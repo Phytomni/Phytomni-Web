@@ -18,6 +18,31 @@ const TERMINAL_HISTORY_STATUSES = new Set([
   "CANCELED",
 ]);
 
+const RELOAD_RETRY_DELAYS_MS = [1000, 2000] as const;
+const MAX_RELOAD_ATTEMPTS = RELOAD_RETRY_DELAYS_MS.length + 1;
+type ReloadTimer = ReturnType<LifecycleScheduler["setTimeout"]>;
+
+type ReloadWork = {
+  dialogueId: string;
+  state: ChatUIState;
+  signature: string;
+  terminal: boolean;
+  attempts: number;
+  timer?: ReloadTimer;
+};
+
+function lifecycleReloadSignature(next: AgentTaskLifecycle): string {
+  return [
+    next.phase,
+    next.terminal ? "1" : "0",
+    String(next.child_task_count),
+    String(next.report_revision),
+    String(next.artifact_summary.image_count),
+    String(next.artifact_summary.output_directory_count),
+    next.artifact_summary.has_report ? "1" : "0",
+  ].join("|");
+}
+
 function isWatchableMessage(message: ChatMessage): string | null {
   if (!isPollableChatAgentTool(message.tool_name)) return null;
   const deliveryPending = message.delivery?.status === "pending";
@@ -47,24 +72,91 @@ export function useChatAgentRunLifecycle(options: {
     "hidden" | "addEventListener" | "removeEventListener"
   >;
 }): { disposeDialogue: (dialogueId: string) => void; dispose: () => void } {
+  const scheduler: LifecycleScheduler = options.scheduler ?? {
+    setTimeout: (callback, delay) => setTimeout(callback, delay),
+    clearTimeout: (timer) => clearTimeout(timer),
+  };
   const watchedRows = new Map<string, string>();
-  const terminalReloadRequested = new Set<string>();
-  const deferredTerminalReloads = new Map<
-    string,
-    { dialogueId: string; state: ChatUIState }
-  >();
+  const reloadWorkByRow = new Map<string, ReloadWork>();
+  const activeReloadRows = new Set<string>();
+  let disposed = false;
 
-  const finishTerminalReload = (
+  const clearReloadTimer = (work: ReloadWork): void => {
+    if (work.timer === undefined) return;
+    scheduler.clearTimeout(work.timer);
+    work.timer = undefined;
+  };
+
+  const cancelReloadWork = (rowId: string): void => {
+    const work = reloadWorkByRow.get(rowId);
+    if (!work) return;
+    clearReloadTimer(work);
+    if (options.chatStates.value[work.dialogueId] === work.state) {
+      delete work.state.refreshingMessages[rowId];
+    }
+    reloadWorkByRow.delete(rowId);
+  };
+
+  const ownsReloadWork = (rowId: string, work: ReloadWork): boolean =>
+    !disposed &&
+    reloadWorkByRow.get(rowId) === work &&
+    watchedRows.get(rowId) === work.dialogueId &&
+    options.chatStates.value[work.dialogueId] === work.state;
+
+  const runReloadWork = async (
     rowId: string,
-    dialogueId: string,
-    state: ChatUIState
-  ): void => {
-    if (!terminalReloadRequested.has(rowId)) return;
-    terminalReloadRequested.delete(rowId);
-    deferredTerminalReloads.delete(rowId);
+    work: ReloadWork
+  ): Promise<void> => {
+    if (!ownsReloadWork(rowId, work) || activeReloadRows.has(rowId)) return;
+
+    activeReloadRows.add(rowId);
+    work.attempts += 1;
+    work.state.refreshingMessages[rowId] = true;
+    let outcome: ChatReloadResult;
+    try {
+      outcome = await options.reloadChat(work.dialogueId);
+    } catch {
+      outcome = "failed";
+    } finally {
+      if (ownsReloadWork(rowId, work)) {
+        delete work.state.refreshingMessages[rowId];
+      }
+      activeReloadRows.delete(rowId);
+    }
+
+    const currentWork = reloadWorkByRow.get(rowId);
+    if (currentWork !== work) {
+      if (currentWork && ownsReloadWork(rowId, currentWork)) {
+        void runReloadWork(rowId, currentWork);
+      }
+      return;
+    }
+    if (!ownsReloadWork(rowId, work)) {
+      cancelReloadWork(rowId);
+      return;
+    }
+
+    const retryDelay = RELOAD_RETRY_DELAYS_MS[work.attempts - 1];
     if (
-      options.chatStates.value[dialogueId] !== state ||
-      state.agentRunLifecycles[rowId]?.terminal !== true
+      outcome === "failed" &&
+      work.attempts < MAX_RELOAD_ATTEMPTS &&
+      retryDelay !== undefined
+    ) {
+      work.timer = scheduler.setTimeout(() => {
+        work.timer = undefined;
+        void runReloadWork(rowId, work);
+      }, retryDelay);
+      return;
+    }
+
+    reloadWorkByRow.delete(rowId);
+    if (!work.terminal) return;
+    const snapshot = work.state.agentRunLifecycles[rowId];
+    if (
+      watchedRows.get(rowId) !== work.dialogueId ||
+      options.chatStates.value[work.dialogueId] !== work.state ||
+      snapshot?.terminal !== true ||
+      lifecycleReloadSignature(snapshot) !== work.signature
     ) {
       return;
     }
@@ -72,71 +164,50 @@ export function useChatAgentRunLifecycle(options: {
     lifecycle.unwatchRow(rowId);
   };
 
-  const performReload = async (
-    rowId: string,
-    dialogueId: string,
-    state: ChatUIState
-  ): Promise<void> => {
-    if (state.refreshingMessages[rowId]) return;
-    state.refreshingMessages[rowId] = true;
-    try {
-      await options.reloadChat(dialogueId);
-    } finally {
-      if (options.chatStates.value[dialogueId] === state) {
-        delete state.refreshingMessages[rowId];
-      }
-      const deferred = deferredTerminalReloads.get(rowId);
-      if (
-        deferred?.dialogueId === dialogueId &&
-        deferred.state === state &&
-        options.chatStates.value[dialogueId] === state
-      ) {
-        deferredTerminalReloads.delete(rowId);
-        void performReload(rowId, dialogueId, state);
-        return;
-      }
-      finishTerminalReload(rowId, dialogueId, state);
-    }
-  };
-
-  const reloadDialogue = async (
+  const requestReload = (
     rowId: string,
     dialogueId: string,
     state: ChatUIState,
-    terminal = false
-  ): Promise<void> => {
-    if (terminal) {
-      if (terminalReloadRequested.has(rowId)) return;
-      terminalReloadRequested.add(rowId);
-    }
-    if (state.refreshingMessages[rowId]) {
-      if (terminal) {
-        deferredTerminalReloads.set(rowId, { dialogueId, state });
-      }
+    snapshot: AgentTaskLifecycle
+  ): void => {
+    if (disposed) return;
+    const signature = lifecycleReloadSignature(snapshot);
+    const previousWork = reloadWorkByRow.get(rowId);
+    if (
+      previousWork?.signature === signature &&
+      previousWork.dialogueId === dialogueId &&
+      previousWork.state === state
+    ) {
       return;
     }
-    await performReload(rowId, dialogueId, state);
+    if (previousWork) clearReloadTimer(previousWork);
+
+    const work: ReloadWork = {
+      dialogueId,
+      state,
+      signature,
+      terminal: snapshot.terminal,
+      attempts: 0,
+    };
+    reloadWorkByRow.set(rowId, work);
+    if (!activeReloadRows.has(rowId)) void runReloadWork(rowId, work);
   };
 
   const lifecycle = useAgentRunLifecycle({
     scope: "chat-lifecycle",
     fetchLifecycle: options.fetchLifecycle,
     maxConcurrent: options.maxConcurrent,
-    scheduler: options.scheduler,
+    scheduler,
     jitter: options.jitter,
     documentRef: options.documentRef,
-    onSnapshot: async (rowId, next) => {
+    onSnapshot: (rowId, next) => {
       const dialogueId = watchedRows.get(rowId);
       if (!dialogueId) return;
       const state = options.chatStates.value[dialogueId];
       if (!state) return;
 
       state.agentRunLifecycles[rowId] = next;
-      if (next.terminal) {
-        await reloadDialogue(rowId, dialogueId, state, true);
-        return;
-      }
-      await reloadDialogue(rowId, dialogueId, state);
+      requestReload(rowId, dialogueId, state, next);
     },
   });
 
@@ -150,7 +221,7 @@ export function useChatAgentRunLifecycle(options: {
         if (!state) continue;
         state.agentRunLifecycles[rowId] = snapshot;
         if (snapshot.terminal) {
-          void reloadDialogue(rowId, dialogueId, state, true);
+          requestReload(rowId, dialogueId, state, snapshot);
         }
       }
     },
@@ -169,9 +240,13 @@ export function useChatAgentRunLifecycle(options: {
       for (const message of state.renderedChat?.messages ?? []) {
         const rowId = isWatchableMessage(message);
         if (!rowId) continue;
+        const snapshot = state.agentRunLifecycles[rowId];
+        const reloadWork = reloadWorkByRow.get(rowId);
         if (
-          state.agentRunLifecycles[rowId]?.terminal &&
-          !terminalReloadRequested.has(rowId)
+          snapshot?.terminal &&
+          (!reloadWork?.terminal ||
+            reloadWork.dialogueId !== dialogueId ||
+            reloadWork.state !== state)
         ) {
           continue;
         }
@@ -187,8 +262,7 @@ export function useChatAgentRunLifecycle(options: {
       if (desiredRows.get(rowId)?.dialogueId === dialogueId) continue;
       lifecycle.unwatchRow(rowId);
       watchedRows.delete(rowId);
-      terminalReloadRequested.delete(rowId);
-      deferredTerminalReloads.delete(rowId);
+      cancelReloadWork(rowId);
     }
     for (const [rowId, desired] of desiredRows) {
       if (watchedRows.get(rowId) === desired.dialogueId) continue;
@@ -207,19 +281,24 @@ export function useChatAgentRunLifecycle(options: {
       if (ownerDialogueId !== dialogueId) continue;
       lifecycle.unwatchRow(rowId);
       watchedRows.delete(rowId);
-      terminalReloadRequested.delete(rowId);
-      deferredTerminalReloads.delete(rowId);
+      cancelReloadWork(rowId);
+    }
+    for (const [rowId, work] of reloadWorkByRow) {
+      if (work.dialogueId === dialogueId) cancelReloadWork(rowId);
     }
   };
 
   return {
     disposeDialogue,
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       stopWatchingStates();
       stopWatchingSnapshots();
+      for (const rowId of [...reloadWorkByRow.keys()]) {
+        cancelReloadWork(rowId);
+      }
       watchedRows.clear();
-      terminalReloadRequested.clear();
-      deferredTerminalReloads.clear();
       lifecycle.dispose();
     },
   };
