@@ -58,7 +58,9 @@ type Branch =
 /** Mirror of the live truthiness gate (empty arrays are truthy). */
 function expectedBranch(message: ChatMessage): Branch {
   const entersBubble =
-    message.role === "user" || (!message.steps && !message.tableHeaders);
+    message.role === "user" ||
+    (message.role === "assistant" && message.tool_name === "DeepGenomeAgent") ||
+    (!message.steps && !message.tableHeaders);
   if (entersBubble) {
     if (
       message.role === "assistant" &&
@@ -796,6 +798,65 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
     );
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
+
+  it.each([
+    {
+      name: "active row with steps",
+      status: "RUNNING",
+      label: "Running",
+      content: "Server task created: child-task-steps",
+      structure: { steps: ["internal active step"] },
+      hasViewer: false,
+    },
+    {
+      name: "active row with table headers",
+      status: "RUNNING",
+      label: "Running",
+      content: "# Partial active report",
+      structure: {
+        tableHeaders: [{ prop: "gene", label: "Gene" }],
+      },
+      hasViewer: true,
+    },
+    {
+      name: "terminal row with steps",
+      status: "FAILED",
+      label: "Failed",
+      content: "# Partial failed report",
+      structure: { steps: ["internal terminal step"] },
+      hasViewer: true,
+    },
+    {
+      name: "terminal row with table headers",
+      status: "CANCELLED",
+      label: "Cancelled",
+      content: "",
+      structure: {
+        tableHeaders: [{ prop: "gene", label: "Gene" }],
+      },
+      hasViewer: false,
+    },
+  ])(
+    "keeps DeepGenome lifecycle precedence for a $name",
+    ({ status, label, content, structure, hasViewer }) => {
+      const wrapper = mountContent(
+        deepGenomeMessage({ status, content, ...structure })
+      );
+
+      expect(wrapper.text()).toContain(label);
+      expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(
+        hasViewer
+      );
+      expect(wrapper.find(".table-response").exists()).toBe(false);
+      expect(wrapper.find(".ai-response").exists()).toBe(false);
+      expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.text()).not.toContain("Server task created");
+      expect(wrapper.text()).not.toContain("internal active step");
+      expect(wrapper.text()).not.toContain("internal terminal step");
+    }
+  );
 });
 
 describe("ChatMessageContent namespace and message-owned stream context", () => {

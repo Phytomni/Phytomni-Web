@@ -611,6 +611,45 @@ describe("Chat artifact shell integration", () => {
     }
   });
 
+  it.each([
+    ["RUNNING", enUS.chat.lifecycle.running],
+    ["FAILED", enUS.chat.lifecycle.failed],
+    ["CANCELLED", enUS.chat.lifecycle.cancelled],
+    ["SUCCEEDED", enUS.chat.lifecycle.resultUnavailable],
+  ])(
+    "does not preview a %s DeepGenome row without a report when generic artifacts exist",
+    async (status, expectedCopy) => {
+      const id = `deep-artifacts-${status.toLowerCase()}`;
+      const message: ChatMessage = {
+        role: "assistant",
+        id,
+        tool_name: "DeepGenomeAgent",
+        status,
+        content: "",
+        artifacts: [
+          {
+            id: "generic-artifact-1",
+            name: "intermediate.txt",
+            kind: "file",
+          },
+        ],
+      };
+      const { wrapper, state } = await mountProductionChat(1440, {
+        markDeepSeen: false,
+        messagesA: [message],
+      });
+      await nextTick();
+      await nextTick();
+
+      const row = wrapper.get(`[data-message-id="${id}"]`);
+      expect(row.text()).toContain(expectedCopy);
+      expect(row.find(".research-artifact-preview").exists()).toBe(false);
+      expect(row.find('[data-test="artifact-open"]').exists()).toBe(false);
+      expect(state.getChatState("A").artifactOpen).toBe(false);
+      expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+    }
+  );
+
   it("does not steal focus when a completed result appeared in a background dialogue", async () => {
     const { state } = await mountProductionChat(1440, {
       markDeepSeen: false,

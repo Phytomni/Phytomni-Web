@@ -6,9 +6,13 @@
   >
     {{ $t("chat.contextDegraded") }}
   </div>
-  <!-- User message, or an answer without reasoning steps -->
+  <!-- User message, lifecycle-owned DeepGenome, or an answer without reasoning steps -->
   <div
-    v-if="message.role === 'user' || (!message.steps && !message.tableHeaders)"
+    v-if="
+      message.role === 'user' ||
+      isDeepGenomeMessage ||
+      (!message.steps && !message.tableHeaders)
+    "
     :class="[
       'message-text',
       message.role === 'user'

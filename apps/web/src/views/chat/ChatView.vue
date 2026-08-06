@@ -1067,15 +1067,16 @@ function artifactAgentLabel(message: ChatMessage): string {
 }
 
 function artifactPreviewForMessage(message: ChatMessage) {
-  const artifactKind = artifactKindForMessage(message);
-  if (artifactKind === null && (message.artifacts?.length ?? 0) === 0)
-    return null;
   if (
-    artifactKind === "deep-genome" &&
+    message.tool_name === "DeepGenomeAgent" &&
     !isCompletedDeepGenomeMessage(message)
   ) {
     return null;
   }
+
+  const artifactKind = artifactKindForMessage(message);
+  if (artifactKind === null && (message.artifacts?.length ?? 0) === 0)
+    return null;
 
   const tool = canonicalAgentTool(message.tool_name);
   if (!tool) return null;
