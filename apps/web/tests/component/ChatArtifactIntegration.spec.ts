@@ -330,9 +330,9 @@ async function mountProductionChat(
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
-          props: ["markdown"],
+          props: ["markdown", "showActions", "showReferences"],
           template:
-            '<article data-test="deep-genome-inline">{{ markdown }}</article>',
+            '<article data-test="deep-genome-inline" :data-show-actions="String(showActions)" :data-show-references="String(showReferences)">{{ markdown }}</article>',
         },
         ChatSidebarNav: true,
         ChatHistoryList: true,
@@ -647,6 +647,100 @@ describe("Chat artifact shell integration", () => {
       expect(row.find('[data-test="artifact-open"]').exists()).toBe(false);
       expect(state.getChatState("A").artifactOpen).toBe(false);
       expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+    }
+  );
+
+  it.each([
+    {
+      name: "running raw placeholder",
+      message: {
+        role: "assistant",
+        id: "401",
+        tool_name: "DeepGenomeAgent",
+        status: "RUNNING",
+        content: "Server task created: synthetic-child",
+      } satisfies ChatMessage,
+      lifecycleCopy: enUS.chat.lifecycle.running,
+      inlineReport: null,
+      previewCount: 0,
+      showActions: null,
+    },
+    {
+      name: "running revision Markdown",
+      message: {
+        role: "assistant",
+        id: "402",
+        tool_name: "DeepGenomeAgent",
+        status: "RUNNING",
+        content: "# Synthetic revision report",
+      } satisfies ChatMessage,
+      lifecycleCopy: enUS.chat.lifecycle.running,
+      inlineReport: "Synthetic revision report",
+      previewCount: 0,
+      showActions: "false",
+    },
+    {
+      name: "failed revision Markdown",
+      message: {
+        role: "assistant",
+        id: "403",
+        tool_name: "DeepGenomeAgent",
+        status: "FAILED",
+        content: "# Synthetic retained report",
+      } satisfies ChatMessage,
+      lifecycleCopy: enUS.chat.lifecycle.failed,
+      inlineReport: "Synthetic retained report",
+      previewCount: 0,
+      showActions: "false",
+    },
+    {
+      name: "successful final Markdown",
+      message: {
+        role: "assistant",
+        id: "404",
+        tool_name: "DeepGenomeAgent",
+        status: "SUCCEEDED",
+        content: "# Synthetic final report",
+      } satisfies ChatMessage,
+      lifecycleCopy: enUS.chat.lifecycle.succeeded,
+      inlineReport: null,
+      previewCount: 1,
+      showActions: null,
+    },
+  ])(
+    "renders the production DeepGenome transition for $name",
+    async ({
+      message,
+      lifecycleCopy,
+      inlineReport,
+      previewCount,
+      showActions,
+    }) => {
+      const { wrapper, state } = await mountProductionChat(1440, {
+        messagesA: [message],
+      });
+      state
+        .getChatState("A")
+        .autoOpenedArtifactMessageIds.push(String(message.id));
+      await nextTick();
+      await nextTick();
+
+      const row = wrapper.get(`[data-message-id="${message.id}"]`);
+      expect(row.text()).toContain(lifecycleCopy);
+      expect(row.findAll(".research-artifact-preview")).toHaveLength(
+        previewCount
+      );
+      expect(row.text()).not.toContain("Server task created");
+      expect(row.text()).not.toContain("No references available.");
+
+      const inline = row.find('[data-test="deep-genome-inline"]');
+      expect(inline.exists()).toBe(inlineReport !== null);
+      if (inlineReport !== null) {
+        expect(inline.text()).toContain(inlineReport);
+        expect(inline.attributes("data-show-actions")).toBe(showActions);
+      } else {
+        expect(row.text()).not.toContain(message.content);
+      }
     }
   );
 

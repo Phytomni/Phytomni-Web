@@ -87,6 +87,140 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
+  it("converges successive Deep Genome revisions without disturbing another dialogue", async () => {
+    vi.useFakeTimers();
+    const owner = buildChatState({
+      historyHydration: "ready",
+      messageInput: "owner draft",
+      renderedChat: {
+        dialogue_id: "deep",
+        messages: [
+          buildChatMessage({
+            id: "301",
+            tool_name: "DeepGenomeAgent",
+            status: "RUNNING",
+            content: "Server task created: synthetic-child",
+          }),
+        ],
+      },
+    });
+    const other = buildChatState({
+      historyHydration: "ready",
+      messageInput: "unchanged composer",
+      renderedChat: {
+        dialogue_id: "other",
+        title: "Unchanged dialogue",
+        messages: [
+          buildChatMessage({
+            id: "302",
+            tool_name: "ChatAgent",
+            status: "SUCCEEDED",
+            content: "Unchanged rendered tree",
+          }),
+        ],
+      },
+    });
+    const otherRenderedTree = JSON.stringify(other.renderedChat);
+    const otherComposer = other.messageInput;
+    const chatStates = ref({ deep: owner, other });
+    const lifecycleSnapshots = [
+      lifecycle(301, {
+        phase: "RUNNING",
+        report_revision: 1,
+        artifact_summary: {
+          image_count: 0,
+          output_directory_count: 0,
+          has_report: true,
+        },
+      }),
+      lifecycle(301, {
+        phase: "RUNNING",
+        report_revision: 2,
+        artifact_summary: {
+          image_count: 0,
+          output_directory_count: 0,
+          has_report: true,
+        },
+      }),
+      lifecycle(301, {
+        phase: "SUCCEEDED",
+        terminal: true,
+        report_revision: 3,
+        artifact_summary: {
+          image_count: 0,
+          output_directory_count: 0,
+          has_report: true,
+        },
+      }),
+    ];
+    const reports = [
+      { content: "Synthetic revision 1", status: "RUNNING" },
+      { content: "Synthetic revision 2", status: "RUNNING" },
+      { content: "Synthetic final report", status: "SUCCEEDED" },
+    ];
+    let lifecycleIndex = 0;
+    const fetchLifecycle = vi.fn().mockImplementation(() => {
+      const snapshot = lifecycleSnapshots[lifecycleIndex];
+      lifecycleIndex += 1;
+      return snapshot
+        ? Promise.resolve(response(snapshot))
+        : Promise.reject(new Error("Synthetic lifecycle queue exhausted"));
+    });
+    const reloadChat = vi.fn(async (dialogueId: string) => {
+      const report = reports[reloadChat.mock.calls.length - 1];
+      const state = chatStates.value[dialogueId];
+      if (!report || !state.renderedChat) return "failed" as const;
+      state.renderedChat = {
+        ...state.renderedChat,
+        messages: state.renderedChat.messages.map((message) =>
+          message.id === "301" ? { ...message, ...report } : message
+        ),
+      };
+      return "applied" as const;
+    });
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    const expectIsolatedRevision = (content: string, status: string) => {
+      expect(owner.renderedChat?.messages[0]).toMatchObject({
+        content,
+        status,
+      });
+      expect(JSON.stringify(other.renderedChat)).toBe(otherRenderedTree);
+      expect(other.messageInput).toBe(otherComposer);
+    };
+
+    await flush();
+    expectIsolatedRevision("Synthetic revision 1", "RUNNING");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    expectIsolatedRevision("Synthetic revision 2", "RUNNING");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await flush();
+    expectIsolatedRevision("Synthetic final report", "SUCCEEDED");
+    expect(owner.agentRunLifecycles["301"]).toMatchObject({
+      phase: "SUCCEEDED",
+      terminal: true,
+      report_revision: 3,
+    });
+    expect(reloadChat).toHaveBeenCalledTimes(3);
+    expect(reloadChat).toHaveBeenNthCalledWith(1, "deep");
+    expect(reloadChat).toHaveBeenNthCalledWith(2, "deep");
+    expect(reloadChat).toHaveBeenNthCalledWith(3, "deep");
+
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fetchLifecycle).toHaveBeenCalledTimes(3);
+    expect(reloadChat).toHaveBeenCalledTimes(3);
+    coordinator.dispose();
+  });
+
   it("retries failed hydration at one and three seconds total", async () => {
     vi.useFakeTimers();
     const state = buildChatState({
