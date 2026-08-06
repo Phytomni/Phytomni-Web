@@ -137,6 +137,82 @@ describe("useAgentRunLifecycle", () => {
     poller.dispose();
   });
 
+  it.each([
+    ["report revision", { report_revision: 1 }],
+    [
+      "report flag",
+      {
+        artifact_summary: {
+          image_count: 0,
+          output_directory_count: 0,
+          has_report: true,
+        },
+      },
+    ],
+    [
+      "image artifact",
+      {
+        artifact_summary: {
+          image_count: 1,
+          output_directory_count: 0,
+          has_report: false,
+        },
+      },
+    ],
+    [
+      "output directory",
+      {
+        artifact_summary: {
+          image_count: 0,
+          output_directory_count: 1,
+          has_report: false,
+        },
+      },
+    ],
+  ] as const)(
+    "emits a material first snapshot for %s",
+    async (_name, overrides) => {
+      const onSnapshot = vi.fn();
+      const poller = useAgentRunLifecycle({
+        scope: "first-material",
+        fetchLifecycle: vi
+          .fn()
+          .mockResolvedValue(
+            response(lifecycle({ phase: "RUNNING", ...overrides }))
+          ),
+        onSnapshot,
+        jitter: () => 0,
+      });
+
+      poller.watchRow("42");
+      await flush();
+
+      expect(onSnapshot).toHaveBeenCalledOnce();
+      expect(onSnapshot).toHaveBeenCalledWith(
+        "42",
+        expect.objectContaining({ phase: "RUNNING" }),
+        undefined
+      );
+      poller.dispose();
+    }
+  );
+
+  it("does not emit a plain preparing first snapshot", async () => {
+    const onSnapshot = vi.fn();
+    const poller = useAgentRunLifecycle({
+      scope: "first-empty",
+      fetchLifecycle: vi.fn().mockResolvedValue(response(lifecycle())),
+      onSnapshot,
+      jitter: () => 0,
+    });
+
+    poller.watchRow("42");
+    await flush();
+
+    expect(onSnapshot).not.toHaveBeenCalled();
+    poller.dispose();
+  });
+
   it("resets the nominal delay only when lifecycle progress changes", async () => {
     vi.useFakeTimers();
     const delays: number[] = [];
