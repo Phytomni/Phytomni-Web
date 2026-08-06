@@ -459,6 +459,27 @@ func TestLoadBotRunProjectionReadsLegacyJSON(t *testing.T) {
 	}
 }
 
+func TestLoadBotRunProjectionNormalizesPersistedCompletedReviewPause(t *testing.T) {
+	setupTestDB(t)
+	if err := setupProjectionRow(16, "alice@example.com", 2, `{
+		"run_id":"run-review-persisted",
+		"agent":"review",
+		"status":"INPUT_REQUIRED",
+		"report_revision":2,
+		"intermediate_report":"# Persisted complete review"
+	}`); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadBotRunProjection(context.Background(), "alice@example.com", 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Status != "SUCCEEDED" || loaded.VisibleReport() != "# Persisted complete review" {
+		t.Fatalf("persisted completed Review projection=%#v", loaded)
+	}
+}
+
 func TestSaveBotRunProjectionPreservesVisibleReportFromOlderBlankSnapshot(t *testing.T) {
 	setupTestDB(t)
 	current := BotRunProjection{RunID: "run-12", ReportRevision: 4, IntermediateReport: "visible"}

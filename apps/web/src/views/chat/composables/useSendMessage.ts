@@ -218,6 +218,31 @@ function parseBlockingProjection(data: QueryData) {
   }
 }
 
+function reviewAnswerText(data: QueryData): string {
+  const answer = data.answer ?? data.final_answer;
+  if (typeof answer !== "string") return "";
+
+  const parsed = parseAgentAnswer(answer);
+  const content = optionalStringValue(parsed, "content");
+  if (content !== undefined) return content;
+  return Object.keys(parsed).length === 0 ? answer : "";
+}
+
+function normalizeCompletedReviewBlockingProjection(
+  data: QueryData,
+  projection: ReturnType<typeof parseBotProjection> | undefined
+) {
+  if (!projection || projection.status !== "INPUT_REQUIRED") return projection;
+  const agent = projection.agent.trim().toLowerCase();
+  if (
+    (agent !== "review" && agent !== "reviewagent") ||
+    reviewAnswerText(data).trim() === ""
+  ) {
+    return projection;
+  }
+  return { ...projection, status: "SUCCEEDED" as const };
+}
+
 const EXPERT_RUN_ID_KEYS = ["bot_run_id", "run_id", "runId"] as const;
 const EXPERT_PROJECTION_KEYS = ["projection", "result", "data"] as const;
 
@@ -687,7 +712,14 @@ export function useSendMessage(opts: {
       // without `code` and rejects explicit non-success envelopes.
       if (isSuccessfulDataEnvelope<QueryData>(response)) {
         const responseData = response.data;
-        const botProjection = parseBlockingProjection(responseData);
+        const parsedBotProjection = parseBlockingProjection(responseData);
+        const botProjection = normalizeCompletedReviewBlockingProjection(
+          responseData,
+          parsedBotProjection
+        );
+        const completedReviewAnswer =
+          parsedBotProjection?.status === "INPUT_REQUIRED" &&
+          botProjection?.status === "SUCCEEDED";
         const resultArchiveV1 =
           botProjection?.resultArchiveV1 === true ||
           responseData.result_archive_v1 === true;
@@ -975,6 +1007,7 @@ export function useSendMessage(opts: {
 
         const contextNotice = normalizeChatContextNotice(response.data);
         if (assistantMessage) {
+          if (completedReviewAnswer) assistantMessage.status = "SUCCEEDED";
           if (contextNotice) assistantMessage.contextNotice = contextNotice;
           attachBlockingLegacyFields(
             assistantMessage,

@@ -1875,7 +1875,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata), metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
-		reviewAnswerCompleted := reviewFormattedAnswerCompletesPause(slug, resp.Status, resp.Result.Formatted)
+		reviewAnswer := ""
+		if resp.Result.Formatted != nil {
+			reviewAnswer = resp.Result.Formatted.Answer
+		}
+		reviewAnswerCompleted := reviewAnswerCompletesPause(slug, resp.Status, reviewAnswer)
 		if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") && !reviewAnswerCompleted {
 			// Review's native pause is returned from the chat endpoint as an
 			// agent.run envelope. Decode only interrupt.draft.a2ui and never

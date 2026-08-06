@@ -462,6 +462,7 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 }
 
 func marshalPersistedProjectionWithContext(projection BotRunProjection, privateContext *persistedConversationContext) (string, error) {
+	projection = normalizeCompletedReviewProjection(projection)
 	interop, err := normalizeInteropProvenance(projection.InterOp)
 	if err != nil {
 		return "", err
@@ -517,7 +518,7 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 	if err != nil {
 		return BotRunProjection{}, nil, err
 	}
-	return BotRunProjection{
+	projection := BotRunProjection{
 		RunID:              stored.RunID,
 		Agent:              stored.Agent,
 		Status:             stored.Status,
@@ -548,7 +549,8 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 		TrackingDegraded: stored.TrackingDegraded,
 		DegradedInterop:  stored.DegradedInterop,
 		InterOp:          interop,
-	}, stored.ConversationContext, nil
+	}
+	return normalizeCompletedReviewProjection(projection), stored.ConversationContext, nil
 }
 
 func persistProjectionDelivery(in *ProjectionDelivery) *persistedProjectionDelivery {

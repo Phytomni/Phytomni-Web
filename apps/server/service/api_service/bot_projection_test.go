@@ -43,6 +43,44 @@ func TestDecodeRunProjectionKeepsIntermediateWhenFinalIsMissing(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionCompletesReviewPauseWithFormattedAnswer(t *testing.T) {
+	tests := []struct {
+		name       string
+		answer     string
+		wantAnswer string
+		wantStatus string
+	}{
+		{name: "completed answer", answer: "# Complete review\n\nFinal evidence-backed answer.", wantAnswer: "# Complete review\n\nFinal evidence-backed answer.", wantStatus: "SUCCEEDED"},
+		{name: "blank answer remains paused", answer: "  \n\t", wantStatus: "INPUT_REQUIRED"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			formatted, err := json.Marshal(map[string]string{"answer": tc.answer})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := json.Marshal(map[string]json.RawMessage{"formatted": formatted})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := DecodeRunProjection(rxBot.RunRecord{
+				RunID:  "run-review-poll",
+				Agent:  "review",
+				Status: "input_required",
+				Result: result,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != tc.wantStatus || got.VisibleReport() != tc.wantAnswer {
+				t.Fatalf("projection=%#v want status=%q answer=%q", got, tc.wantStatus, tc.wantAnswer)
+			}
+		})
+	}
+}
+
 func TestDecodeRunProjectionPrefersFinalAndRejectsPrivatePayload(t *testing.T) {
 	got, err := DecodeRunProjection(loadRunRecordFixture(t, "deep_genome_final.json"))
 	if err != nil {
@@ -580,7 +618,7 @@ func TestDecodeRunProjectionAcceptsNonInteropFormattedMetadata(t *testing.T) {
 	}{
 		{name: "success", agent: "deep_genome", topStatus: "succeeded", metaStatus: "SUCCESS", wantStatus: "SUCCEEDED"},
 		{name: "running", agent: "analyst", topStatus: "running", metaStatus: "RUNNING", wantStatus: "RUNNING"},
-		{name: "input required", agent: "review", topStatus: "input_required", metaStatus: "INPUT_REQUIRED", wantStatus: "INPUT_REQUIRED"},
+		{name: "Review answer completes pause", agent: "review", topStatus: "input_required", metaStatus: "INPUT_REQUIRED", wantStatus: "SUCCEEDED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			record := rxBot.RunRecord{

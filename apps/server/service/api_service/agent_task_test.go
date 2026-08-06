@@ -419,6 +419,32 @@ func TestAnswerCheckDualReadRecordsSanitizedOutcome(t *testing.T) {
 	}
 }
 
+func TestAnswerCheckProjectionNormalizesPersistedCompletedReviewPause(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(112, 'dlg-review-persisted', 0, 'alice', 'review-q', 'legacy-a', 'ReviewAgent', 'run-review-persisted', ?, 2, 'INPUT_REQUIRED', '2026-01-01 00:00:00')`, `{
+			"run_id":"run-review-persisted",
+			"agent":"review",
+			"status":"INPUT_REQUIRED",
+			"report_revision":2,
+			"final_report":"# Persisted complete review"
+		}`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-review-persisted", HistoryReadModeProjection)
+	if err != nil {
+		t.Fatalf("projection read: %v", err)
+	}
+	if result.Source != historySourceProjection || len(result.Rows) != 1 {
+		t.Fatalf("unexpected projection read result: %#v", result)
+	}
+	if row := result.Rows[0]; row.Status != "SUCCEEDED" || row.ToolName != "ReviewAgent" || !strings.Contains(row.Answer, "Persisted complete review") {
+		t.Fatalf("completed Review history row=%#v", row)
+	}
+}
+
 func TestAnswerCheckDualReadFallsBackForUnavailableProjection(t *testing.T) {
 	tests := []struct {
 		name       string

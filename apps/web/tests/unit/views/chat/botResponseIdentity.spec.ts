@@ -159,7 +159,7 @@ describe("blocking Bot response identity", () => {
     });
   });
 
-  it("renders a completed Review answer without attaching a stale confirmation", async () => {
+  it("defensively completes a Review answer with a contradictory input-required status", async () => {
     mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
         id: 44,
@@ -170,7 +170,7 @@ describe("blocking Bot response identity", () => {
           content: "# Complete review\n\nFinal evidence-backed answer.",
           doc_list: [{ title: "Review source" }],
         }),
-        status: "SUCCEEDED",
+        status: "INPUT_REQUIRED",
         a2ui: {
           catalog_version: "v1.0",
           surface_id: "surface-stale",
@@ -223,6 +223,7 @@ describe("blocking Bot response identity", () => {
         id: 44,
         bot_run_id: "run-44",
         dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
         answer: "",
         status: "INPUT_REQUIRED",
         a2ui: {
@@ -244,6 +245,8 @@ describe("blocking Bot response identity", () => {
     await sendMessage();
 
     const assistant = lastMessage(state, "A2UI input-required response");
+    expect(assistant.status).toBe("INPUT_REQUIRED");
+    expect(assistant.botProjection?.status).toBe("INPUT_REQUIRED");
     expect(assistant.blocks).toHaveLength(1);
     const block = mustGet(assistant.blocks?.[0], "A2UI first block");
     expect(block).toMatchObject({

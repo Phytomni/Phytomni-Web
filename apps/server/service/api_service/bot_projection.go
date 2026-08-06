@@ -205,18 +205,23 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 		return BotRunProjection{}, err
 	}
 	projection.ChildTaskCount = len(record.TaskIDs)
-	return projection, nil
+	return normalizeCompletedReviewProjection(projection), nil
 }
 
-// reviewFormattedAnswerCompletesPause resolves one contradictory Review
-// envelope defensively. A genuine input-required pause carries only an
-// interrupt draft; once result.formatted.answer is non-blank, the answer is
-// terminal and the accompanying interrupt is stale.
-func reviewFormattedAnswerCompletesPause(agent, status string, formatted *rxBot.Formatted) bool {
+// reviewAnswerCompletesPause resolves one contradictory Review envelope
+// defensively. A genuine input-required pause has no visible answer; once an
+// answer is non-blank, the accompanying interrupt is stale.
+func reviewAnswerCompletesPause(agent, status, answer string) bool {
 	return strings.EqualFold(strings.TrimSpace(agent), "review") &&
 		strings.EqualFold(strings.TrimSpace(status), "input_required") &&
-		formatted != nil &&
-		strings.TrimSpace(formatted.Answer) != ""
+		strings.TrimSpace(answer) != ""
+}
+
+func normalizeCompletedReviewProjection(projection BotRunProjection) BotRunProjection {
+	if reviewAnswerCompletesPause(projection.Agent, projection.Status, projection.VisibleReport()) {
+		projection.Status = "SUCCEEDED"
+	}
+	return projection
 }
 
 func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, error) {
@@ -227,9 +232,6 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	status, err := normalizeProjectionStatus(response.Status)
 	if err != nil {
 		return BotRunProjection{}, err
-	}
-	if reviewFormattedAnswerCompletesPause(agent, status, response.Result.Formatted) {
-		status = "SUCCEEDED"
 	}
 	if len(response.TaskIDs) > maxProjectionChildTasks {
 		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")
@@ -274,7 +276,7 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		}
 		projection.FinalReport = answer
 	}
-	return projection, nil
+	return normalizeCompletedReviewProjection(projection), nil
 }
 
 type projectionEnvelope struct {
