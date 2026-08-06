@@ -22,6 +22,14 @@
          assigns phyto.references → doc_list, the same blocks rerender to
          #m<index>-ref-N links. Live-session only — history reload does not
          invent persisted streaming references. -->
+    <div
+      v-if="showLeadingLifecycleStatus"
+      class="agent-lifecycle"
+      role="status"
+      aria-live="polite"
+    >
+      {{ $t(lifecycleLabel) }}
+    </div>
     <StreamMessage
       v-if="
         message.role === 'assistant' &&
@@ -300,6 +308,19 @@ const lifecycleLabel = computed(() =>
   effectiveLifecyclePhase.value
     ? `chat.lifecycle.${effectiveLifecyclePhase.value.toLowerCase()}`
     : ""
+);
+const isSpecializedImageAgent = computed(
+  () =>
+    props.message.tool_name === "GeneNetworkAgent" ||
+    props.message.tool_name === "DigitalDesignAgent"
+);
+const showLeadingLifecycleStatus = computed(
+  () =>
+    props.message.role === "assistant" &&
+    lifecycleLabel.value !== "" &&
+    !props.message.streaming &&
+    !(props.message.blocks && props.message.blocks.length) &&
+    !isSpecializedImageAgent.value
 );
 const isTerminalLifecycle = computed(
   () =>
