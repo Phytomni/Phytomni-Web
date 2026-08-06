@@ -109,7 +109,7 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
-  it("excludes synchronous, Deep Genome, malformed, and terminal history rows", async () => {
+  it("includes Deep Genome while excluding synchronous, malformed, and terminal history rows", async () => {
     const state = buildChatState({
       historyHydration: "ready",
       renderedChat: {
@@ -152,7 +152,10 @@ describe("useChatAgentRunLifecycle", () => {
     });
 
     await flush();
-    expect(fetchLifecycle.mock.calls.map(([rowId]) => rowId)).toEqual(["54"]);
+    expect(fetchLifecycle.mock.calls.map(([rowId]) => rowId).sort()).toEqual([
+      "52",
+      "54",
+    ]);
     coordinator.dispose();
   });
 

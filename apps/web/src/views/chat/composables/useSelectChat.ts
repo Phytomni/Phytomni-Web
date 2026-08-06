@@ -29,6 +29,7 @@ import {
   isSafeAssetId,
   type AttachmentMetadata,
 } from "../utils/asset-attachments";
+import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 
 export function historyAssistantMetadata(
   item: Pick<
@@ -85,13 +86,6 @@ function stripActiveArchiveLegacyFields(message: ChatMessage): void {
   delete message.original;
 }
 
-const BACKGROUND_AGENT_TOOLS = new Set([
-  "AnalystAgent",
-  "InSilicoResearchAgent",
-  "GeneNetworkAgent",
-  "DigitalDesignAgent",
-]);
-
 function isSuccessfulHistoryStatus(status: unknown): boolean {
   return (
     String(status ?? "")
@@ -102,7 +96,7 @@ function isSuccessfulHistoryStatus(status: unknown): boolean {
 
 function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.answer !== "string" || item.answer.trim()) return false;
-  if (!BACKGROUND_AGENT_TOOLS.has(item.tool_name ?? "")) return false;
+  if (!isPollableChatAgentTool(item.tool_name)) return false;
   if (isSuccessfulHistoryStatus(item.status)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");

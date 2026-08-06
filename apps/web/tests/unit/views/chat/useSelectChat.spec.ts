@@ -1155,6 +1155,7 @@ describe("useSelectChat", () => {
       historyResponse([
         ...[
           "AnalystAgent",
+          "DeepGenomeAgent",
           "InSilicoResearchAgent",
           "GeneNetworkAgent",
           "DigitalDesignAgent",
@@ -1167,7 +1168,7 @@ describe("useSelectChat", () => {
           })
         ),
         buildChatHistoryRecord({
-          id: "205",
+          id: "206",
           answer: "",
           status: "RUNNING",
           tool_name: "ChatAgent",
@@ -1179,19 +1180,19 @@ describe("useSelectChat", () => {
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "206",
+          id: "207",
           answer: "",
           status: "SUCCEEDED",
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "207",
+          id: "208",
           answer: "",
           status: "FAILED",
           tool_name: "GeneNetworkAgent",
         }),
         buildChatHistoryRecord({
-          id: "208",
+          id: "209",
           answer: "",
           status: "CANCELLED",
           tool_name: "DigitalDesignAgent",
@@ -1213,34 +1214,41 @@ describe("useSelectChat", () => {
         expect.objectContaining({
           role: "assistant",
           id: "202",
-          tool_name: "InSilicoResearchAgent",
+          tool_name: "DeepGenomeAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
           id: "203",
-          tool_name: "GeneNetworkAgent",
+          tool_name: "InSilicoResearchAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
           id: "204",
+          tool_name: "GeneNetworkAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "205",
           tool_name: "DigitalDesignAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "207",
+          id: "208",
           tool_name: "GeneNetworkAgent",
           status: "FAILED",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "208",
+          id: "209",
           tool_name: "DigitalDesignAgent",
           status: "CANCELLED",
           content: "",
@@ -1251,6 +1259,6 @@ describe("useSelectChat", () => {
       renderedFor("d1", "blank background rows").messages.map((message) =>
         String(message.id ?? "")
       )
-    ).not.toEqual(expect.arrayContaining(["205", "206", "malformed"]));
+    ).not.toEqual(expect.arrayContaining(["206", "207", "malformed"]));
   });
 });
