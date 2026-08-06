@@ -110,6 +110,26 @@ describe("a2uiAction", () => {
     expect(body.payload.fields.gene).toBe("Os01g0177400");
   });
 
+  it("keeps a successful action when the optional formatted answer exceeds the inline budget", async () => {
+    const body = structuredClone(fixture("http/terminal_succeeded.json")) as {
+      result: { formatted: { answer: string } };
+    };
+    body.result.formatted.answer = "x".repeat(13_696);
+    const fetchImpl = vi.fn(async () => jsonResponse(200, body));
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const response = await t(envelope);
+
+    expect(response.status).toBe("succeeded");
+    if (response.status === "succeeded") {
+      expect(response.result).not.toHaveProperty("formatted");
+    }
+  });
+
   it("fetch transport decodes input-required responses", async () => {
     const fetchImpl = vi.fn(
       async () =>

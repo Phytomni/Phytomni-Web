@@ -472,10 +472,15 @@ function decodeFormatted(
   if (value === undefined) return ok(undefined);
   if (!isOrdinaryObject(value)) return fail("response_invalid");
   if (!hasOwn(value, "answer")) return ok({});
-  const answer = readText(value.answer, false);
-  if (!answer.ok) return answer;
+  if (typeof value.answer !== "string") return fail("props_invalid");
+  if (value.answer !== value.answer.trim()) return fail("props_invalid");
+  // The terminal A2UI surface is authoritative for the action outcome. A
+  // Review report may legitimately be much longer than the bounded inline
+  // Markdown answer budget, so discard only that optional projection rather
+  // than turning an otherwise valid terminal action into an unknown result.
+  if (value.answer.length > A2UI_LIMITS.textChars) return ok(undefined);
   return ok({
-    ...(answer.value !== undefined ? { answer: answer.value } : {}),
+    answer: value.answer,
   });
 }
 

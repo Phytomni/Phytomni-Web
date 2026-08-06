@@ -615,6 +615,22 @@ describe("decodeA2uiActionResponse", () => {
       });
     }
   });
+
+  it("accepts a terminal surface when the optional formatted Review answer is long", () => {
+    const response = structuredClone(
+      fixture("http/terminal_succeeded.json")
+    ) as {
+      result: { formatted: { answer: string } };
+    };
+    response.result.formatted.answer = "x".repeat(A2UI_LIMITS.textChars + 1);
+
+    const result = decodeA2uiActionResponse(response);
+
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.status === "succeeded") {
+      expect(result.value.result).not.toHaveProperty("formatted");
+    }
+  });
 });
 
 describe("parseA2uiCustomValue alias", () => {
