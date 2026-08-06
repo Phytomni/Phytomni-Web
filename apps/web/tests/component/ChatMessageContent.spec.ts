@@ -472,6 +472,15 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       },
     },
     {
+      name: "ReviewAgent referenced assistant → cited",
+      message: {
+        role: "assistant",
+        content: "review body",
+        tool_name: "ReviewAgent",
+        doc_list: [{ title: "Review source" }],
+      },
+    },
+    {
       name: "truthy tableHeaders → table",
       message: {
         role: "assistant",

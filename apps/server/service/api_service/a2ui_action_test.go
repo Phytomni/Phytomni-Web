@@ -25,17 +25,19 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"chat","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{}}`))
+		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{Query: "review"})
+	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{
+		Query: "review", Mode: "expert", Tool: "ReviewAgent",
+	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.Status != "INPUT_REQUIRED" || out.BotRunID != "run-review-1" || out.A2UI == nil {
+	if out.ToolName != "ReviewAgent" || out.Status != "INPUT_REQUIRED" || out.BotRunID != "run-review-1" || out.A2UI == nil {
 		t.Fatalf("out = %#v", out)
 	}
 	if out.A2UI.SurfaceID != "surface-1" || out.A2UI.Widget != "confirm" {
@@ -53,6 +55,77 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `"title":"Approve"`) || strings.Contains(string(encoded), "confirm_label") || strings.Contains(string(encoded), "cancel_label") {
 		t.Fatalf("unexpected confirmation props in QueryData: %s", encoded)
+	}
+}
+
+func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		query    QueryInput
+		response string
+	}{
+		{
+			name:     "forced Review chat completion",
+			path:     "/v1/chat/completions",
+			query:    QueryInput{Query: "review", Mode: "expert", Tool: "ReviewAgent"},
+			response: `{"id":"run-review-complete-chat","run_id":"run-review-complete-chat","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-stale-chat","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{"formatted":{"answer":"# Complete review\n\nFinal evidence-backed answer.","references":[{"file_id":"f1","title":"Review source"}]}}}`,
+		},
+		{
+			name:     "autonomous Expert Review route",
+			path:     "/v1/query/route",
+			query:    QueryInput{Query: "review", Mode: "expert"},
+			response: `{"id":"run-review-complete-route","run_id":"run-review-complete-route","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-stale-route","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{"formatted":{"answer":"# Complete review\n\nFinal evidence-backed answer.","references":[{"file_id":"f1","title":"Review source"}]}}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tt.path {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.response))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = nil })
+
+			out, err := NewService().Query(context.Background(), "alice@x.com", tt.query)
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if out.ToolName != "ReviewAgent" || out.Status != "SUCCEEDED" {
+				t.Fatalf("out = %#v", out)
+			}
+			if out.A2UI != nil {
+				t.Fatalf("stale confirmation surfaced: %#v", out.A2UI)
+			}
+			var cited struct {
+				Content string `json:"content"`
+				DocList []struct {
+					Title string `json:"title"`
+				} `json:"doc_list"`
+			}
+			if err := json.Unmarshal([]byte(out.Answer), &cited); err != nil {
+				t.Fatalf("answer is not cited JSON: %v (%q)", err, out.Answer)
+			}
+			if cited.Content != "# Complete review\n\nFinal evidence-backed answer." || len(cited.DocList) != 1 || cited.DocList[0].Title != "Review source" {
+				t.Fatalf("cited answer = %#v", cited)
+			}
+			var persistedStatus, persistedAnswer string
+			if err := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&persistedStatus, &persistedAnswer); err != nil {
+				t.Fatalf("read persisted Review row: %v", err)
+			}
+			if persistedStatus != "SUCCEEDED" || persistedAnswer != out.Answer {
+				t.Fatalf("persisted status=%q answer=%q", persistedStatus, persistedAnswer)
+			}
+		})
 	}
 }
 

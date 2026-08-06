@@ -1875,7 +1875,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, metadataReportRevision(resp.Formatted.Metadata), metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
-		if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") {
+		reviewAnswerCompleted := reviewFormattedAnswerCompletesPause(slug, resp.Status, resp.Result.Formatted)
+		if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") && !reviewAnswerCompleted {
 			// Review's native pause is returned from the chat endpoint as an
 			// agent.run envelope. Decode only interrupt.draft.a2ui and never
 			// assume choices[0] exists for this shape.
@@ -1891,8 +1892,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		} else {
 			// Default-mode chat/completions strips formatted.answer into
 			// choices[0].message.content; source it there, then reshape per slug
-			// (knowledge/review become {content, doc_list}; chat stays plain).
-			if strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil {
+			// (knowledge/review become {content, doc_list}; chat stays plain). A
+			// completed Review result wins over a contradictory stale interrupt.
+			if reviewAnswerCompleted || (strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil) {
 				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			} else {

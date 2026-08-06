@@ -208,6 +208,17 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	return projection, nil
 }
 
+// reviewFormattedAnswerCompletesPause resolves one contradictory Review
+// envelope defensively. A genuine input-required pause carries only an
+// interrupt draft; once result.formatted.answer is non-blank, the answer is
+// terminal and the accompanying interrupt is stale.
+func reviewFormattedAnswerCompletesPause(agent, status string, formatted *rxBot.Formatted) bool {
+	return strings.EqualFold(strings.TrimSpace(agent), "review") &&
+		strings.EqualFold(strings.TrimSpace(status), "input_required") &&
+		formatted != nil &&
+		strings.TrimSpace(formatted.Answer) != ""
+}
+
 func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, error) {
 	agent, err := normalizeProjectionAgent(response.Agent)
 	if err != nil {
@@ -216,6 +227,9 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	status, err := normalizeProjectionStatus(response.Status)
 	if err != nil {
 		return BotRunProjection{}, err
+	}
+	if reviewFormattedAnswerCompletesPause(agent, status, response.Result.Formatted) {
+		status = "SUCCEEDED"
 	}
 	if len(response.TaskIDs) > maxProjectionChildTasks {
 		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")

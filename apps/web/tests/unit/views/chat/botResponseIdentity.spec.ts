@@ -159,6 +159,41 @@ describe("blocking Bot response identity", () => {
     });
   });
 
+  it("renders a completed Review answer without attaching a stale confirmation", async () => {
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        id: 44,
+        bot_run_id: "run-review-complete",
+        dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
+        answer: JSON.stringify({
+          content: "# Complete review\n\nFinal evidence-backed answer.",
+          doc_list: [{ title: "Review source" }],
+        }),
+        status: "SUCCEEDED",
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: "surface-stale",
+          widget: "confirm",
+          props: { title: "Approve" },
+        },
+      },
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessage(state, "completed Review response");
+    expect(assistant).toMatchObject({
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      content: "# Complete review\n\nFinal evidence-backed answer.",
+      doc_list: [{ title: "Review source" }],
+    });
+    expect(assistant.blocks).toBeUndefined();
+    expect(assistant.a2uiRuntime).toBeUndefined();
+  });
+
   it("preserves legacy task and download fields on an Analyst response", async () => {
     mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
