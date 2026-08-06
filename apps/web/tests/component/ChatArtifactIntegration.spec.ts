@@ -663,6 +663,7 @@ describe("Chat artifact shell integration", () => {
       lifecycleCopy: enUS.chat.lifecycle.running,
       inlineReport: null,
       previewCount: 0,
+      neutralPreviewCount: 0,
       showActions: null,
     },
     {
@@ -677,6 +678,7 @@ describe("Chat artifact shell integration", () => {
       lifecycleCopy: enUS.chat.lifecycle.running,
       inlineReport: "Synthetic revision report",
       previewCount: 0,
+      neutralPreviewCount: 0,
       showActions: "false",
     },
     {
@@ -691,6 +693,7 @@ describe("Chat artifact shell integration", () => {
       lifecycleCopy: enUS.chat.lifecycle.failed,
       inlineReport: "Synthetic retained report",
       previewCount: 0,
+      neutralPreviewCount: 0,
       showActions: "false",
     },
     {
@@ -705,6 +708,7 @@ describe("Chat artifact shell integration", () => {
       lifecycleCopy: enUS.chat.lifecycle.succeeded,
       inlineReport: null,
       previewCount: 1,
+      neutralPreviewCount: 1,
       showActions: null,
     },
   ])(
@@ -714,6 +718,7 @@ describe("Chat artifact shell integration", () => {
       lifecycleCopy,
       inlineReport,
       previewCount,
+      neutralPreviewCount,
       showActions,
     }) => {
       const { wrapper, state } = await mountProductionChat(1440, {
@@ -729,6 +734,9 @@ describe("Chat artifact shell integration", () => {
       expect(row.text()).toContain(lifecycleCopy);
       expect(row.findAll(".research-artifact-preview")).toHaveLength(
         previewCount
+      );
+      expect(row.findAll(".research-artifact-preview--neutral")).toHaveLength(
+        neutralPreviewCount
       );
       expect(row.text()).not.toContain("Server task created");
       expect(row.text()).not.toContain("No references available.");
