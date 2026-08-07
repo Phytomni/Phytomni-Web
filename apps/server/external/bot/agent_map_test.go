@@ -93,7 +93,7 @@ func TestValidateWebAgentDescriptorsProjectsAttachmentChannels(t *testing.T) {
 			Capabilities: AgentDescriptorCapabilities{
 				Attachments: AgentDescriptorAttachments{
 					DocumentContext: &struct{}{},
-					Datasets:        &struct{}{},
+					Datasets:        &AgentDescriptorDatasetCapability{},
 				},
 			},
 		}},

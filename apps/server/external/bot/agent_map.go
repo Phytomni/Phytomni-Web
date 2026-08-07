@@ -75,6 +75,14 @@ func supportsProtocol(resp *AgentsListResponse, protocol string, version int) bo
 	return false
 }
 
+func supportsExactProtocol(resp *AgentsListResponse, protocol string, version int) bool {
+	if resp == nil {
+		return false
+	}
+	versions, ok := resp.Protocols[protocol]
+	return ok && len(versions) == 1 && versions[0] == version
+}
+
 // SupportsProtocol reports whether the authenticated Bot catalog advertises a
 // specific server-to-server protocol version.
 func SupportsProtocol(resp *AgentsListResponse, protocol string, version int) bool {

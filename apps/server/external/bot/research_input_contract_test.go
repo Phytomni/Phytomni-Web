@@ -1,0 +1,195 @@
+package bot
+
+import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+func validResearchCatalog() *AgentsListResponse {
+	return &AgentsListResponse{
+		Protocols: map[string][]int{
+			ResearchInputProtocol: {ResearchInputProtocolVersion},
+		},
+		ResearchInputResolution: &ResearchInputResolutionDescriptor{
+			MaxUserQueryChars: DefaultMaxUserQueryChars,
+			MaxAttachments:    DefaultMaxAssetAttachmentRefs,
+			MaxDatasetPaths:   DefaultMaxResearchDatasetPaths,
+			MaxReferences:     DefaultMaxResearchInputReferences,
+		},
+		Data: []AgentDescriptor{{
+			Slug: "research",
+			Tool: "InSilicoResearchAgent",
+			Capabilities: AgentDescriptorCapabilities{
+				Attachments: AgentDescriptorAttachments{
+					Datasets: &AgentDescriptorDatasetCapability{
+						Formats:       []string{"vcf", " CSV ", "fastq.gz"},
+						MaxFiles:      DefaultMaxAssetAttachmentRefs,
+						MaxFileBytes:  10 << 30,
+						MaxTotalBytes: 20 << 30,
+					},
+				},
+			},
+		}},
+	}
+}
+
+func TestValidateResearchInputContract(t *testing.T) {
+	response := validResearchCatalog()
+	wantFormats := []string{"csv", "fastq.gz", "vcf"}
+
+	got, err := ValidateResearchInputContract(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxUserQueryChars != DefaultMaxUserQueryChars ||
+		got.MaxAttachments != DefaultMaxAssetAttachmentRefs ||
+		got.MaxDatasetPaths != DefaultMaxResearchDatasetPaths ||
+		got.MaxReferences != DefaultMaxResearchInputReferences {
+		t.Fatalf("contract=%#v", got)
+	}
+	if !reflect.DeepEqual(got.DatasetFormats, wantFormats) {
+		t.Fatalf("DatasetFormats=%v, want %v", got.DatasetFormats, wantFormats)
+	}
+
+	sourceFormats := response.Data[0].Capabilities.Attachments.Datasets.Formats
+	if !reflect.DeepEqual(sourceFormats, []string{"vcf", " CSV ", "fastq.gz"}) {
+		t.Fatalf("validator mutated source formats: %v", sourceFormats)
+	}
+	sourceFormats[0] = "bam"
+	if !reflect.DeepEqual(got.DatasetFormats, wantFormats) {
+		t.Fatalf("contract retained source formats: %v", got.DatasetFormats)
+	}
+	got.DatasetFormats[0] = "bed"
+	if sourceFormats[0] != "bam" {
+		t.Fatalf("source retained contract formats: %v", sourceFormats)
+	}
+}
+
+func TestValidateResearchInputContractRejectsInvalidCatalog(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*AgentsListResponse)
+	}{
+		{name: "missing protocol", mutate: func(r *AgentsListResponse) { delete(r.Protocols, ResearchInputProtocol) }},
+		{name: "wrong protocol version", mutate: func(r *AgentsListResponse) { r.Protocols[ResearchInputProtocol] = []int{2} }},
+		{name: "mixed protocol versions", mutate: func(r *AgentsListResponse) { r.Protocols[ResearchInputProtocol] = []int{1, 2} }},
+		{name: "zero query count", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxUserQueryChars = 0 }},
+		{name: "query count above hard limit", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxUserQueryChars = HardMaxUserQueryChars + 1 }},
+		{name: "zero attachment count", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxAttachments = 0 }},
+		{name: "attachment count above hard limit", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxAttachments = HardMaxAssetAttachmentRefs + 1 }},
+		{name: "zero dataset path count", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxDatasetPaths = 0 }},
+		{name: "dataset path count above hard limit", mutate: func(r *AgentsListResponse) {
+			r.ResearchInputResolution.MaxDatasetPaths = HardMaxResearchDatasetPaths + 1
+		}},
+		{name: "zero combined count", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution.MaxReferences = 0 }},
+		{name: "combined count below attachments", mutate: func(r *AgentsListResponse) {
+			r.ResearchInputResolution.MaxReferences = r.ResearchInputResolution.MaxAttachments - 1
+		}},
+		{name: "combined count below paths", mutate: func(r *AgentsListResponse) {
+			r.ResearchInputResolution.MaxDatasetPaths = 129
+			r.ResearchInputResolution.MaxReferences = 128
+		}},
+		{name: "combined count above hard limit", mutate: func(r *AgentsListResponse) {
+			r.ResearchInputResolution.MaxReferences = HardMaxResearchInputReferences + 1
+		}},
+		{name: "missing limit descriptor", mutate: func(r *AgentsListResponse) { r.ResearchInputResolution = nil }},
+		{name: "missing Research descriptor", mutate: func(r *AgentsListResponse) { r.Data = nil }},
+		{name: "wrong Research tool", mutate: func(r *AgentsListResponse) { r.Data[0].Tool = "AnalystAgent" }},
+		{name: "duplicate Research descriptor", mutate: func(r *AgentsListResponse) { r.Data = append(r.Data, r.Data[0]) }},
+		{name: "missing dataset capability", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets = nil }},
+		{name: "missing formats", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats = nil }},
+		{name: "blank format", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats[0] = " " }},
+		{name: "normalized duplicate format", mutate: func(r *AgentsListResponse) {
+			r.Data[0].Capabilities.Attachments.Datasets.Formats = []string{"csv", " CSV ", "vcf"}
+		}},
+		{name: "unsafe format", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats[0] = "../vcf" }},
+		{name: "overlong format", mutate: func(r *AgentsListResponse) {
+			r.Data[0].Capabilities.Attachments.Datasets.Formats[0] = strings.Repeat("a", 65)
+		}},
+		{name: "excessive formats", mutate: func(r *AgentsListResponse) {
+			formats := make([]string, 257)
+			for i := range formats {
+				formats[i] = "format" + strconv.Itoa(i)
+			}
+			r.Data[0].Capabilities.Attachments.Datasets.Formats = formats
+		}},
+		{name: "CSV-only formats", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats = []string{"csv"} }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := validResearchCatalog()
+			tt.mutate(response)
+			if got, err := ValidateResearchInputContract(response); err == nil {
+				t.Fatalf("accepted invalid catalog: %#v", got)
+			}
+		})
+	}
+
+	if got, err := ValidateResearchInputContract(nil); err == nil {
+		t.Fatalf("accepted nil catalog: %#v", got)
+	}
+}
+
+func TestValidateResearchInputContractRejectsNonIntegralAndOverflowCounts(t *testing.T) {
+	raw, err := json.Marshal(validResearchCatalog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := []struct {
+		name  string
+		value int
+	}{
+		{name: "max_user_query_chars", value: DefaultMaxUserQueryChars},
+		{name: "max_attachments_per_request", value: DefaultMaxAssetAttachmentRefs},
+		{name: "max_research_dataset_paths", value: DefaultMaxResearchDatasetPaths},
+		{name: "max_research_input_references", value: DefaultMaxResearchInputReferences},
+	}
+	for _, field := range fields {
+		needle := []byte(`"` + field.name + `":` + strconv.Itoa(field.value))
+		for _, replacement := range []struct {
+			name  string
+			value string
+		}{
+			{name: "fractional", value: "1.5"},
+			{name: "overflow", value: "9223372036854775808"},
+		} {
+			t.Run(field.name+"/"+replacement.name, func(t *testing.T) {
+				malformed := bytes.Replace(raw, needle, []byte(`"`+field.name+`":`+replacement.value), 1)
+				if bytes.Equal(malformed, raw) {
+					t.Fatalf("fixture did not contain %s", needle)
+				}
+				var decoded AgentsListResponse
+				if err := json.Unmarshal(malformed, &decoded); err == nil {
+					t.Fatal("decoded a non-integral or overflowing count")
+				}
+			})
+		}
+	}
+}
+
+func TestResearchCatalogTypesDiscardUnknownFields(t *testing.T) {
+	raw := `{
+		"protocols":{"research_input_resolution_v1":[1]},
+		"research_input_resolution":{"max_user_query_chars":131072,"max_attachments_per_request":64,"max_research_dataset_paths":64,"max_research_input_references":128,"private_limit":"secret"},
+		"data":[{"slug":"research","tool":"InSilicoResearchAgent","capabilities":{"attachments":{"datasets":{"formats":["csv","vcf"],"max_files":64,"max_file_bytes":10737418240,"max_total_bytes":21474836480,"private_token":"secret"}}}}]
+	}`
+	var response AgentsListResponse
+	if err := json.Unmarshal([]byte(raw), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateResearchInputContract(&response); err != nil {
+		t.Fatal(err)
+	}
+	reencoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(reencoded), "private_limit") || strings.Contains(string(reencoded), "private_token") || strings.Contains(string(reencoded), "secret") {
+		t.Fatalf("unknown upstream fields were retained: %s", reencoded)
+	}
+}

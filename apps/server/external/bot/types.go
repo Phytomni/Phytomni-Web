@@ -176,12 +176,22 @@ type RunLogsResponse struct {
 	TaskLogs []map[string]interface{} `json:"task_logs"`
 }
 
-// AgentDescriptorAttachments is the finite attachment-channel presence
-// projection accepted from GET /v1/agents. Its empty struct values deliberately
-// discard every nested limit, extension, provider, and diagnostic field.
+// AgentDescriptorDatasetCapability is the finite Research dataset projection
+// accepted from GET /v1/agents. Unknown provider and diagnostic fields are
+// deliberately discarded at this boundary.
+type AgentDescriptorDatasetCapability struct {
+	Formats       []string `json:"formats"`
+	MaxFiles      int      `json:"max_files"`
+	MaxFileBytes  int64    `json:"max_file_bytes"`
+	MaxTotalBytes int64    `json:"max_total_bytes"`
+}
+
+// AgentDescriptorAttachments is the finite attachment-channel projection
+// accepted from GET /v1/agents. Document details remain presence-only while
+// Research dataset limits and formats are decoded into a bounded type.
 type AgentDescriptorAttachments struct {
-	DocumentContext *struct{} `json:"document_context"`
-	Datasets        *struct{} `json:"datasets"`
+	DocumentContext *struct{}                         `json:"document_context"`
+	Datasets        *AgentDescriptorDatasetCapability `json:"datasets"`
 }
 
 // AgentDescriptorCapabilities is the finite descriptor capability projection
@@ -203,9 +213,10 @@ type AgentDescriptor struct {
 
 // AgentsListResponse is the GET /v1/agents envelope.
 type AgentsListResponse struct {
-	Object    string            `json:"object"`
-	Data      []AgentDescriptor `json:"data"`
-	Protocols map[string][]int  `json:"protocols,omitempty"`
+	Object                  string                             `json:"object"`
+	Data                    []AgentDescriptor                  `json:"data"`
+	Protocols               map[string][]int                   `json:"protocols,omitempty"`
+	ResearchInputResolution *ResearchInputResolutionDescriptor `json:"research_input_resolution,omitempty"`
 }
 
 // BotError is the uniform error envelope every non-2xx Bot response carries.
