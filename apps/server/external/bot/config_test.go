@@ -253,3 +253,45 @@ func TestInitFromViperAgentTimeoutPartialOverride(t *testing.T) {
 		t.Fatalf("research fallback=%d, want global 17", got)
 	}
 }
+
+func TestInitFromViperNormalizesMaxQueryChars(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = nil
+	})
+
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper defaults: %v", err)
+	}
+	if got := BotConfig.MaxQueryChars; got != DefaultMaxUserQueryChars {
+		t.Fatalf("default MaxQueryChars=%d, want %d", got, DefaultMaxUserQueryChars)
+	}
+
+	viper.Set("bot.max_query_chars", 7)
+	if err := InitFromViper(); err != nil {
+		t.Fatalf("InitFromViper explicit max query chars: %v", err)
+	}
+	if got := BotConfig.MaxQueryChars; got != 7 {
+		t.Fatalf("explicit MaxQueryChars=%d, want 7", got)
+	}
+}
+
+func TestInitFromViperRejectsInvalidMaxQueryChars(t *testing.T) {
+	viper.Reset()
+	previous := BotConfig
+	sentinel := &Config{MaxQueryChars: DefaultMaxUserQueryChars}
+	BotConfig = sentinel
+	t.Cleanup(func() {
+		viper.Reset()
+		BotConfig = previous
+	})
+	viper.Set("bot.max_query_chars", HardMaxUserQueryChars+1)
+
+	if err := InitFromViper(); err == nil {
+		t.Fatal("InitFromViper must reject max_query_chars above the hard limit")
+	}
+	if BotConfig != sentinel {
+		t.Fatal("InitFromViper must not assign BotConfig when max_query_chars is invalid")
+	}
+}

@@ -43,6 +43,9 @@ type Config struct {
 	// per-Agent map. Long-running agents return 202 immediately, so this only
 	// caps the synchronous request itself.
 	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds" mapstructure:"timeout_seconds"`
+	// MaxQueryChars limits a user query before it is forwarded to Bot. A missing
+	// value uses DefaultMaxUserQueryChars; invalid values fail configuration load.
+	MaxQueryChars int `json:"max_query_chars" yaml:"max_query_chars" mapstructure:"max_query_chars"`
 	// AgentTimeoutSeconds bounds one synchronous Agent execution request by
 	// canonical Bot slug. Missing/invalid entries use compiled defaults.
 	AgentTimeoutSeconds map[string]int `json:"agent_timeout_seconds" yaml:"agent_timeout_seconds" mapstructure:"agent_timeout_seconds"`
@@ -121,6 +124,11 @@ func InitFromViper() error {
 	if cfg.TimeoutSeconds <= 0 {
 		cfg.TimeoutSeconds = 60
 	}
+	maxQueryChars, err := NormalizeMaxUserQueryChars(cfg.MaxQueryChars)
+	if err != nil {
+		return err
+	}
+	cfg.MaxQueryChars = maxQueryChars
 	for slug, seconds := range cfg.AgentTimeoutSeconds {
 		_, known := defaultAgentTimeoutSeconds[slug]
 		if !known || seconds <= 0 {
