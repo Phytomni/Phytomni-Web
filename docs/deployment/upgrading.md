@@ -340,6 +340,37 @@ This is a breaking Web ↔ Bot data-plane cutover, not an additive fallback for
 the legacy multipart body relay. Keep it `false` during the normal 0.1.3/0.1.4
 deployment unless a separate acceptance packet covers both repositories.
 
+The release contract has one Attach action and server-side classification:
+Web Go derives `dataset` or `document` from bounded filename metadata (archives
+always default to `dataset`) and rejects unsupported or ambiguous names before
+Bot/OBS allocation. No browser request or new recovery record carries a
+user-selected purpose or dataset description. A legacy recovery purpose may be
+read only for compatibility/cleanup/migration and is ignored for new
+classification.
+
+The browser-to-Go boundary is `/api/v1/files` JSON control traffic only
+(create, renew, head, and abort). Go never receives file parts, Huawei
+credentials, OBS upload ids, object keys, or signed storage URLs. Parts go
+directly from the browser to Bot with the short-lived opaque capability. The
+trusted Go-to-Bot create coordination carries the server-derived class and
+owner scope; Bot owns durable state, owner resolution, and final native mapping.
+Conversation attachment submission carries the raw query and completed
+`asset_id` references only, not purpose, descriptions, paths, capabilities, or
+`data_list`/`obs_file_list` values.
+
+Bot maps resolved assets according to the selected Agent's declared channels:
+dual-channel Agents split documents to `obs_file_list` and datasets to
+`data_list`; document-only or dataset-only Agents receive every asset through
+their sole channel; zero-channel Agents reject attachments. A single-channel
+placement does not rewrite the persisted class, and Web-side compatibility
+checks never replace Bot authorization or resolution.
+
+The shared `AttachmentChipStrip` contract applies to Chat, Research, and
+Digital Design: one contained horizontal strip, on-demand detail within the
+strip, bounded layout at `320px`/`390px`, full accessible names for ellipsized
+filenames, `+N more`, keyboard-visible focus, default-sized touch targets,
+polite live announcements, reduced-motion, and forced-colors support.
+
 Before an operator changes the flag, record all of the following:
 
 1. the exact clean Web and Bot SHAs, with the Bot receipt's protocol,
@@ -363,6 +394,15 @@ interruption/resume and owner-denial checks. If any result fails, set the flag
 back to `false` and restart Web. Do not restore the old body relay as an
 implicit fallback after the breaking cutover; handle a full release rollback
 with the owner and retain additive Bot persistence.
+
+Label acceptance explicitly: local Web classifier, request-shape, recovery,
+chip, accessibility, and visual checks are `ACCEPTED_WITH_GAPS (WEB-ONLY)`;
+they do not establish Bot storage or native Agent mapping. A paired-runtime
+result is `External Pending`/`Needs Verification` until the Bot receipt and a
+development Web → Go → Bot run prove storage, owner isolation, credential
+redaction, and dual/single/zero-channel behavior. This runbook keeps
+`bot.resumable_upload_enabled=false`; it neither activates nor authorizes a
+production configuration change.
 
 ## 9. Evidence and ownership
 

@@ -284,6 +284,68 @@ evidence, credential-boundary review, and the cross-repository source checker
 all pass. The legacy multipart relay is not an allowed fallback after the
 breaking cutover is accepted.
 
+### Unified attachment contract
+
+Every production upload surface exposes exactly one Attach action. The user
+does not choose a purpose, see a purpose selector/badge, or fill a separate
+dataset-description field. The ordinary query is the only place to explain
+the intended analysis. Web Go normalizes the bounded filename metadata and
+derives `dataset` or `document` before it asks Bot to create an asset; every
+archive suffix defaults to `dataset`, while unsupported or ambiguous names are
+rejected before a Bot/OBS session is created.
+
+The two trust boundaries are deliberately narrow:
+
+- **Browser → Web Go:** `/api/v1/files` is a JSON-only control plane for
+  create, renew, head, and abort. The browser sends filename/size/type hints
+  and receives an opaque, short-lived upload capability; it never sends a
+  purpose, file body, Huawei credential, OBS upload id, object key, or signed
+  storage URL to Go.
+- **Web Go → Bot:** trusted Go sends the server-derived class and owner-scoped
+  upload coordination data. It does not forward a client-selected class,
+  resolve an asset into a path, or relay file parts. The browser sends parts
+  directly to Bot's accepted upload origin with the opaque capability.
+
+The attachment portion of a conversation submission contains the raw user
+query and completed owner-scoped `asset_id` references only. It must not carry
+`purpose`, dataset descriptions, native `data_list`/`obs_file_list` values,
+storage coordinates, or capabilities. New browser recovery records are
+purpose-free and description-free. A legacy record may be read only for
+compatibility, cleanup, or migration; its stored purpose is never trusted for
+new classification or submission.
+
+Bot remains the owner of durable asset state, authorization, and final Agent
+mapping. After resolving each asset for the authenticated owner, it applies
+the Agent's declared channels as follows:
+
+| Agent channels         | Bot mapping                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `document` + `dataset` | Documents → `obs_file_list`; datasets → `data_list`            |
+| `document` only        | Every completed asset → `obs_file_list`                        |
+| `dataset` only         | Every completed asset → `data_list`                            |
+| no attachment channel  | Reject an attachment-bearing run before native tool invocation |
+
+The persisted class is not mutated by single-channel placement. Web may block
+an obviously incompatible selection earlier, but Bot is the final authority
+for ownership, capability authorization, and native argument construction.
+
+Chat, Research, and Digital Design share `AttachmentChipStrip`. The strip is
+a horizontal overflow row that stays inside the composer at every continuous
+matrix width, including `320px` and `390px`; its on-demand detail panel is
+contained by the strip rather than covering the editor. Long names ellipsize
+visually but retain the full accessible name, `+N more` exposes hidden files,
+and every action uses the default control height, visible `:focus-visible`,
+keyboard order, a single polite live region, reduced-motion behavior, and
+forced-colors rules. Per-dialogue upload state remains in `chatStates`.
+
+Web-only classifier, serialization, recovery, chip, and visual evidence must
+be labelled `ACCEPTED_WITH_GAPS (WEB-ONLY)`; it does not prove Bot storage or
+native mapping. `External Pending`/`Needs Verification` remains the status
+until a paired Web → Go → Bot run with a development account proves the Bot
+receipt, owner isolation, capability redaction, and dual/single/zero-channel
+mapping. This contract does not activate the feature or authorize production
+configuration changes.
+
 Static demo downloads only communicate that a download has started. They do not
 claim backend completion, persistence, or measured transfer progress.
 
