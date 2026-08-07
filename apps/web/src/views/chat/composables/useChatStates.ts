@@ -9,6 +9,7 @@ function createDefaultChatUIState(): ChatUIState {
     isSending: false,
     messageInput: "",
     fileList: [],
+    attachmentAnnouncementNonce: 0,
     historyQuestion: null,
     historyHydration: "new",
     historyErrorKind: null,
@@ -166,6 +167,17 @@ export function useChatStates() {
     set: (value: string) => {
       if (!currentChatId.value) return;
       getChatState(currentChatId.value).attachmentAnnouncement = value;
+    },
+  });
+
+  const attachmentAnnouncementNonce = computed({
+    get: (): number => {
+      if (!currentChatId.value) return 0;
+      return getChatState(currentChatId.value).attachmentAnnouncementNonce;
+    },
+    set: (value: number) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).attachmentAnnouncementNonce = value;
     },
   });
 
@@ -329,6 +341,7 @@ export function useChatStates() {
     fileList,
     focusedUploadLocalId,
     attachmentAnnouncement,
+    attachmentAnnouncementNonce,
     uploadTransfer,
     copyVisible,
     copyTimeRef,

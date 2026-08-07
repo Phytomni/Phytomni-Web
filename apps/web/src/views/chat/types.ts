@@ -229,6 +229,8 @@ export interface ChatUIState {
   focusedUploadLocalId?: string;
   /** Localized duplicate attachment announcement for this dialogue. */
   attachmentAnnouncement?: string;
+  /** Revision for repeated duplicate/rejection announcements in this dialogue. */
+  attachmentAnnouncementNonce: number;
   historyQuestion: readonly ChatMessage[] | null;
   /** Lifecycle of this dialogue's persisted-history reconstruction. */
   historyHydration: ChatHistoryHydrationStatus;

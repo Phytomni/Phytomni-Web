@@ -14,6 +14,8 @@ describe("useChatStates parallel chat state", () => {
     const stateA = s.getChatState("deleted-dialogue");
     const stateB = s.getChatState("retained-dialogue");
     stateA.renderedChat = { messages: [{ role: "assistant", content: "A" }] };
+    stateA.attachmentAnnouncement = "Rejected first.bam";
+    stateA.attachmentAnnouncementNonce = 4;
     stateB.renderedChat = { messages: [{ role: "assistant", content: "B" }] };
     s.currentChatId.value = "deleted-dialogue";
 
@@ -26,6 +28,11 @@ describe("useChatStates parallel chat state", () => {
     expect(s.chatStates.value["deleted-dialogue"]).toBeUndefined();
     expect(s.currentChatId.value).toBe("");
     expect(s.chatStates.value["retained-dialogue"]).toBe(stateB);
+
+    s.currentChatId.value = "deleted-dialogue";
+    const recreated = s.getChatState("deleted-dialogue");
+    expect(recreated.attachmentAnnouncement).toBeUndefined();
+    expect(recreated.attachmentAnnouncementNonce).toBe(0);
   });
 
   it("keeps lifecycle snapshots isolated and moves them with a dialogue rekey", () => {
@@ -112,6 +119,7 @@ describe("useChatStates parallel chat state", () => {
       isSending: false,
       messageInput: "",
       fileList: [],
+      attachmentAnnouncementNonce: 0,
       historyQuestion: null,
       historyHydration: "new",
       historyErrorKind: null,

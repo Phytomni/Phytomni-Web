@@ -609,7 +609,6 @@ import {
   nextTick,
   watch,
   computed,
-  reactive,
 } from "vue";
 import Sidebar from "./ChatSidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
@@ -972,28 +971,18 @@ const {
   fileList,
   focusedUploadLocalId,
   attachmentAnnouncement,
+  attachmentAnnouncementNonce,
   uploadTransfer,
   copyVisible,
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
 
-const attachmentAnnouncementNonces = reactive(new Map<string, number>());
-const attachmentAnnouncementNonce = computed(() => {
-  const dialogueId = currentChatId.value;
-  // Keep the computed invalidated when the per-dialogue nonce changes.
-  void attachmentAnnouncement.value;
-  return dialogueId ? (attachmentAnnouncementNonces.get(dialogueId) ?? 0) : 0;
-});
-
 function announceAttachment(message: string): void {
   const ownerDialogueId = currentChatId.value;
   if (!ownerDialogueId) return;
   const ownerState = getChatState(ownerDialogueId);
-  attachmentAnnouncementNonces.set(
-    ownerDialogueId,
-    (attachmentAnnouncementNonces.get(ownerDialogueId) ?? 0) + 1
-  );
+  ownerState.attachmentAnnouncementNonce += 1;
   ownerState.attachmentAnnouncement = "";
   void nextTick(() => {
     if (currentChatId.value === ownerDialogueId) {
