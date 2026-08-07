@@ -297,13 +297,11 @@ const metricLabel = (item: ResumableUploadItem): string => {
 };
 
 const detailProgressText = (item: ResumableUploadItem): string =>
-  progressStatuses.has(item.status)
-    ? t("chat.upload.progress", {
-        loaded: formatBytes(item.loadedBytes),
-        total: formatBytes(item.size),
-        percent: progressPercent(item),
-      })
-    : formatBytes(item.size);
+  t("chat.upload.progress", {
+    loaded: formatBytes(item.loadedBytes),
+    total: formatBytes(item.size),
+    percent: progressPercent(item),
+  });
 
 const speedText = (item: ResumableUploadItem): string =>
   t("chat.upload.speed", {

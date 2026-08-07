@@ -324,28 +324,35 @@ describe("AttachmentChipStrip", () => {
     host.remove();
   });
 
-  it("suppresses stale speed and ETA for terminal detail states", async () => {
-    const wrapper = mountStrip([
-      makeItem(1, {
-        status: "completed",
-        loadedBytes: 1024,
-        speedBytesPerSecond: 1024,
-        etaSeconds: 0,
-      }),
-    ]);
+  it.each([
+    ["completed", "1.0 KB / 4.0 KB (100%)"],
+    ["failed", "1.0 KB / 4.0 KB (25%)"],
+    ["expired", "1.0 KB / 4.0 KB (25%)"],
+  ] as const)(
+    "keeps exact progress while suppressing stale speed and ETA for %s details",
+    async (status, progress) => {
+      const wrapper = mountStrip([
+        makeItem(1, {
+          status,
+          loadedBytes: 1024,
+          speedBytesPerSecond: 1024,
+          etaSeconds: 0,
+        }),
+      ]);
 
-    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+      await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
 
-    expect(
-      wrapper.find('[data-testid="attachment-chip-detail-speed"]').exists()
-    ).toBe(false);
-    expect(
-      wrapper.find('[data-testid="attachment-chip-detail-eta"]').exists()
-    ).toBe(false);
-    expect(
-      wrapper.get('[data-testid="attachment-chip-detail-progress"]').text()
-    ).toContain("4.0 KB");
-  });
+      expect(
+        wrapper.find('[data-testid="attachment-chip-detail-speed"]').exists()
+      ).toBe(false);
+      expect(
+        wrapper.find('[data-testid="attachment-chip-detail-eta"]').exists()
+      ).toBe(false);
+      expect(
+        wrapper.get('[data-testid="attachment-chip-detail-progress"]').text()
+      ).toContain(progress);
+    }
+  );
 
   it("uses one non-wrapping scroll row, semantic tokens, and installed icons", () => {
     expect(STRIP_SOURCE).toContain("flex-wrap: nowrap");
