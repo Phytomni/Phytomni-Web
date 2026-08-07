@@ -6,12 +6,6 @@
  * 既往不恋！当下不杂！！未来不迎！！！
  */
 export default {
-  attachmentPurpose: {
-    dataset: "分析数据",
-    document: "参考材料",
-    descriptionLabel: "数据集描述（可选）",
-    descriptionPlaceholder: "描述数据集、物种、分组和预期分析",
-  },
   // 通用部分
   common: {
     confirm: "确认",
@@ -781,9 +775,7 @@ export default {
       questionPlaceholder: "描述您需要的分析、物种与比较组",
       contextFilesLabel: "分析文件",
       contextFilesHint:
-        "按支持的用途上传文档或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
-      datasetDescriptionLabel: "数据集描述（可选）",
-      datasetDescriptionPlaceholder: "描述数据集、分组、物种与分析参数",
+        "上传支持的文档或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
       submit: "开始分析运行",
       submitting: "正在提交…",
       reset: "开始新的运行",
@@ -965,8 +957,6 @@ export default {
       contextFilesLabel: "论文与上下文文件",
       contextFilesHint:
         "可上传任意格式的论文或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
-      datasetDescriptionLabel: "数据集描述（可选）",
-      datasetDescriptionPlaceholder: "描述数据集、物种、参数或希望替换的内容",
       submit: "开始研究运行",
       submitting: "正在提交…",
       reset: "开始新的运行",

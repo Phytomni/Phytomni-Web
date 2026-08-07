@@ -94,13 +94,6 @@
           <label :for="`${agentKey}-files`">
             {{ t(`${localePrefix}.contextFilesLabel`) }}
           </label>
-          <AttachmentPurposeSelector
-            v-if="allowedPurposes.length > 1"
-            v-model="uploadPurpose"
-            :allowed-purposes="allowedPurposes"
-            :disabled="!canPickAttachments || isSubmitting || isRunActive"
-            :data-test="`${agentKey}-attachment-purpose`"
-          />
           <input
             :id="`${agentKey}-files`"
             :data-test="`${agentKey}-files`"
@@ -129,19 +122,6 @@
               />
             </li>
           </ul>
-        </div>
-
-        <div v-if="hasDatasetUpload" class="analysis-agent-field">
-          <label :for="`${agentKey}-dataset`">
-            {{ t(`${localePrefix}.datasetDescriptionLabel`) }}
-          </label>
-          <textarea
-            :id="`${agentKey}-dataset`"
-            v-model="datasetDescription"
-            :data-test="`${agentKey}-dataset`"
-            :placeholder="t(`${localePrefix}.datasetDescriptionPlaceholder`)"
-            rows="3"
-          />
         </div>
 
         <p
@@ -288,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { getChatdownloadURL } from "@/api/chat";
@@ -302,7 +282,6 @@ import {
   type RemoteAgentTool,
 } from "@/constants/agents";
 import { userStore } from "@/stores";
-import AttachmentPurposeSelector from "@/views/chat/components/AttachmentPurposeSelector.vue";
 import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
@@ -341,6 +320,7 @@ type Props = {
 
 const MAX_QUERY_LENGTH = 4000;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+const TRANSITIONAL_UPLOAD_PURPOSE: UploadPurpose = "document";
 
 const props = defineProps<Props>();
 const { t } = useI18n();
@@ -373,9 +353,6 @@ const remoteLifecycle = useRemoteAgentLifecycle({
 
 const question = ref("");
 const datasetDescription = ref("");
-const uploadPurpose = ref<UploadPurpose>(
-  props.tool === "InSilicoResearchAgent" ? "dataset" : "document"
-);
 const fileError = ref("");
 const formError = ref("");
 const downloadError = ref("");
@@ -413,22 +390,7 @@ const uploadQueue = useResumableUploads({
   },
 });
 const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
-const hasDatasetUpload = computed(() =>
-  uploadItems.value.some(
-    (item) => item.purpose === "dataset" && item.status !== "aborted"
-  )
-);
 const hasBlockingUploads = uploadQueue.hasBlockingUploads;
-
-watch(
-  allowedPurposes,
-  (purposes) => {
-    if (purposes.length > 0 && !purposes.includes(uploadPurpose.value)) {
-      uploadPurpose.value = purposes[0];
-    }
-  },
-  { immediate: true }
-);
 
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
@@ -526,7 +488,7 @@ function handleFiles(event: Event): void {
   fileError.value = "";
   if (canPickAttachments.value) {
     void uploadQueue
-      .queueFiles(incoming, uploadPurpose.value)
+      .queueFiles(incoming, TRANSITIONAL_UPLOAD_PURPOSE)
       .catch(() => undefined);
   }
   input.value = "";

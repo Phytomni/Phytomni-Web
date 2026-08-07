@@ -1,12 +1,5 @@
 // English language pack.
 export default {
-  attachmentPurpose: {
-    dataset: "Analysis data",
-    document: "Reference material",
-    descriptionLabel: "Dataset description (optional)",
-    descriptionPlaceholder:
-      "Describe the dataset, organism, groups, and intended analysis",
-  },
   // Common parts
   common: {
     confirm: "Confirm",
@@ -803,10 +796,7 @@ export default {
         "Describe the analysis, species, and comparison you need",
       contextFilesLabel: "Analysis files",
       contextFilesHint:
-        "Attach documents or biological data in a supported purpose, up to 10 files and 10 GiB each.",
-      datasetDescriptionLabel: "Dataset description (optional)",
-      datasetDescriptionPlaceholder:
-        "Describe the dataset, groups, species, and analysis parameters",
+        "Attach supported documents or biological data, up to 10 files and 10 GiB each.",
       submit: "Start analysis run",
       submitting: "Submitting…",
       reset: "Start another run",
@@ -1009,9 +999,6 @@ export default {
       contextFilesLabel: "Paper and context files",
       contextFilesHint:
         "Attach papers or biological data in any format, up to 10 files and 10 GiB each.",
-      datasetDescriptionLabel: "Dataset description (optional)",
-      datasetDescriptionPlaceholder:
-        "Describe the dataset, species, parameters, or substitutions to consider",
       submit: "Start research run",
       submitting: "Submitting…",
       reset: "Start another run",

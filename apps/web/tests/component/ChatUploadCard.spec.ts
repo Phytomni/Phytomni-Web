@@ -59,20 +59,23 @@ function mountCard(item: ResumableUploadItem, attachToDocument = false) {
 }
 
 describe("ChatUploadCard", () => {
-  it.each([
-    ["document", "Reference material"],
-    ["dataset", "Analysis data"],
-  ] as const)(
-    "renders the localized immutable %s purpose",
-    (purpose, label) => {
+  it.each(["document", "dataset"] as const)(
+    "never renders the internal %s purpose",
+    (purpose) => {
       const wrapper = mountCard(makeItem({ purpose }));
 
-      expect(wrapper.get('[data-testid="chat-upload-purpose"]').text()).toBe(
-        label
+      expect(wrapper.get('[data-testid="chat-upload-name"]').text()).toBe(
+        "sample.bam"
       );
-      expect(
-        wrapper.find('[data-testid="chat-upload-purpose"] button').exists()
-      ).toBe(false);
+      expect(wrapper.find('[data-testid="chat-upload-purpose"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.get('[data-testid="chat-upload-status"]').exists()).toBe(
+        true
+      );
+      expect(wrapper.get('[data-testid="chat-upload-progress"]').exists()).toBe(
+        true
+      );
     }
   );
 

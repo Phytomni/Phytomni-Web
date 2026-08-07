@@ -51,7 +51,7 @@ const mocks = vi.hoisted(() => {
         value: [{ asset_id: "file_dataset_1234567890" }],
       },
       hasBlockingUploads: { value: false, __v_isRef: true },
-      queueFiles: vi.fn(),
+      queueFiles: vi.fn().mockResolvedValue(undefined),
       removeUpload: vi.fn().mockResolvedValue(undefined),
       removeUploadById: vi.fn(),
       cancelUpload: vi.fn(),
@@ -72,7 +72,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
           enabled: true,
           execution: "agent_run",
           attachments: true,
-          attachmentPurposes: ["dataset"],
+          attachmentPurposes: ["document", "dataset"],
           artifacts: true,
         },
       },
@@ -148,46 +148,43 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = false;
   });
 
-  it("submits a mixed Analyst request through the shared runner", async () => {
+  it("submits through the shared runner without separate attachment metadata", async () => {
     const wrapper = mountWorkspace();
 
     expect(wrapper.find("form.analysis-agent-form").exists()).toBe(true);
+    expect(
+      wrapper.find('[data-test="analyst-attachment-purpose"]').exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-test="analyst-dataset"]').exists()).toBe(false);
     await wrapper
       .get('[data-testid="analyst-query"]')
       .setValue("Compare groups");
-    await wrapper
-      .get('[data-test="analyst-dataset"]')
-      .setValue("Rice count matrix");
     await wrapper.get('[data-testid="analyst-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith({
       query: "Compare groups",
       attachments: [{ asset_id: "file_dataset_1234567890" }],
-      datasetDescription: "Rice count matrix",
     });
     wrapper.unmount();
   });
 
-  it("shows the dataset description only for active dataset uploads", () => {
-    mocks.chatState.fileList = [];
-    const emptyQueue = mountWorkspace();
-    expect(emptyQueue.find('[data-test="analyst-dataset"]').exists()).toBe(
-      false
-    );
-    emptyQueue.unmount();
+  it("queues files from one attach control with the transitional placeholder", async () => {
+    const wrapper = mountWorkspace();
+    const input = wrapper.get<HTMLInputElement>('[data-test="analyst-files"]');
+    const file = new File(["counts"], "counts.csv", { type: "text/csv" });
+    Object.defineProperty(input.element, "files", {
+      configurable: true,
+      value: [file],
+    });
 
-    mocks.chatState.fileList = [
-      {
-        assetId: "file_document_1234567890",
-        purpose: "document",
-        status: "completed",
-      },
-    ];
-    const documentOnlyQueue = mountWorkspace();
-    expect(
-      documentOnlyQueue.find('[data-test="analyst-dataset"]').exists()
-    ).toBe(false);
-    documentOnlyQueue.unmount();
+    await input.trigger("change");
+
+    expect(wrapper.findAll('[data-test="analyst-files"]')).toHaveLength(1);
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
+      [file],
+      "document"
+    );
+    wrapper.unmount();
   });
 
   it("renders terminal reports and artifact lists through the shared surface", () => {

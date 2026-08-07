@@ -405,12 +405,6 @@ export function removeDeletedChat(options: {
                   :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
-                  v-model:upload-purpose="uploadPurpose"
-                  v-model:dataset-description="datasetDescription"
-                  :allowed-upload-purposes="allowedUploadPurposes"
-                  :show-dataset-description="
-                    fileList.some((item) => item.purpose === 'dataset')
-                  "
                   :has-blocking-uploads="hasBlockingUploads"
                   :roles-loading="rolesLoading"
                   :has-messages="!!currentChat?.messages?.length"
@@ -957,7 +951,6 @@ const {
   selectedAgent,
   fileList,
   uploadPurpose,
-  datasetDescription,
   uploadTransfer,
   copyVisible,
   copyTimeRef,

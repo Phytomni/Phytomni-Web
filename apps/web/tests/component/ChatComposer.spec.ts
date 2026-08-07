@@ -85,10 +85,6 @@ const baseProps = () => ({
   hasMessages: false,
   selectedAgent: "",
   pickerOptions,
-  uploadPurpose: "document" as const,
-  datasetDescription: "",
-  allowedUploadPurposes: ["document"] as const,
-  showDatasetDescription: false,
 });
 
 const mountComposer = (overrides: Record<string, unknown> = {}) =>
@@ -122,12 +118,6 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             '<div class="chat-upload-card-stub"><button data-testid="stub-remove" @click="$emit(\'remove\', item.localId)">Remove</button></div>',
           props: ["item"],
           emits: ["pause", "resume", "retry", "reselect", "cancel", "remove"],
-        },
-        AttachmentPurposeSelector: {
-          name: "AttachmentPurposeSelector",
-          template: '<div data-testid="attachment-purpose-selector-stub" />',
-          props: ["modelValue", "allowedPurposes", "disabled"],
-          emits: ["update:modelValue"],
         },
         ElUpload: {
           name: "ElUpload",
@@ -176,15 +166,6 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
     },
   });
 
-const legacyProps = (): Record<string, unknown> => {
-  const props: Record<string, unknown> = { ...baseProps() };
-  delete props.uploadPurpose;
-  delete props.datasetDescription;
-  delete props.allowedUploadPurposes;
-  delete props.showDatasetDescription;
-  return props;
-};
-
 describe("ChatComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -199,37 +180,18 @@ describe("ChatComposer", () => {
     expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
   });
 
-  it("safely disables upload metadata controls for legacy callers", () => {
-    const wrapper = mountWithApp(ChatComposer, {
-      props: legacyProps(),
-      global: {
-        stubs: {
-          AttachmentPurposeSelector: {
-            name: "AttachmentPurposeSelector",
-            template: "<div />",
-            props: ["modelValue", "allowedPurposes", "disabled"],
-          },
-          ElUpload: {
-            name: "ElUpload",
-            template: "<div />",
-            props: ["disabled"],
-          },
-        },
-      },
-    });
+  it("renders one attach action without purpose or description controls", () => {
+    const wrapper = mountComposer();
 
-    expect(
-      wrapper
-        .getComponent({ name: "AttachmentPurposeSelector" })
-        .props("modelValue")
-    ).toBe("document");
-    expect(
-      wrapper
-        .getComponent({ name: "AttachmentPurposeSelector" })
-        .props("allowedPurposes")
-    ).toEqual([]);
+    expect(wrapper.findAllComponents({ name: "ElUpload" })).toHaveLength(1);
     expect(wrapper.getComponent({ name: "ElUpload" }).props("disabled")).toBe(
-      true
+      false
+    );
+    expect(
+      wrapper.findComponent({ name: "AttachmentPurposeSelector" }).exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
+      false
     );
   });
 
@@ -481,43 +443,6 @@ describe("ChatComposer", () => {
       .findComponent({ name: "ChatUploadCard" })
       .vm.$emit("remove", file.localId);
     expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
-  });
-
-  it("shows purpose controls but hides the dataset description for a document-only queue", () => {
-    const wrapper = mountComposer({
-      allowedUploadPurposes: ["document"],
-      showDatasetDescription: false,
-    });
-
-    expect(
-      wrapper.find('[data-testid="attachment-purpose-selector-stub"]').exists()
-    ).toBe(true);
-    expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
-      false
-    );
-  });
-
-  it("disables file selection and suppresses file events without an allowed purpose", () => {
-    const wrapper = mountComposer({ allowedUploadPurposes: [] });
-    const upload = wrapper.findComponent({ name: "ElUpload" });
-    const selector = wrapper.findComponent({
-      name: "AttachmentPurposeSelector",
-    });
-    const file = new File(["x"], "notes.txt", { type: "text/plain" });
-
-    expect(upload.props("disabled")).toBe(true);
-    expect(selector.props("disabled")).toBe(true);
-
-    upload.props("onChange")?.({ name: file.name, raw: file });
-    upload.props("onExceed")?.([file]);
-
-    const paste = new Event("paste", { bubbles: true, cancelable: true });
-    Object.defineProperty(paste, "clipboardData", { value: { files: [file] } });
-    wrapper.element.dispatchEvent(paste);
-
-    expect(paste.defaultPrevented).toBe(false);
-    expect(wrapper.emitted("file-change")).toBeUndefined();
-    expect(wrapper.emitted("paste-files")).toBeUndefined();
   });
 
   it("blocks only send while an upload is incomplete and keeps the editor usable", () => {
