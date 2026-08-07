@@ -21,11 +21,27 @@ describe("chat attachment reference decoding", () => {
     ).toEqual(attachments);
   });
 
+  it.each([64, 256])(
+    "accepts %d ordered safe attachment references as a detached result",
+    (count) => {
+      const attachments = Array.from({ length: count }, (_, index) => ({
+        asset_id: `file_${index}`,
+      }));
+      const decoded = decodeQueryData({ id: 1, attachments }).attachments;
+
+      expect(decoded).toEqual(attachments);
+      expect(decoded).not.toBe(attachments);
+      expect(decoded?.[0]).not.toBe(attachments[0]);
+      if (decoded) decoded[0].asset_id = "file_mutated";
+      expect(attachments[0]?.asset_id).toBe("file_0");
+    }
+  );
+
   it.each([
     [{ asset_id: "not-file" }],
     [{ asset_id: "file_reads" }, { asset_id: "file_reads" }],
     [{ asset_id: "file_reads", name: "reads.fastq" }],
-    Array.from({ length: 11 }, (_, index) => ({ asset_id: `file_${index}` })),
+    Array.from({ length: 257 }, (_, index) => ({ asset_id: `file_${index}` })),
   ])("rejects malformed or unbounded attachment references", (attachments) => {
     expect(() => decodeQueryData({ id: 1, attachments })).toThrow(
       "Invalid chat response"

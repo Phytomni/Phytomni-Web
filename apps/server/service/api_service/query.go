@@ -174,7 +174,7 @@ func validateV1CurrentMessage(value string) error {
 }
 
 func validateQueryAttachments(refs []rxBot.AssetAttachmentRef) ([]rxBot.AssetAttachmentRef, error) {
-	validated, err := rxBot.ValidateAssetAttachmentRefs(refs)
+	validated, err := rxBot.ValidateAssetAttachmentRefsWithin(refs, rxBot.DefaultMaxAssetAttachmentRefs)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidQueryAttachments, err)
 	}

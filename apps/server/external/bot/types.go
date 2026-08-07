@@ -1,6 +1,9 @@
 package bot
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 const (
 	// ResumableUploadProtocol is the only browser-to-Bot upload protocol
@@ -11,8 +14,8 @@ const (
 	// delivery projection.
 	ResultArchiveProtocol        = "result_archive_v1"
 	ResultArchiveProtocolVersion = 1
-	// MaxAssetAttachmentRefs bounds opaque asset references per submission.
-	MaxAssetAttachmentRefs = 10
+	// MaxAssetAttachmentRefs is the structural ceiling for opaque references.
+	MaxAssetAttachmentRefs = HardMaxAssetAttachmentRefs
 )
 
 // AssetAttachmentRef identifies one completed, owner-scoped upload. It is
@@ -20,6 +23,22 @@ const (
 // not cross the Chat/Agent request boundary.
 type AssetAttachmentRef struct {
 	AssetID string `json:"asset_id"`
+}
+
+// ValidateAssetAttachmentRefsWithin applies structural validation before a
+// trusted server-owned business limit.
+func ValidateAssetAttachmentRefsWithin(refs []AssetAttachmentRef, limit int) ([]AssetAttachmentRef, error) {
+	validated, err := ValidateAssetAttachmentRefs(refs)
+	if err != nil {
+		return nil, err
+	}
+	if limit < 1 || limit > MaxAssetAttachmentRefs {
+		return nil, fmt.Errorf("invalid asset attachment limit %d", limit)
+	}
+	if len(validated) > limit {
+		return nil, fmt.Errorf("too many asset attachments")
+	}
+	return validated, nil
 }
 
 // ChatMessage is one turn in an OpenAI-compatible message array.

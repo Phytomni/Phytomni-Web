@@ -840,7 +840,7 @@ export function decodeConversationArtifacts(
   });
 }
 
-const MAX_ASSET_ATTACHMENTS = 10;
+const MAX_ASSET_ATTACHMENTS = 256;
 const ASSET_ATTACHMENT_ID_PATTERN = /^file_[A-Za-z0-9_-]{1,123}$/u;
 
 function decodeAssetAttachments(value: unknown): AssetAttachmentRef[] {

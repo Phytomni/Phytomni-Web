@@ -2,9 +2,65 @@ package bot
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func distinctAttachmentRefs(count int) []AssetAttachmentRef {
+	refs := make([]AssetAttachmentRef, count)
+	for index := range refs {
+		refs[index].AssetID = fmt.Sprintf("file_%03d", index)
+	}
+	return refs
+}
+
+func TestValidateAssetAttachmentRefsHardLimit(t *testing.T) {
+	refs := distinctAttachmentRefs(256)
+	got, err := ValidateAssetAttachmentRefs(refs)
+	if err != nil {
+		t.Fatalf("256 refs rejected: %v", err)
+	}
+	if len(got) != 256 || got[0].AssetID != "file_000" || got[255].AssetID != "file_255" {
+		t.Fatalf("refs lost order: first=%q last=%q len=%d", got[0].AssetID, got[255].AssetID, len(got))
+	}
+	got[0].AssetID = "file_mutated"
+	if refs[0].AssetID != "file_000" {
+		t.Fatal("validator returned an aliased slice")
+	}
+	if got, err := ValidateAssetAttachmentRefs(distinctAttachmentRefs(257)); err == nil || got != nil {
+		t.Fatalf("257 refs accepted as %#v, err=%v", got, err)
+	}
+}
+
+func TestValidateAssetAttachmentRefsWithinDefaultLimit(t *testing.T) {
+	refs := distinctAttachmentRefs(64)
+	got, err := ValidateAssetAttachmentRefsWithin(refs, 64)
+	if err != nil {
+		t.Fatalf("64 refs rejected: %v", err)
+	}
+	if len(got) != 64 || got[0].AssetID != "file_000" || got[63].AssetID != "file_063" {
+		t.Fatalf("refs lost order: first=%q last=%q len=%d", got[0].AssetID, got[63].AssetID, len(got))
+	}
+	got[0].AssetID = "file_mutated"
+	if refs[0].AssetID != "file_000" {
+		t.Fatal("bounded validator returned an aliased slice")
+	}
+	if got, err := ValidateAssetAttachmentRefsWithin(distinctAttachmentRefs(65), 64); err == nil || got != nil {
+		t.Fatalf("65 refs accepted as %#v, err=%v", got, err)
+	}
+	for _, limit := range []int{0, 257} {
+		if got, err := ValidateAssetAttachmentRefsWithin(nil, limit); err == nil || got != nil {
+			t.Fatalf("invalid limit %d accepted as %#v, err=%v", limit, got, err)
+		}
+	}
+	if got, err := ValidateAssetAttachmentRefsWithin(
+		[]AssetAttachmentRef{{AssetID: "file_same"}, {AssetID: "file_same"}},
+		64,
+	); err == nil || got != nil {
+		t.Fatalf("duplicate refs accepted as %#v, err=%v", got, err)
+	}
+}
 
 func TestValidateAssetAttachmentRefsBoundsAndOrder(t *testing.T) {
 	valid := []AssetAttachmentRef{{AssetID: "file_first"}, {AssetID: "file_second"}}
@@ -28,13 +84,7 @@ func TestValidateAssetAttachmentRefsBoundsAndOrder(t *testing.T) {
 		{name: "bad prefix", refs: []AssetAttachmentRef{{AssetID: "asset_a"}}},
 		{name: "empty suffix", refs: []AssetAttachmentRef{{AssetID: "file_"}}},
 		{name: "overlong", refs: []AssetAttachmentRef{{AssetID: "file_" + strings.Repeat("a", 124)}}},
-		{name: "too many", refs: func() []AssetAttachmentRef {
-			refs := make([]AssetAttachmentRef, MaxAssetAttachmentRefs+1)
-			for i := range refs {
-				refs[i].AssetID = "file_" + string(rune('a'+i))
-			}
-			return refs
-		}()},
+		{name: "too many", refs: distinctAttachmentRefs(257)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

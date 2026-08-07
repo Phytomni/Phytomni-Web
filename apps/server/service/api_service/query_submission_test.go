@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,6 +31,32 @@ func v1SubmissionServer(
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	return server
+}
+
+func distinctQueryAttachmentRefs(count int) []rxBot.AssetAttachmentRef {
+	refs := make([]rxBot.AssetAttachmentRef, count)
+	for index := range refs {
+		refs[index].AssetID = fmt.Sprintf("file_%03d", index)
+	}
+	return refs
+}
+
+func TestQuerySubmissionAttachmentRefsUseManagedLimit(t *testing.T) {
+	refs := distinctQueryAttachmentRefs(64)
+	got, err := validateQueryAttachments(refs)
+	if err != nil {
+		t.Fatalf("64 refs rejected: %v", err)
+	}
+	if len(got) != 64 || got[0].AssetID != "file_000" || got[63].AssetID != "file_063" {
+		t.Fatalf("refs lost order: first=%q last=%q len=%d", got[0].AssetID, got[63].AssetID, len(got))
+	}
+	got[0].AssetID = "file_mutated"
+	if refs[0].AssetID != "file_000" {
+		t.Fatal("query attachment validation returned an aliased slice")
+	}
+	if got, err := validateQueryAttachments(distinctQueryAttachmentRefs(65)); err == nil || got != nil {
+		t.Fatalf("65 refs accepted as %#v, err=%v", got, err)
+	}
 }
 
 func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T) {
@@ -391,13 +418,7 @@ func TestQuerySubmissionRejectsInvalidAttachmentReferencesBeforeAllocation(t *te
 		{name: "bad prefix", refs: []rxBot.AssetAttachmentRef{{AssetID: "asset_secret"}}},
 		{name: "empty suffix", refs: []rxBot.AssetAttachmentRef{{AssetID: "file_"}}},
 		{name: "duplicate", refs: []rxBot.AssetAttachmentRef{{AssetID: "file_same"}, {AssetID: "file_same"}}},
-		{name: "too many", refs: func() []rxBot.AssetAttachmentRef {
-			refs := make([]rxBot.AssetAttachmentRef, rxBot.MaxAssetAttachmentRefs+1)
-			for index := range refs {
-				refs[index].AssetID = "file_asset_" + strings.Repeat("a", index+1)
-			}
-			return refs
-		}()},
+		{name: "too many", refs: distinctQueryAttachmentRefs(65)},
 	} {
 		_, err := NewService().Query(context.Background(), "alice", QueryInput{
 			Query: "unsafe", Mode: "instant", ClientTurnID: "unsafe-attachment-" + tc.name,
