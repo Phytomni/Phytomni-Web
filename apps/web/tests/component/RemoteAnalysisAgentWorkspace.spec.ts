@@ -33,7 +33,6 @@ const mocks = vi.hoisted(() => {
     fileList: [
       {
         assetId: "file_dataset_1234567890",
-        purpose: "dataset",
         status: "completed",
       },
     ],
@@ -142,7 +141,6 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     mocks.chatState.fileList = [
       {
         assetId: "file_dataset_1234567890",
-        purpose: "dataset",
         status: "completed",
       },
     ];
@@ -174,7 +172,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     wrapper.unmount();
   });
 
-  it("queues files from one attach control with the transitional placeholder", async () => {
+  it("queues files from one purpose-free attach control", async () => {
     const wrapper = mountWorkspace();
     const input = wrapper.get<HTMLInputElement>('[data-test="analyst-files"]');
     const file = new File(["counts"], "counts.csv", { type: "text/csv" });
@@ -186,10 +184,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     await input.trigger("change");
 
     expect(wrapper.findAll('[data-test="analyst-files"]')).toHaveLength(1);
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
-      [file],
-      "document"
-    );
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([file]);
     wrapper.unmount();
   });
 

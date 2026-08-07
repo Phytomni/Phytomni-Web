@@ -148,7 +148,6 @@ export function useSelectChat(opts: {
               name: record.name,
               size: record.size,
               type: record.type,
-              purpose: "document",
             },
           ])
       );

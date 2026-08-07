@@ -133,7 +133,6 @@ describe("useSelectChat", () => {
       size: number;
       type: string;
       status: "completed" | "failed";
-      purpose?: "dataset" | "document";
     }>
   ): UploadRecoveryStore {
     return {
@@ -192,7 +191,6 @@ describe("useSelectChat", () => {
         size: 42,
         type: "application/gzip",
         status: "completed",
-        purpose: "dataset",
       },
     ]);
 
@@ -206,7 +204,6 @@ describe("useSelectChat", () => {
         name: "reads.fastq.gz",
         size: 42,
         type: "application/gzip",
-        purpose: "document",
       },
     ]);
     expect(
@@ -260,7 +257,7 @@ describe("useSelectChat", () => {
     expect(JSON.stringify(assistant)).not.toContain("/srv/private");
   });
 
-  it("defaults historical structured attachments without purpose to document", async () => {
+  it("hydrates historical structured attachments without classification", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       historyResponse([
         buildChatHistoryRecord({
@@ -285,17 +282,14 @@ describe("useSelectChat", () => {
       ]),
     }).selectChat("d1");
 
-    expect(messageAt("d1", 0, "legacy purpose attachment").attachments).toEqual(
-      [
-        {
-          asset_id: "file_legacy",
-          name: "legacy.csv",
-          size: 12,
-          type: "text/csv",
-          purpose: "document",
-        },
-      ]
-    );
+    expect(messageAt("d1", 0, "legacy attachment").attachments).toEqual([
+      {
+        asset_id: "file_legacy",
+        name: "legacy.csv",
+        size: 12,
+        type: "text/csv",
+      },
+    ]);
   });
 
   it("uses a localized generic label when same-account metadata is unavailable", async () => {
@@ -323,7 +317,6 @@ describe("useSelectChat", () => {
         name: "Completed file",
         size: 0,
         type: "",
-        purpose: "document",
       },
     ]);
   });

@@ -312,7 +312,6 @@ import type {
   AgentResultDelivery,
   ConversationArtifactLink,
 } from "@/api/types";
-import type { UploadPurpose } from "@/views/chat/upload/types";
 import {
   DatasetDescriptionError,
   normalizeDatasetDescription,
@@ -333,7 +332,6 @@ type Props = {
 
 const MAX_QUERY_LENGTH = 4000;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
-const TRANSITIONAL_UPLOAD_PURPOSE: UploadPurpose = "document";
 
 const props = defineProps<Props>();
 const { t } = useI18n();
@@ -503,9 +501,7 @@ function handleFiles(event: Event): void {
   const incoming = Array.from(input.files ?? []);
   fileError.value = "";
   if (canPickAttachments.value) {
-    void uploadQueue
-      .queueFiles(incoming, TRANSITIONAL_UPLOAD_PURPOSE)
-      .catch(() => undefined);
+    void uploadQueue.queueFiles(incoming).catch(() => undefined);
   }
   input.value = "";
 }
@@ -552,19 +548,10 @@ async function submit(): Promise<void> {
     return;
   }
 
-  const capturedUploads = [...uploadItems.value];
   const capturedDescriptionInput = datasetDescription.value;
   let capturedDescription: string | undefined;
   try {
-    if (
-      capturedUploads.some(
-        (item) => item.status === "completed" && item.purpose === "dataset"
-      )
-    ) {
-      capturedDescription = normalizeDatasetDescription(
-        capturedDescriptionInput
-      );
-    }
+    capturedDescription = normalizeDatasetDescription(capturedDescriptionInput);
   } catch (error) {
     if (error instanceof DatasetDescriptionError) {
       formError.value = t(`${props.localePrefix}.datasetTooLong`);

@@ -2,7 +2,7 @@ import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { UploadFile as ElementUploadFile } from "element-plus";
 import type { ChatComposerHandle, ChatUIState } from "../types";
-import type { ResumableUploadItem, UploadPurpose } from "../upload/types";
+import type { ResumableUploadItem } from "../upload/types";
 import {
   RESUMABLE_UPLOAD_LIMITS,
   validateUploadFile,
@@ -31,11 +31,7 @@ const isElementUploadFile = (value: unknown): value is ElementUploadFile => {
   );
 };
 
-function fallbackItem(
-  file: File,
-  index: number,
-  purpose: UploadPurpose
-): ResumableUploadItem {
+function fallbackItem(file: File, index: number): ResumableUploadItem {
   return {
     localId: `legacy-upload-${Date.now()}-${index}`,
     file,
@@ -44,7 +40,6 @@ function fallbackItem(
     size: file.size,
     type: file.type,
     lastModified: file.lastModified,
-    purpose,
     status: "queued",
     partSize: 0,
     partCount: 0,
@@ -70,21 +65,16 @@ function reportValidation(
 export function useFileUpload(opts: {
   fileList: WritableComputedRef<ResumableUploadItem[]>;
   currentChatId: Ref<string>;
-  uploadPurpose: Readonly<Ref<UploadPurpose>>;
   getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
   scrollToBottom: () => Promise<void>;
-  queueFiles?: (
-    files: readonly File[],
-    purpose: UploadPurpose
-  ) => void | Promise<void>;
+  queueFiles?: (files: readonly File[]) => void | Promise<void>;
   removeUpload?: (item: ResumableUploadItem) => void | Promise<void>;
   onValidationError?: (error: ChatAttachmentValidationError) => void;
 }) {
   const {
     fileList,
     currentChatId,
-    uploadPurpose,
     getChatState,
     composerRef,
     scrollToBottom,
@@ -122,14 +112,13 @@ export function useFileUpload(opts: {
       }
     }
     if (accepted.length === 0) return;
-    const purpose = uploadPurpose.value;
 
     if (queueFiles) {
-      Promise.resolve(queueFiles(accepted, purpose)).catch(() => undefined);
+      Promise.resolve(queueFiles(accepted)).catch(() => undefined);
     } else {
       chatState.fileList = [
         ...chatState.fileList,
-        ...accepted.map((file, index) => fallbackItem(file, index, purpose)),
+        ...accepted.map((file, index) => fallbackItem(file, index)),
       ];
     }
 

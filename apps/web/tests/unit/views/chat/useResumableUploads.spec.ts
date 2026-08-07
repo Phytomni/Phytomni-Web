@@ -189,7 +189,7 @@ describe("useResumableUploads", () => {
     const { queue, getChatState, currentChatId } = setup();
     const file = fixtureFile("reads.fastq.gz");
 
-    await queue.queueFiles([file], "document");
+    await queue.queueFiles([file]);
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]?.status).toBe("completed");
     });
@@ -209,9 +209,9 @@ describe("useResumableUploads", () => {
   it("isolates simultaneous A/B queues and aggregate snapshots", async () => {
     const { queue, getChatState, currentChatId } = setup();
 
-    await queue.queueFiles([fixtureFile("a.bam")], "document");
+    await queue.queueFiles([fixtureFile("a.bam")]);
     currentChatId.value = "B";
-    await queue.queueFiles([fixtureFile("b.vcf")], "document");
+    await queue.queueFiles([fixtureFile("b.vcf")]);
 
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]?.status).toBe("completed");
@@ -227,7 +227,7 @@ describe("useResumableUploads", () => {
 
   it("moves the engine registry across a temporary-to-canonical dialogue rekey", async () => {
     const { queue, getChatState, states } = setup();
-    await queue.queueFiles([fixtureFile("pending.bam")], "document");
+    await queue.queueFiles([fixtureFile("pending.bam")]);
     const sourceState = getChatState("A");
     states.set("server-1", sourceState);
     states.delete("A");
@@ -248,7 +248,7 @@ describe("useResumableUploads", () => {
       upload_origin: "",
     };
 
-    await queue.queueFiles([fixtureFile("blocked.fastq")], "document");
+    await queue.queueFiles([fixtureFile("blocked.fastq")]);
 
     expect(mocks.createUpload).not.toHaveBeenCalled();
     expect(onValidationError).toHaveBeenCalledWith(
@@ -278,7 +278,7 @@ describe("useResumableUploads", () => {
     });
     mocks.createUploadDataPlane.mockReturnValue(data);
 
-    await queue.queueFiles([fixtureFile("during-switch.fasta")], "document");
+    await queue.queueFiles([fixtureFile("during-switch.fasta")]);
     await started;
 
     capability.value = {
@@ -310,10 +310,10 @@ describe("useResumableUploads", () => {
       return data;
     });
 
-    await queue.queueFiles(
-      [fixtureFile("failed-input.fasta"), fixtureFile("sibling-input.vcf.gz")],
-      "document"
-    );
+    await queue.queueFiles([
+      fixtureFile("failed-input.fasta"),
+      fixtureFile("sibling-input.vcf.gz"),
+    ]);
 
     await vi.waitFor(() => {
       expect(getChatState("A").fileList).toHaveLength(2);
@@ -325,9 +325,9 @@ describe("useResumableUploads", () => {
 
   it("cancels all incomplete items for one dialogue without touching another", async () => {
     const { queue, getChatState, currentChatId } = setup();
-    await queue.queueFiles([fixtureFile("a.fastq")], "document");
+    await queue.queueFiles([fixtureFile("a.fastq")]);
     currentChatId.value = "B";
-    await queue.queueFiles([fixtureFile("b.fastq")], "document");
+    await queue.queueFiles([fixtureFile("b.fastq")]);
     await vi.waitFor(() => {
       expect(getChatState("A").fileList[0]).toBeTruthy();
       expect(getChatState("B").fileList[0]?.status).toBe("completed");
@@ -340,11 +340,11 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
-  it("retains distinct purposes selected in separate picker actions", async () => {
+  it("keeps runtime queue items free of client classification", async () => {
     const { queue, getChatState } = setup();
 
-    await queue.queueFiles([fixtureFile("reference.pdf")], "document");
-    await queue.queueFiles([fixtureFile("reads.fastq.gz")], "dataset");
+    await queue.queueFiles([fixtureFile("reference.pdf")]);
+    await queue.queueFiles([fixtureFile("reads.fastq.gz")]);
 
     await vi.waitFor(() => {
       expect(getChatState("A").fileList).toHaveLength(2);
@@ -352,9 +352,9 @@ describe("useResumableUploads", () => {
         getChatState("A").fileList.every((item) => item.status === "completed")
       ).toBe(true);
     });
-    expect(getChatState("A").fileList.map((item) => item.purpose)).toEqual([
-      "document",
-      "dataset",
+    expect(getChatState("A").fileList).toEqual([
+      expect.not.objectContaining({ purpose: expect.anything() }),
+      expect.not.objectContaining({ purpose: expect.anything() }),
     ]);
     expect(mocks.createUpload).toHaveBeenNthCalledWith(
       1,
@@ -379,12 +379,12 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
-  it("uses a private placeholder instead of legacy recovery purpose", async () => {
+  it("drops legacy recovery purpose from the runtime queue item", async () => {
     const store = fakeStore();
     const first = setup(store);
     const file = fixtureFile("counts.csv");
 
-    await first.queue.queueFiles([file], "document");
+    await first.queue.queueFiles([file]);
     await vi.waitFor(() => {
       expect(first.getChatState("A").fileList[0]?.status).toBe("completed");
     });
@@ -401,8 +401,11 @@ describe("useResumableUploads", () => {
     );
     await recovered.queue.loadRecovery();
     expect(recovered.getChatState("A").fileList).toEqual([
-      expect.objectContaining({ file: null, purpose: "document" }),
+      expect.objectContaining({ file: null }),
     ]);
+    expect(recovered.getChatState("A").fileList[0]).not.toHaveProperty(
+      "purpose"
+    );
     await recovered.queue.dispose();
   });
 });

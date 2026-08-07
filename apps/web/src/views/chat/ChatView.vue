@@ -944,7 +944,6 @@ const {
   chatMode,
   selectedAgent,
   fileList,
-  uploadPurpose,
   uploadTransfer,
   copyVisible,
   copyTimeRef,
@@ -1694,7 +1693,6 @@ function analystLogErrorKind(
 const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
   fileList,
   currentChatId,
-  uploadPurpose,
   getChatState,
   composerRef,
   scrollToBottom,

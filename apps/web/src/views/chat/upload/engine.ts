@@ -8,7 +8,6 @@ import {
 } from "@/api/upload";
 import type {
   ResumableUploadItem,
-  UploadPurpose,
   UploadStatus,
 } from "@/views/chat/upload/types";
 import {
@@ -70,7 +69,6 @@ export interface ResumableUploadEngineInput {
   accountScope: string;
   file: File | null;
   idempotencyKey: string;
-  purpose: UploadPurpose;
   recovered?: UploadRecoveryRecord;
 }
 
@@ -221,7 +219,7 @@ export class ResumableUploadEngine {
     this.partDigests = { ...(input.recovered?.partDigests ?? {}) };
     this.partSizes = [...(input.recovered?.partSizes ?? [])];
     this.item = input.recovered
-      ? this.itemFromRecovery(input.recovered, input.file, input.purpose)
+      ? this.itemFromRecovery(input.recovered, input.file)
       : this.newItem(input);
     if (options.onChange) this.listeners.add(options.onChange);
   }
@@ -238,7 +236,6 @@ export class ResumableUploadEngine {
       size: input.file.size,
       type: input.file.type,
       lastModified: input.file.lastModified,
-      purpose: input.purpose,
       status: "queued",
       partSize: 0,
       partCount: 0,
@@ -254,8 +251,7 @@ export class ResumableUploadEngine {
 
   private itemFromRecovery(
     record: UploadRecoveryRecord,
-    file: File | null,
-    purpose: UploadPurpose
+    file: File | null
   ): ResumableUploadItem {
     return {
       localId: record.localId,
@@ -265,7 +261,6 @@ export class ResumableUploadEngine {
       size: record.size,
       type: record.type,
       lastModified: record.lastModified,
-      purpose,
       status: record.status,
       partSize: record.partSize,
       partCount: record.partCount,

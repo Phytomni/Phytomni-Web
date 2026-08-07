@@ -533,7 +533,7 @@ function handleFiles(event: Event): void {
   const incoming = Array.from(input.files ?? []);
   fileError.value = "";
   if (canPickAttachments.value) {
-    void uploadQueue.queueFiles(incoming, "document").catch(() => undefined);
+    void uploadQueue.queueFiles(incoming).catch(() => undefined);
   }
   input.value = "";
 }

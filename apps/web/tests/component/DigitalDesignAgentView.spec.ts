@@ -342,10 +342,7 @@ describe("DigitalDesignAgentView", () => {
     await fileInput.trigger("change");
 
     mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_context" }];
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
-      [context],
-      "document"
-    );
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([context]);
     await wrapper.get("form.digital-design-form").trigger("submit");
     expect(mocks.submit).toHaveBeenCalledWith({
       query: "Design a stable protein",
@@ -371,10 +368,7 @@ describe("DigitalDesignAgentView", () => {
     });
     await input.trigger("change");
 
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
-      [reads],
-      "document"
-    );
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
     wrapper.unmount();
   });
 

@@ -16,7 +16,7 @@ import type {
   StreamContentBlock,
 } from "./messageTypes";
 import type { AgentTaskLifecycle } from "@/api/types";
-import type { ResumableUploadItem, UploadPurpose } from "./upload/types";
+import type { ResumableUploadItem } from "./upload/types";
 import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
@@ -225,7 +225,6 @@ export interface ChatUIState {
   isSending: boolean;
   messageInput: string;
   fileList: ResumableUploadItem[];
-  uploadPurpose: UploadPurpose;
   datasetDescription: string;
   historyQuestion: readonly ChatMessage[] | null;
   /** Lifecycle of this dialogue's persisted-history reconstruction. */

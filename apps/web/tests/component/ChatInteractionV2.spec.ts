@@ -701,7 +701,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       });
       const states = chatViewState.states;
       if (!states) throw new Error("ChatView state was not captured");
-      const dialogueId = `attachment-purpose-${mode}-${selectedAgent || "auto"}`;
+      const dialogueId = `attachment-channel-${mode}-${selectedAgent || "auto"}`;
 
       try {
         states.currentChatId.value = dialogueId;

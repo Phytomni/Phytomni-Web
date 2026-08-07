@@ -112,7 +112,6 @@ describe("useChatStates parallel chat state", () => {
       isSending: false,
       messageInput: "",
       fileList: [],
-      uploadPurpose: "document",
       datasetDescription: "",
       historyQuestion: null,
       historyHydration: "new",
@@ -147,19 +146,19 @@ describe("useChatStates parallel chat state", () => {
       autoOpenedArtifactMessageIds: [],
       archiveRetryingByMessageId: {},
     });
+    expect(state).not.toHaveProperty("uploadPurpose");
+    expect(s).not.toHaveProperty("uploadPurpose");
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
   });
 
-  it("isolates upload purpose and dataset description by dialogue", () => {
+  it("isolates the remaining dataset description by dialogue", () => {
     const s = useChatStates();
     const stateA = s.getChatState("A");
     const stateB = s.getChatState("B");
 
-    stateA.uploadPurpose = "dataset";
     stateA.datasetDescription = "Treatment and control counts";
 
-    expect(stateB.uploadPurpose).toBe("document");
     expect(stateB.datasetDescription).toBe("");
   });
 

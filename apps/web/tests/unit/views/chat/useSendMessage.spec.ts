@@ -9,10 +9,7 @@ import type {
   ChatView,
   DialogueReconciliationResult,
 } from "@/views/chat/types";
-import type {
-  ResumableUploadItem,
-  UploadPurpose,
-} from "@/views/chat/upload/types";
+import type { ResumableUploadItem } from "@/views/chat/upload/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 import {
@@ -115,8 +112,7 @@ describe("useSendMessage", () => {
 
   function completedUpload(
     name = "sample.txt",
-    assetId = "file_sample",
-    purpose: UploadPurpose = "document"
+    assetId = "file_sample"
   ): ResumableUploadItem {
     return {
       localId: `upload-${assetId}`,
@@ -126,7 +122,6 @@ describe("useSendMessage", () => {
       size: 5,
       type: "text/plain",
       lastModified: 0,
-      purpose,
       status: "completed",
       partSize: 5,
       partCount: 1,
@@ -1166,12 +1161,12 @@ describe("useSendMessage", () => {
     });
   });
 
-  it("sends one normalized dataset description only with a completed dataset", async () => {
+  it("never emits a separate dataset description for completed attachments", async () => {
     stateFor("A").messageInput = "Analyze the uploaded data";
     stateFor("A").datasetDescription = "  Treatment and control counts  ";
     stateFor("A").fileList = [
-      completedUpload("context.pdf", "file_context", "document"),
-      completedUpload("counts.csv", "file_counts", "dataset"),
+      completedUpload("context.pdf", "file_context"),
+      completedUpload("counts.csv", "file_counts"),
     ];
     mockGetQueryAbortable.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<DecodedQueryData>>({
@@ -1183,16 +1178,16 @@ describe("useSendMessage", () => {
 
     const formData = queryCallAt(0, "dataset description query")[0] as FormData;
     expect(formData.get("query")).toBe("Analyze the uploaded data");
-    expect(formData.getAll("dataset_description")).toEqual([
-      "Treatment and control counts",
-    ]);
+    expect(formData.has("dataset_description")).toBe(false);
     expect(formData.get("attachments")).toBe(
       JSON.stringify([
         { asset_id: "file_context" },
         { asset_id: "file_counts" },
       ])
     );
-    expect(stateFor("A").datasetDescription).toBe("");
+    expect(stateFor("A").datasetDescription).toBe(
+      "  Treatment and control counts  "
+    );
   });
 
   it("omits a dataset description for document-only submissions", async () => {

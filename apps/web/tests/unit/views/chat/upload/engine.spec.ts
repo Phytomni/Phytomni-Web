@@ -105,8 +105,7 @@ class MemoryStore implements UploadRecoveryStore {
 
 function input(
   file: File | null,
-  recovered?: UploadRecoveryRecord,
-  purpose: "dataset" | "document" = "document"
+  recovered?: UploadRecoveryRecord
 ): ResumableUploadEngineInput {
   return {
     localId: "local-1",
@@ -114,7 +113,6 @@ function input(
     accountScope,
     file,
     idempotencyKey: "1c2d3e4f-5061-4789-8abc-def012345678",
-    purpose,
     recovered,
   };
 }
@@ -194,15 +192,13 @@ describe("resumable upload engine", () => {
       max_parallel_parts: 1,
     };
     const deps = makeDeps(store, data, {}, session);
-    const engine = createResumableUploadEngine(
-      input(file, undefined, "dataset"),
-      deps
-    );
+    const engine = createResumableUploadEngine(input(file), deps);
 
     await engine.start();
 
     expect(engine.snapshot.status).toBe("completed");
     expect(engine.snapshot.loadedBytes).toBe(6);
+    expect(engine.snapshot).not.toHaveProperty("purpose");
     expect(data.putPart).toHaveBeenCalledWith(
       1,
       expect.any(Blob),

@@ -135,7 +135,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
           a2ui: false,
           resolver: false,
           attachments: true,
-          attachmentPurposes: ["dataset"],
+          attachmentChannels: ["dataset"],
           artifacts: true,
           enabled: true,
         },
@@ -405,10 +405,7 @@ describe("ResearchAgentView", () => {
     await fileInput.trigger("change");
 
     mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_paper" }];
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
-      [paper],
-      "dataset"
-    );
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([paper]);
     await wrapper.get('[data-test="research-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith(
@@ -435,10 +432,7 @@ describe("ResearchAgentView", () => {
     });
     await input.trigger("change");
 
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith(
-      [reads],
-      "dataset"
-    );
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
     wrapper.unmount();
   });
 
@@ -458,11 +452,10 @@ describe("ResearchAgentView", () => {
     wrapper.unmount();
   });
 
-  it("submits the dataset description separately without changing the query", async () => {
+  it("submits attachments without client classification metadata", async () => {
     mocks.chatState.fileList = [
       {
         assetId: "file_dataset",
-        purpose: "dataset",
         status: "completed",
       },
     ];
@@ -472,16 +465,12 @@ describe("ResearchAgentView", () => {
     await wrapper
       .get('[data-test="research-question"]')
       .setValue("Summarize the paper");
-    await wrapper
-      .get('[data-test="research-dataset"]')
-      .setValue("Traits were measured in drought-treated plants.");
     await wrapper.get('[data-test="research-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith(
       expect.objectContaining({
         query: "Summarize the paper",
         attachments: [{ asset_id: "file_dataset" }],
-        datasetDescription: "Traits were measured in drought-treated plants.",
       })
     );
     expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");

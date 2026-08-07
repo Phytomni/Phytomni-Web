@@ -1,7 +1,7 @@
 import { ref, computed } from "vue";
 import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import type { AnalystAgentLog } from "@/api/types";
-import type { ResumableUploadItem, UploadPurpose } from "../upload/types";
+import type { ResumableUploadItem } from "../upload/types";
 import type { RekeyChatStateOutcome } from "../types";
 
 function createDefaultChatUIState(): ChatUIState {
@@ -9,7 +9,6 @@ function createDefaultChatUIState(): ChatUIState {
     isSending: false,
     messageInput: "",
     fileList: [],
-    uploadPurpose: "document",
     datasetDescription: "",
     historyQuestion: null,
     historyHydration: "new",
@@ -146,17 +145,6 @@ export function useChatStates() {
       if (chatState) {
         chatState.fileList = value;
       }
-    },
-  });
-
-  const uploadPurpose = computed<UploadPurpose>({
-    get: () => {
-      if (!currentChatId.value) return "document";
-      return getChatState(currentChatId.value).uploadPurpose;
-    },
-    set: (value: UploadPurpose) => {
-      if (!currentChatId.value) return;
-      getChatState(currentChatId.value).uploadPurpose = value;
     },
   });
 
@@ -329,7 +317,6 @@ export function useChatStates() {
     chatMode,
     selectedAgent,
     fileList,
-    uploadPurpose,
     datasetDescription,
     uploadTransfer,
     copyVisible,
