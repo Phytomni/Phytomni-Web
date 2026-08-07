@@ -1880,6 +1880,7 @@ const { sendMessage } = useSendMessage({
   timestamp,
   selectChat,
   scrollToBottom,
+  attachmentTargetBlocked,
 });
 
 const { submitAction, retryAction } = useA2uiInteraction();
@@ -1900,7 +1901,7 @@ const handleMarkdownFinish = (messageIndex: number) => {
 // Handle the follow-up question click event
 const handleFollowUpQuestionClick = (question: string) => {
   // If sending or refreshing, block the action
-  if (isSending.value) return;
+  if (isSending.value || attachmentTargetBlocked.value) return;
 
   if (!currentChatId.value) return;
 

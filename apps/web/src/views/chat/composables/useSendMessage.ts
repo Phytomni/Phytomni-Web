@@ -393,6 +393,7 @@ export function useSendMessage(opts: {
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
   scrollToBottom: () => Promise<void>;
+  attachmentTargetBlocked?: Readonly<Ref<boolean>>;
 }) {
   const {
     getChatState,
@@ -406,13 +407,14 @@ export function useSendMessage(opts: {
     timestamp,
     selectChat,
     scrollToBottom,
+    attachmentTargetBlocked,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
     currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
-    if (!currentChatId.value) return;
+    if (!currentChatId.value || attachmentTargetBlocked?.value) return;
 
     const sendingDialogueId = currentChatId.value;
     const chatState = getChatState(sendingDialogueId);

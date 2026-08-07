@@ -633,6 +633,25 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       },
       false,
     ],
+    [
+      "Autonomous Expert ignores an unauthorized capable Agent",
+      ["AnalystAgent"],
+      "expert",
+      "",
+      {
+        AnalystAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentChannels: [],
+        },
+        ReviewAgent: {
+          enabled: true,
+          attachments: true,
+          attachmentChannels: ["document"],
+        },
+      },
+      false,
+    ],
   ])(
     "derives attachment availability for %s without widening the authorized Agent set",
     async (_name, roles, mode, selectedAgent, capabilities, expected) => {
@@ -727,6 +746,117 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       }
     }
   );
+
+  it("preserves the draft and attachment chips when a blocked follow-up is clicked", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
+      ],
+    });
+    await router.push("/chat");
+    await router.isReady();
+    const context = createTestAppContext({ router });
+    userStore().SET_ROLES(["AnalystAgent"]);
+    userStore().expertEnabled = true;
+    mockBotCapabilities.byTool.value = {
+      AnalystAgent: {
+        enabled: true,
+        attachments: true,
+        attachmentChannels: [],
+      },
+    } as BotCapabilityByTool;
+    mockBotCapabilities.upload.value = {
+      enabled: true,
+      protocol: "obs-multipart-v2",
+      upload_origin: "https://upload.example",
+      max_file_bytes: 10 * 1024 * 1024 * 1024,
+      max_attachments: 10,
+    };
+
+    const wrapper = context.mount(ChatView, {
+      shallow: true,
+      global: {
+        stubs: {
+          PhyAdaptiveShell: {
+            template:
+              '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+          },
+          ChatMessageRow,
+          FollowUpQuestions: {
+            name: "FollowUpQuestions",
+            props: ["questions"],
+            emits: ["question-click"],
+            template:
+              '<button data-testid="blocked-follow-up" @click="$emit(\'question-click\', questions[0])">Follow up</button>',
+          },
+          ChatComposer: {
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
+              return {};
+            },
+            template: "<div />",
+          },
+          ElIcon: true,
+        },
+      },
+    });
+    const states = chatViewState.states;
+    if (!states) throw new Error("ChatView state was not captured");
+    const dialogueId = "blocked-follow-up";
+    const state = states.getChatState(dialogueId);
+    const attachment = {
+      localId: "upload-incompatible",
+      assetId: "file_incompatible",
+      name: "counts.csv",
+      size: 1,
+      type: "text/csv",
+      file: null,
+      lastModified: 0,
+      status: "completed" as const,
+      partSize: 1,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 1,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    state.renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        {
+          role: "assistant",
+          content: "Answer",
+          tool_name: "AnalystAgent",
+          followUpQuestions: ["Run another analysis"],
+          showFollowUpQuestions: true,
+        },
+      ],
+    };
+    state.messageInput = "keep this draft";
+    state.mode = "expert";
+    state.selectedAgent = "AnalystAgent";
+    state.fileList = [attachment];
+    states.currentChatId.value = dialogueId;
+    await nextTick();
+
+    try {
+      await wrapper.get('[data-testid="blocked-follow-up"]').trigger("click");
+      await flushPromises();
+
+      expect(state.messageInput).toBe("keep this draft");
+      expect(state.fileList).toEqual([attachment]);
+      expect(state.renderedChat.messages).toHaveLength(1);
+      expect(state.isSending).toBe(false);
+    } finally {
+      wrapper.unmount();
+    }
+  });
 
   it("mounts user/assistant rows, follow-ups, and actions chrome", () => {
     const user = mount(ChatMessageRow, {
