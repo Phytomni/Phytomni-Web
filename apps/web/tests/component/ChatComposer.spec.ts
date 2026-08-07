@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ResumableUploadItem } from "@/views/chat/types";
 import { mountWithApp } from "../helpers/test-app-context";
+
+const COMPOSER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
+  "utf8"
+);
 
 const mentionExpose = {
   openHeader: vi.fn(),
@@ -536,6 +543,82 @@ describe("ChatComposer", () => {
     const strip = wrapper.findComponent({ name: "AttachmentChipStrip" });
     expect(strip.props("announcement")).toBe("Already attached: paper.pdf");
     expect(strip.props("announcementNonce")).toBe(1);
+  });
+
+  it("keeps the editor footprint and compact controls stable across attachment counts", () => {
+    expect(COMPOSER_SOURCE).toContain(
+      "min-height: var(--phy-control-height-primary)"
+    );
+    expect(COMPOSER_SOURCE).toContain("@media (max-width: 600px)");
+    expect(COMPOSER_SOURCE).toContain(
+      "grid-template-columns: minmax(0, 1fr) auto"
+    );
+
+    for (const count of [0, 1, 10]) {
+      const fileList: ResumableUploadItem[] = Array.from(
+        { length: count },
+        (_, index) => ({
+          localId: `upload-${index}`,
+          assetId: `asset-${index}`,
+          name: `sample-${index}.fastq.gz`,
+          size: 10,
+          type: "application/gzip",
+          file: null,
+          lastModified: index,
+          status: "completed",
+          partSize: 10,
+          partCount: 1,
+          receivedParts: [1],
+          loadedBytes: 10,
+          speedBytesPerSecond: 0,
+          etaSeconds: null,
+          retryCount: 0,
+          errorCode: null,
+        })
+      );
+      const wrapper = mountComposer({
+        modelValue: "keep editing",
+        fileList,
+      });
+
+      expect(wrapper.find(".chat-composer-body").exists()).toBe(true);
+      expect(wrapper.find(".composer-toolbar").exists()).toBe(true);
+      expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+      expect(
+        wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+      ).toBe(false);
+      expect(
+        wrapper.findComponent(".composer-send-button").props("disabled")
+      ).toBe(false);
+      expect(
+        wrapper.findComponent({ name: "AttachmentChipStrip" }).exists()
+      ).toBe(count > 0);
+      if (count > 0) {
+        expect(
+          wrapper.findComponent({ name: "AttachmentChipStrip" }).props("items")
+        ).toHaveLength(count);
+      }
+      wrapper.unmount();
+    }
+
+    const emptyExpert = mountComposer({ modelValue: "query" });
+    expect(emptyExpert.find(".composer-mode-selector").exists()).toBe(true);
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(true);
+    expect(emptyExpert.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+    expect(emptyExpert.find(".composer-send-button").exists()).toBe(true);
+
+    const populatedExpert = mountComposer({
+      modelValue: "query",
+      hasMessages: true,
+      showModeSelector: false,
+    });
+    expect(populatedExpert.find(".el-dropdown").exists()).toBe(true);
+    expect(populatedExpert.findComponent({ name: "ElUpload" }).exists()).toBe(
+      true
+    );
+    expect(populatedExpert.find(".composer-send-button").exists()).toBe(true);
   });
 
   it("blocks only send while an upload is incomplete and keeps the editor usable", () => {

@@ -558,16 +558,17 @@ describe("ChatInteractionV2 — behavior matrix", () => {
               '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
           },
           ChatComposer: {
-            props: ["fileList"],
+            name: "ChatComposer",
+            props: ["fileList", "attachmentAnnouncement"],
             setup(
               _props: unknown,
               { expose }: { expose: (value: Record<string, unknown>) => void }
             ) {
               expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
-              return {};
+              return { overflowOpen: ref(false), selectedHiddenId: ref("") };
             },
             template:
-              '<div><button v-for="item in fileList" :key="item.localId" data-testid="attachment-chip">{{ item.name }}</button></div>',
+              '<div><button v-for="item in fileList.slice(0, 3)" :key="item.localId" data-testid="attachment-chip">{{ item.name }}</button><button v-if="fileList.length > 3" data-testid="attachment-chip-overflow" @click="overflowOpen = true">More</button><section v-if="overflowOpen" data-testid="attachment-chip-detail"><button v-for="item in fileList.slice(3)" :key="item.localId" data-testid="attachment-chip-overflow-item" @click="selectedHiddenId = item.localId">{{ item.name }}</button></section></div>',
           },
         },
       },
@@ -600,9 +601,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     chatUploadQueueState.options?.onDuplicate?.("upload-existing", "paper.pdf");
     await flushPromises();
 
-    expect(
-      wrapper.get('[data-testid="chat-attachment-announcement"]').text()
-    ).toBe("Already attached: paper.pdf");
+    const composer = wrapper.findComponent({ name: "ChatComposer" });
+    expect(composer.props("attachmentAnnouncement")).toBe(
+      "Already attached: paper.pdf"
+    );
     expect(
       wrapper
         .get('[data-testid="chat-root"]')
@@ -615,9 +617,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     states.currentChatId.value = "duplicate-chat-b";
     await nextTick();
 
-    expect(
-      wrapper.find('[data-testid="chat-attachment-announcement"]').exists()
-    ).toBe(false);
+    expect(composer.props("attachmentAnnouncement")).toBe("");
     expect(
       wrapper
         .get('[data-testid="chat-root"]')
@@ -626,14 +626,36 @@ describe("ChatInteractionV2 — behavior matrix", () => {
 
     states.currentChatId.value = dialogueId;
     await nextTick();
-    expect(
-      wrapper.get('[data-testid="chat-attachment-announcement"]').text()
-    ).toBe("Already attached: paper.pdf");
+    expect(composer.props("attachmentAnnouncement")).toBe(
+      "Already attached: paper.pdf"
+    );
     expect(
       wrapper
         .get('[data-testid="chat-root"]')
         .attributes("data-focused-upload-id")
     ).toBe("upload-existing");
+
+    const hiddenItem: ResumableUploadItem = {
+      ...item,
+      localId: "upload-hidden",
+      name: "hidden.fastq.gz",
+    };
+    states.getChatState(dialogueId).fileList = [
+      { ...item, localId: "upload-direct-1", name: "direct-1.pdf" },
+      { ...item, localId: "upload-direct-2", name: "direct-2.pdf" },
+      { ...item, localId: "upload-direct-3", name: "direct-3.pdf" },
+      hiddenItem,
+    ];
+    await nextTick();
+    chatUploadQueueState.options?.onDuplicate?.(
+      "upload-hidden",
+      "hidden.fastq.gz"
+    );
+    await flushPromises();
+
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="attachment-chip-overflow-item"]').element
+    );
     wrapper.unmount();
   });
 

@@ -433,15 +433,6 @@ export function removeDeletedChat(options: {
                   @clear-agent="clearSelectedAgent"
                   @toggle-agent="handleButtonClick"
                 />
-                <p
-                  v-if="attachmentAnnouncement"
-                  class="chat-attachment-announcement"
-                  data-testid="chat-attachment-announcement"
-                  role="status"
-                  aria-live="polite"
-                >
-                  {{ attachmentAnnouncement }}
-                </p>
               </div>
               <div
                 v-if="!currentChat?.messages?.length"
@@ -989,9 +980,24 @@ async function onAttachmentDuplicate(
   const overflowChip = chatRootRef.value?.querySelector<HTMLButtonElement>(
     '[data-testid="attachment-chip-overflow"]'
   );
-  const focusTarget =
-    itemIndex >= 0 && itemIndex < 3 ? directChips?.[itemIndex] : overflowChip;
-  focusTarget?.focus();
+  if (itemIndex < 0) return;
+  if (itemIndex >= 0 && itemIndex < 3) {
+    directChips?.[itemIndex]?.focus();
+    return;
+  }
+  if (!overflowChip) return;
+
+  overflowChip.focus();
+  overflowChip.click();
+  await nextTick();
+  if (currentChatId.value !== ownerDialogueId) return;
+  const hiddenChip = chatRootRef.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow-item"]'
+  )[itemIndex - 3];
+  if (!hiddenChip) return;
+  hiddenChip.click();
+  hiddenChip.focus();
+  await nextTick();
 }
 
 const botCapabilities = useBotCapabilities("chat");
