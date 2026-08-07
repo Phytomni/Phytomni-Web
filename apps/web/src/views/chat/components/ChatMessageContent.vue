@@ -299,6 +299,7 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
 
+// Canonical tool_name spelling: 'DeepGenomeAgent'.
 const isDeepGenomeMessage = computed(
   () =>
     props.message.role === "assistant" &&

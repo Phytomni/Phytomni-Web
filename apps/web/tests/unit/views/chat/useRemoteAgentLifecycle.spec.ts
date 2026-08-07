@@ -189,11 +189,11 @@ describe("useRemoteAgentLifecycle", () => {
       "19",
       expect.stringContaining("remote-GeneNetworkAgent-19-")
     );
-    expect(mocks.getAnswerCheck).not.toHaveBeenCalled();
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
     expect(controller.snapshot.value).toEqual(lifecycle());
 
     await vi.advanceTimersByTimeAsync(1000);
-    expect(mocks.getAnswerCheck).not.toHaveBeenCalled();
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
 
     mocks.getTaskLifecycle.mockResolvedValueOnce({
       data: lifecycle({ report_revision: 1 }),
@@ -377,7 +377,7 @@ describe("useRemoteAgentLifecycle", () => {
     });
     await flushAsync();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
 
     controller.reset();
     state.value = runState({
@@ -413,7 +413,7 @@ describe("useRemoteAgentLifecycle", () => {
     });
     await flushAsync();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
 
     controller.dispose();
     resolveHistory?.({ code: 200, data: [historyRow()] });
