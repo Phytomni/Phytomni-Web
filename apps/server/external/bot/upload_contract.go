@@ -23,6 +23,12 @@ const (
 	maxUploadAbortResponseBytes int64 = 16 << 10
 )
 
+var (
+	errUploadAbortRequestFailed   = errors.New("upload abort request failed")
+	errUploadAbortResponseInvalid = errors.New("invalid upload abort response")
+	errUploadAbortResponseLarge   = errors.New("upload abort response exceeds size limit")
+)
+
 // UploadCreateRequest is the metadata-only control request sent from Web Go
 // to Bot. OwnerSubject is always derived by Web Go; it is never accepted from
 // the browser.
@@ -138,40 +144,45 @@ func (c *Client) AbortUpload(ctx context.Context, assetID, capability string) (*
 		return nil, ResponseMeta{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+capability)
-	resp, err := c.http.Do(req)
+	abortHTTP := *c.http
+	abortHTTP.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := abortHTTP.Do(req)
 	if err != nil {
-		return nil, ResponseMeta{}, wrapTransportError(err)
+		return nil, ResponseMeta{}, sanitizeUploadAbortTransportError(err)
 	}
 	defer resp.Body.Close()
 
-	meta := responseMeta(resp)
+	meta := ResponseMeta{StatusCode: resp.StatusCode}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxUploadAbortResponseBytes+1))
 	if err != nil {
-		return nil, meta, wrapTransportError(err)
+		return nil, meta, sanitizeUploadAbortTransportError(err)
 	}
 	if int64(len(raw)) > maxUploadAbortResponseBytes {
-		return nil, meta, errors.New("upload abort response exceeds size limit")
+		return nil, meta, errUploadAbortResponseLarge
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, meta, fmt.Errorf(
-			"bot %s %s: status %d req=%s",
-			http.MethodDelete,
-			path,
-			resp.StatusCode,
-			meta.BotRequestID,
-		)
+		return nil, meta, errUploadAbortRequestFailed
 	}
 	if err := rejectDuplicateJSONKeys(raw); err != nil {
-		return nil, meta, err
+		return nil, meta, errUploadAbortResponseInvalid
 	}
 	var out UploadAbortResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, meta, err
+		return nil, meta, errUploadAbortResponseInvalid
 	}
 	if err := validateUploadAbortResponse(assetID, out); err != nil {
 		return nil, meta, err
 	}
 	return &out, meta, nil
+}
+
+func sanitizeUploadAbortTransportError(err error) error {
+	if isTimeoutErr(err) {
+		return fmt.Errorf("%w: upload abort request failed", ErrBotTimeout)
+	}
+	return errUploadAbortRequestFailed
 }
 
 func validateUploadCreateRequest(in UploadCreateRequest) error {
@@ -257,16 +268,16 @@ func validateUploadCapabilityResponse(assetID string, out UploadCapabilityRespon
 
 func validateUploadAbortResponse(assetID string, out UploadAbortResponse) error {
 	if out.Protocol != ResumableUploadProtocol {
-		return fmt.Errorf("unsupported upload protocol %q", out.Protocol)
+		return errUploadAbortResponseInvalid
 	}
 	if err := validateAssetID(out.AssetID); err != nil {
-		return err
+		return errUploadAbortResponseInvalid
 	}
 	if out.AssetID != assetID {
-		return errors.New("upload abort asset mismatch")
+		return errUploadAbortResponseInvalid
 	}
 	if out.Status != "aborted" {
-		return fmt.Errorf("invalid upload abort status %q", out.Status)
+		return errUploadAbortResponseInvalid
 	}
 	return nil
 }

@@ -15,6 +15,36 @@ import (
 	"github.com/google/uuid"
 )
 
+type abortRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f abortRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+type abortErrorBody struct {
+	err error
+}
+
+func (b abortErrorBody) Read([]byte) (int, error) {
+	return 0, b.err
+}
+
+func (abortErrorBody) Close() error {
+	return nil
+}
+
+func assertAbortErrorSanitized(t *testing.T, err error, forbidden ...string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("AbortUpload error = nil, want rejection")
+	}
+	for _, value := range forbidden {
+		if strings.Contains(err.Error(), value) {
+			t.Fatalf("AbortUpload error leaked %q: %q", value, err)
+		}
+	}
+}
+
 func uploadCreateFixture(serverURL string) (UploadCreateRequest, UploadCreateResponse) {
 	return UploadCreateRequest{
 			OwnerSubject:   "alice@example.com",
@@ -136,6 +166,61 @@ func TestAbortUploadIgnoresHostileCreateUploadURL(t *testing.T) {
 	}
 }
 
+func TestAbortUploadRejectsRedirectsWithoutContactingTarget(t *testing.T) {
+	const (
+		baseURL    = "https://bot.example"
+		assetID    = "file_test_abc"
+		capability = "opaque-secret-abort-capability"
+	)
+	for _, tt := range []struct {
+		name     string
+		location string
+	}{
+		{name: "same origin", location: baseURL + "/redirected"},
+		{name: "matching subdomain", location: "https://child.bot.example/redirected"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var initialCalls, redirectedCalls int
+			transport := abortRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+				if request.URL.String() != baseURL+"/v1/files/"+assetID {
+					redirectedCalls++
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(`{"protocol":"obs-multipart-v2","asset_id":"file_test_abc","status":"aborted"}`)),
+					}, nil
+				}
+				initialCalls++
+				if got := request.Header.Values("Authorization"); len(got) != 1 || got[0] != "Bearer "+capability {
+					t.Errorf("initial Authorization=%q", got)
+				}
+				return &http.Response{
+					StatusCode: http.StatusTemporaryRedirect,
+					Header:     http.Header{"Location": []string{tt.location}},
+					Body:       io.NopCloser(strings.NewReader("provider redirect body")),
+				}, nil
+			})
+			client := &Client{
+				http:    &http.Client{Transport: transport},
+				baseURL: baseURL,
+				userKey: "ptm_test",
+			}
+
+			response, meta, err := client.AbortUpload(context.Background(), assetID, capability)
+			if response != nil || err == nil {
+				t.Fatalf("redirect accepted: response=%#v err=%v", response, err)
+			}
+			if initialCalls != 1 || redirectedCalls != 0 {
+				t.Fatalf("initial calls=%d redirected calls=%d, want 1 and 0", initialCalls, redirectedCalls)
+			}
+			if meta.StatusCode != http.StatusTemporaryRedirect {
+				t.Fatalf("meta=%#v, want redirect status", meta)
+			}
+			assertAbortErrorSanitized(t, err, capability, tt.location, "provider redirect body")
+		})
+	}
+}
+
 func TestAbortUploadRejectsInvalidInputsBeforeNetwork(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,27 +298,30 @@ func TestAbortUploadBoundsResponseBody(t *testing.T) {
 }
 
 func TestAbortUploadRejectsDuplicateResponseKeys(t *testing.T) {
+	const capability = "opaque-secret-abort-capability"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"protocol":"obs-multipart-v2","asset_id":"file_test_abc","asset_id":"file_other","status":"aborted"}`)
+		_, _ = io.WriteString(w, `{"protocol":"obs-multipart-v2","asset_id":"file_test_abc","status":"aborted","`+capability+`":1,"`+capability+`":2}`)
 	}))
 	defer srv.Close()
 
 	response, _, err := newTestClient(srv.URL).AbortUpload(
-		context.Background(), "file_test_abc", "opaque-capability",
+		context.Background(), "file_test_abc", capability,
 	)
-	if response != nil || !errors.Is(err, errDuplicateJSONKey) {
+	if response != nil || err == nil {
 		t.Fatalf("duplicate response keys accepted: response=%#v err=%v", response, err)
 	}
+	assertAbortErrorSanitized(t, err, capability)
 }
 
 func TestAbortUploadRejectsInvalidResponseIdentity(t *testing.T) {
+	const capability = "opaque-secret-abort-capability"
 	for _, tt := range []struct {
 		name   string
 		mutate func(*UploadAbortResponse)
 	}{
-		{name: "wrong protocol", mutate: func(response *UploadAbortResponse) { response.Protocol = "legacy" }},
-		{name: "wrong asset", mutate: func(response *UploadAbortResponse) { response.AssetID = "file_other" }},
-		{name: "wrong status", mutate: func(response *UploadAbortResponse) { response.Status = "uploading" }},
+		{name: "wrong protocol", mutate: func(response *UploadAbortResponse) { response.Protocol = capability }},
+		{name: "wrong asset", mutate: func(response *UploadAbortResponse) { response.AssetID = "file_" + capability }},
+		{name: "wrong status", mutate: func(response *UploadAbortResponse) { response.Status = capability }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			responseBody := uploadAbortFixture()
@@ -244,33 +332,36 @@ func TestAbortUploadRejectsInvalidResponseIdentity(t *testing.T) {
 			defer srv.Close()
 
 			response, _, err := newTestClient(srv.URL).AbortUpload(
-				context.Background(), "file_test_abc", "opaque-capability",
+				context.Background(), "file_test_abc", capability,
 			)
 			if response != nil || err == nil {
 				t.Fatalf("invalid response accepted: response=%#v err=%v", response, err)
 			}
+			assertAbortErrorSanitized(t, err, capability)
 		})
 	}
 }
 
 func TestAbortUploadRejectsMalformedJSON(t *testing.T) {
+	const capability = "opaque-secret-abort-capability"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"protocol":`)
+		_, _ = io.WriteString(w, `{"protocol":"`+capability+`"`)
 	}))
 	defer srv.Close()
 
 	response, _, err := newTestClient(srv.URL).AbortUpload(
-		context.Background(), "file_test_abc", "opaque-capability",
+		context.Background(), "file_test_abc", capability,
 	)
 	if response != nil || err == nil {
 		t.Fatalf("malformed JSON accepted: response=%#v err=%v", response, err)
 	}
+	assertAbortErrorSanitized(t, err, capability)
 }
 
 func TestAbortUploadRejectsNon2xxWithoutLeakingCapabilityOrBody(t *testing.T) {
 	const capability = "opaque-secret-abort-capability"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Request-Id", "bot-abort-7")
+		w.Header().Set("X-Request-Id", strings.Repeat("provider-header-", 2048)+capability)
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = io.WriteString(w, `{"error":"`+capability+`","private":"raw-response-detail"}`)
 	}))
@@ -282,15 +373,31 @@ func TestAbortUploadRejectsNon2xxWithoutLeakingCapabilityOrBody(t *testing.T) {
 	if response != nil || err == nil {
 		t.Fatalf("non-2xx accepted: response=%#v err=%v", response, err)
 	}
-	if meta.StatusCode != http.StatusForbidden || meta.BotRequestID != "bot-abort-7" {
-		t.Fatalf("meta=%#v, want safe status and request id", meta)
+	if meta.StatusCode != http.StatusForbidden || meta.BotRequestID != "" {
+		t.Fatalf("meta=%#v, want status without provider request id", meta)
 	}
-	message := err.Error()
-	for _, forbidden := range []string{capability, "raw-response-detail"} {
-		if strings.Contains(message, forbidden) {
-			t.Fatalf("error leaked %q: %q", forbidden, message)
-		}
+	assertAbortErrorSanitized(t, err, capability, "provider-header", "raw-response-detail")
+}
+
+func TestAbortUploadSanitizesResponseReadErrors(t *testing.T) {
+	const capability = "opaque-secret-abort-capability"
+	client := &Client{
+		http: &http.Client{Transport: abortRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       abortErrorBody{err: errors.New("provider read failure " + capability)},
+			}, nil
+		})},
+		baseURL: "https://bot.example",
+		userKey: "ptm_test",
 	}
+
+	response, meta, err := client.AbortUpload(context.Background(), "file_test_abc", capability)
+	if response != nil || meta.StatusCode != http.StatusOK {
+		t.Fatalf("response=%#v meta=%#v, want safe status metadata", response, meta)
+	}
+	assertAbortErrorSanitized(t, err, capability, "provider read failure")
 }
 
 func TestCreateUploadUsesMetadataOnlyJSONAndPurpose(t *testing.T) {
