@@ -6,6 +6,21 @@ WEB_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
 EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/unified-attachments"
 SESSION="phy-chat-unified-attachments"
+TRACKED_CAPTURE_FILES=(
+    "apps/web/src/views/chat/components/AttachmentChipStrip.vue"
+    "apps/web/tests/component/AttachmentChipStrip.spec.ts"
+    "apps/web/tests/unit/views/chat/chat-visual-fixtures.spec.ts"
+    "apps/web/tests/visual/chat/README.md"
+    "apps/web/tests/visual/chat/assert-upload-styles.js"
+    "apps/web/tests/visual/chat/capture-upload-matrix.sh"
+    "apps/web/tests/visual/chat/measure-geometry.js"
+)
+if ! git -C "${REPO_ROOT}" diff --exit-code -- "${TRACKED_CAPTURE_FILES[@]}" >/dev/null 2>&1 ||
+    ! git -C "${REPO_ROOT}" diff --cached --exit-code -- "${TRACKED_CAPTURE_FILES[@]}" >/dev/null 2>&1; then
+    printf '%s\n' \
+        'attachment capture requires clean tracked attachment sources; ignored evidence is allowed' >&2
+    exit 1
+fi
 BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
 SOURCE_SHA="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
 GEOMETRY_SCRIPT_SHA256="$(sha256sum "${SCRIPT_DIR}/measure-geometry.js" | awk '{print $1}')"
@@ -59,7 +74,7 @@ capture_fixture() {
         "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
 
     agent-browser --session "${SESSION}" eval \
-        "window.__PHY_CHAT_CAPTURE_META__ = {sourceSha: '${SOURCE_SHA}', geometryScriptSha256: '${GEOMETRY_SCRIPT_SHA256}', styleScriptSha256: '${STYLE_SCRIPT_SHA256}', contractSha256: '${CONTRACT_SHA256}'}"
+        "window.__PHY_CHAT_CAPTURE_META__ = {contract: 'unified-attachments-v1', sourceSha: '${SOURCE_SHA}', geometryScriptSha256: '${GEOMETRY_SCRIPT_SHA256}', styleScriptSha256: '${STYLE_SCRIPT_SHA256}', contractSha256: '${CONTRACT_SHA256}'}"
 
     agent-browser --session "${SESSION}" eval --stdin \
         <"${SCRIPT_DIR}/measure-geometry.js" |

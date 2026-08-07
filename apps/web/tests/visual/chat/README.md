@@ -178,6 +178,8 @@ Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
 ./tests/visual/chat/capture-upload-matrix.sh
 ```
 
+The capture exits before opening a browser if any tracked attachment-audit
+source is dirty or staged; ignored `.codex/evidence` output does not block it.
 The script writes only to the ignored
 `.codex/evidence/frontend-v2/unified-attachments/` directory. Before every
 `screenshot`, `measure-geometry.js` writes an independent geometry record and

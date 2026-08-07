@@ -87,6 +87,11 @@ type GeometryResult = {
   attachmentStrip?: Rect;
   composerEditor?: Rect;
   attachmentDetail?: Rect;
+  attachmentGeometry?: {
+    fixture?: string | null;
+    pass?: boolean;
+    detailWithinStrip?: boolean;
+  } | null;
   error?: string;
   reasons?: string[];
 };
@@ -129,6 +134,8 @@ type GeometryHarnessOptions = {
   primaryVisible?: boolean;
   composerVisible?: boolean;
   includeAttachmentStrip?: boolean;
+  attachmentFixture?: string;
+  captureContract?: string;
   attachmentStripRect?: Rect;
   includeAttachmentDetail?: boolean;
   attachmentDetailRect?: Rect;
@@ -230,6 +237,9 @@ async function runGeometryHarness(
       if (name === "data-sidebar-drawer-state") return drawerState;
       if (name === "data-empty-scroll-position") return emptyScrollPosition;
       if (name === "data-chat-mode") return chatMode;
+      if (name === "data-attachment-fixture") {
+        return options.attachmentFixture ?? null;
+      }
       return null;
     },
     querySelectorAll: (selector: string) => {
@@ -314,10 +324,18 @@ async function runGeometryHarness(
   const composerEditor = makeElement(
     options.composerEditorRect ?? rect(300, 744, width - 24, 816)
   );
-  if (options.composerSurfaceRect) {
+  if (options.composerSurfaceRect || options.composerEditorRect) {
     Object.assign(composer, {
-      querySelector: (selector: string) =>
-        selector === ".chat-composer-surface" ? composerSurface : null,
+      querySelector: (selector: string) => {
+        if (selector === ".chat-composer-surface") return composerSurface;
+        if (
+          selector === ".chat-composer-body" ||
+          selector.includes("chat-composer-body")
+        ) {
+          return composerEditor;
+        }
+        return null;
+      },
     });
   }
   const includeTrigger = options.includeTrigger ?? drawerState === "closed";
@@ -350,6 +368,11 @@ async function runGeometryHarness(
     },
   };
   const windowMock: Record<string, unknown> = {};
+  if (options.captureContract) {
+    windowMock.__PHY_CHAT_CAPTURE_META__ = {
+      contract: options.captureContract,
+    };
+  }
 
   const result = (await runInNewContext(MEASURE_SOURCE, {
     window: windowMock,
@@ -1026,6 +1049,9 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain("attachmentGeometry");
     expect(MEASURE_SOURCE).toContain("detailWithinStrip");
     expect(MEASURE_SOURCE).toContain("isLegacyUploadFixture");
+    expect(MEASURE_SOURCE).toContain(
+      'captureContract === "unified-attachments-v1"'
+    );
     expect(MEASURE_SOURCE).toContain('[data-testid="attachment-chip-detail"]');
     expect(MEASURE_SOURCE).toContain("unified-attachments-v1");
     expect(MEASURE_SOURCE).toContain("contractSha256");
@@ -1094,6 +1120,7 @@ describe("Chat visual fixture script contracts", () => {
     );
     expect(UPLOAD_ASSERT_SOURCE).toContain("focus ring");
     expect(UPLOAD_ASSERT_SOURCE).toContain("activeElement");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("focusWithin");
     expect(UPLOAD_ASSERT_SOURCE).not.toContain("focusCss");
     expect(UPLOAD_ASSERT_SOURCE).toContain("fake progress");
     expect(UPLOAD_ASSERT_SOURCE).toContain("pass: true");
@@ -1117,6 +1144,8 @@ describe("Chat visual fixture script contracts", () => {
     expect(UPLOAD_CAPTURE_SOURCE).toContain("SOURCE_SHA=");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("CONTRACT_SHA256=");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("__PHY_CHAT_CAPTURE_META__");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("TRACKED_CAPTURE_FILES");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("diff --exit-code");
     expect(UPLOAD_CAPTURE_SOURCE).not.toContain("cp ");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("EXPECTED_COUNT=80");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("capture only creates evidence");
@@ -1149,6 +1178,51 @@ describe("Chat visual fixture geometry negative controls", () => {
       pass: true,
       attachmentStrip: { top: 304, bottom: 344 },
       composerEditor: { top: 348, bottom: 420 },
+    });
+  });
+
+  it("keeps ordinary empty fixtures on the Composer viewport contract", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 304, 650),
+      composerSurfaceRect: rect(16, 292, 304, 650),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons).toContain(
+      "composer escapes viewport in the reviewed state"
+    );
+    expect(result.attachmentGeometry).toBeNull();
+  });
+
+  it("uses the attachment contract for the unified empty fixture", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 304, 650),
+      composerSurfaceRect: rect(16, 292, 304, 650),
+      composerEditorRect: rect(33, 413, 272, 471),
+      attachmentFixture: "empty",
+      captureContract: "unified-attachments-v1",
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      attachmentGeometry: {
+        fixture: "empty",
+        pass: true,
+      },
     });
   });
 

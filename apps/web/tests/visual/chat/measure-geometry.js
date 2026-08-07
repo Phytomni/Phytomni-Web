@@ -15,11 +15,17 @@
   const EDGE_TOLERANCE = 0.5;
   const HISTORY_STATES = new Set(["title-only", "loading", "empty", "error"]);
 
-  function captureEvidence() {
+  function captureMetadata() {
     const metadata = window[CAPTURE_METADATA_KEY];
+    return metadata && typeof metadata === "object" ? metadata : null;
+  }
+
+  function captureEvidence() {
+    const metadata = captureMetadata();
     return {
       fixtureSource: "tests/visual/chat",
-      contract: "unified-attachments-v1",
+      contract:
+        typeof metadata?.contract === "string" ? metadata.contract : null,
       sourceSha:
         typeof metadata?.sourceSha === "string" ? metadata.sourceSha : null,
       geometryScriptSha256:
@@ -212,6 +218,7 @@
   }
 
   const contentStackEl = contentStacks[0];
+  const captureContract = captureMetadata()?.contract;
   const attachmentFixture = root.getAttribute("data-attachment-fixture");
   const unifiedAttachmentFixtureKeys = new Set([
     "empty",
@@ -221,6 +228,7 @@
     "incompatible-agent-blocked",
   ]);
   const isUnifiedAttachmentFixture =
+    captureContract === "unified-attachments-v1" &&
     unifiedAttachmentFixtureKeys.has(attachmentFixture);
   const uploadStatus = root.getAttribute("data-upload-status");
   const uploadFixtureStatuses = new Set([

@@ -228,7 +228,7 @@ if (
     chips[0] ||
     overflow ||
     (isInteractive(editor) ? editor : editor?.querySelector("textarea"));
-  if (strip && focusTarget instanceof HTMLElement) {
+  if (focusTarget instanceof HTMLElement) {
     document.body.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "Tab" })
     );
@@ -238,12 +238,20 @@ if (
       fail("focus target is not effective");
     } else {
       const focusStyle = getComputedStyle(activeElement);
+      const focusWithin = activeElement.closest?.(".phy-composer-frame");
+      const focusWithinStyle = focusWithin
+        ? getComputedStyle(focusWithin)
+        : null;
       const focusRing =
         focusStyle.outlineStyle !== "none" &&
         parseFloat(focusStyle.outlineWidth) > 0;
-      if (!focusRing) fail("focus ring is missing");
+      const focusWithinRing =
+        activeElement.matches?.(":focus-visible") === true &&
+        Boolean(focusWithinStyle?.boxShadow) &&
+        focusWithinStyle.boxShadow !== "none";
+      if (!focusRing && !focusWithinRing) fail("focus ring is missing");
     }
-  } else if (fixture !== "empty") {
+  } else {
     fail("focus ring target is missing");
   }
 
