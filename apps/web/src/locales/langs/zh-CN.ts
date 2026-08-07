@@ -441,6 +441,12 @@ export default {
     },
     upload: {
       alreadyAttached: "已添加：{file}",
+      attachments: "附件",
+      chipLabel: "{file}，{suffix}，{status}，{metric}",
+      fileSuffixFallback: "文件",
+      more: "另外 {count} 个",
+      hiddenFailed: "{count} 个失败",
+      hiddenExpired: "{count} 个已过期",
       status: {
         queued: "排队中",
         creating: "准备中",

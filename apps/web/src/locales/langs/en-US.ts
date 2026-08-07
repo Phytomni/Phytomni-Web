@@ -445,6 +445,12 @@ export default {
     },
     upload: {
       alreadyAttached: "Already attached: {file}",
+      attachments: "Attachments",
+      chipLabel: "{file}, {suffix}, {status}, {metric}",
+      fileSuffixFallback: "FILE",
+      more: "+{count} more",
+      hiddenFailed: "{count} failed",
+      hiddenExpired: "{count} expired",
       status: {
         queued: "Queued",
         creating: "Preparing",
