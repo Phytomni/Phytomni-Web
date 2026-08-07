@@ -72,6 +72,51 @@ func TestApiQuery_DisabledGatewayWiring(t *testing.T) {
 	}
 }
 
+func TestQueryRejectsOversizedUnicode(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = nil
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	c, w := newQueryRequest(t, strings.Repeat("稻", rxBot.DefaultMaxUserQueryChars+1))
+	c.Set("username", "alice")
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s, want 413", w.Code, w.Body.String())
+	}
+}
+
+func TestQueryAcceptsMaximumUnicode(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = nil
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	c, w := newQueryRequest(t, strings.Repeat("稻", rxBot.DefaultMaxUserQueryChars))
+	c.Set("username", "alice")
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want service dispatch to return 503", w.Code, w.Body.String())
+	}
+}
+
+func TestQueryUsesDefaultLimitForUnnormalizedConfig(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	c, w := newQueryRequest(t, "valid query")
+	c.Set("username", "alice")
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want service dispatch to return 503", w.Code, w.Body.String())
+	}
+}
+
 func TestParseAssetAttachmentsStrictContract(t *testing.T) {
 	validTen := make([]string, rxBot.MaxAssetAttachmentRefs)
 	for i := range validTen {

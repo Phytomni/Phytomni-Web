@@ -148,7 +148,7 @@ func parseArtifactIDs(raw string) ([]string, bool) {
 	return artifactIDs, true
 }
 
-const maxQueryControlBodyBytes int64 = 256 << 10
+const maxQueryAttachmentsJSONBytes = 64 << 10
 
 // parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
@@ -158,7 +158,7 @@ func parseAssetAttachments(raw string) ([]rxBot.AssetAttachmentRef, bool) {
 	if raw == "" {
 		return nil, true
 	}
-	if len(raw) > int(maxQueryControlBodyBytes) || raw[0] != '[' || raw[len(raw)-1] != ']' {
+	if len(raw) > maxQueryAttachmentsJSONBytes || raw[0] != '[' || raw[len(raw)-1] != ']' {
 		return nil, false
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
@@ -334,7 +334,15 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 
-	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxQueryControlBodyBytes)
+	maxQueryChars := rxBot.ConfiguredMaxUserQueryChars()
+	if maxQueryChars == 0 {
+		maxQueryChars = rxBot.DefaultMaxUserQueryChars
+	}
+	ctx.Request.Body = http.MaxBytesReader(
+		ctx.Writer,
+		ctx.Request.Body,
+		api_service.QueryControlBodyLimit(maxQueryChars),
+	)
 
 	// Parse the bounded multipart body once: a MaxBytesReader trip surfaces
 	// here, so an over-limit upload is reported as too large rather than
@@ -348,12 +356,19 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			return
 		}
 	}
+	in := queryInputForSurface(ctx, surface, routeTool)
+	if err := api_service.ValidateCurrentQuery(in.Query, maxQueryChars); err != nil {
+		if errors.Is(err, api_service.ErrQueryLimitExceeded) {
+			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": i18n.T(ctx, "query.upload_too_large")})
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
+		return
+	}
 	if hasForbiddenQueryAttachmentFields(ctx) {
 		writeQueryError(ctx, http.StatusBadRequest, "invalid query attachments")
 		return
 	}
-
-	in := queryInputForSurface(ctx, surface, routeTool)
 	geneID, toID, speciesCode, err := parseAgentProductResolver(ctx, surface, routeTool)
 	if err != nil {
 		status, message := queryErrorStatus(err)
@@ -411,10 +426,6 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		return
 	}
 	in.ArtifactIDs = artifactIDs
-	if strings.TrimSpace(in.Query) == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.query_empty")})
-		return
-	}
 	// RESTful: conversation id from path /conversations/:id/messages (id=0 means a
 	// new conversation, preserving the old DefaultPostForm("id","0") semantics).
 	// refresh_id still travels in the multipart body.
