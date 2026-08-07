@@ -89,6 +89,7 @@ const mocks = vi.hoisted(() => {
     uploadQueue,
     uploadOptions: null as {
       onDuplicate?: (localId: string, fileName: string) => void;
+      onValidationError?: (error: { code: string; fileName?: string }) => void;
     } | null,
     getChatState: vi.fn(() => chatState),
     getChatdownloadURL: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 vi.mock("@/views/chat/composables/useResumableUploads", () => ({
   useResumableUploads: (options: {
     onDuplicate?: (localId: string, fileName: string) => void;
+    onValidationError?: (error: { code: string; fileName?: string }) => void;
   }) => {
     mocks.uploadOptions = options;
     return mocks.uploadQueue;
@@ -438,6 +440,44 @@ describe("DigitalDesignAgentView", () => {
     wrapper.unmount();
   });
 
+  it("bounds duplicate and rejection filenames before the live region", async () => {
+    const wrapper = mountView();
+    const craftedName = `<${"gene".repeat(40)}>`;
+
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", craftedName);
+    await flushPromises();
+    const duplicateAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(duplicateAnnouncement.text()).not.toContain("<");
+    expect(duplicateAnnouncement.text()).not.toContain(">");
+    expect(duplicateAnnouncement.text()).toContain("…");
+    expect(duplicateAnnouncement.text()).not.toContain("gene".repeat(30));
+
+    mocks.uploadOptions?.onValidationError?.({
+      code: "unsupported_type",
+      fileName: craftedName,
+    });
+    await flushPromises();
+    const rejectionAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(rejectionAnnouncement.text()).not.toContain("<");
+    expect(rejectionAnnouncement.text()).not.toContain(">");
+    expect(rejectionAnnouncement.text()).toContain("gene");
+    expect(rejectionAnnouncement.text()).not.toContain("gene".repeat(30));
+
+    const normalizedName = `\u0000e\u0301e\u0301e\u0301`;
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", normalizedName);
+    await flushPromises();
+    const normalizedAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(normalizedAnnouncement.text()).not.toContain("\u0000");
+    expect(normalizedAnnouncement.text()).toContain("ééé");
+    wrapper.unmount();
+  });
+
   it("sends completed asset IDs and clears chips only after acceptance", async () => {
     const item = completedUpload("upload-accepted", "context.pdf");
     mocks.chatState.fileList = [item];
@@ -568,6 +608,31 @@ describe("DigitalDesignAgentView", () => {
     );
     await wrapper.get("form.digital-design-form").trigger("submit");
     expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("blocks a second submit after an accepted run becomes active", async () => {
+    mocks.submit.mockImplementationOnce(async () => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        phase: "running",
+        requestId: null,
+      };
+    });
+    const wrapper = mountView();
+    await wrapper.get('[data-test="design-question"]').setValue("Run once");
+    await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await wrapper.get('[data-test="design-species-code"]').setValue("ath");
+    const submit = wrapper.get('[data-test="design-submit"]');
+
+    await submit.trigger("click");
+    await flushPromises();
+
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(submit.element).toHaveProperty("disabled", true);
+
+    await submit.trigger("click");
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 

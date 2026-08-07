@@ -192,7 +192,10 @@
             class="digital-design-submit"
             data-test="design-submit"
             :disabled="
-              isSubmitting || hasBlockingUploads || attachmentTargetBlocked
+              isSubmitting ||
+              isRunActive ||
+              hasBlockingUploads ||
+              attachmentTargetBlocked
             "
             @keydown.enter.prevent="submitDesign"
           >
@@ -354,6 +357,7 @@ import type {
 const MAX_QUERY_LENGTH = 4000;
 const MAX_GENE_ID_LENGTH = 128;
 const MAX_SPECIES_CODE_LENGTH = 32;
+const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
 const GENE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SPECIES_CODE_PATTERN = /^[a-z][a-z0-9_-]{1,31}$/u;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -442,7 +446,7 @@ const attachmentTargetBlocked = computed(
 
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
-    file: error.fileName ?? "",
+    file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
     maxFiles: capabilities.upload.value.max_attachments,
     maxFileMb: Math.ceil(
       capabilities.upload.value.max_file_bytes / 1024 / 1024
@@ -451,6 +455,23 @@ function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
       capabilities.upload.value.max_file_bytes / 1024 / 1024
     ),
   });
+}
+
+function boundedAttachmentAnnouncementFileName(fileName: string): string {
+  const normalized = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return t("chat.upload.fileSuffixFallback");
+  const codePoints = Array.from(normalized);
+  if (codePoints.length <= MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH) {
+    return normalized;
+  }
+  return `${codePoints
+    .slice(0, MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH - 1)
+    .join("")}…`;
 }
 
 function announceAttachment(message: string): void {
@@ -468,7 +489,7 @@ async function onAttachmentDuplicate(
   focusedUploadLocalId.value = localId;
   announceAttachment(
     t("chat.upload.alreadyAttached", {
-      file: fileName,
+      file: boundedAttachmentAnnouncementFileName(fileName),
     })
   );
   await focusAttachmentChip(localId);
@@ -524,12 +545,10 @@ const reportUpdatedAt = computed(
 const trackingDegraded = computed(
   () => displayedState.value.projection?.trackingDegraded === true
 );
-const isRunActive = computed(
-  () =>
-    Boolean(displayedState.value.requestId) &&
-    ["submitting", "running", "input_required"].includes(
-      displayedState.value.phase
-    )
+const isRunActive = computed(() =>
+  ["submitting", "running", "input_required"].includes(
+    displayedState.value.phase
+  )
 );
 const hasRun = computed(
   () =>
@@ -644,6 +663,7 @@ async function submitDesign(): Promise<void> {
   if (
     !capabilityAllowed.value ||
     isSubmitting.value ||
+    isRunActive.value ||
     hasBlockingUploads.value ||
     attachmentTargetBlocked.value
   )
