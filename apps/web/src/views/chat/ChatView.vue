@@ -2296,7 +2296,7 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
         padding: 12px 16px;
         background-color: #fff;
         border-radius: 8px;
-        border-left: 3px solid var(--el-color-primary);
+        border: 1px solid var(--phy-color-border-subtle);
 
         .step-label {
           font-weight: bold;
@@ -2638,7 +2638,7 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid var(--el-color-primary);
+          border: 1px solid var(--phy-color-border-subtle);
 
           p {
             margin: 0;
@@ -2653,7 +2653,7 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
           padding: 15px;
           background-color: #f8f9fa;
           border-radius: 8px;
-          border-left: 3px solid var(--el-color-primary);
+          border: 1px solid var(--phy-color-border-subtle);
           text-align: center;
           width: 300px !important;
           height: 200px !important;
