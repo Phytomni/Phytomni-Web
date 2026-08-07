@@ -61,8 +61,7 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	}
 }
 
-func TestChatCompletionClientForwardsDatasetDescriptionAcrossRequestPaths(t *testing.T) {
-	const description = "normalized dataset context"
+func TestChatCompletionClientsDropObsoleteDatasetDescriptionAcrossRequestPaths(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
@@ -71,8 +70,11 @@ func TestChatCompletionClientForwardsDatasetDescriptionAcrossRequestPaths(t *tes
 			t.Errorf("decode %s request: %v", r.URL.Path, err)
 			return
 		}
-		if body["dataset_description"] != description {
-			t.Errorf("%s dataset_description=%v, want normalized structured value", r.URL.Path, body["dataset_description"])
+		if _, leaked := body["dataset_description"]; leaked {
+			t.Errorf("%s leaked obsolete dataset_description: %#v", r.URL.Path, body)
+		}
+		if body["owner_subject"] != "alice@example.com" {
+			t.Errorf("%s owner_subject=%v, want authenticated owner", r.URL.Path, body["owner_subject"])
 		}
 		switch r.URL.Path {
 		case "/v1/chat/completions":
@@ -93,26 +95,30 @@ func TestChatCompletionClientForwardsDatasetDescriptionAcrossRequestPaths(t *tes
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	if _, err := client.ChatCompletion(context.Background(), ChatCompletionRequest{
-		Model: "phyto-chat", DatasetDescription: description,
-	}); err != nil {
+	var chat ChatCompletionRequest
+	if err := json.Unmarshal([]byte(`{"model":"phyto-chat","messages":[{"role":"user","content":"analyze"}],"attachments":[{"asset_id":"file_chat"}],"owner_subject":"alice@example.com","dataset_description":"obsolete"}`), &chat); err != nil {
+		t.Fatalf("decode crafted chat request: %v", err)
+	}
+	if _, err := client.ChatCompletion(context.Background(), chat); err != nil {
 		t.Fatalf("ChatCompletion: %v", err)
 	}
-	stream, err := client.ChatCompletionStream(context.Background(), ChatCompletionRequest{
-		Model: "phyto-chat", DatasetDescription: description,
-	})
+	stream, err := client.ChatCompletionStream(context.Background(), chat)
 	if err != nil {
 		t.Fatalf("ChatCompletionStream: %v", err)
 	}
 	_ = stream.Close()
-	if _, err := client.InvokeAgent(context.Background(), "data", AgentRunRequest{
-		Arguments: map[string]interface{}{"user_query": "analyze"}, DatasetDescription: description,
-	}); err != nil {
+	var agent AgentRunRequest
+	if err := json.Unmarshal([]byte(`{"arguments":{"user_query":"analyze","gene_id":"AT1G01010"},"attachments":[{"asset_id":"file_agent"}],"owner_subject":"alice@example.com","dataset_description":"obsolete"}`), &agent); err != nil {
+		t.Fatalf("decode crafted agent request: %v", err)
+	}
+	if _, err := client.InvokeAgent(context.Background(), "data", agent); err != nil {
 		t.Fatalf("InvokeAgent: %v", err)
 	}
-	if _, err := client.RouteQuery(context.Background(), RouteQueryRequest{
-		UserQuery: "analyze", DatasetDescription: description,
-	}); err != nil {
+	var route RouteQueryRequest
+	if err := json.Unmarshal([]byte(`{"user_query":"analyze","attachments":[{"asset_id":"file_route"}],"owner_subject":"alice@example.com","allowed_tools":["ChatAgent","DataAgent"],"forced_tool":null,"dataset_description":"obsolete"}`), &route); err != nil {
+		t.Fatalf("decode crafted route request: %v", err)
+	}
+	if _, err := client.RouteQuery(context.Background(), route); err != nil {
 		t.Fatalf("RouteQuery: %v", err)
 	}
 	if got := strings.Join(paths, ","); got != "/v1/chat/completions,/v1/chat/completions,/v1/agents/data/runs,/v1/query/route" {

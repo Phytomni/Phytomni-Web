@@ -337,12 +337,20 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			previousConfig := rxBot.BotConfig
 			var gotPath string
 			var gotRequest rxBot.AgentRunRequest
+			var gotBody map[string]json.RawMessage
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotPath = r.URL.Path
-				if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read Bot request: %v", err)
+				}
+				if err := json.Unmarshal(body, &gotRequest); err != nil {
 					t.Errorf("decode Bot request: %v", err)
+				}
+				if err := json.Unmarshal(body, &gotBody); err != nil {
+					t.Errorf("decode raw Bot request: %v", err)
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.upstreamCode)
@@ -393,8 +401,8 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if len(gotRequest.Attachments) != 1 || gotRequest.Attachments[0].AssetID != "file_route" {
 				t.Fatalf("opaque attachments=%#v, want file_route", gotRequest.Attachments)
 			}
-			if tc.tool == "InSilicoResearchAgent" && tc.upstreamCode == http.StatusOK && gotRequest.DatasetDescription != "direct product dataset context" {
-				t.Fatalf("dataset_description=%q, want normalized structured value", gotRequest.DatasetDescription)
+			if _, leaked := gotBody["dataset_description"]; leaked {
+				t.Fatalf("dataset_description crossed the product request boundary: %#v", gotBody)
 			}
 			var response struct {
 				Code int                   `json:"code"`

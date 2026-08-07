@@ -35,8 +35,6 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, "invalid client turn id"
 	case errors.Is(err, api_service.ErrInvalidQueryAttachments):
 		return http.StatusBadRequest, "invalid query attachments"
-	case errors.Is(err, api_service.ErrInvalidDatasetDescription):
-		return http.StatusUnprocessableEntity, "invalid dataset description"
 	case errors.Is(err, api_service.ErrInvalidAgentResolver):
 		return http.StatusBadRequest, "invalid agent resolver"
 	case errors.Is(err, api_service.ErrConversationModeConflict):
@@ -288,13 +286,12 @@ func (ph *Handler) AgentProductRun(ctx *gin.Context) {
 // testable without exposing a caller-controlled service surface.
 func queryInputForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) api_service.QueryInput {
 	in := api_service.QueryInput{
-		Query:              ctx.PostForm("query"),
-		Tool:               ctx.PostForm("tool"),
-		History:            ctx.DefaultPostForm("history", "[]"),
-		Mode:               ctx.DefaultPostForm("mode", "instant"),
-		DatasetDescription: ctx.PostForm("dataset_description"),
-		ClientTurnID:       strings.TrimSpace(ctx.PostForm("client_turn_id")),
-		Surface:            surface,
+		Query:        ctx.PostForm("query"),
+		Tool:         ctx.PostForm("tool"),
+		History:      ctx.DefaultPostForm("history", "[]"),
+		Mode:         ctx.DefaultPostForm("mode", "instant"),
+		ClientTurnID: strings.TrimSpace(ctx.PostForm("client_turn_id")),
+		Surface:      surface,
 	}
 	if surface == api_service.QuerySurfaceAgentProduct {
 		in.Tool = routeTool

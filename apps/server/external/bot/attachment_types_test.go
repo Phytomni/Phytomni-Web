@@ -54,22 +54,21 @@ func TestBotRequestFamiliesSerializeReferenceOnlyAttachments(t *testing.T) {
 		{
 			name: "chat",
 			value: ChatCompletionRequest{
-				Model: "phyto-chat", Attachments: refs, OwnerSubject: "alice@example.com", DatasetDescription: "normalized dataset context",
+				Model: "phyto-chat", Attachments: refs, OwnerSubject: "alice@example.com",
 			},
 		},
 		{
 			name: "route",
 			value: RouteQueryRequest{
-				UserQuery: "analyze", Attachments: refs, OwnerSubject: "alice@example.com", DatasetDescription: "normalized dataset context",
+				UserQuery: "analyze", Attachments: refs, OwnerSubject: "alice@example.com",
 			},
 		},
 		{
 			name: "agent",
 			value: AgentRunRequest{
-				Arguments:          map[string]interface{}{"user_query": "analyze"},
-				Attachments:        refs,
-				OwnerSubject:       "alice@example.com",
-				DatasetDescription: "normalized dataset context",
+				Arguments:    map[string]interface{}{"user_query": "analyze"},
+				Attachments:  refs,
+				OwnerSubject: "alice@example.com",
 			},
 		},
 	}
@@ -86,8 +85,8 @@ func TestBotRequestFamiliesSerializeReferenceOnlyAttachments(t *testing.T) {
 			if decoded["owner_subject"] != "alice@example.com" {
 				t.Fatalf("owner_subject=%v, want authenticated owner", decoded["owner_subject"])
 			}
-			if decoded["dataset_description"] != "normalized dataset context" {
-				t.Fatalf("dataset_description=%v, want normalized structured value", decoded["dataset_description"])
+			if _, leaked := decoded["dataset_description"]; leaked {
+				t.Fatalf("request serialized obsolete dataset_description: %s", raw)
 			}
 			if _, ok := decoded["obs_file_list"]; ok {
 				t.Fatalf("request serialized legacy OBS paths: %s", raw)
@@ -99,15 +98,20 @@ func TestBotRequestFamiliesSerializeReferenceOnlyAttachments(t *testing.T) {
 	}
 }
 
-func TestBotRequestFamiliesOmitEmptyDatasetDescription(t *testing.T) {
-	tests := map[string]interface{}{
-		"chat":  ChatCompletionRequest{Model: "phyto-chat"},
-		"route": RouteQueryRequest{UserQuery: "analyze"},
-		"agent": AgentRunRequest{Arguments: map[string]interface{}{"user_query": "analyze"}},
+func TestBotRequestFamiliesOmitDatasetDescriptionUnconditionally(t *testing.T) {
+	tests := map[string]struct {
+		value interface{}
+	}{
+		"chat":  {value: &ChatCompletionRequest{}},
+		"route": {value: &RouteQueryRequest{}},
+		"agent": {value: &AgentRunRequest{}},
 	}
-	for name, value := range tests {
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			raw, err := json.Marshal(value)
+			if err := json.Unmarshal([]byte(`{"dataset_description":"obsolete"}`), test.value); err != nil {
+				t.Fatalf("decode crafted request: %v", err)
+			}
+			raw, err := json.Marshal(test.value)
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
 			}
@@ -116,7 +120,7 @@ func TestBotRequestFamiliesOmitEmptyDatasetDescription(t *testing.T) {
 				t.Fatalf("decode: %v", err)
 			}
 			if _, ok := decoded["dataset_description"]; ok {
-				t.Fatalf("empty dataset description serialized: %s", raw)
+				t.Fatalf("dataset description serialized: %s", raw)
 			}
 		})
 	}

@@ -15,58 +15,7 @@ import (
 	"phytomni-server/model"
 )
 
-func TestNormalizeDatasetDescription(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		raw     string
-		want    string
-		wantErr bool
-	}{
-		{name: "empty omitted", raw: " \t\n ", want: ""},
-		{name: "trimmed", raw: "  normalized dataset context  ", want: "normalized dataset context"},
-		{name: "maximum runes", raw: strings.Repeat("数", 4000), want: strings.Repeat("数", 4000)},
-		{name: "too many runes", raw: strings.Repeat("x", 4001), wantErr: true},
-		{name: "nul", raw: "bad\x00value", wantErr: true},
-		{name: "invalid utf8", raw: "bad\xffvalue", wantErr: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := normalizeDatasetDescription(tc.raw)
-			if tc.wantErr {
-				if !errors.Is(err, ErrInvalidDatasetDescription) {
-					t.Fatalf("normalize error=%v, want ErrInvalidDatasetDescription", err)
-				}
-				return
-			}
-			if err != nil || got != tc.want {
-				t.Fatalf("normalized=%q err=%v, want %q", got, err, tc.want)
-			}
-		})
-	}
-}
-
-func TestQueryRejectsInvalidDatasetDescriptionBeforeDispatch(t *testing.T) {
-	gdb := setupExpertTestDB(t)
-	effects := observeQueryPermissionEffects(t, gdb)
-	previous := rxBot.BotConfig
-	hits := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
-
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "Analyze counts", Mode: "instant", DatasetDescription: strings.Repeat("x", 4001),
-	})
-	if !errors.Is(err, ErrInvalidDatasetDescription) {
-		t.Fatalf("Query error=%v, want ErrInvalidDatasetDescription", err)
-	}
-	if hits != 0 {
-		t.Fatalf("invalid description reached Bot %d time(s)", hits)
-	}
-	effects.assertNone(t)
-}
-
-func TestQueryForwardsNormalizedDatasetDescriptionToBlockingAndStreamChat(t *testing.T) {
+func TestQueryPreservesAttachmentsAcrossBlockingAndStreamChat(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		stream bool
@@ -95,7 +44,8 @@ func TestQueryForwardsNormalizedDatasetDescriptionToBlockingAndStreamChat(t *tes
 			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: tc.stream, TimeoutSeconds: 5}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
-			in := QueryInput{Query: "Analyze counts", Mode: "instant", DatasetDescription: "  normalized dataset context  "}
+			refs := []rxBot.AssetAttachmentRef{{AssetID: "file_counts"}}
+			in := QueryInput{Query: "Analyze counts", Mode: "instant", Attachments: refs}
 			if tc.stream {
 				_, err := NewService().QueryStream(context.Background(), "alice@example.com", in, nil, nil)
 				if err != nil {
@@ -104,11 +54,11 @@ func TestQueryForwardsNormalizedDatasetDescriptionToBlockingAndStreamChat(t *tes
 			} else if _, err := NewService().Query(context.Background(), "alice", in); err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if captured.DatasetDescription != "normalized dataset context" {
-				t.Fatalf("dataset_description=%q, want normalized structured value", captured.DatasetDescription)
+			if captured.Messages[0].Content != "Analyze counts" {
+				t.Fatalf("chat query changed: %#v", captured.Messages)
 			}
-			if captured.Messages[0].Content != "Analyze counts" || strings.Contains(captured.Messages[0].Content, "dataset context") {
-				t.Fatalf("chat message leaked structured description: %#v", captured.Messages)
+			if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject == "" {
+				t.Fatalf("chat attachments=%#v owner=%q, want %#v and authenticated owner", captured.Attachments, captured.OwnerSubject, refs)
 			}
 		})
 	}

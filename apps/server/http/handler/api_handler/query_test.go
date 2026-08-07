@@ -8,13 +8,14 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/service/api_service"
 )
 
 func TestQueryErrorStatus_BotTimeout(t *testing.T) {
@@ -80,42 +81,18 @@ func newChatQueryHandlerRequest(t *testing.T, fields map[string]string) (*gin.Co
 	return c, w
 }
 
-func TestQueryRejectsInvalidDatasetDescriptionBeforeDispatch(t *testing.T) {
-	gdb := setupRemoteProductHandlerDB(t)
-	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "dataset@example.com", "admin", 5).Error; err != nil {
-		t.Fatal(err)
-	}
-	previousConfig := rxBot.BotConfig
-	botCalls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { botCalls++ }))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
-	previousQuota := viper.Get("chatlimit.enforce")
-	viper.Set("chatlimit.enforce", false)
-	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+func TestQueryInputForSurfaceIgnoresDatasetDescription(t *testing.T) {
+	c, _ := newChatQueryHandlerRequest(t, map[string]string{
+		"query":               "Analyze counts exactly as authored",
+		"dataset_description": "obsolete independent context",
+	})
 
-	for _, value := range []string{strings.Repeat("x", 4001), "bad\x00value"} {
-		t.Run("invalid", func(t *testing.T) {
-			c, w := newChatQueryHandlerRequest(t, map[string]string{
-				"dataset_description": value,
-			})
-			c.Set("username", "dataset@example.com")
-			NewHandler().Query(c)
-			if w.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status=%d, body=%s, want 422", w.Code, w.Body.String())
-			}
-		})
+	in := queryInputForSurface(c, api_service.QuerySurfaceChat, "")
+	if in.Query != "Analyze counts exactly as authored" {
+		t.Fatalf("query=%q, want authored query unchanged", in.Query)
 	}
-	if botCalls != 0 {
-		t.Fatalf("invalid dataset description reached Bot %d time(s)", botCalls)
-	}
-	var rows int64
-	if err := gdb.Model(&struct{}{}).Table("question_agent_logs").Count(&rows).Error; err != nil {
-		t.Fatal(err)
-	}
-	if rows != 0 {
-		t.Fatalf("invalid dataset description persisted %d row(s)", rows)
+	if _, exists := reflect.TypeOf(in).FieldByName("DatasetDescription"); exists {
+		t.Fatal("query input still exposes dataset description")
 	}
 }
 
