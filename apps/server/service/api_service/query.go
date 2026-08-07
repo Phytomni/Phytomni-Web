@@ -792,7 +792,7 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		}
 		titleQuery := ""
 		if target.parentID == 0 && in.RefreshId == 0 {
-			titleQuery = in.Query
+			titleQuery = conversationTitle(in.Query)
 		}
 		if target.operation == "replace" {
 			var current model.QuestionAgentLog
@@ -2072,7 +2072,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// 4. Persist the Web row (INSERT new, or UPDATE on refresh).
 	titleQuery := ""
 	if fID == 0 && in.RefreshId == 0 {
-		titleQuery = in.Query // first turn of a new conversation is its title
+		titleQuery = conversationTitle(in.Query) // first turn of a new conversation is its title
 	}
 	attachmentProjection, err := attachmentProjectionJSON(in.Attachments)
 	if err != nil {
@@ -2673,7 +2673,7 @@ func (ps *Service) QueryStream(
 	} else {
 		titleQuery := ""
 		if fID == 0 && in.RefreshId == 0 {
-			titleQuery = in.Query
+			titleQuery = conversationTitle(in.Query)
 		}
 		row := model.QuestionAgentLog{
 			DialogueId:        dialogueID,

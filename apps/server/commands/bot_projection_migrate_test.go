@@ -110,6 +110,26 @@ func TestQuestionAgentLogProjectionFieldsArePrivateAndRevisionTagged(t *testing.
 	}
 }
 
+func TestQuestionAgentLogUsesMediumTextForQueryAndAnswer(t *testing.T) {
+	gdb := openMigrationSQLite(t, `CREATE TABLE question_agent_logs (id INTEGER PRIMARY KEY)`)
+	stmt := &gorm.Statement{DB: gdb}
+	if err := stmt.Parse(&model.QuestionAgentLog{}); err != nil {
+		t.Fatalf("parse QuestionAgentLog schema: %v", err)
+	}
+	for _, name := range []string{"query", "answer"} {
+		field, ok := stmt.Schema.FieldsByDBName[name]
+		if !ok {
+			t.Fatalf("QuestionAgentLog is missing %s", name)
+		}
+		if got := field.TagSettings["TYPE"]; got != "mediumtext" {
+			t.Fatalf("%s type = %q, want mediumtext", name, got)
+		}
+	}
+	if got := stmt.Schema.FieldsByDBName["title_query"].TagSettings["TYPE"]; got != "text" {
+		t.Fatalf("title_query type = %q, want text", got)
+	}
+}
+
 func TestMigrateExposesOperatorControlledBotProjectionCommand(t *testing.T) {
 	command := Migrate()
 	for _, subcommand := range command.Subcommands {

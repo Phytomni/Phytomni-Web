@@ -34,6 +34,7 @@ func v1SubmissionServer(
 
 func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T) {
 	gdb := setupExpertTestDB(t)
+	rawQuery := "\n\t  Rice root atlas   reproduction \n" + strings.Repeat("x", 500)
 	var (
 		mu       sync.Mutex
 		calls    int
@@ -60,7 +61,7 @@ func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T)
 	})
 
 	input := QueryInput{
-		Query: "hello", Mode: "instant", Tool: "DataAgent",
+		Query: rawQuery, Mode: "instant", Tool: "DataAgent",
 		ClientTurnID: "stable-turn-1",
 	}
 	first, err := NewService().Query(context.Background(), "alice", input)
@@ -95,12 +96,65 @@ func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T)
 	if err := gdb.First(&row, first.Id).Error; err != nil {
 		t.Fatal(err)
 	}
+	if row.Query != rawQuery {
+		t.Fatal("submission changed the stored raw query")
+	}
+	if row.TitleQuery != "Rice root atlas reproduction" {
+		t.Fatalf("stored title = %q", row.TitleQuery)
+	}
 	private, err := LoadBotConversationContext(context.Background(), "alice", row.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if private.ClientTurnID != input.ClientTurnID {
 		t.Fatalf("stored client turn = %q, want %q", private.ClientTurnID, input.ClientTurnID)
+	}
+}
+
+func TestQuerySubmissionBoundsLegacyBlockingConversationTitle(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var hit string
+	botRouter(t, &hit)
+	rawQuery := strings.Repeat("稻", 161) + "\nignored"
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: rawQuery, Mode: "instant",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Query != rawQuery {
+		t.Fatal("blocking submission changed the stored raw query")
+	}
+	if row.TitleQuery != strings.Repeat("稻", 160) {
+		t.Fatalf("stored title has %d code points, want 160", len([]rune(row.TitleQuery)))
+	}
+}
+
+func TestQuerySubmissionBoundsLegacyStreamConversationTitle(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	sseChatServer(t)
+	rawQuery := "\n  streamed   title  \n" + strings.Repeat("x", 500)
+
+	out, err := NewService().QueryStream(context.Background(), "alice@example.com", QueryInput{
+		Query: rawQuery, Mode: "instant",
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("QueryStream: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Query != rawQuery {
+		t.Fatal("stream submission changed the stored raw query")
+	}
+	if row.TitleQuery != "streamed title" {
+		t.Fatalf("stored title = %q", row.TitleQuery)
 	}
 }
 

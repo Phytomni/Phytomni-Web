@@ -57,9 +57,9 @@ type QuestionAgentLog struct {
 	BotProjectionJSON string     `gorm:"column:bot_projection_json;type:longtext;comment:sanitized Bot run projection;NULL" json:"-"`
 	BotReportRevision int64      `gorm:"column:bot_report_revision;type:bigint;default:-1;comment:last Bot report revision" json:"-"`
 	UserName          string     `gorm:"column:user_name;type:varchar(255);comment:user name;NOT NULL" json:"user_name"`
-	Query             string     `gorm:"column:query;type:text;comment:question;NOT NULL" json:"query"`
+	Query             string     `gorm:"column:query;type:mediumtext;comment:question;NOT NULL" json:"query"`
 	TitleQuery        string     `gorm:"column:title_query;type:text;comment:title question;NOT NULL" json:"title_query"`
-	Answer            string     `gorm:"column:answer;type:text;comment:answer;NOT NULL" json:"answer"`
+	Answer            string     `gorm:"column:answer;type:mediumtext;comment:answer;NOT NULL" json:"answer"`
 	FollowUpQuestions string     `gorm:"column:follow_up_questions;type:text;comment:follow-up prompts;NOT NULL" json:"follow_up_questions"`
 	TaskId            string     `gorm:"column:task_id;type:varchar(50);comment:task id;NOT NULL" json:"task_id"`
 	TaskLog           string     `gorm:"column:task_log;type:longtext;comment:task log;NOT NULL" json:"task_log"`
