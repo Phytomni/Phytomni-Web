@@ -9,7 +9,10 @@ import {
   A2uiTransportError,
   type A2uiActionEnvelope,
 } from "@/views/chat/streaming/a2uiAction";
-import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
+import {
+  A2UI_LIMITS,
+  type A2uiActionResponse,
+} from "@/views/chat/streaming/a2uiContract";
 import { createA2uiSucceededResponse } from "../../../../helpers/a2uiFixtures";
 
 const fixture = (relativePath: string): unknown =>
@@ -229,6 +232,35 @@ describe("a2uiAction", () => {
       httpStatus: 502,
       forwarded: true,
       retryable: false,
+    });
+  });
+
+  it("rejects an HTTP 200 response body over the aggregate response budget", async () => {
+    const body = { padding: "x".repeat(A2UI_LIMITS.responseBytes) };
+    const serializedBody = JSON.stringify(body);
+    expect(new TextEncoder().encode(serializedBody).byteLength).toBeGreaterThan(
+      A2UI_LIMITS.responseBytes
+    );
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(serializedBody, {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+    );
+    const t = createFetchA2uiTransport({
+      conversationId: "42",
+      getToken: () => "tok",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(t(envelope)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "a2ui_response_too_large",
+      httpStatus: 200,
+      forwarded: true,
+      retryable: false,
+      message: "A2UI action request failed",
     });
   });
 
