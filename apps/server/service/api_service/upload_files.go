@@ -25,8 +25,6 @@ var (
 	ErrUploadControlDisabled = errors.New("upload control disabled")
 	// ErrUploadMetadataInvalid marks browser metadata that cannot be accepted.
 	ErrUploadMetadataInvalid = errors.New("invalid upload metadata")
-	// ErrAttachmentPurposeInvalid marks a browser purpose outside the public enum.
-	ErrAttachmentPurposeInvalid = errors.New("attachment purpose invalid")
 	// ErrUploadControlUnavailable covers transport and contract failures after
 	// the local request has passed validation.
 	ErrUploadControlUnavailable = errors.New("upload control unavailable")
@@ -39,7 +37,6 @@ type UploadCreateInput struct {
 	SizeBytes    int64
 	ContentType  string
 	LastModified int64
-	Purpose      string
 }
 
 // UploadCreateResult is the safe browser-facing upload session envelope. It
@@ -77,13 +74,13 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 	if err != nil {
 		return nil, err
 	}
-	purpose, err := normalizeAttachmentPurpose(input.Purpose)
-	if err != nil {
-		return nil, err
-	}
 	filename, err := normalizeUploadFilename(input.Filename)
 	if err != nil {
 		return nil, err
+	}
+	purpose, err := classifyAttachmentFilename(filename)
+	if err != nil {
+		return nil, fmt.Errorf("%w: filename", ErrUploadMetadataInvalid)
 	}
 	if input.SizeBytes < 1 || input.SizeBytes > resumableUploadMaxFileBytes {
 		return nil, fmt.Errorf("%w: size", ErrUploadMetadataInvalid)
@@ -113,7 +110,7 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 		SizeBytes:      input.SizeBytes,
 		ContentType:    contentType,
 		LastModified:   input.LastModified,
-		Purpose:        purpose,
+		Purpose:        string(purpose),
 		IdempotencyKey: idempotency,
 	})
 	if err != nil {
@@ -134,15 +131,6 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 		CapabilityExpiresAt: out.CapabilityExpiresAt,
 		SessionExpiresAt:    out.SessionExpiresAt,
 	}, nil
-}
-
-func normalizeAttachmentPurpose(raw string) (string, error) {
-	switch raw {
-	case "dataset", "document":
-		return raw, nil
-	default:
-		return "", ErrAttachmentPurposeInvalid
-	}
 }
 
 // RenewUploadCapability derives the owner from Web authentication and asks
