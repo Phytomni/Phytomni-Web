@@ -40,8 +40,8 @@ function makeItem(
   };
 }
 
-const mountStrip = (items: readonly ResumableUploadItem[]) =>
-  mountWithApp(AttachmentChipStrip, { props: { items } });
+const mountStrip = (items: readonly ResumableUploadItem[], announcement = "") =>
+  mountWithApp(AttachmentChipStrip, { props: { items, announcement } });
 
 describe("AttachmentChipStrip", () => {
   it("renders no strip when there are no attachments", () => {
@@ -361,5 +361,176 @@ describe("AttachmentChipStrip", () => {
     expect(STRIP_SOURCE).toMatch(/var\(--phy-[^)]+\)/);
     expect(STRIP_SOURCE).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(STRIP_SOURCE).not.toMatch(/<svg\b/i);
+  });
+
+  it("keeps direct chips, overflow, hidden items, and detail actions in logical tab order", async () => {
+    const wrapper = mountStrip(
+      Array.from({ length: 5 }, (_, index) => makeItem(index + 1))
+    );
+
+    expect(
+      wrapper
+        .findAll("button")
+        .map((button) => button.attributes("data-testid"))
+    ).toEqual([
+      "attachment-chip",
+      "attachment-chip",
+      "attachment-chip",
+      "attachment-chip-overflow",
+    ]);
+
+    await wrapper
+      .get('[data-testid="attachment-chip-overflow"]')
+      .trigger("click");
+
+    const focusableControls = wrapper.findAll("button");
+    expect(
+      focusableControls.map((button) => button.attributes("data-testid"))
+    ).toEqual([
+      "attachment-chip",
+      "attachment-chip",
+      "attachment-chip",
+      "attachment-chip-overflow",
+      "attachment-chip-overflow-item",
+      "attachment-chip-overflow-item",
+      "attachment-chip-detail-pause",
+      "attachment-chip-detail-cancel",
+      "attachment-chip-detail-remove",
+    ]);
+    expect(
+      focusableControls.every(
+        (button) => button.attributes("tabindex") === undefined
+      )
+    ).toBe(true);
+    expect(
+      wrapper
+        .get('[data-testid="attachment-chip-detail"]')
+        .attributes("tabindex")
+    ).toBe("-1");
+  });
+
+  it("includes the file name in every file-specific compact control name", async () => {
+    const item = makeItem(1);
+    const wrapper = mountStrip([item]);
+    const chip = wrapper.get('[data-testid="attachment-chip"]');
+
+    expect(chip.attributes("aria-label")).toContain(item.name);
+    await chip.trigger("click");
+
+    for (const testId of [
+      "attachment-chip-detail-pause",
+      "attachment-chip-detail-cancel",
+      "attachment-chip-detail-remove",
+    ]) {
+      expect(
+        wrapper.get(`[data-testid="${testId}"]`).attributes("aria-label")
+      ).toContain(item.name);
+    }
+    expect(STRIP_SOURCE).toContain('aria-hidden="true"');
+  });
+
+  it("exposes determinate transfer progress with numeric and textual semantics", async () => {
+    const wrapper = mountStrip([makeItem(1)]);
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    const progress = wrapper.get(
+      '[data-testid="attachment-chip-detail-progress"]'
+    );
+
+    expect(progress.attributes("role")).toBe("progressbar");
+    expect(progress.attributes("aria-valuemin")).toBe("0");
+    expect(progress.attributes("aria-valuemax")).toBe("100");
+    expect(progress.attributes("aria-valuenow")).toBe("50");
+    expect(progress.attributes("aria-valuetext")).toContain(
+      "2.0 KB / 4.0 KB (50%)"
+    );
+  });
+
+  it.each([
+    ["completed", "Ready to send"],
+    ["failed", "Upload failed"],
+    ["paused", "Paused"],
+    ["expired", "Session expired"],
+  ] as const)(
+    "announces a meaningful %s state transition without relying on color",
+    async (status, label) => {
+      const item = makeItem(1);
+      const wrapper = mountStrip([item]);
+
+      await wrapper.setProps({ items: [{ ...item, status }] });
+
+      const liveRegion = wrapper.get(
+        '[data-testid="attachment-chip-live-region"]'
+      );
+      expect(liveRegion.attributes("role")).toBe("status");
+      expect(liveRegion.attributes("aria-live")).toBe("polite");
+      expect(liveRegion.attributes("aria-atomic")).toBe("true");
+      expect(liveRegion.text()).toContain(item.name);
+      expect(liveRegion.text()).toContain(label);
+      expect(
+        wrapper.get('[data-testid="attachment-chip"]').attributes()
+      ).toMatchObject({
+        "data-state": status,
+      });
+      expect(wrapper.get('[data-testid="attachment-chip-status"]').text()).toBe(
+        label
+      );
+    }
+  );
+
+  it("does not announce byte-by-byte progress updates", async () => {
+    const item = makeItem(1);
+    const wrapper = mountStrip([item]);
+    const liveRegion = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+
+    expect(liveRegion.text()).toBe("");
+    await wrapper.setProps({
+      items: [{ ...item, loadedBytes: item.loadedBytes + 512 }],
+    });
+
+    expect(liveRegion.text()).toBe("");
+  });
+
+  it("routes duplicate and rejection copy through the single polite live region", async () => {
+    const item = makeItem(1);
+    const wrapper = mountStrip(
+      [item, makeItem(2)],
+      `Already attached: ${item.name}`
+    );
+    const liveRegions = wrapper.findAll(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+
+    expect(liveRegions).toHaveLength(1);
+    expect(liveRegions[0].text()).toBe(`Already attached: ${item.name}`);
+
+    await wrapper.setProps({ announcement: "sample-2.fastq.gz was rejected" });
+    expect(liveRegions[0].text()).toBe("sample-2.fastq.gz was rejected");
+  });
+
+  it("announces a rejected first file without rendering an empty strip", () => {
+    const wrapper = mountStrip([], "unsupported.fastq was rejected");
+
+    expect(wrapper.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      false
+    );
+    expect(
+      wrapper.get('[data-testid="attachment-chip-live-region"]').text()
+    ).toBe("unsupported.fastq was rejected");
+  });
+
+  it("uses token-sized touch targets and explicit reduced-motion and forced-color rules", () => {
+    expect(STRIP_SOURCE).toMatch(
+      /\.attachment-chip\s*\{[\s\S]*?min-block-size:\s*var\(--phy-control-height-default\)/
+    );
+    expect(STRIP_SOURCE).toMatch(
+      /\.attachment-chip-detail__action\s*\{[\s\S]*?min-block-size:\s*var\(--phy-control-height-default\)/
+    );
+    expect(STRIP_SOURCE).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(STRIP_SOURCE).toContain("transition: none");
+    expect(STRIP_SOURCE).toContain("@media (forced-colors: active)");
+    expect(STRIP_SOURCE).not.toMatch(/#[0-9a-f]{3,8}\b/i);
   });
 });

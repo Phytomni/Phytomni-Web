@@ -94,7 +94,18 @@
         </span>
       </div>
       <div class="attachment-chip-detail__metrics">
-        <span data-testid="attachment-chip-detail-progress">
+        <span
+          class="attachment-chip-detail__progress"
+          data-testid="attachment-chip-detail-progress"
+          role="progressbar"
+          :aria-label="
+            t('chat.upload.progressLabel', { file: activeItem.name })
+          "
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="progressPercent(activeItem)"
+          :aria-valuetext="detailProgressText(activeItem)"
+        >
           {{ detailProgressText(activeItem) }}
         </span>
         <template v-if="showsTransferMetrics(activeItem)">
@@ -213,6 +224,15 @@
       @change="handleFileChange"
     />
   </div>
+  <p
+    class="attachment-chip-strip__live-region"
+    data-testid="attachment-chip-live-region"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    {{ liveAnnouncement }}
+  </p>
 </template>
 
 <script setup lang="ts">
@@ -233,9 +253,11 @@ const props = withDefaults(
   defineProps<{
     items: readonly ResumableUploadItem[];
     disabled?: boolean;
+    announcement?: string;
   }>(),
   {
     disabled: false,
+    announcement: "",
   }
 );
 
@@ -256,6 +278,7 @@ const detailSurface = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const originControl = ref<HTMLButtonElement | null>(null);
 const detailMaxBlockSize = ref("20rem");
+const liveAnnouncement = ref("");
 
 const directItems = computed(() => props.items.slice(0, 3));
 const hiddenItems = computed(() =>
@@ -286,6 +309,49 @@ const progressPercent = (item: ResumableUploadItem): number => {
 
 const statusLabel = (item: ResumableUploadItem): string =>
   t(`chat.upload.status.${item.status}`);
+
+const announcedStatuses = new Set(["completed", "failed", "paused", "expired"]);
+
+const statusSignature = computed(() =>
+  props.items.map((item) => ({ localId: item.localId, status: item.status }))
+);
+
+watch(statusSignature, (current, previous) => {
+  const previousStatuses = new Map(
+    previous.map((item) => [item.localId, item.status])
+  );
+  const announcements = current.flatMap((item) => {
+    const previousStatus = previousStatuses.get(item.localId);
+    if (
+      previousStatus === undefined ||
+      previousStatus === item.status ||
+      !announcedStatuses.has(item.status)
+    ) {
+      return [];
+    }
+    const currentItem = props.items.find(
+      (candidate) => candidate.localId === item.localId
+    );
+    if (!currentItem) return [];
+    return [
+      t("chat.upload.stateChanged", {
+        file: currentItem.name,
+        status: statusLabel(currentItem),
+      }),
+    ];
+  });
+  if (announcements.length > 0) {
+    liveAnnouncement.value = announcements.join(" · ");
+  }
+});
+
+watch(
+  () => props.announcement,
+  (announcement) => {
+    liveAnnouncement.value = announcement.trim();
+  },
+  { immediate: true }
+);
 
 const metricLabel = (item: ResumableUploadItem): string => {
   if (!progressStatuses.has(item.status)) return formatBytes(item.size);
@@ -455,6 +521,18 @@ const overflowLabel = computed(() => {
   scrollbar-width: thin;
 }
 
+.attachment-chip-strip__live-region {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .attachment-chip {
   display: inline-flex;
   flex: 0 1 clamp(160px, 30vw, 288px);
@@ -462,7 +540,7 @@ const overflowLabel = computed(() => {
   gap: 6px;
   min-inline-size: min(160px, 75vw);
   max-inline-size: min(288px, 85vw);
-  min-block-size: 36px;
+  min-block-size: var(--phy-control-height-default);
   padding: 6px 10px;
   border: 1px solid var(--phy-color-border-subtle);
   border-radius: var(--phy-radius-pill);
@@ -472,6 +550,10 @@ const overflowLabel = computed(() => {
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
 .attachment-chip:hover:not(:disabled) {
@@ -548,6 +630,9 @@ const overflowLabel = computed(() => {
   border-radius: var(--phy-radius-md);
   background: var(--phy-color-bg-elevated);
   box-shadow: var(--phy-shadow-soft);
+  transition:
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    background-color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
 .attachment-chip-detail:focus-visible {
@@ -592,6 +677,10 @@ const overflowLabel = computed(() => {
   font-size: 0.75rem;
 }
 
+.attachment-chip-detail__progress {
+  transition: color var(--phy-motion-fast) var(--phy-motion-ease-out);
+}
+
 .attachment-chip-detail__actions {
   flex-wrap: wrap;
 }
@@ -601,9 +690,10 @@ const overflowLabel = computed(() => {
 }
 
 .attachment-chip-detail__overflow-item {
+  min-block-size: var(--phy-control-height-default);
   min-inline-size: 0;
   max-inline-size: 100%;
-  padding: 0;
+  padding-inline: var(--phy-space-8);
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -622,7 +712,7 @@ const overflowLabel = computed(() => {
 }
 
 .attachment-chip-detail__action {
-  min-block-size: var(--phy-control-height-compact);
+  min-block-size: var(--phy-control-height-default);
   padding-inline: var(--phy-space-8);
   border: 1px solid transparent;
   border-radius: var(--phy-radius-sm);
@@ -631,6 +721,9 @@ const overflowLabel = computed(() => {
   cursor: pointer;
   font: inherit;
   font-size: 0.75rem;
+  transition:
+    background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    color var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
 .attachment-chip-detail__action:hover {
@@ -656,5 +749,35 @@ const overflowLabel = computed(() => {
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .attachment-chip,
+  .attachment-chip-detail,
+  .attachment-chip-detail__overflow-item,
+  .attachment-chip-detail__action {
+    border-color: ButtonText;
+  }
+
+  .attachment-chip[data-state="failed"],
+  .attachment-chip[data-state="expired"],
+  .attachment-chip-detail__overflow-item[data-state="failed"],
+  .attachment-chip-detail__overflow-item[data-state="expired"] {
+    border-style: double;
+  }
+
+  .attachment-chip__status,
+  .attachment-chip-detail__status {
+    color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attachment-chip,
+  .attachment-chip-detail,
+  .attachment-chip-detail__progress,
+  .attachment-chip-detail__action {
+    transition: none;
+  }
 }
 </style>
