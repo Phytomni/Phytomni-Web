@@ -2,8 +2,10 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +20,7 @@ const (
 	maxResumableUploadPartCount       = 100000
 	maxUploadCapabilityBytes          = 4096
 	maxUploadTimestampBytes           = 128
+	maxUploadAbortResponseBytes int64 = 16 << 10
 )
 
 // UploadCreateRequest is the metadata-only control request sent from Web Go
@@ -65,6 +68,14 @@ type UploadCapabilityResponse struct {
 	SessionExpiresAt    string `json:"session_expires_at"`
 }
 
+// UploadAbortResponse carries only the fields needed to confirm that Bot
+// aborted the intended upload session under the negotiated protocol.
+type UploadAbortResponse struct {
+	Protocol string `json:"protocol"`
+	AssetID  string `json:"asset_id"`
+	Status   string `json:"status"`
+}
+
 // CreateUpload asks Bot to allocate an owner-scoped resumable upload session.
 // The request is JSON metadata only; file bytes never enter this client.
 func (c *Client) CreateUpload(ctx context.Context, in UploadCreateRequest) (*UploadCreateResponse, ResponseMeta, error) {
@@ -105,6 +116,59 @@ func (c *Client) RenewUploadCapability(ctx context.Context, assetID, ownerSubjec
 		return nil, meta, err
 	}
 	if err := validateUploadCapabilityResponse(assetID, out); err != nil {
+		return nil, meta, err
+	}
+	return &out, meta, nil
+}
+
+// AbortUpload asks the configured Bot to abort one upload session using only
+// that session's opaque capability. It never follows an upload URL returned by
+// a create response and never sends the Client's user key.
+func (c *Client) AbortUpload(ctx context.Context, assetID, capability string) (*UploadAbortResponse, ResponseMeta, error) {
+	if err := validateAssetID(assetID); err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	if err := validateCapability(capability); err != nil {
+		return nil, ResponseMeta{}, err
+	}
+
+	path := "/v1/files/" + assetID
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+path, nil)
+	if err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+capability)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, ResponseMeta{}, wrapTransportError(err)
+	}
+	defer resp.Body.Close()
+
+	meta := responseMeta(resp)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxUploadAbortResponseBytes+1))
+	if err != nil {
+		return nil, meta, wrapTransportError(err)
+	}
+	if int64(len(raw)) > maxUploadAbortResponseBytes {
+		return nil, meta, errors.New("upload abort response exceeds size limit")
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, meta, fmt.Errorf(
+			"bot %s %s: status %d req=%s",
+			http.MethodDelete,
+			path,
+			resp.StatusCode,
+			meta.BotRequestID,
+		)
+	}
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return nil, meta, err
+	}
+	var out UploadAbortResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, meta, err
+	}
+	if err := validateUploadAbortResponse(assetID, out); err != nil {
 		return nil, meta, err
 	}
 	return &out, meta, nil
@@ -189,6 +253,22 @@ func validateUploadCapabilityResponse(assetID string, out UploadCapabilityRespon
 		return err
 	}
 	return validateUploadTimestamps(out.CapabilityExpiresAt, out.SessionExpiresAt)
+}
+
+func validateUploadAbortResponse(assetID string, out UploadAbortResponse) error {
+	if out.Protocol != ResumableUploadProtocol {
+		return fmt.Errorf("unsupported upload protocol %q", out.Protocol)
+	}
+	if err := validateAssetID(out.AssetID); err != nil {
+		return err
+	}
+	if out.AssetID != assetID {
+		return errors.New("upload abort asset mismatch")
+	}
+	if out.Status != "aborted" {
+		return fmt.Errorf("invalid upload abort status %q", out.Status)
+	}
+	return nil
 }
 
 func validateUploadIdentity(protocol, assetID, status string) error {

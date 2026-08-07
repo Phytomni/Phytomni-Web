@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,249 @@ func uploadCapabilityFixture(serverURL string) UploadCapabilityResponse {
 		Capability:          "renewed-opaque-capability",
 		CapabilityExpiresAt: time.Now().Add(15 * time.Minute).UTC().Format(time.RFC3339),
 		SessionExpiresAt:    time.Now().Add(7 * 24 * time.Hour).UTC().Format(time.RFC3339),
+	}
+}
+
+func uploadAbortFixture() UploadAbortResponse {
+	return UploadAbortResponse{
+		Protocol: ResumableUploadProtocol,
+		AssetID:  "file_test_abc",
+		Status:   "aborted",
+	}
+}
+
+func TestAbortUploadUsesCapabilityAgainstConfiguredBaseURL(t *testing.T) {
+	const capability = "opaque-abort-capability"
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/files/file_test_abc" {
+			t.Errorf("request=%s %s, want DELETE /v1/files/file_test_abc", r.Method, r.URL.Path)
+		}
+		if r.URL.RawQuery != "" {
+			t.Errorf("query=%q, want empty", r.URL.RawQuery)
+		}
+		if got := r.Header.Values("Authorization"); len(got) != 1 || got[0] != "Bearer "+capability {
+			t.Errorf("Authorization=%q, want exactly one capability header", got)
+		}
+		for name, values := range r.Header {
+			for _, value := range values {
+				if strings.Contains(value, "ptm_test") {
+					t.Errorf("header %q exposed service key", name)
+				}
+			}
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read body: %v", err)
+		}
+		if len(body) != 0 {
+			t.Errorf("body=%q, want empty", body)
+		}
+		if got := r.Header.Get("Content-Type"); got != "" {
+			t.Errorf("Content-Type=%q, want absent", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(uploadAbortFixture())
+	}))
+	defer srv.Close()
+
+	response, meta, err := newTestClient(srv.URL).AbortUpload(
+		context.Background(), "file_test_abc", capability,
+	)
+	if err != nil {
+		t.Fatalf("AbortUpload error: %v", err)
+	}
+	if response == nil || *response != uploadAbortFixture() {
+		t.Fatalf("response=%#v, want %#v", response, uploadAbortFixture())
+	}
+	if meta.StatusCode != http.StatusOK || calls != 1 {
+		t.Fatalf("meta=%#v calls=%d, want 200 and one call", meta, calls)
+	}
+}
+
+func TestAbortUploadIgnoresHostileCreateUploadURL(t *testing.T) {
+	var trustedCalls, hostileCalls int
+	hostile := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hostileCalls++
+		http.Error(w, "must not be called", http.StatusInternalServerError)
+	}))
+	defer hostile.Close()
+	trusted := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		trustedCalls++
+		_ = json.NewEncoder(w).Encode(uploadAbortFixture())
+	}))
+	defer trusted.Close()
+
+	_, hostileCreateResponse := uploadCreateFixture(hostile.URL)
+	if hostileCreateResponse.UploadURL != hostile.URL+"/v1/files/file_test_abc" {
+		t.Fatalf("hostile test fixture URL=%q", hostileCreateResponse.UploadURL)
+	}
+	response, _, err := newTestClient(trusted.URL).AbortUpload(
+		context.Background(), hostileCreateResponse.AssetID, hostileCreateResponse.Capability,
+	)
+	if err != nil || response == nil {
+		t.Fatalf("AbortUpload response=%#v err=%v", response, err)
+	}
+	if trustedCalls != 1 || hostileCalls != 0 {
+		t.Fatalf("trusted calls=%d hostile calls=%d, want 1 and 0", trustedCalls, hostileCalls)
+	}
+}
+
+func TestAbortUploadRejectsInvalidInputsBeforeNetwork(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_ = json.NewEncoder(w).Encode(uploadAbortFixture())
+	}))
+	defer srv.Close()
+	client := newTestClient(srv.URL)
+
+	tests := []struct {
+		name       string
+		assetID    string
+		capability string
+	}{
+		{name: "empty asset", assetID: "", capability: "opaque-capability"},
+		{name: "empty asset suffix", assetID: "file_", capability: "opaque-capability"},
+		{name: "path traversal", assetID: "file_../secret", capability: "opaque-capability"},
+		{name: "oversized asset", assetID: "file_" + strings.Repeat("a", 124), capability: "opaque-capability"},
+		{name: "unicode asset", assetID: "file_ä", capability: "opaque-capability"},
+		{name: "empty capability", assetID: "file_test_abc", capability: ""},
+		{name: "space capability", assetID: "file_test_abc", capability: "opaque capability"},
+		{name: "newline capability", assetID: "file_test_abc", capability: "opaque\ncapability"},
+		{name: "delete capability", assetID: "file_test_abc", capability: "opaque\x7fcapability"},
+		{name: "invalid UTF-8 capability", assetID: "file_test_abc", capability: string([]byte{0xff})},
+		{name: "oversized capability", assetID: "file_test_abc", capability: strings.Repeat("a", maxUploadCapabilityBytes+1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response, meta, err := client.AbortUpload(context.Background(), tt.assetID, tt.capability)
+			if response != nil || err == nil || meta != (ResponseMeta{}) {
+				t.Fatalf("response=%#v meta=%#v err=%v, want local rejection", response, meta, err)
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("network calls=%d, want zero", calls)
+	}
+}
+
+func TestAbortUploadBoundsResponseBody(t *testing.T) {
+	const maxAbortBodyBytes = 16 << 10
+	valid, err := json.Marshal(uploadAbortFixture())
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	for _, tt := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "exact limit", size: maxAbortBodyBytes},
+		{name: "one byte overflow", size: maxAbortBodyBytes + 1, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			body := append(append([]byte(nil), valid...), bytes.Repeat([]byte(" "), tt.size-len(valid))...)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write(body)
+			}))
+			defer srv.Close()
+
+			response, _, err := newTestClient(srv.URL).AbortUpload(
+				context.Background(), "file_test_abc", "opaque-capability",
+			)
+			if tt.wantErr {
+				if response != nil || err == nil {
+					t.Fatalf("overflow accepted: response=%#v err=%v", response, err)
+				}
+				return
+			}
+			if response == nil || err != nil {
+				t.Fatalf("bounded response rejected: response=%#v err=%v", response, err)
+			}
+		})
+	}
+}
+
+func TestAbortUploadRejectsDuplicateResponseKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"protocol":"obs-multipart-v2","asset_id":"file_test_abc","asset_id":"file_other","status":"aborted"}`)
+	}))
+	defer srv.Close()
+
+	response, _, err := newTestClient(srv.URL).AbortUpload(
+		context.Background(), "file_test_abc", "opaque-capability",
+	)
+	if response != nil || !errors.Is(err, errDuplicateJSONKey) {
+		t.Fatalf("duplicate response keys accepted: response=%#v err=%v", response, err)
+	}
+}
+
+func TestAbortUploadRejectsInvalidResponseIdentity(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		mutate func(*UploadAbortResponse)
+	}{
+		{name: "wrong protocol", mutate: func(response *UploadAbortResponse) { response.Protocol = "legacy" }},
+		{name: "wrong asset", mutate: func(response *UploadAbortResponse) { response.AssetID = "file_other" }},
+		{name: "wrong status", mutate: func(response *UploadAbortResponse) { response.Status = "uploading" }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			responseBody := uploadAbortFixture()
+			tt.mutate(&responseBody)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(responseBody)
+			}))
+			defer srv.Close()
+
+			response, _, err := newTestClient(srv.URL).AbortUpload(
+				context.Background(), "file_test_abc", "opaque-capability",
+			)
+			if response != nil || err == nil {
+				t.Fatalf("invalid response accepted: response=%#v err=%v", response, err)
+			}
+		})
+	}
+}
+
+func TestAbortUploadRejectsMalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"protocol":`)
+	}))
+	defer srv.Close()
+
+	response, _, err := newTestClient(srv.URL).AbortUpload(
+		context.Background(), "file_test_abc", "opaque-capability",
+	)
+	if response != nil || err == nil {
+		t.Fatalf("malformed JSON accepted: response=%#v err=%v", response, err)
+	}
+}
+
+func TestAbortUploadRejectsNon2xxWithoutLeakingCapabilityOrBody(t *testing.T) {
+	const capability = "opaque-secret-abort-capability"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-Id", "bot-abort-7")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":"`+capability+`","private":"raw-response-detail"}`)
+	}))
+	defer srv.Close()
+
+	response, meta, err := newTestClient(srv.URL).AbortUpload(
+		context.Background(), "file_test_abc", capability,
+	)
+	if response != nil || err == nil {
+		t.Fatalf("non-2xx accepted: response=%#v err=%v", response, err)
+	}
+	if meta.StatusCode != http.StatusForbidden || meta.BotRequestID != "bot-abort-7" {
+		t.Fatalf("meta=%#v, want safe status and request id", meta)
+	}
+	message := err.Error()
+	for _, forbidden := range []string{capability, "raw-response-detail"} {
+		if strings.Contains(message, forbidden) {
+			t.Fatalf("error leaked %q: %q", forbidden, message)
+		}
 	}
 }
 
