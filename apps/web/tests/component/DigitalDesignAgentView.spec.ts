@@ -356,10 +356,20 @@ describe("DigitalDesignAgentView", () => {
   });
 
   it("submits structured gene/species resolver values without leaking them into query", async () => {
+    mocks.chatState.fileList = [
+      completedUpload("upload-context", "context.pdf"),
+    ];
     const wrapper = mountView();
     const context = new File(["context"], "context.pdf", {
       type: "application/pdf",
     });
+
+    expect(wrapper.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-testid="chat-upload-card"]').exists()).toBe(
+      false
+    );
 
     await wrapper
       .get('[data-test="design-question"]')
@@ -414,12 +424,63 @@ describe("DigitalDesignAgentView", () => {
     await flushPromises();
 
     expect(
-      wrapper.get('[data-test="design-attachment-announcement"]').text()
+      wrapper.get('[data-testid="attachment-chip-live-region"]').text()
     ).toBe("Already attached: context.pdf");
-    const retained = wrapper.get('[data-upload-local-id="upload-existing"]');
-    expect(retained.attributes("data-upload-focused")).toBe("true");
-    expect(document.activeElement).toBe(retained.element);
+    expect(wrapper.attributes("data-focused-upload-id")).toBe(
+      "upload-existing"
+    );
+    expect(
+      wrapper.find('[data-upload-local-id="upload-existing"]').exists()
+    ).toBe(false);
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="attachment-chip"]').element
+    );
     wrapper.unmount();
+  });
+
+  it("sends completed asset IDs and clears chips only after acceptance", async () => {
+    const item = completedUpload("upload-accepted", "context.pdf");
+    mocks.chatState.fileList = [item];
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_context" }];
+    const wrapper = mountView();
+
+    await wrapper
+      .get('[data-test="design-question"]')
+      .setValue("Keep this design draft");
+    await wrapper.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await wrapper.get('[data-test="design-species-code"]').setValue("ath");
+    await wrapper.get("form.digital-design-form").trigger("submit");
+    await flushPromises();
+
+    expect(mocks.submit).toHaveBeenCalledWith({
+      query: "Keep this design draft",
+      attachments: [{ asset_id: "file_context" }],
+      resolver: { geneId: "AT1G01010", speciesCode: "ath" },
+    });
+    expect(mocks.uploadQueue.removeUpload).toHaveBeenCalledWith(item);
+    wrapper.unmount();
+
+    const failedItem = completedUpload("upload-rejected", "context.pdf");
+    mocks.chatState.fileList = [failedItem];
+    mocks.uploadQueue.removeUpload.mockClear();
+    mocks.submit.mockRejectedValueOnce(new Error("submit failed"));
+    const rejected = mountView();
+    await rejected
+      .get('[data-test="design-question"]')
+      .setValue("Keep failed design draft");
+    await rejected.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await rejected.get('[data-test="design-species-code"]').setValue("ath");
+    await rejected.get("form.digital-design-form").trigger("submit");
+    await flushPromises();
+
+    expect(
+      rejected.get('[data-test="design-question"]').element
+    ).toHaveProperty("value", "Keep failed design draft");
+    expect(mocks.uploadQueue.removeUpload).not.toHaveBeenCalled();
+    expect(rejected.find('[data-testid="attachment-chip"]').exists()).toBe(
+      true
+    );
+    rejected.unmount();
   });
 
   it("keeps file-free runs available when Agent attachments are disabled", async () => {
@@ -531,15 +592,27 @@ describe("DigitalDesignAgentView", () => {
     };
     mocks.chatState.fileList = [item];
     let wrapper = mountView();
-    await wrapper.get('[data-testid="chat-upload-pause"]').trigger("click");
-    await wrapper.get('[data-testid="chat-upload-remove"]').trigger("click");
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-pause"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-cancel"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-remove"]')
+      .trigger("click");
     expect(mocks.uploadQueue.pauseUpload).toHaveBeenCalledWith("upload-1");
+    expect(mocks.uploadQueue.cancelUpload).toHaveBeenCalledWith("upload-1");
     expect(mocks.uploadQueue.removeUploadById).toHaveBeenCalledWith("upload-1");
     wrapper.unmount();
 
     mocks.chatState.fileList = [{ ...item, status: "paused" }];
     wrapper = mountView();
-    await wrapper.get('[data-testid="chat-upload-resume"]').trigger("click");
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-resume"]')
+      .trigger("click");
     expect(mocks.uploadQueue.resumeUpload).toHaveBeenCalledWith("upload-1");
     wrapper.unmount();
 
@@ -547,8 +620,29 @@ describe("DigitalDesignAgentView", () => {
       { ...item, status: "failed", errorCode: "upload_failed" },
     ];
     wrapper = mountView();
-    await wrapper.get('[data-testid="chat-upload-retry"]').trigger("click");
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-retry"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-reselect"]')
+      .trigger("click");
+    const replacement = new File(["replacement"], "replacement.fastq.gz", {
+      type: "application/gzip",
+    });
+    const reselectInput = wrapper.get<HTMLInputElement>(
+      '[data-testid="attachment-chip-reselect-input"]'
+    );
+    Object.defineProperty(reselectInput.element, "files", {
+      configurable: true,
+      value: [replacement],
+    });
+    await reselectInput.trigger("change");
     expect(mocks.uploadQueue.retryUpload).toHaveBeenCalledWith("upload-1");
+    expect(mocks.uploadQueue.reselectUpload).toHaveBeenCalledWith(
+      "upload-1",
+      replacement
+    );
     wrapper.unmount();
   });
 

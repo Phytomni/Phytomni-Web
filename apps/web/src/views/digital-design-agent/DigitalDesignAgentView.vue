@@ -2,6 +2,7 @@
   <main
     ref="designRoot"
     class="digital-design-page"
+    :data-focused-upload-id="focusedUploadLocalId || undefined"
     data-scroll-root="digital-design-agent"
     aria-labelledby="digital-design-title"
   >
@@ -131,40 +132,19 @@
           <p class="digital-design-hint">
             {{ t("agents.digitalDesign.contextFilesHint") }}
           </p>
-          <ul
-            v-if="uploadItems.length"
-            class="digital-design-file-list"
-            data-test="design-file-list"
-          >
-            <li
-              v-for="item in uploadItems"
-              :key="item.localId"
-              :data-upload-local-id="item.localId"
-              :data-upload-focused="
-                focusedUploadLocalId === item.localId ? 'true' : undefined
-              "
-              tabindex="-1"
-            >
-              <ChatUploadCard
-                :item="item"
-                @pause="pauseUpload"
-                @resume="resumeUpload"
-                @retry="retryUpload"
-                @reselect="reselectUpload"
-                @cancel="cancelUpload"
-                @remove="removeUpload"
-              />
-            </li>
-          </ul>
-          <p
-            v-if="attachmentAnnouncement"
-            class="digital-design-hint"
-            data-test="design-attachment-announcement"
-            role="status"
-            aria-live="polite"
-          >
-            {{ attachmentAnnouncement }}
-          </p>
+          <div class="digital-design-attachments">
+            <AttachmentChipStrip
+              :items="uploadItems"
+              :announcement="attachmentAnnouncement"
+              :announcement-nonce="attachmentAnnouncementNonce"
+              @pause="pauseUpload"
+              @resume="resumeUpload"
+              @retry="retryUpload"
+              @reselect="reselectUpload"
+              @cancel="cancelUpload"
+              @remove="removeUpload"
+            />
+          </div>
           <p
             v-if="attachmentTargetBlocked"
             class="digital-design-hint"
@@ -351,7 +331,7 @@ import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
-import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
+import AttachmentChipStrip from "@/views/chat/components/AttachmentChipStrip.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { userStore } from "@/stores";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
@@ -411,6 +391,7 @@ const speciesCode = ref("");
 const validationMessages = ref<string[]>([]);
 const fileError = ref("");
 const attachmentAnnouncement = ref("");
+const attachmentAnnouncementNonce = ref(0);
 const focusedUploadLocalId = ref("");
 const designRoot = ref<HTMLElement | null>(null);
 const formError = ref("");
@@ -445,7 +426,9 @@ const uploadQueue = useResumableUploads({
   uploadCapability: capabilities.upload,
   username: uploadUsername,
   onValidationError: (error) => {
-    fileError.value = attachmentErrorMessage(error);
+    const message = attachmentErrorMessage(error);
+    fileError.value = message;
+    announceAttachment(message);
   },
   onDuplicate: (localId, fileName) => {
     onAttachmentDuplicate(localId, fileName).catch(() => undefined);
@@ -470,21 +453,51 @@ function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   });
 }
 
+function announceAttachment(message: string): void {
+  attachmentAnnouncementNonce.value += 1;
+  attachmentAnnouncement.value = "";
+  nextTick(() => {
+    attachmentAnnouncement.value = message;
+  }).catch(() => undefined);
+}
+
 async function onAttachmentDuplicate(
   localId: string,
   fileName: string
 ): Promise<void> {
   focusedUploadLocalId.value = localId;
-  attachmentAnnouncement.value = "";
+  announceAttachment(
+    t("chat.upload.alreadyAttached", {
+      file: fileName,
+    })
+  );
+  await focusAttachmentChip(localId);
+}
+
+async function focusAttachmentChip(localId: string): Promise<void> {
   await nextTick();
-  const item = Array.from(
-    designRoot.value?.querySelectorAll<HTMLElement>("[data-upload-local-id]") ??
-      []
-  ).find((candidate) => candidate.dataset.uploadLocalId === localId);
-  item?.focus();
-  attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
-    file: fileName,
-  });
+  const index = uploadItems.value.findIndex((item) => item.localId === localId);
+  if (index < 0) return;
+
+  const directChips = designRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  if (index < 3) {
+    directChips?.[index]?.focus();
+    return;
+  }
+
+  const overflowChip = designRoot.value?.querySelector<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow"]'
+  );
+  if (!overflowChip) return;
+  overflowChip.focus();
+  overflowChip.click();
+  await nextTick();
+  const hiddenChip = designRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow-item"]'
+  )[index - 3];
+  hiddenChip?.focus();
 }
 
 const displayedState = computed(
@@ -668,6 +681,11 @@ async function submitDesign(): Promise<void> {
         speciesCode: normalizedSpecies,
       },
     });
+    await clearUploads().catch(() => {
+      const cleanupMessage = t("chat.upload.status.failed");
+      fileError.value = cleanupMessage;
+      announceAttachment(cleanupMessage);
+    });
   } catch {
     formError.value = t("agents.digitalDesign.submitFailed");
   } finally {
@@ -830,8 +848,7 @@ onBeforeUnmount(() => {
 
 .digital-design-back,
 .digital-design-submit,
-.digital-design-cancel,
-.digital-design-file-remove {
+.digital-design-cancel {
   min-height: var(--phy-control-height-default);
   padding: 0 var(--phy-space-16);
   border-radius: var(--phy-radius-sm);
@@ -896,7 +913,6 @@ onBeforeUnmount(() => {
   gap: var(--phy-space-16);
 }
 
-.digital-design-file-list,
 .digital-design-error-list {
   display: grid;
   gap: var(--phy-space-8);
@@ -905,29 +921,8 @@ onBeforeUnmount(() => {
   list-style: none;
 }
 
-.digital-design-file-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--phy-space-12);
+.digital-design-attachments {
   min-width: 0;
-  padding: var(--phy-space-8) var(--phy-space-12);
-  border: 1px solid var(--phy-color-border-subtle);
-  border-radius: var(--phy-radius-sm);
-}
-
-.digital-design-file-list li span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.digital-design-file-remove {
-  flex: 0 0 auto;
-  min-height: 2rem;
-  padding-inline: var(--phy-space-8);
-  font-size: 0.8125rem;
 }
 
 .digital-design-error {
@@ -987,7 +982,6 @@ onBeforeUnmount(() => {
 .digital-design-back:focus-visible,
 .digital-design-submit:focus-visible,
 .digital-design-cancel:focus-visible,
-.digital-design-file-remove:focus-visible,
 .digital-design-field input:focus-visible,
 .digital-design-field textarea:focus-visible {
   outline: 2px solid var(--phy-color-focus);
