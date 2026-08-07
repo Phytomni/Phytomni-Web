@@ -348,10 +348,11 @@ user-selected purpose or dataset description. A legacy recovery purpose may be
 read only for compatibility/cleanup/migration and is ignored for new
 classification.
 
-The browser-to-Go boundary is `/api/v1/files` JSON control traffic only
-(create, renew, head, and abort). Go never receives file parts, Huawei
-credentials, OBS upload ids, object keys, or signed storage URLs. Parts go
-directly from the browser to Bot with the short-lived opaque capability. The
+The browser-to-Go boundary is `/api/v1/files` JSON control traffic for create
+and capability renewal only. Go never receives file parts, Huawei credentials,
+OBS upload ids, object keys, or signed storage URLs. The browser uses the
+short-lived opaque capability at Bot's upload origin for `HEAD`, part uploads,
+completion, and abort; these data-plane calls do not pass through Web Go. The
 trusted Go-to-Bot create coordination carries the server-derived class and
 owner scope; Bot owns durable state, owner resolution, and final native mapping.
 Conversation attachment submission carries the raw query and completed

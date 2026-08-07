@@ -297,10 +297,13 @@ rejected before a Bot/OBS session is created.
 The two trust boundaries are deliberately narrow:
 
 - **Browser → Web Go:** `/api/v1/files` is a JSON-only control plane for
-  create, renew, head, and abort. The browser sends filename/size/type hints
+  create and capability renewal. The browser sends filename/size/type hints
   and receives an opaque, short-lived upload capability; it never sends a
   purpose, file body, Huawei credential, OBS upload id, object key, or signed
   storage URL to Go.
+- **Browser → Bot upload origin:** the opaque capability authorizes `HEAD`,
+  part uploads, completion, and abort directly at Bot. These data-plane calls
+  never pass through Web Go.
 - **Web Go → Bot:** trusted Go sends the server-derived class and owner-scoped
   upload coordination data. It does not forward a client-selected class,
   resolve an asset into a path, or relay file parts. The browser sends parts
