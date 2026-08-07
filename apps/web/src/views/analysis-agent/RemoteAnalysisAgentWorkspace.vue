@@ -2,6 +2,7 @@
   <main
     ref="workspaceRoot"
     class="analysis-agent-page"
+    :data-focused-upload-id="focusedUploadLocalId || undefined"
     :data-scroll-root="`${agentKey}-agent`"
     :aria-labelledby="`${agentKey}-agent-title`"
   >
@@ -106,40 +107,19 @@
           <p class="analysis-agent-hint">
             {{ t(`${localePrefix}.contextFilesHint`) }}
           </p>
-          <ul
-            v-if="uploadItems.length"
-            class="analysis-agent-file-list"
-            :data-test="`${agentKey}-file-list`"
-          >
-            <li
-              v-for="item in uploadItems"
-              :key="item.localId"
-              :data-upload-local-id="item.localId"
-              :data-upload-focused="
-                focusedUploadLocalId === item.localId ? 'true' : undefined
-              "
-              tabindex="-1"
-            >
-              <ChatUploadCard
-                :item="item"
-                @pause="pauseUpload"
-                @resume="resumeUpload"
-                @retry="retryUpload"
-                @reselect="reselectUpload"
-                @cancel="cancelUpload"
-                @remove="removeUpload"
-              />
-            </li>
-          </ul>
-          <p
-            v-if="attachmentAnnouncement"
-            class="analysis-agent-hint"
-            :data-test="`${agentKey}-attachment-announcement`"
-            role="status"
-            aria-live="polite"
-          >
-            {{ attachmentAnnouncement }}
-          </p>
+          <div class="analysis-agent-attachments">
+            <AttachmentChipStrip
+              :items="uploadItems"
+              :announcement="attachmentAnnouncement"
+              :announcement-nonce="attachmentAnnouncementNonce"
+              @pause="pauseUpload"
+              @resume="resumeUpload"
+              @retry="retryUpload"
+              @reselect="reselectUpload"
+              @cancel="cancelUpload"
+              @remove="removeUpload"
+            />
+          </div>
           <p
             v-if="attachmentTargetBlocked"
             class="analysis-agent-hint"
@@ -310,7 +290,7 @@ import {
   type RemoteAgentTool,
 } from "@/constants/agents";
 import { userStore } from "@/stores";
-import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
+import AttachmentChipStrip from "@/views/chat/components/AttachmentChipStrip.vue";
 import {
   useBotCapabilities,
   type AttachmentChannel,
@@ -379,6 +359,7 @@ const remoteLifecycle = useRemoteAgentLifecycle({
 const question = ref("");
 const fileError = ref("");
 const attachmentAnnouncement = ref("");
+const attachmentAnnouncementNonce = ref(0);
 const focusedUploadLocalId = ref("");
 const workspaceRoot = ref<HTMLElement | null>(null);
 const formError = ref("");
@@ -443,17 +424,39 @@ async function onAttachmentDuplicate(
   fileName: string
 ): Promise<void> {
   focusedUploadLocalId.value = localId;
+  attachmentAnnouncementNonce.value += 1;
   attachmentAnnouncement.value = "";
   await nextTick();
-  const item = Array.from(
-    workspaceRoot.value?.querySelectorAll<HTMLElement>(
-      "[data-upload-local-id]"
-    ) ?? []
-  ).find((candidate) => candidate.dataset.uploadLocalId === localId);
-  item?.focus();
   attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
     file: fileName,
   });
+  await focusAttachmentChip(localId);
+}
+
+async function focusAttachmentChip(localId: string): Promise<void> {
+  await nextTick();
+  const index = uploadItems.value.findIndex((item) => item.localId === localId);
+  if (index < 0) return;
+
+  const directChips = workspaceRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  if (index < 3) {
+    directChips?.[index]?.focus();
+    return;
+  }
+
+  const overflowChip = workspaceRoot.value?.querySelector<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow"]'
+  );
+  if (!overflowChip) return;
+  overflowChip.focus();
+  overflowChip.click();
+  await nextTick();
+  const hiddenChip = workspaceRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow-item"]'
+  )[index - 3];
+  hiddenChip?.focus();
 }
 
 const displayedState = computed(
@@ -806,19 +809,13 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 
-.analysis-agent-file-list {
-  display: grid;
-  gap: var(--phy-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.analysis-agent-attachments {
+  min-width: 0;
+  margin-top: var(--phy-space-4);
 }
 
-.analysis-agent-file-list li {
+.analysis-agent-attachments :deep(.attachment-chip-strip) {
   min-width: 0;
-  padding: var(--phy-space-8) var(--phy-space-12);
-  border: 1px solid var(--phy-color-border-subtle);
-  border-radius: var(--phy-radius-sm);
 }
 
 .analysis-agent-actions {

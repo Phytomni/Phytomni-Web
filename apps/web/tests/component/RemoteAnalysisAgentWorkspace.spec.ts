@@ -54,11 +54,11 @@ const mocks = vi.hoisted(() => {
       hasBlockingUploads: { value: false, __v_isRef: true },
       queueFiles: vi.fn().mockResolvedValue(undefined),
       removeUpload: vi.fn().mockResolvedValue(undefined),
-      removeUploadById: vi.fn(),
-      cancelUpload: vi.fn(),
-      pauseUpload: vi.fn(),
-      resumeUpload: vi.fn(),
-      retryUpload: vi.fn(),
+      removeUploadById: vi.fn().mockResolvedValue(undefined),
+      cancelUpload: vi.fn().mockResolvedValue(undefined),
+      pauseUpload: vi.fn().mockResolvedValue(undefined),
+      resumeUpload: vi.fn().mockResolvedValue(undefined),
+      retryUpload: vi.fn().mockResolvedValue(undefined),
       reselectUpload: vi.fn(),
     },
     uploadOptions: null as {
@@ -178,6 +178,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     const wrapper = mountWorkspace();
 
     expect(wrapper.find("form.analysis-agent-form").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-testid="chat-upload-card"]').exists()).toBe(
+      false
+    );
     expect(
       wrapper.find('[data-test="analyst-attachment-purpose"]').exists()
     ).toBe(false);
@@ -206,7 +212,36 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     await input.trigger("change");
 
     expect(wrapper.findAll('[data-test="analyst-files"]')).toHaveLength(1);
+    expect(input.attributes("accept")).toBeUndefined();
     expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([file]);
+    wrapper.unmount();
+  });
+
+  it("routes shared chip lifecycle actions to the existing upload queue", async () => {
+    const item = completedUpload("upload-active", "reads.fastq.gz");
+    mocks.chatState.fileList = [
+      { ...item, status: "uploading", loadedBytes: 3 },
+    ];
+    const wrapper = mountWorkspace();
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-pause"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-cancel"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-remove"]')
+      .trigger("click");
+
+    expect(mocks.uploadQueue.pauseUpload).toHaveBeenCalledWith("upload-active");
+    expect(mocks.uploadQueue.cancelUpload).toHaveBeenCalledWith(
+      "upload-active"
+    );
+    expect(mocks.uploadQueue.removeUploadById).toHaveBeenCalledWith(
+      "upload-active"
+    );
     wrapper.unmount();
   });
 
@@ -217,11 +252,14 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     await flushPromises();
 
     expect(
-      wrapper.get('[data-test="analyst-attachment-announcement"]').text()
+      wrapper.get('[data-testid="attachment-chip-live-region"]').text()
     ).toBe("Already attached: counts.csv");
-    const retained = wrapper.get('[data-upload-local-id="upload-existing"]');
-    expect(retained.attributes("data-upload-focused")).toBe("true");
-    expect(document.activeElement).toBe(retained.element);
+    expect(wrapper.attributes("data-focused-upload-id")).toBe(
+      "upload-existing"
+    );
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="attachment-chip"]').element
+    );
     wrapper.unmount();
   });
 

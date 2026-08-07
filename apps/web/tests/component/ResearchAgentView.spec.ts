@@ -333,6 +333,36 @@ describe("ResearchAgentView", () => {
     view.unmount();
   });
 
+  it("renders the shared attachment strip for In Silico Research", () => {
+    mocks.chatState.fileList = [
+      {
+        localId: "research-upload",
+        assetId: "file_dataset",
+        name: "reads.fastq.gz",
+        size: 6,
+        type: "application/gzip",
+        file: null,
+        lastModified: 42,
+        status: "completed",
+        partSize: 6,
+        partCount: 1,
+        receivedParts: [1],
+        loadedBytes: 6,
+        speedBytesPerSecond: 0,
+        etaSeconds: 0,
+        retryCount: 0,
+        errorCode: null,
+      },
+    ];
+    const view = mountView();
+
+    expect(view.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      true
+    );
+    expect(view.find('[data-testid="chat-upload-card"]').exists()).toBe(false);
+    view.unmount();
+  });
+
   it("keeps loading and dark-product Back actions reachable", async () => {
     mocks.capabilityLoaded.value = false;
     const loading = mountView();
@@ -458,8 +488,22 @@ describe("ResearchAgentView", () => {
   it("submits attachments without client classification metadata", async () => {
     mocks.chatState.fileList = [
       {
+        localId: "research-upload",
         assetId: "file_dataset",
+        name: "counts.csv",
+        size: 6,
+        type: "text/csv",
+        file: null,
+        lastModified: 42,
         status: "completed",
+        partSize: 6,
+        partCount: 1,
+        receivedParts: [1],
+        loadedBytes: 6,
+        speedBytesPerSecond: 0,
+        etaSeconds: 0,
+        retryCount: 0,
+        errorCode: null,
       },
     ];
     mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_dataset" }];
