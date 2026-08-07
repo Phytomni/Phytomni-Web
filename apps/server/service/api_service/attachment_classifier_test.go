@@ -22,7 +22,10 @@ func TestClassifyAttachmentFilenameArchiveSuffixes(t *testing.T) {
 		})
 	}
 
-	for _, filename := range []string{"READS.FASTQ.GZ", "variants.VCF.BGZ", "bundle.TAR.GZ"} {
+	for _, filename := range []string{
+		"READS.FASTQ.GZ", "variants.VCF.BGZ", "bundle.TAR.GZ",
+		"reads.FaStQ.Gz", "variants.VcF.BgZ", "bundle.TaR.Gz",
+	} {
 		t.Run(filename, func(t *testing.T) {
 			assertAttachmentClass(t, filename, attachmentClassDataset)
 		})
