@@ -294,7 +294,7 @@ derives `dataset` or `document` before it asks Bot to create an asset; every
 archive suffix defaults to `dataset`, while unsupported or ambiguous names are
 rejected before a Bot/OBS session is created.
 
-The two trust boundaries are deliberately narrow:
+The attachment control and data boundaries are deliberately narrow:
 
 - **Browser → Web Go:** `/api/v1/files` is a JSON-only control plane for
   create and capability renewal. The browser sends filename/size/type hints
