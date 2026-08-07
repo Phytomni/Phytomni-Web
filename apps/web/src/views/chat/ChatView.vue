@@ -786,6 +786,7 @@ const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
     maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
   });
   ElMessage.warning(message);
+  announceAttachment(message);
 };
 
 // Show the Agents architecture diagram dialog
@@ -955,6 +956,18 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+function announceAttachment(message: string): void {
+  const ownerDialogueId = currentChatId.value;
+  if (!ownerDialogueId) return;
+  const ownerState = getChatState(ownerDialogueId);
+  ownerState.attachmentAnnouncement = "";
+  void nextTick(() => {
+    if (currentChatId.value === ownerDialogueId) {
+      ownerState.attachmentAnnouncement = message;
+    }
+  });
+}
 
 async function onAttachmentDuplicate(
   localId: string,

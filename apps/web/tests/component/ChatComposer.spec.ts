@@ -592,12 +592,10 @@ describe("ChatComposer", () => {
       ).toBe(false);
       expect(
         wrapper.findComponent({ name: "AttachmentChipStrip" }).exists()
-      ).toBe(count > 0);
-      if (count > 0) {
-        expect(
-          wrapper.findComponent({ name: "AttachmentChipStrip" }).props("items")
-        ).toHaveLength(count);
-      }
+      ).toBe(true);
+      expect(
+        wrapper.findComponent({ name: "AttachmentChipStrip" }).props("items")
+      ).toHaveLength(count);
       wrapper.unmount();
     }
 

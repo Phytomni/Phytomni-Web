@@ -595,13 +595,24 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       errorCode: null,
     };
     states.currentChatId.value = dialogueId;
+    states.getChatState(dialogueId).fileList = [];
+    await nextTick();
+
+    const composer = wrapper.findComponent({ name: "ChatComposer" });
+    chatUploadQueueState.options?.onValidationError?.({
+      code: "invalid_size",
+      fileName: "first.bam",
+    });
+    await nextTick();
+    await flushPromises();
+    expect(composer.props("attachmentAnnouncement")).toContain("first.bam");
+
     states.getChatState(dialogueId).fileList = [item];
     await nextTick();
 
     chatUploadQueueState.options?.onDuplicate?.("upload-existing", "paper.pdf");
     await flushPromises();
 
-    const composer = wrapper.findComponent({ name: "ChatComposer" });
     expect(composer.props("attachmentAnnouncement")).toBe(
       "Already attached: paper.pdf"
     );

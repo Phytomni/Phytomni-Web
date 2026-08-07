@@ -11,8 +11,8 @@
           {{ t("chat.agentPicker.noAvailableAgents") }}
         </div>
         <div
-          v-if="fileList.length > 0"
           class="phy-composer-frame__attachments composer-attachments"
+          :class="{ 'composer-attachments--empty': fileList.length === 0 }"
         >
           <AttachmentChipStrip
             :items="fileList"
@@ -389,6 +389,12 @@ defineExpose<ChatComposerHandle>({
 
 .phy-composer-frame__attachments {
   margin-bottom: 8px;
+}
+
+.composer-attachments--empty {
+  block-size: 0;
+  margin-bottom: 0;
+  padding: 0;
 }
 
 .phy-composer-frame__actions {

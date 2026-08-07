@@ -99,6 +99,7 @@ describe("Chat progress placement integration", () => {
     expect(COMPOSER_SOURCE).toContain("<AttachmentChipStrip");
     expect(COMPOSER_SOURCE).not.toContain("<ChatUploadCard");
     expect(COMPOSER_SOURCE).toContain(':announcement="attachmentAnnouncement"');
+    expect(COMPOSER_SOURCE).not.toContain('v-if="fileList.length > 0"');
     expect(CHAT_SOURCE).not.toContain(
       'data-testid="chat-attachment-announcement"'
     );
