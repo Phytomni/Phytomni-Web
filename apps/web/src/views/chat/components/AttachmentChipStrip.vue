@@ -254,10 +254,12 @@ const props = withDefaults(
     items: readonly ResumableUploadItem[];
     disabled?: boolean;
     announcement?: string;
+    announcementNonce?: number;
   }>(),
   {
     disabled: false,
     announcement: "",
+    announcementNonce: 0,
   }
 );
 
@@ -279,6 +281,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const originControl = ref<HTMLButtonElement | null>(null);
 const detailMaxBlockSize = ref("20rem");
 const liveAnnouncement = ref("");
+let liveAnnouncementRevision = 0;
 
 const directItems = computed(() => props.items.slice(0, 3));
 const hiddenItems = computed(() =>
@@ -312,6 +315,24 @@ const statusLabel = (item: ResumableUploadItem): string =>
 
 const announcedStatuses = new Set(["completed", "failed", "paused", "expired"]);
 
+const announcePolite = async (announcement: string): Promise<void> => {
+  const normalized = announcement.trim();
+  const revision = ++liveAnnouncementRevision;
+  if (normalized === "") {
+    liveAnnouncement.value = "";
+    return;
+  }
+  if (liveAnnouncement.value !== normalized) {
+    liveAnnouncement.value = normalized;
+    return;
+  }
+  liveAnnouncement.value = "";
+  await nextTick();
+  if (revision === liveAnnouncementRevision) {
+    liveAnnouncement.value = normalized;
+  }
+};
+
 const statusSignature = computed(() =>
   props.items.map((item) => ({ localId: item.localId, status: item.status }))
 );
@@ -341,14 +362,14 @@ watch(statusSignature, (current, previous) => {
     ];
   });
   if (announcements.length > 0) {
-    liveAnnouncement.value = announcements.join(" · ");
+    announcePolite(announcements.join(" · ")).catch(() => undefined);
   }
 });
 
 watch(
-  () => props.announcement,
-  (announcement) => {
-    liveAnnouncement.value = announcement.trim();
+  [() => props.announcement, () => props.announcementNonce],
+  ([announcement]) => {
+    announcePolite(announcement).catch(() => undefined);
   },
   { immediate: true }
 );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -40,8 +41,37 @@ function makeItem(
   };
 }
 
-const mountStrip = (items: readonly ResumableUploadItem[], announcement = "") =>
-  mountWithApp(AttachmentChipStrip, { props: { items, announcement } });
+const mountStrip = (
+  items: readonly ResumableUploadItem[],
+  announcement = "",
+  announcementNonce = 0
+) =>
+  mountWithApp(AttachmentChipStrip, {
+    props: { items, announcement, announcementNonce },
+  });
+
+async function observeLiveRegionMutations(
+  element: Element,
+  update: () => Promise<void>
+): Promise<MutationRecord[]> {
+  const records: MutationRecord[] = [];
+  const observer = new MutationObserver((mutations) =>
+    records.push(...mutations)
+  );
+  observer.observe(element, {
+    characterData: true,
+    characterDataOldValue: true,
+    childList: true,
+    subtree: true,
+  });
+  await update();
+  await nextTick();
+  await nextTick();
+  await Promise.resolve();
+  records.push(...observer.takeRecords());
+  observer.disconnect();
+  return records;
+}
 
 describe("AttachmentChipStrip", () => {
   it("renders no strip when there are no attachments", () => {
@@ -509,6 +539,56 @@ describe("AttachmentChipStrip", () => {
     await wrapper.setProps({ announcement: "sample-2.fastq.gz was rejected" });
     expect(liveRegions[0].text()).toBe("sample-2.fastq.gz was rejected");
   });
+
+  it.each([
+    ["failed", "creating", "Upload failed"],
+    ["paused", "uploading", "Paused"],
+  ] as const)(
+    "mutates the live region when %s recurs after an intermediate state",
+    async (status, intermediateStatus, label) => {
+      const item = makeItem(1);
+      const wrapper = mountStrip([item]);
+      await wrapper.setProps({ items: [{ ...item, status }] });
+      const liveRegion = wrapper.get(
+        '[data-testid="attachment-chip-live-region"]'
+      );
+      expect(liveRegion.text()).toContain(label);
+
+      await wrapper.setProps({
+        items: [{ ...item, status: intermediateStatus }],
+      });
+      const mutations = await observeLiveRegionMutations(
+        liveRegion.element,
+        () => wrapper.setProps({ items: [{ ...item, status }] })
+      );
+
+      expect(mutations.length).toBeGreaterThanOrEqual(2);
+      expect(liveRegion.text()).toContain(item.name);
+      expect(liveRegion.text()).toContain(label);
+    }
+  );
+
+  it.each([
+    `Already attached: sample-1.fastq.gz`,
+    `sample-1.fastq.gz was rejected`,
+  ])(
+    "re-announces identical external text when its bounded nonce changes: %s",
+    async (announcement) => {
+      const wrapper = mountStrip([makeItem(1)], announcement, 1);
+      const liveRegion = wrapper.get(
+        '[data-testid="attachment-chip-live-region"]'
+      );
+      expect(liveRegion.text()).toBe(announcement);
+
+      const mutations = await observeLiveRegionMutations(
+        liveRegion.element,
+        () => wrapper.setProps({ announcement, announcementNonce: 2 })
+      );
+
+      expect(mutations.length).toBeGreaterThanOrEqual(2);
+      expect(liveRegion.text()).toBe(announcement);
+    }
+  );
 
   it("announces a rejected first file without rendering an empty strip", () => {
     const wrapper = mountStrip([], "unsupported.fastq was rejected");
