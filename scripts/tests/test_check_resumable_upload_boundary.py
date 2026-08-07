@@ -47,6 +47,8 @@ def _clean_root(tmp_path: Path):
         source = "// reference-only attachment request; no file bytes or OBS paths\n"
         if relative == checker.CANONICAL_AGENT_ARGUMENTS_PATH:
             source = _canonical_agent_arguments_source()
+        elif relative == checker.BOT_UPLOAD_CREATE_PATH:
+            source = 'type UploadCreateRequest struct { Purpose string `json:"purpose"` }\n'
         path.write_text(source, encoding="utf-8")
     return checker
 
@@ -109,6 +111,24 @@ class ResumableUploadBoundaryTests(unittest.TestCase):
         self.assertTrue(any("multipart file relay" in violation for violation in violations))
         self.assertTrue(any("complete file bytes" in violation for violation in violations))
 
+    def test_legacy_relay_symbols_are_rejected(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+        source = tmp_path / checker.GO_RELAY_PATHS[0]
+        source.write_text(
+            "type QueryFile struct{}\n"
+            "func UploadFileWithMeta() {}\n"
+            "type UploadLimits struct{}\n"
+            "type FileUploadResponse struct{}\n",
+            encoding="utf-8",
+        )
+
+        violations = checker.check(tmp_path)
+
+        self.assertTrue(any("QueryFile" in item for item in violations))
+        self.assertTrue(any("legacy Bot file upload" in item for item in violations))
+        self.assertTrue(any("upload limit/response" in item for item in violations))
+
     def test_only_canonical_agent_argument_assignments_are_allowed(self):
         tmp_path = self._tmp_root()
         checker = _clean_root(tmp_path)
@@ -166,6 +186,135 @@ class ResumableUploadBoundaryTests(unittest.TestCase):
         violations = checker.check(tmp_path)
 
         self.assertTrue(any("native attachment field" in item for item in violations))
+
+    def test_browser_upload_metadata_purpose_is_rejected(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+        source = tmp_path / checker.BROWSER_UPLOAD_CONTROL_PATH
+        source.write_text(
+            'const metadata = { filename: "reads.fastq.gz", purpose: "dataset" };\n',
+            encoding="utf-8",
+        )
+
+        violations = checker.check(tmp_path)
+
+        self.assertTrue(any("browser upload purpose" in item for item in violations))
+
+    def test_public_upload_body_purpose_tag_is_rejected(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+        source = tmp_path / checker.PUBLIC_UPLOAD_HANDLER_PATH
+        source.write_text(
+            'type uploadCreateBody struct { Purpose string `json:"purpose"` }\n',
+            encoding="utf-8",
+        )
+
+        violations = checker.check(tmp_path)
+
+        self.assertTrue(any("public upload purpose" in item for item in violations))
+
+    def test_trusted_bot_upload_create_purpose_is_allowed(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+
+        self.assertEqual(checker.check(tmp_path), [])
+
+    def test_dataset_description_is_rejected_on_browser_and_go_paths(self):
+        fixtures = (
+            ("web", 'formData.append("dataset_description", description)\n'),
+            ("go", 'payload["dataset_description"] = value\n'),
+            ("go", 'type Input struct { Description string `json:"dataset_description"` }\n'),
+        )
+        for owner, fixture in fixtures:
+            with self.subTest(owner=owner, fixture=fixture):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = (
+                    tmp_path / checker.WEB_RELAY_PATHS[0]
+                    if owner == "web"
+                    else tmp_path / checker.GO_RELAY_PATHS[0]
+                )
+                source.write_text(fixture, encoding="utf-8")
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(any("dataset description" in item for item in violations))
+
+    def test_browser_sensitive_attachment_fields_are_rejected(self):
+        fields = (
+            "obs_path",
+            "object_key",
+            "owner_subject",
+            "credentials",
+            "upload_id",
+            "storage_path",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = tmp_path / checker.WEB_RELAY_PATHS[0]
+                source.write_text(
+                    f'formData.append("{field}", value)\n', encoding="utf-8"
+                )
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(
+                    any("forbidden attachment field" in item for item in violations)
+                )
+
+    def test_public_upload_body_owner_and_storage_tags_are_rejected(self):
+        fixtures = (
+            'type Body struct { Owner string `json:"owner_subject"` }\n',
+            'type Body struct { Key string `json:"object_key"` }\n',
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = tmp_path / checker.PUBLIC_UPLOAD_HANDLER_PATH
+                source.write_text(fixture, encoding="utf-8")
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(
+                    any("forbidden attachment field" in item for item in violations)
+                )
+
+    def test_go_sensitive_attachment_fields_are_rejected(self):
+        fields = ("obs_path", "object_key", "credentials", "upload_id", "storage_path")
+        for field in fields:
+            with self.subTest(field=field):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = tmp_path / checker.GO_RELAY_PATHS[0]
+                source.write_text(
+                    f'payload["{field}"] = value\n', encoding="utf-8"
+                )
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(
+                    any("forbidden attachment field" in item for item in violations)
+                )
+
+    def test_file_and_blob_body_assignments_are_rejected(self):
+        fixtures = (
+            "request.body = file\n",
+            "const options = { data: selectedFile };\n",
+            "const options = { body: blob };\n",
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = tmp_path / checker.WEB_RELAY_PATHS[0]
+                source.write_text(fixture, encoding="utf-8")
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(any("file or Blob body" in item for item in violations))
 
     def test_allowlist_is_exact_and_does_not_cover_production_paths(self):
         checker = load_checker()
