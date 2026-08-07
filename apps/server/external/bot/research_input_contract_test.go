@@ -69,6 +69,43 @@ func TestValidateResearchInputContract(t *testing.T) {
 	}
 }
 
+func TestResearchFormatsCompatibleCoversCompleteAndMissingMatrices(t *testing.T) {
+	required := []string{"gz", "mtx", "tar", "tsv", "txt.gz", "mtx.gz", "tar.gz"}
+	tests := []struct {
+		name       string
+		advertised []string
+		want       bool
+	}{
+		{
+			name:       "complete exact matrix",
+			advertised: []string{"tar.gz", "txt.gz", "tsv", "mtx.gz", "tar", "gz", "mtx"},
+			want:       true,
+		},
+		{
+			name:       "complete archive-suffix matrix",
+			advertised: []string{"tsv", "tar", "mtx", "gz"},
+			want:       true,
+		},
+		{name: "missing gz semantics", advertised: []string{"tsv", "tar", "mtx"}},
+		{name: "missing tsv", advertised: []string{"gz", "tar", "mtx"}},
+		{name: "missing mtx", advertised: []string{"gz", "tar", "tsv"}},
+		{name: "missing tar.gz semantics", advertised: []string{"gz", "mtx", "tsv"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requiredBefore := append([]string(nil), required...)
+			advertisedBefore := append([]string(nil), tt.advertised...)
+			if got := ResearchFormatsCompatible(required, tt.advertised); got != tt.want {
+				t.Fatalf("ResearchFormatsCompatible(%v, %v) = %v, want %v", required, tt.advertised, got, tt.want)
+			}
+			if !reflect.DeepEqual(required, requiredBefore) || !reflect.DeepEqual(tt.advertised, advertisedBefore) {
+				t.Fatalf("compatibility check mutated inputs: required=%v advertised=%v", required, tt.advertised)
+			}
+		})
+	}
+}
+
 func TestValidateResearchInputContractRejectsInvalidCatalog(t *testing.T) {
 	tests := []struct {
 		name   string

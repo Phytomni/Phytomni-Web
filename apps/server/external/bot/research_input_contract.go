@@ -33,6 +33,32 @@ type ResearchInputContract struct {
 	DatasetFormats    []string
 }
 
+// ResearchFormatsCompatible reports whether every Web-required format is
+// covered by the Bot registry. A compound format may be covered by its exact
+// token or by its advertised final archive suffix.
+func ResearchFormatsCompatible(required, advertised []string) bool {
+	if len(required) == 0 || len(advertised) == 0 {
+		return false
+	}
+	advertisedSet := make(map[string]struct{}, len(advertised))
+	for _, format := range advertised {
+		advertisedSet[format] = struct{}{}
+	}
+	for _, format := range required {
+		if _, ok := advertisedSet[format]; ok {
+			continue
+		}
+		separator := strings.LastIndexByte(format, '.')
+		if separator > 0 {
+			if _, ok := advertisedSet[format[separator+1:]]; ok {
+				continue
+			}
+		}
+		return false
+	}
+	return true
+}
+
 // ValidateResearchInputContract validates the exact Research protocol and
 // projects only the limits and normalized dataset formats Web consumes.
 func ValidateResearchInputContract(response *AgentsListResponse) (ResearchInputContract, error) {

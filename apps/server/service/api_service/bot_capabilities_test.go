@@ -77,7 +77,7 @@ func validResearchCapabilityCatalog() *rxBot.AgentsListResponse {
 			continue
 		}
 		descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{
-			Formats:       []string{"csv", "vcf"},
+			Formats:       RequiredResearchDatasetFormats(),
 			MaxFiles:      64,
 			MaxFileBytes:  10 << 30,
 			MaxTotalBytes: (10 << 30) * 64,
@@ -97,6 +97,48 @@ func validResearchCapabilityCatalog() *rxBot.AgentsListResponse {
 			MaxDatasetPaths:   64,
 			MaxReferences:     128,
 		},
+	}
+}
+
+func TestBotCapabilitiesResearchFormatMatrixFailsClosedOnlyForResearch(t *testing.T) {
+	for _, missing := range []string{"gz", "tsv", "mtx", "tar"} {
+		t.Run("missing "+missing, func(t *testing.T) {
+			response := validResearchCapabilityCatalog()
+			for index := range response.Data {
+				if response.Data[index].Slug != "research" {
+					continue
+				}
+				dataset := response.Data[index].Capabilities.Attachments.Datasets
+				formats := make([]string, 0, len(dataset.Formats)-1)
+				for _, format := range dataset.Formats {
+					if format != missing {
+						formats = append(formats, format)
+					}
+				}
+				dataset.Formats = formats
+			}
+
+			srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
+			t.Cleanup(srv.Close)
+			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+				ProxyEnabled:           true,
+				ResumableUploadEnabled: true,
+				UploadPublicOrigin:     "https://upload.example",
+				ResearchEnabled:        true,
+				MaxQueryChars:          131_072,
+			})
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.ResearchInput.Enabled || capabilityBySlug(manifest.Agents, "research").Enabled {
+				t.Fatalf("Research remained enabled without %q: %#v", missing, manifest)
+			}
+			if !capabilityBySlug(manifest.Agents, "chat").Enabled || !manifest.Upload.Enabled {
+				t.Fatalf("unrelated capabilities were disabled without %q: %#v", missing, manifest)
+			}
+		})
 	}
 }
 

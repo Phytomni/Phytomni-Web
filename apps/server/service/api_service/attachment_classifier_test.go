@@ -3,9 +3,56 @@ package api_service
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
+
+func TestResearchFormatContractCoversPaperSample(t *testing.T) {
+	paths := []string{
+		"GSM4363196_9311RPM.txt.gz",
+		"GSM4363200_9311_matrix.mtx.gz",
+		"A_thaliana_pep__v__NIP_genome_pep.tsv",
+		"org.Osativa.eg.db.tar.gz",
+	}
+	for _, path := range paths {
+		if class, err := classifyAttachmentFilename(path); err != nil || class != attachmentClassDataset {
+			t.Fatalf("%s class=%q err=%v", path, class, err)
+		}
+	}
+}
+
+func TestResearchFormatsRequiredAreSortedDetachedSuffixTokens(t *testing.T) {
+	first := RequiredResearchDatasetFormats()
+	second := RequiredResearchDatasetFormats()
+	if len(first) == 0 || !sort.StringsAreSorted(first) {
+		t.Fatalf("required formats are not a non-empty sorted list: %v", first)
+	}
+
+	requiredSamples := map[string]bool{"gz": false, "mtx": false, "tar": false, "tsv": false}
+	for _, format := range first {
+		if format != strings.ToLower(format) || strings.HasPrefix(format, ".") {
+			t.Fatalf("format %q is not a lower-case suffix token", format)
+		}
+		if _, ok := requiredSamples[format]; ok {
+			requiredSamples[format] = true
+		}
+	}
+	for format, found := range requiredSamples {
+		if !found {
+			t.Fatalf("required formats omitted %q: %v", format, first)
+		}
+	}
+
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated calls differ: first=%v second=%v", first, second)
+	}
+	first[0] = "mutated"
+	if second[0] == "mutated" || reflect.DeepEqual(first, second) {
+		t.Fatalf("required formats share caller-owned storage: first=%v second=%v", first, second)
+	}
+}
 
 func TestClassifyAttachmentFilenameArchiveSuffixes(t *testing.T) {
 	archiveSuffixes := []string{

@@ -8,6 +8,7 @@ import (
 
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/service/api_service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,7 +20,7 @@ func handlerCapabilityBody(t *testing.T) string {
 		descriptor := rxBot.AgentDescriptor{Slug: definition.Slug, Tool: definition.Tool}
 		if definition.Slug == "research" {
 			descriptor.Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{
-				Formats:       []string{"csv", "vcf"},
+				Formats:       api_service.RequiredResearchDatasetFormats(),
 				MaxFiles:      64,
 				MaxFileBytes:  10 << 30,
 				MaxTotalBytes: (10 << 30) * 64,

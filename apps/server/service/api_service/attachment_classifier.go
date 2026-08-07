@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -65,6 +66,20 @@ var datasetAttachmentTokens = map[string]struct{}{
 var documentAttachmentTokens = map[string]struct{}{
 	"readme": {}, "license": {}, "paper": {}, "article": {}, "manuscript": {}, "protocol": {}, "report": {},
 	"reference": {}, "references": {}, "literature": {}, "note": {}, "notes": {},
+}
+
+// RequiredResearchDatasetFormats returns the detached scientific suffix
+// contract accepted by Web for Research datasets.
+func RequiredResearchDatasetFormats() []string {
+	formats := make([]string, 0, len(datasetAttachmentSuffixes)+len(archiveAttachmentSuffixes))
+	for suffix := range datasetAttachmentSuffixes {
+		formats = append(formats, strings.ToLower(strings.TrimPrefix(suffix, ".")))
+	}
+	for suffix := range archiveAttachmentSuffixes {
+		formats = append(formats, strings.ToLower(strings.TrimPrefix(suffix, ".")))
+	}
+	sort.Strings(formats)
+	return formats
 }
 
 func classifyAttachmentFilename(filename string) (attachmentClass, error) {
