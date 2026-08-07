@@ -150,6 +150,13 @@ func TestParseAssetAttachmentsStrictContract(t *testing.T) {
 	}
 }
 
+func TestParseAssetAttachmentsRejectsRawJSONOver64KiB(t *testing.T) {
+	raw := strings.Repeat(" ", 64<<10) + "[]"
+	if refs, ok := parseAssetAttachments(raw); ok {
+		t.Fatalf("accepted %d-byte padded attachment JSON: %#v", len(raw), refs)
+	}
+}
+
 func TestApiQueryRejectsAnyMultipartFilePartBeforeDispatch(t *testing.T) {
 	previousConfig := rxBot.BotConfig
 	previousQuota := viper.Get("chatlimit.enforce")

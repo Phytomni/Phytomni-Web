@@ -154,11 +154,14 @@ const maxQueryAttachmentsJSONBytes = 64 << 10
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
 // future authority fields out of the Chat/Agent request contract.
 func parseAssetAttachments(raw string) ([]rxBot.AssetAttachmentRef, bool) {
+	if len(raw) > maxQueryAttachmentsJSONBytes {
+		return nil, false
+	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, true
 	}
-	if len(raw) > maxQueryAttachmentsJSONBytes || raw[0] != '[' || raw[len(raw)-1] != ']' {
+	if raw[0] != '[' || raw[len(raw)-1] != ']' {
 		return nil, false
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
