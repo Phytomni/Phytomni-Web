@@ -221,7 +221,7 @@ export class ResumableUploadEngine {
     this.partDigests = { ...(input.recovered?.partDigests ?? {}) };
     this.partSizes = [...(input.recovered?.partSizes ?? [])];
     this.item = input.recovered
-      ? this.itemFromRecovery(input.recovered, input.file)
+      ? this.itemFromRecovery(input.recovered, input.file, input.purpose)
       : this.newItem(input);
     if (options.onChange) this.listeners.add(options.onChange);
   }
@@ -254,7 +254,8 @@ export class ResumableUploadEngine {
 
   private itemFromRecovery(
     record: UploadRecoveryRecord,
-    file: File | null
+    file: File | null,
+    purpose: UploadPurpose
   ): ResumableUploadItem {
     return {
       localId: record.localId,
@@ -264,7 +265,7 @@ export class ResumableUploadEngine {
       size: record.size,
       type: record.type,
       lastModified: record.lastModified,
-      purpose: record.purpose,
+      purpose,
       status: record.status,
       partSize: record.partSize,
       partCount: record.partCount,
@@ -321,7 +322,6 @@ export class ResumableUploadEngine {
       size: this.item.size,
       type: this.item.type,
       lastModified: this.item.lastModified,
-      purpose: this.item.purpose,
       partSize: this.item.partSize,
       partCount: this.item.partCount,
       partSizes: [...this.partSizes],

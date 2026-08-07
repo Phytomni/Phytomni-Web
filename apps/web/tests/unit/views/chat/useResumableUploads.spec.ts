@@ -379,7 +379,7 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
-  it("does not reselect a recovered row when the requested purpose differs", async () => {
+  it("uses a private placeholder instead of legacy recovery purpose", async () => {
     const store = fakeStore();
     const first = setup(store);
     const file = fixtureFile("counts.csv");
@@ -390,20 +390,19 @@ describe("useResumableUploads", () => {
     });
     await first.queue.dispose();
 
-    const recovered = setup(store);
+    const persisted = (store.upsert as ReturnType<typeof vi.fn>).mock.calls.at(
+      -1
+    )?.[0] as UploadRecoveryRecord;
+    const legacy = { ...persisted } as unknown as Record<string, unknown>;
+    legacy.purpose = "dataset";
+
+    const recovered = setup(
+      fakeStore([legacy as unknown as UploadRecoveryRecord])
+    );
     await recovered.queue.loadRecovery();
     expect(recovered.getChatState("A").fileList).toEqual([
       expect.objectContaining({ file: null, purpose: "document" }),
     ]);
-
-    await recovered.queue.queueFiles([file], "dataset");
-    await vi.waitFor(() => {
-      expect(recovered.getChatState("A").fileList).toHaveLength(2);
-      expect(recovered.getChatState("A").fileList[1]?.status).toBe("completed");
-    });
-    expect(
-      recovered.getChatState("A").fileList.map((item) => item.purpose)
-    ).toEqual(["document", "dataset"]);
     await recovered.queue.dispose();
   });
 });

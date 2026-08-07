@@ -70,6 +70,10 @@ const EMPTY_DATA_PLANE: UploadDataPlane = {
   abort: async () => undefined,
 };
 
+// Recovery records no longer carry classification; retain this only until the
+// runtime item type drops its transitional purpose field.
+const RECOVERED_UPLOAD_PURPOSE: UploadPurpose = "document";
+
 function capabilityData(
   capability: BotUploadCapability,
   session: UploadSession | UploadCapabilityRenewal
@@ -419,7 +423,7 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
           accountScope: scope,
           file: null,
           idempotencyKey: recovered.idempotencyKey,
-          purpose: recovered.purpose,
+          purpose: RECOVERED_UPLOAD_PURPOSE,
           recovered,
         },
         depsFor(data),

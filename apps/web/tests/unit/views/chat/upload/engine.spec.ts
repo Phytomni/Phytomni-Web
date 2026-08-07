@@ -62,7 +62,6 @@ function record(
     size: 6,
     type: "application/octet-stream",
     lastModified: 1,
-    purpose: "document",
     partSize: 0,
     partCount: 0,
     partSizes: [],
@@ -213,8 +212,10 @@ describe("resumable upload engine", () => {
     await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
       status: "completed",
       assetId: "file_abc123",
-      purpose: "dataset",
     });
+    expect(await store.load(accountScope, "local-1")).not.toHaveProperty(
+      "purpose"
+    );
     expect(deps.control.create).toHaveBeenCalledWith(
       {
         filename: "sample.bin",

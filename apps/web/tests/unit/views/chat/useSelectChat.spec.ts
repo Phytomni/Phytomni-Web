@@ -173,7 +173,7 @@ describe("useSelectChat", () => {
     }
   );
 
-  it("hydrates structured attachments with same-account metadata", async () => {
+  it("hydrates structured attachments with purpose-free same-account metadata", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       historyResponse([
         buildChatHistoryRecord({
@@ -206,7 +206,7 @@ describe("useSelectChat", () => {
         name: "reads.fastq.gz",
         size: 42,
         type: "application/gzip",
-        purpose: "dataset",
+        purpose: "document",
       },
     ]);
     expect(

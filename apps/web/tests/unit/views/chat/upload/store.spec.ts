@@ -28,7 +28,6 @@ function queuedRecord(
     size: 6,
     type: "application/gzip",
     lastModified: 123,
-    purpose: "document",
     partSize: 0,
     partCount: 0,
     partSizes: [],
@@ -169,30 +168,32 @@ describe("non-secret upload recovery store", () => {
     expect(UPLOAD_RECOVERY_DB_VERSION).toBe(1);
   });
 
-  it("defaults an old recovery record without purpose to document", async () => {
-    const store = createUploadRecoveryStore({ openDatabase });
-    const legacy = { ...queuedRecord() } as Record<string, unknown>;
-    delete legacy.purpose;
-    await database.objectStore.put(legacy);
+  it.each(["dataset", "document", "unknown"])(
+    "loads legacy recovery purpose %s without retaining it",
+    async (purpose) => {
+      const store = createUploadRecoveryStore({ openDatabase });
+      const legacy = { ...queuedRecord(), purpose } as Record<string, unknown>;
+      await database.objectStore.put(legacy);
 
-    await expect(store.list(accountA)).resolves.toEqual([
-      expect.objectContaining({ purpose: "document" }),
-    ]);
-  });
-
-  it.each(["", "chat_attachment", "analysis", 7, null])(
-    "rejects corrupt recovery purpose %j",
-    (purpose) => {
-      expect(() =>
-        serializeUploadRecoveryRecord({
-          ...queuedRecord(),
-          purpose: purpose as "dataset",
-        })
-      ).toThrowError(
-        expect.objectContaining({ code: "upload_recovery_corrupt" })
-      );
+      await expect(store.list(accountA)).resolves.toEqual([
+        expect.not.objectContaining({ purpose: expect.anything() }),
+      ]);
     }
   );
+
+  it("writes purpose-free recovery snapshots", async () => {
+    const store = createUploadRecoveryStore({ openDatabase });
+    await store.upsert(queuedRecord());
+
+    const raw = [...database.objectStore.values.values()][0] as Record<
+      string,
+      unknown
+    >;
+    expect(raw).not.toHaveProperty("purpose");
+    expect(serializeUploadRecoveryRecord(queuedRecord())).not.toHaveProperty(
+      "purpose"
+    );
+  });
 
   it("rejects forbidden values before they can enter the recovery store", async () => {
     const store = createUploadRecoveryStore({ openDatabase });
