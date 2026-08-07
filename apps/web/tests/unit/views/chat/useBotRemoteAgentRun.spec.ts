@@ -169,22 +169,6 @@ describe("useBotRemoteAgentRun", () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it.each(["bad\u0000text", "x".repeat(4001)])(
-    "rejects invalid description without submitting: %j",
-    async (datasetDescription) => {
-      const run = useBotRemoteAgentRun({
-        tool: "GeneNetworkAgent",
-        dialogueId: "invalid-description",
-        capabilities: makeCapabilities("GeneNetworkAgent"),
-      });
-
-      await expect(
-        run.submit({ query: "Analyze", datasetDescription })
-      ).rejects.toMatchObject({ code: "invalid_dataset_description" });
-      expect(mockQuery).not.toHaveBeenCalled();
-    }
-  );
-
   it("keeps run state inside the supplied dialogue", async () => {
     const states = new Map<string, RemoteAgentChatState>();
     const getChatState = (dialogueId: string) => {
@@ -217,14 +201,16 @@ describe("useBotRemoteAgentRun", () => {
       ),
     });
 
-    const submitInput = {
-      query: "paper",
+    const submitInput: RemoteAgentSubmitInput & {
+      datasetDescription: string;
+    } = {
+      query: "  paper\n",
       attachments: [{ asset_id: "file_paper" }],
-      datasetDescription: "Rice experiment data",
+      datasetDescription: "Legacy dataset context",
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
       interopMode: "auto",
       interopTargets: ["mcp-peer"],
-    } satisfies RemoteAgentSubmitInput;
+    };
 
     await run.submit(submitInput);
 
@@ -234,16 +220,14 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.messageId).toBe("17");
 
     const formData = mockQuery.mock.calls[0][1] as FormData;
-    expect(formData.get("query")).toBe("paper");
+    expect(formData.get("query")).toBe("  paper\n");
     expect(formData.get("tool")).toBeNull();
     expect(formData.get("mode")).toBeNull();
     expect(formData.get("id")).toBe("d1");
     expect(formData.get("attachments")).toBe(
       JSON.stringify([{ asset_id: "file_paper" }])
     );
-    expect(formData.getAll("dataset_description")).toEqual([
-      "Rice experiment data",
-    ]);
+    expect(formData.has("dataset_description")).toBe(false);
     expect(formData.getAll("files")).toEqual([]);
     expect(
       Array.from(formData.values()).some((value) => value instanceof Blob)

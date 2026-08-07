@@ -415,6 +415,9 @@ describe("ResearchAgentView", () => {
       })
     );
     expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");
+    expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty(
+      "datasetDescription"
+    );
     wrapper.unmount();
   });
 
@@ -474,6 +477,9 @@ describe("ResearchAgentView", () => {
       })
     );
     expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");
+    expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty(
+      "datasetDescription"
+    );
     wrapper.unmount();
   });
 

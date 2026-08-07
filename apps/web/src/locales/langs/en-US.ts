@@ -823,7 +823,6 @@ export default {
         "This route is reserved for a capability-gated analysis workflow. No result was created.",
       questionRequired: "Enter an analysis question before submitting.",
       questionTooLong: "The analysis question is too long.",
-      datasetTooLong: "The dataset description is too long.",
       submitFailed:
         "The analysis run could not be submitted. Please try again.",
       downloadFailed: "The download request could not be completed.",
@@ -1028,7 +1027,6 @@ export default {
       fileCountValidation: "You can upload at most 10 files.",
       questionRequired: "Enter a research question before submitting.",
       questionTooLong: "The research question is too long.",
-      datasetTooLong: "The dataset description is too long.",
       submitFailed:
         "The research run could not be submitted. Please try again.",
       downloadFailed: "The download request could not be completed.",

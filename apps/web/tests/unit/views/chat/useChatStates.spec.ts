@@ -112,7 +112,6 @@ describe("useChatStates parallel chat state", () => {
       isSending: false,
       messageInput: "",
       fileList: [],
-      datasetDescription: "",
       historyQuestion: null,
       historyHydration: "new",
       historyErrorKind: null,
@@ -148,18 +147,10 @@ describe("useChatStates parallel chat state", () => {
     });
     expect(state).not.toHaveProperty("uploadPurpose");
     expect(s).not.toHaveProperty("uploadPurpose");
+    expect(state).not.toHaveProperty("datasetDescription");
+    expect(s).not.toHaveProperty("datasetDescription");
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
-  });
-
-  it("isolates the remaining dataset description by dialogue", () => {
-    const s = useChatStates();
-    const stateA = s.getChatState("A");
-    const stateB = s.getChatState("B");
-
-    stateA.datasetDescription = "Treatment and control counts";
-
-    expect(stateB.datasetDescription).toBe("");
   });
 
   it("isolates logErrorKinds and log activity keys per dialogue", () => {

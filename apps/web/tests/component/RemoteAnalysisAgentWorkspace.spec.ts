@@ -184,7 +184,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     expect(wrapper.find('[data-test="analyst-dataset"]').exists()).toBe(false);
     await wrapper
       .get('[data-testid="analyst-query"]')
-      .setValue("Compare groups");
+      .setValue("  Compare groups  ");
     await wrapper.get('[data-testid="analyst-submit"]').trigger("click");
 
     expect(mocks.submit).toHaveBeenCalledWith({

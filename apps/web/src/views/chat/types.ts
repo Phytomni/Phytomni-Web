@@ -229,7 +229,6 @@ export interface ChatUIState {
   focusedUploadLocalId?: string;
   /** Localized duplicate attachment announcement for this dialogue. */
   attachmentAnnouncement?: string;
-  datasetDescription: string;
   historyQuestion: readonly ChatMessage[] | null;
   /** Lifecycle of this dialogue's persisted-history reconstruction. */
   historyHydration: ChatHistoryHydrationStatus;

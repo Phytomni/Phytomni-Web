@@ -1161,9 +1161,8 @@ describe("useSendMessage", () => {
     });
   });
 
-  it("never emits a separate dataset description for completed attachments", async () => {
-    stateFor("A").messageInput = "Analyze the uploaded data";
-    stateFor("A").datasetDescription = "  Treatment and control counts  ";
+  it("preserves authored query text and never emits a separate dataset description", async () => {
+    stateFor("A").messageInput = "  Analyze the uploaded data\n";
     stateFor("A").fileList = [
       completedUpload("context.pdf", "file_context"),
       completedUpload("counts.csv", "file_counts"),
@@ -1177,7 +1176,7 @@ describe("useSendMessage", () => {
     await makeComposable().sendMessage();
 
     const formData = queryCallAt(0, "dataset description query")[0] as FormData;
-    expect(formData.get("query")).toBe("Analyze the uploaded data");
+    expect(formData.get("query")).toBe("  Analyze the uploaded data\n");
     expect(formData.has("dataset_description")).toBe(false);
     expect(formData.get("attachments")).toBe(
       JSON.stringify([
@@ -1185,14 +1184,10 @@ describe("useSendMessage", () => {
         { asset_id: "file_counts" },
       ])
     );
-    expect(stateFor("A").datasetDescription).toBe(
-      "  Treatment and control counts  "
-    );
   });
 
   it("omits a dataset description for document-only submissions", async () => {
     stateFor("A").messageInput = "Summarize the paper";
-    stateFor("A").datasetDescription = "Do not submit this without a dataset";
     stateFor("A").fileList = [completedUpload("paper.pdf", "file_paper")];
     mockGetQueryAbortable.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<DecodedQueryData>>({

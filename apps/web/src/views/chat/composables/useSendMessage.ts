@@ -530,7 +530,6 @@ export function useSendMessage(opts: {
       selectedAgent: capturedSelectedAgent,
       query: currentMessage,
       attachments: attachmentRefs.map(({ asset_id }) => asset_id),
-      datasetDescription: "",
     });
     const clientTurnId =
       chatState.pendingTurnFingerprint !== null &&

@@ -330,10 +330,6 @@ import type {
   AgentResultDelivery,
   ConversationArtifactLink,
 } from "@/api/types";
-import {
-  DatasetDescriptionError,
-  normalizeDatasetDescription,
-} from "@/views/chat/utils/dataset-description";
 
 export type AnalysisRemoteAgentTool = Extract<
   RemoteAgentTool,
@@ -381,7 +377,6 @@ const remoteLifecycle = useRemoteAgentLifecycle({
 });
 
 const question = ref("");
-const datasetDescription = ref("");
 const fileError = ref("");
 const attachmentAnnouncement = ref("");
 const focusedUploadLocalId = ref("");
@@ -591,34 +586,13 @@ async function submit(): Promise<void> {
     return;
   }
 
-  const capturedDescriptionInput = datasetDescription.value;
-  let capturedDescription: string | undefined;
-  try {
-    capturedDescription = normalizeDatasetDescription(capturedDescriptionInput);
-  } catch (error) {
-    if (error instanceof DatasetDescriptionError) {
-      formError.value = t(`${props.localePrefix}.datasetTooLong`);
-      return;
-    }
-    throw error;
-  }
-
   formError.value = "";
   isSubmitting.value = true;
   try {
     await run.submit({
       query,
       attachments: [...uploadQueue.completedAssetIds.value],
-      ...(capturedDescription === undefined
-        ? {}
-        : { datasetDescription: capturedDescription }),
     });
-    if (
-      capturedDescription !== undefined &&
-      datasetDescription.value === capturedDescriptionInput
-    ) {
-      datasetDescription.value = "";
-    }
   } catch {
     formError.value = t(`${props.localePrefix}.submitFailed`);
   } finally {
@@ -635,7 +609,6 @@ function resetRun(): void {
   remoteLifecycle.reset();
   run.reset();
   question.value = "";
-  datasetDescription.value = "";
   void clearUploads().catch(() => undefined);
   fileError.value = "";
   formError.value = "";

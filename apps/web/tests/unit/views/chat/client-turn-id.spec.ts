@@ -14,7 +14,6 @@ const baseDraft = (): ClientTurnDraft => ({
   selectedAgent: "KnowledgeAgent",
   query: "Find evidence",
   attachments: ["file_evidence"],
-  datasetDescription: "",
 });
 
 describe("client turn identity", () => {
@@ -57,13 +56,26 @@ describe("client turn identity", () => {
     );
   });
 
+  it("writes only the current turn fields and omits dataset description", () => {
+    const fingerprint = JSON.parse(clientTurnDraftFingerprint(baseDraft()));
+
+    expect(fingerprint).toEqual({
+      parentRowId: 42,
+      operation: "append",
+      mode: "expert",
+      selectedAgent: "KnowledgeAgent",
+      query: "Find evidence",
+      attachments: ["file_evidence"],
+    });
+    expect(fingerprint).not.toHaveProperty("datasetDescription");
+  });
+
   it.each([
     ["parent row", { parentRowId: 43 }],
     ["operation", { operation: "replace" as const }],
     ["mode", { mode: "instant" as const }],
     ["selected agent", { selectedAgent: "DataAgent" }],
     ["query", { query: "Find different evidence" }],
-    ["dataset description", { datasetDescription: "Updated dataset context" }],
     [
       "attachment order",
       {
@@ -94,6 +106,21 @@ describe("client turn identity", () => {
 
     expect(temporary).not.toBe(canonical);
     expect(clientTurnDraftFingerprintMatches(temporary, canonical)).toBe(true);
+  });
+
+  it("ignores a legacy dataset description during parent rekey comparison", () => {
+    const temporary = JSON.parse(
+      clientTurnDraftFingerprint({ ...baseDraft(), parentRowId: 0 })
+    ) as Record<string, unknown>;
+    temporary.datasetDescription = "Legacy dataset context";
+    const canonical = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      parentRowId: 99,
+    });
+
+    expect(
+      clientTurnDraftFingerprintMatches(JSON.stringify(temporary), canonical)
+    ).toBe(true);
   });
 
   it("does not match a rekeyed draft after the query changes", () => {
