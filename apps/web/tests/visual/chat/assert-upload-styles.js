@@ -135,6 +135,14 @@ if (
       fail("attachment detail escapes the viewport");
     }
     if (
+      stripRect &&
+      detailRect &&
+      (detailRect.left < stripRect.left - tolerance ||
+        detailRect.right > stripRect.right + tolerance)
+    ) {
+      fail("attachment detail escapes containing strip");
+    }
+    if (
       editorRect &&
       detailRect &&
       detailRect.bottom > editorRect.top + tolerance
@@ -220,24 +228,22 @@ if (
     chips[0] ||
     overflow ||
     (isInteractive(editor) ? editor : editor?.querySelector("textarea"));
-  if (focusTarget instanceof HTMLElement) {
+  if (strip && focusTarget instanceof HTMLElement) {
     document.body.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "Tab" })
     );
     focusTarget.focus({ preventScroll: true, focusVisible: true });
-    const focusStyle = getComputedStyle(focusTarget);
-    const surfaceStyle = composerSurface
-      ? getComputedStyle(composerSurface)
-      : null;
-    const focusRing =
-      (focusStyle.outlineStyle !== "none" &&
-        parseFloat(focusStyle.outlineWidth) > 0) ||
-      Boolean(surfaceStyle?.boxShadow && surfaceStyle.boxShadow !== "none");
-    const focusCss = Array.from(document.querySelectorAll("style"))
-      .map((style) => style.textContent || "")
-      .some((css) => css.includes("focus-visible") && css.includes("outline"));
-    if (!focusRing && !focusCss) fail("focus ring is missing");
-  } else {
+    const activeElement = document.activeElement;
+    if (activeElement !== focusTarget && !focusTarget.contains(activeElement)) {
+      fail("focus target is not effective");
+    } else {
+      const focusStyle = getComputedStyle(activeElement);
+      const focusRing =
+        focusStyle.outlineStyle !== "none" &&
+        parseFloat(focusStyle.outlineWidth) > 0;
+      if (!focusRing) fail("focus ring is missing");
+    }
+  } else if (fixture !== "empty") {
     fail("focus ring target is missing");
   }
 

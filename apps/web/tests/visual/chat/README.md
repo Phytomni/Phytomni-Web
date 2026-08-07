@@ -180,16 +180,24 @@ Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
 
 The script writes only to the ignored
 `.codex/evidence/frontend-v2/unified-attachments/` directory. Before every
-screenshot, `assert-upload-styles.js` checks page overflow, the non-wrapping
-chip strip, visible editor, detail/editor separation, bounded controls, focus
-ring semantics, real (non-fake) progress, and the incompatible-Agent blocked
-send state. Stable selectors are the shared
+`screenshot`, `measure-geometry.js` writes an independent geometry record and
+`assert-geometry.js` gates it. `assert-upload-styles.js` then checks page
+overflow, the non-wrapping chip strip, visible editor, detail/editor
+containment and separation, bounded controls, effective focus-ring semantics,
+real (non-fake) progress, and the incompatible-Agent blocked send state.
+Stable selectors are the shared
 `attachment-chip-strip` / `attachment-chip` / `attachment-chip-detail`
 test IDs plus the Composer editor surface (`.chat-composer-body` or its
 textarea/contenteditable child). The script returns automated evidence only; it
 does not claim visual approval. Inspect each PNG individually before adding a
 human review row. The synthetic matrix is not evidence of a live Bot upload or
 10 GiB behavior.
+
+Each geometry record also carries `fixtureSource=tests/visual/chat`, the current
+Git `sourceSha`, the geometry/style script SHA-256 values, and the
+`unified-attachments-v1` `contractSha256`. This provenance makes a geometry
+record auditable against the source that produced it and prevents an upload-style
+JSON copy from masquerading as geometry evidence.
 
 ## Agent lifecycle acceptance matrix
 

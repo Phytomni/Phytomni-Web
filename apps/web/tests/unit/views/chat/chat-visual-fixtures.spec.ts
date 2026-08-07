@@ -1023,6 +1023,13 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain('".chat-composer-surface"');
     expect(MEASURE_SOURCE).toContain("querySelector?.");
     expect(MEASURE_SOURCE).toContain("composerNodes[0]");
+    expect(MEASURE_SOURCE).toContain("attachmentGeometry");
+    expect(MEASURE_SOURCE).toContain("detailWithinStrip");
+    expect(MEASURE_SOURCE).toContain("isLegacyUploadFixture");
+    expect(MEASURE_SOURCE).toContain('[data-testid="attachment-chip-detail"]');
+    expect(MEASURE_SOURCE).toContain("unified-attachments-v1");
+    expect(MEASURE_SOURCE).toContain("contractSha256");
+    expect(MEASURE_SOURCE).toContain("sourceSha");
     expect(MEASURE_SOURCE).toContain(
       "viewport below 900 requires mobile drawer state"
     );
@@ -1080,9 +1087,14 @@ describe("Chat visual fixture script contracts", () => {
     expect(UPLOAD_ASSERT_SOURCE).toContain("editor is hidden");
     expect(UPLOAD_ASSERT_SOURCE).toContain("detail surface overlaps editor");
     expect(UPLOAD_ASSERT_SOURCE).toContain(
+      "attachment detail escapes containing strip"
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
       "attachment control escapes viewport"
     );
     expect(UPLOAD_ASSERT_SOURCE).toContain("focus ring");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("activeElement");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("focusCss");
     expect(UPLOAD_ASSERT_SOURCE).toContain("fake progress");
     expect(UPLOAD_ASSERT_SOURCE).toContain("pass: true");
     expect(UPLOAD_ASSERT_SOURCE).not.toContain("location.href");
@@ -1100,6 +1112,12 @@ describe("Chat visual fixture script contracts", () => {
       '"empty"\n    "uploading-detail-open"\n    "mixed-ready-failed-expired"\n    "ten-files-overflow"\n    "incompatible-agent-blocked"'
     );
     expect(UPLOAD_CAPTURE_SOURCE).toContain('themes=("light" "dark")');
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("measure-geometry.js");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("assert-geometry.js");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("SOURCE_SHA=");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("CONTRACT_SHA256=");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("__PHY_CHAT_CAPTURE_META__");
+    expect(UPLOAD_CAPTURE_SOURCE).not.toContain("cp ");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("EXPECTED_COUNT=80");
     expect(UPLOAD_CAPTURE_SOURCE).toContain("capture only creates evidence");
     expect(UPLOAD_CAPTURE_SOURCE).not.toContain("resumable-upload");

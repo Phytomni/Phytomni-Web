@@ -7,6 +7,10 @@ REPO_ROOT="$(cd "${WEB_ROOT}/../.." && pwd)"
 EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/unified-attachments"
 SESSION="phy-chat-unified-attachments"
 BASE_URL="http://127.0.0.1:5174/tests/visual/chat/"
+SOURCE_SHA="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+GEOMETRY_SCRIPT_SHA256="$(sha256sum "${SCRIPT_DIR}/measure-geometry.js" | awk '{print $1}')"
+STYLE_SCRIPT_SHA256="$(sha256sum "${SCRIPT_DIR}/assert-upload-styles.js" | awk '{print $1}')"
+CONTRACT_SHA256="$(sha256sum "${WEB_ROOT}/tests/unit/views/chat/chat-visual-fixtures.spec.ts" | awk '{print $1}')"
 
 # This capture only creates evidence; it does not claim a visual pass.
 
@@ -54,13 +58,19 @@ capture_fixture() {
     agent-browser --session "${SESSION}" wait --fn \
         "document.querySelector('[data-testid=chat-visual-root]')?.dataset.fixtureReady === 'true'"
 
+    agent-browser --session "${SESSION}" eval \
+        "window.__PHY_CHAT_CAPTURE_META__ = {sourceSha: '${SOURCE_SHA}', geometryScriptSha256: '${GEOMETRY_SCRIPT_SHA256}', styleScriptSha256: '${STYLE_SCRIPT_SHA256}', contractSha256: '${CONTRACT_SHA256}'}"
+
+    agent-browser --session "${SESSION}" eval --stdin \
+        <"${SCRIPT_DIR}/measure-geometry.js" |
+        tee "${EVIDENCE_DIR}/${stem}.geometry.json"
+    test -s "${EVIDENCE_DIR}/${stem}.geometry.json"
+    agent-browser --session "${SESSION}" eval --stdin \
+        <"${SCRIPT_DIR}/assert-geometry.js"
     agent-browser --session "${SESSION}" eval --stdin \
         <"${SCRIPT_DIR}/assert-upload-styles.js" |
         tee "${EVIDENCE_DIR}/${stem}.upload.json"
     test -s "${EVIDENCE_DIR}/${stem}.upload.json"
-    cp "${EVIDENCE_DIR}/${stem}.upload.json" \
-        "${EVIDENCE_DIR}/${stem}.geometry.json"
-    test -s "${EVIDENCE_DIR}/${stem}.geometry.json"
 
     agent-browser --session "${SESSION}" screenshot \
         "${EVIDENCE_DIR}/${stem}.png"

@@ -9,10 +9,33 @@
  */
 (async () => {
   const GEOMETRY_KEY = "__PHY_CHAT_GEOMETRY_RESULT__";
+  const CAPTURE_METADATA_KEY = "__PHY_CHAT_CAPTURE_META__";
   const MOBILE_BREAKPOINT = 900;
   const MOBILE_HEADER_MAX_HEIGHT = 96;
   const EDGE_TOLERANCE = 0.5;
   const HISTORY_STATES = new Set(["title-only", "loading", "empty", "error"]);
+
+  function captureEvidence() {
+    const metadata = window[CAPTURE_METADATA_KEY];
+    return {
+      fixtureSource: "tests/visual/chat",
+      contract: "unified-attachments-v1",
+      sourceSha:
+        typeof metadata?.sourceSha === "string" ? metadata.sourceSha : null,
+      geometryScriptSha256:
+        typeof metadata?.geometryScriptSha256 === "string"
+          ? metadata.geometryScriptSha256
+          : null,
+      styleScriptSha256:
+        typeof metadata?.styleScriptSha256 === "string"
+          ? metadata.styleScriptSha256
+          : null,
+      contractSha256:
+        typeof metadata?.contractSha256 === "string"
+          ? metadata.contractSha256
+          : null,
+    };
+  }
 
   function measureRect(el) {
     if (!el) {
@@ -45,6 +68,18 @@
       height: rect.height,
       visible,
     };
+  }
+
+  function queryElement(el, selector) {
+    return typeof el?.querySelector === "function"
+      ? el.querySelector(selector)
+      : null;
+  }
+
+  function queryElements(el, selector) {
+    return typeof el?.querySelectorAll === "function"
+      ? Array.from(el.querySelectorAll(selector))
+      : [];
   }
 
   function isInsideViewport(rect) {
@@ -98,6 +133,8 @@
         sidebar: { present: false },
         optionCount: 0,
       },
+      attachmentGeometry: null,
+      evidence: captureEvidence(),
       state: null,
       chatMode: null,
       pass: false,
@@ -175,6 +212,16 @@
   }
 
   const contentStackEl = contentStacks[0];
+  const attachmentFixture = root.getAttribute("data-attachment-fixture");
+  const unifiedAttachmentFixtureKeys = new Set([
+    "empty",
+    "uploading-detail-open",
+    "mixed-ready-failed-expired",
+    "ten-files-overflow",
+    "incompatible-agent-blocked",
+  ]);
+  const isUnifiedAttachmentFixture =
+    unifiedAttachmentFixtureKeys.has(attachmentFixture);
   const uploadStatus = root.getAttribute("data-upload-status");
   const uploadFixtureStatuses = new Set([
     "queued",
@@ -184,6 +231,7 @@
     "completed",
   ]);
   const isUploadFixture = uploadFixtureStatuses.has(uploadStatus);
+  const isLegacyUploadFixture = isUploadFixture && !isUnifiedAttachmentFixture;
   const emptyScrollPosition =
     root.getAttribute("data-empty-scroll-position") === "cases"
       ? "cases"
@@ -281,6 +329,54 @@
   const uploadCard = uploadCardNode
     ? measureRect(uploadCardNode)
     : { ...measureRect(null), count: 0 };
+  const attachmentStripNode = root.querySelector(
+    '[data-testid="attachment-chip-strip"]'
+  );
+  const attachmentRowNode = queryElement(
+    attachmentStripNode,
+    ".attachment-chip-strip__row"
+  );
+  const attachmentChipNodes = queryElements(
+    attachmentStripNode,
+    '[data-testid="attachment-chip"]'
+  );
+  const attachmentDetailNode = root.querySelector(
+    '[data-testid="attachment-chip-detail"]'
+  );
+  const attachmentEditorNode =
+    queryElement(
+      composerNodes[0],
+      '[data-testid="chat-composer-editor"], [data-testid="mention-input"], .chat-composer-body textarea, .chat-composer-body [contenteditable="true"], .chat-composer-body .el-textarea__inner'
+    ) || queryElement(composerNodes[0], ".chat-composer-body");
+  const attachmentStrip = measureRect(attachmentStripNode);
+  const attachmentRow = measureRect(attachmentRowNode);
+  const attachmentChips = attachmentChipNodes.map((chip) => ({
+    ...measureRect(chip),
+    state: chip.getAttribute("data-state"),
+  }));
+  const attachmentDetail = measureRect(attachmentDetailNode);
+  const attachmentEditor = measureRect(attachmentEditorNode);
+  const attachmentDetailWithinStrip = attachmentDetailNode
+    ? attachmentStrip.present &&
+      attachmentDetail.left >= attachmentStrip.left - EDGE_TOLERANCE &&
+      attachmentDetail.right <= attachmentStrip.right + EDGE_TOLERANCE
+    : true;
+  const attachmentDetailWithinViewport = attachmentDetailNode
+    ? isInsideViewport(attachmentDetail)
+    : true;
+  const attachmentGeometry = isUnifiedAttachmentFixture
+    ? {
+        fixture: attachmentFixture,
+        strip: attachmentStrip,
+        row: attachmentRow,
+        chips: attachmentChips,
+        detail: attachmentDetail,
+        editor: attachmentEditor,
+        detailWithinStrip: attachmentDetailWithinStrip,
+        detailWithinViewport: attachmentDetailWithinViewport,
+        pass: true,
+      }
+    : null;
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
     : { present: false };
@@ -345,6 +441,50 @@
   const docScrollWidth = document.documentElement.scrollWidth;
   const docClientWidth = document.documentElement.clientWidth;
   const reasons = [];
+  const attachmentReasons = [];
+
+  if (isUnifiedAttachmentFixture) {
+    if (attachmentFixture === "empty") {
+      if (attachmentStripNode) {
+        attachmentReasons.push(
+          "empty attachment fixture unexpectedly renders a strip"
+        );
+      }
+    } else if (!attachmentStripNode || !attachmentRowNode) {
+      attachmentReasons.push("unified attachment strip or row is missing");
+    }
+    if (!attachmentEditor.present || !attachmentEditor.visible) {
+      attachmentReasons.push("unified attachment editor is hidden");
+    }
+    if (
+      attachmentRowNode &&
+      getComputedStyle(attachmentRowNode).flexWrap !== "nowrap"
+    ) {
+      attachmentReasons.push("unified attachment strip wraps");
+    }
+    if (attachmentStripNode && !isInsideViewport(attachmentStrip)) {
+      attachmentReasons.push("unified attachment strip escapes viewport");
+    }
+    if (attachmentDetailNode) {
+      if (!attachmentDetailWithinViewport) {
+        attachmentReasons.push("unified attachment detail escapes viewport");
+      }
+      if (!attachmentDetailWithinStrip) {
+        attachmentReasons.push(
+          "unified attachment detail escapes containing strip"
+        );
+      }
+      if (
+        attachmentEditor.present &&
+        attachmentDetail.bottom > attachmentEditor.top + EDGE_TOLERANCE
+      ) {
+        attachmentReasons.push(
+          "unified attachment detail overlaps the Composer editor"
+        );
+      }
+    }
+    reasons.push(...attachmentReasons);
+  }
 
   if (historyState === "loading") {
     if (historyLoadingNodes.length !== 1) {
@@ -438,13 +578,14 @@
   } else if (
     !openMobile &&
     !isUploadFixture &&
+    !isUnifiedAttachmentFixture &&
     (state === "populated" || emptyScrollPosition === "top") &&
     !isInsideViewport(composer)
   ) {
     reasons.push("composer escapes viewport in the reviewed state");
   }
 
-  if (isUploadFixture) {
+  if (isLegacyUploadFixture) {
     if (!uploadCard.present || !isVisibleInViewport(uploadCard)) {
       reasons.push(
         "upload fixture requires a visible upload card in the viewport"
@@ -580,6 +721,13 @@
     reasons.push(`sidebar trigger count ${triggerNodes.length}`);
   }
 
+  if (attachmentGeometry) {
+    attachmentGeometry.pass = attachmentReasons.length === 0;
+    if (attachmentReasons.length > 0) {
+      attachmentGeometry.reasons = attachmentReasons;
+    }
+  }
+
   const result = {
     viewport: { width: innerWidth, height: innerHeight },
     document: {
@@ -620,6 +768,8 @@
     composer,
     uploadStatus,
     uploadCard,
+    attachmentGeometry,
+    evidence: captureEvidence(),
     mainSurfaceHidden: mainSurface?.getAttribute("aria-hidden") === "true",
     drawerSurface: measureRect(drawerSurface),
     drawerScrim: measureRect(drawerScrim),
