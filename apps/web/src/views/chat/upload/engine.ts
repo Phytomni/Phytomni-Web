@@ -487,7 +487,10 @@ export class ResumableUploadEngine {
 
   private async execute(): Promise<void> {
     try {
-      if (this.item.assetId === null) await this.createAsset();
+      if (this.item.assetId === null) {
+        await this.createAsset();
+        if (this.item.status === "paused") return;
+      }
       await this.reconcile();
       if (this.item.status === "completed") return;
       await this.uploadMissingParts();
@@ -519,6 +522,12 @@ export class ResumableUploadEngine {
         this.idempotency
       )
     );
+    if (this.item.status === "paused") {
+      this.applySession(result.session, result.data);
+      this.setStatus("paused");
+      await this.persist();
+      return;
+    }
     try {
       this.throwIfCancelled();
     } catch (error) {

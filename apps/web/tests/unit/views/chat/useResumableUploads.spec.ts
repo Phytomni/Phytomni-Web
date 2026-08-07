@@ -539,6 +539,51 @@ describe("useResumableUploads", () => {
     );
   });
 
+  it("keeps a late create response recoverable after disposal", async () => {
+    const store = fakeStore();
+    const { queue, getChatState } = setup(store);
+    const data = fakeDataPlane();
+    let markCreateStarted!: () => void;
+    let resolveCreate!: (
+      value: ApiEnvelope<ReturnType<typeof session>>
+    ) => void;
+    const createStarted = new Promise<void>((resolve) => {
+      markCreateStarted = resolve;
+    });
+    const createResponse = new Promise<ApiEnvelope<ReturnType<typeof session>>>(
+      (resolve) => {
+        resolveCreate = resolve;
+      }
+    );
+    mocks.createUpload.mockImplementationOnce(async () => {
+      markCreateStarted();
+      return createResponse;
+    });
+    mocks.createUploadDataPlane.mockReturnValue(data);
+
+    await queue.queueFiles([fixtureFile("late-create-recovery.fastq")]);
+    await createStarted;
+    const originalKey = mocks.createUpload.mock.calls[0]?.[1];
+
+    await queue.dispose();
+    expect(getChatState("A").fileList[0]?.status).toBe("paused");
+    expect(store.remove).not.toHaveBeenCalled();
+
+    resolveCreate(response(session("file_fixture", 3)));
+    await vi.waitFor(() => {
+      expect(store.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetId: "file_fixture",
+          idempotencyKey: originalKey,
+          status: "paused",
+        })
+      );
+    });
+
+    expect(data.abort).not.toHaveBeenCalled();
+    expect(getChatState("A").fileList[0]?.status).toBe("paused");
+  });
+
   it.each(["cancel", "remove"] as const)(
     "keeps explicit %s terminal and clears upload recovery",
     async (action) => {
