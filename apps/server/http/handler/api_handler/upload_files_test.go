@@ -110,6 +110,10 @@ func setupUploadHandler(t *testing.T, serverURL string) {
 }
 
 func invokeUploadHandler(t *testing.T, method, path, body, contentType, username, idempotency string, handler gin.HandlerFunc) *httptest.ResponseRecorder {
+	return invokeUploadHandlerWithLanguage(t, method, path, body, contentType, username, idempotency, "", handler)
+}
+
+func invokeUploadHandlerWithLanguage(t *testing.T, method, path, body, contentType, username, idempotency, language string, handler gin.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	response := httptest.NewRecorder()
@@ -124,6 +128,9 @@ func invokeUploadHandler(t *testing.T, method, path, body, contentType, username
 	if idempotency != "" {
 		ctx.Request.Header.Set("Idempotency-Key", idempotency)
 	}
+	if language != "" {
+		ctx.Request.Header.Set("Accept-Language", language)
+	}
 	if username != "" {
 		ctx.Set("username", username)
 	}
@@ -132,11 +139,34 @@ func invokeUploadHandler(t *testing.T, method, path, body, contentType, username
 	return response
 }
 
+func TestCreateUploadHandlerClassificationErrorsAreLocalized(t *testing.T) {
+	var calls int
+	server := uploadHandlerServer(t, nil, &calls)
+	setupUploadHandler(t, server.URL)
+	response := invokeUploadHandlerWithLanguage(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":1}`, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", "zh-CN", NewHandler().CreateUpload)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if payload.Code != "attachment_type_unsupported" || payload.Message != "文件名无法识别为受支持的附件类型" {
+		t.Fatalf("localized error response=%#v", payload)
+	}
+	if calls != 0 {
+		t.Fatalf("unsupported filename reached Bot %d times", calls)
+	}
+}
+
 func TestCreateUploadHandlerSuccessSetsNoStore(t *testing.T) {
 	var captures []uploadHandlerCreateCapture
 	server := uploadHandlerServer(t, &captures, nil)
 	setupUploadHandler(t, server.URL)
-	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"counts.csv","size_bytes":1,"content_type_hint":"application/octet-stream","purpose":"document"}`, "application/json; charset=utf-8", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"counts.csv","size_bytes":1,"content_type_hint":"application/octet-stream"}`, "application/json; charset=utf-8", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -149,9 +179,47 @@ func TestCreateUploadHandlerSuccessSetsNoStore(t *testing.T) {
 }
 
 func TestCreateUploadHandlerRejectsUnknownOrAmbiguousFilename(t *testing.T) {
+	for name, test := range map[string]struct {
+		body, code, message string
+	}{
+		"unknown":   {body: `{"filename":"sample.bin","size_bytes":9}`, code: "attachment_type_unsupported", message: "file name does not identify a supported attachment type"},
+		"ambiguous": {body: `{"filename":"counts-paper.txt","size_bytes":9}`, code: "attachment_type_ambiguous", message: "file name matches both document and analysis data"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var calls int
+			server := uploadHandlerServer(t, nil, &calls)
+			setupUploadHandler(t, server.URL)
+			response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", test.body, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+			if response.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+			}
+			var payload struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if payload.Code != test.code || payload.Message != test.message {
+				t.Fatalf("error response=%#v, want code=%q message=%q", payload, test.code, test.message)
+			}
+			if strings.Contains(response.Body.String(), "provider") || strings.Contains(response.Body.String(), "upstream") {
+				t.Fatalf("classification response leaked provider detail: %s", response.Body.String())
+			}
+			if calls != 0 {
+				t.Fatalf("invalid filename reached Bot %d times", calls)
+			}
+		})
+	}
+}
+
+func TestCreateUploadHandlerRejectsForbiddenBrowserFields(t *testing.T) {
 	for name, body := range map[string]string{
-		"unknown":   `{"filename":"sample.bin","size_bytes":9}`,
-		"ambiguous": `{"filename":"counts-paper.txt","size_bytes":9}`,
+		"obsolete purpose":     `{"filename":"paper.pdf","size_bytes":1,"purpose":"dataset"}`,
+		"owner assertion":      `{"filename":"paper.pdf","size_bytes":1,"owner_subject":"bob@example.com"}`,
+		"native data list":     `{"filename":"paper.pdf","size_bytes":1,"data_list":["file_1"]}`,
+		"native document list": `{"filename":"paper.pdf","size_bytes":1,"obs_file_list":["file_1"]}`,
+		"storage field":        `{"filename":"paper.pdf","size_bytes":1,"object_key":"private/object"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var calls int
@@ -159,25 +227,12 @@ func TestCreateUploadHandlerRejectsUnknownOrAmbiguousFilename(t *testing.T) {
 			setupUploadHandler(t, server.URL)
 			response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", body, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
 			if response.Code != http.StatusBadRequest {
-				t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
+				t.Fatalf("status=%d body=%s, want bad request", response.Code, response.Body.String())
 			}
 			if calls != 0 {
-				t.Fatalf("invalid purpose reached Bot %d times", calls)
+				t.Fatalf("forbidden browser field reached Bot %d times", calls)
 			}
 		})
-	}
-}
-
-func TestCreateUploadHandlerRejectsCallerAuthorityFields(t *testing.T) {
-	var calls int
-	server := uploadHandlerServer(t, nil, &calls)
-	setupUploadHandler(t, server.URL)
-	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"paper.pdf","size_bytes":1,"owner_subject":"bob@example.com"}`, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("status=%d body=%s, want bad request", response.Code, response.Body.String())
-	}
-	if calls != 0 {
-		t.Fatalf("unknown browser authority reached Bot %d times", calls)
 	}
 }
 
@@ -234,7 +289,7 @@ func TestCreateUploadHandlerScopesSameIdempotencyKeyPerUser(t *testing.T) {
 	server := uploadHandlerServer(t, &captures, nil)
 	setupUploadHandler(t, server.URL)
 	for _, user := range []string{"alice@example.com", "bob@example.com"} {
-		response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"paper.pdf","size_bytes":1,"purpose":"dataset"}`, "application/json", user, "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+		response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"paper.pdf","size_bytes":1}`, "application/json", user, "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
 		if response.Code != http.StatusOK {
 			t.Fatalf("user %s status=%d body=%s", user, response.Code, response.Body.String())
 		}

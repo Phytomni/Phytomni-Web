@@ -24,7 +24,6 @@ type uploadCreateBody struct {
 	SizeBytes    int64  `json:"size_bytes"`
 	ContentType  string `json:"content_type_hint,omitempty"`
 	LastModified int64  `json:"last_modified_ms,omitempty"`
-	Purpose      string `json:"purpose"`
 }
 
 // CreateUpload accepts metadata only. The authenticated Web identity supplies
@@ -143,11 +142,26 @@ func uploadRequestBodyEmpty(ctx *gin.Context) bool {
 }
 
 func writeUploadServiceError(ctx *gin.Context, err error) {
+	if errors.Is(err, api_service.ErrAttachmentTypeUnsupported) {
+		writeUploadClassificationError(ctx, "attachment_type_unsupported", "upload.attachment_type_unsupported")
+		return
+	}
+	if errors.Is(err, api_service.ErrAttachmentTypeAmbiguous) {
+		writeUploadClassificationError(ctx, "attachment_type_ambiguous", "upload.attachment_type_ambiguous")
+		return
+	}
 	if errors.Is(err, api_service.ErrUploadMetadataInvalid) {
 		writeUploadError(ctx, http.StatusBadRequest, "upload.invalid_request")
 		return
 	}
 	writeUploadError(ctx, http.StatusServiceUnavailable, "upload.unavailable")
+}
+
+func writeUploadClassificationError(ctx *gin.Context, code, messageKey string) {
+	ctx.JSON(http.StatusUnprocessableEntity, gin.H{
+		"code":    code,
+		"message": i18n.T(ctx, messageKey),
+	})
 }
 
 func writeUploadError(ctx *gin.Context, status int, messageKey string) {

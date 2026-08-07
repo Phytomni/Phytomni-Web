@@ -80,7 +80,7 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 	}
 	purpose, err := classifyAttachmentFilename(filename)
 	if err != nil {
-		return nil, fmt.Errorf("%w: filename", ErrUploadMetadataInvalid)
+		return nil, fmt.Errorf("%w: %w", ErrUploadMetadataInvalid, err)
 	}
 	if input.SizeBytes < 1 || input.SizeBytes > resumableUploadMaxFileBytes {
 		return nil, fmt.Errorf("%w: size", ErrUploadMetadataInvalid)
