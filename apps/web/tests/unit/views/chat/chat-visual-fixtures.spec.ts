@@ -933,9 +933,9 @@ describe("Chat visual fixture script contracts", () => {
     );
   });
 
-  it("locks upload-state style assertions to the real card semantics", () => {
-    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-upload-card");
-    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-upload-progress");
+  it("locks upload-state style assertions to shared attachment semantics", () => {
+    expect(UPLOAD_ASSERT_SOURCE).toContain("upload fixture status");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("ChatUploadCard");
     expect(UPLOAD_ASSERT_SOURCE).toContain("aria-valuenow");
     expect(UPLOAD_ASSERT_SOURCE).toContain("uploading");
     expect(UPLOAD_ASSERT_SOURCE).toContain("completed");
@@ -1385,13 +1385,13 @@ describe("Chat visual fixture rendering (no network)", () => {
   });
 
   it.each([
-    ["upload-queued", "queued", "chat-upload-cancel"],
-    ["upload-uploading", "uploading", "chat-upload-pause"],
-    ["upload-paused", "paused", "chat-upload-resume"],
-    ["upload-failed", "failed", "chat-upload-retry"],
-    ["upload-completed", "completed", "chat-upload-remove"],
+    ["upload-queued", "queued", "attachment-chip-detail-cancel"],
+    ["upload-uploading", "uploading", "attachment-chip-detail-pause"],
+    ["upload-paused", "paused", "attachment-chip-detail-resume"],
+    ["upload-failed", "failed", "attachment-chip-detail-retry"],
+    ["upload-completed", "completed", "attachment-chip-detail-remove"],
   ] as const)(
-    "renders the %s resumable upload state through ChatUploadCard",
+    "renders the %s resumable upload state through AttachmentChipStrip",
     async (key, status, actionTestId) => {
       const wrapper = mountFixtureApp(getChatVisualFixture(key));
       await flushPromises();
@@ -1399,17 +1399,19 @@ describe("Chat visual fixture rendering (no network)", () => {
 
       const root = wrapper.get('[data-testid="chat-visual-root"]');
       expect(root.attributes("data-upload-status")).toBe(status);
-      const card = wrapper.get('[data-testid="chat-upload-card"]');
-      expect(card.attributes("data-upload-status")).toBe(status);
-      expect(card.get('[data-testid="chat-upload-status"]').text()).not.toBe(
-        ""
-      );
+      const strip = wrapper.get('[data-testid="attachment-chip-strip"]');
+      const chip = strip.get('[data-testid="attachment-chip"]');
+      expect(chip.attributes("data-state")).toBe(status);
       expect(
-        card
-          .get('[data-testid="chat-upload-progress"]')
+        chip.get('[data-testid="attachment-chip-status"]').text()
+      ).not.toBe("");
+      await chip.trigger("click");
+      expect(
+        strip
+          .get('[data-testid="attachment-chip-detail-progress"]')
           .attributes("aria-valuenow")
       ).toMatch(/^\d+$/);
-      expect(card.get(`[data-testid="${actionTestId}"]`).exists()).toBe(true);
+      expect(strip.get(`[data-testid="${actionTestId}"]`).exists()).toBe(true);
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
       wrapper.unmount();
@@ -1803,7 +1805,7 @@ describe("Chat visual fixture rendering (no network)", () => {
       expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
       expect(
         wrapper.findAll('[role="status"][aria-live="polite"]')
-      ).toHaveLength(5);
+      ).toHaveLength(6);
       expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
       wrapper.unmount();
     }

@@ -20,8 +20,22 @@ const COMPOSER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
   "utf8"
 );
-const UPLOAD_CARD_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/components/ChatUploadCard.vue"),
+const ANALYSIS_WORKSPACE_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue"
+  ),
+  "utf8"
+);
+const DIGITAL_DESIGN_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/digital-design-agent/DigitalDesignAgentView.vue"
+  ),
+  "utf8"
+);
+const ATTACHMENT_STRIP_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/AttachmentChipStrip.vue"),
   "utf8"
 );
 
@@ -98,6 +112,14 @@ describe("Chat progress placement integration", () => {
     expect(COMPOSER_SOURCE).toContain("!props.hasBlockingUploads");
     expect(COMPOSER_SOURCE).toContain("<AttachmentChipStrip");
     expect(COMPOSER_SOURCE).not.toContain("<ChatUploadCard");
+    for (const source of [
+      COMPOSER_SOURCE,
+      ANALYSIS_WORKSPACE_SOURCE,
+      DIGITAL_DESIGN_SOURCE,
+    ]) {
+      expect(source).toContain("AttachmentChipStrip");
+      expect(source).not.toContain("ChatUploadCard");
+    }
     expect(COMPOSER_SOURCE).toContain(':announcement="attachmentAnnouncement"');
     expect(COMPOSER_SOURCE).not.toContain('v-if="fileList.length > 0"');
     expect(CHAT_SOURCE).not.toContain(
@@ -114,9 +136,17 @@ describe("Chat progress placement integration", () => {
       "ownerState.attachmentAnnouncementNonce += 1"
     );
     expect(COMPOSER_SOURCE).not.toContain("CHAT_ATTACHMENT_ACCEPT");
-    expect(UPLOAD_CARD_SOURCE).toContain('role="progressbar"');
-    expect(UPLOAD_CARD_SOURCE).toContain('aria-live="polite"');
-    expect(UPLOAD_CARD_SOURCE).toContain("speedText");
-    expect(UPLOAD_CARD_SOURCE).toContain("etaText");
+    expect(ATTACHMENT_STRIP_SOURCE).toContain(
+      'data-testid="attachment-chip-detail-progress"'
+    );
+    expect(ATTACHMENT_STRIP_SOURCE).toContain('role="progressbar"');
+    expect(ATTACHMENT_STRIP_SOURCE).toContain('aria-live="polite"');
+    expect(ATTACHMENT_STRIP_SOURCE).toContain(
+      'data-testid="attachment-chip-detail-speed"'
+    );
+    expect(ATTACHMENT_STRIP_SOURCE).toContain(
+      'data-testid="attachment-chip-detail-eta"'
+    );
+    expect(ATTACHMENT_STRIP_SOURCE).toContain("showsTransferMetrics");
   });
 });

@@ -156,7 +156,7 @@ authenticated or production acceptance from synthetic captures.
 
 ## Resumable upload-state matrix
 
-The upload-state harness uses the production `ChatUploadCard` component with
+The upload-state harness uses the production `AttachmentChipStrip` component with
 synthetic, non-uploading `ResumableUploadItem` records. It covers `queued`,
 `uploading`, `paused`, `failed`, and `completed` at the eight agreed CSS
 viewports (`320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560`) in
@@ -175,7 +175,7 @@ captured only after `measure-geometry.js`, `assert-geometry.js`, and
 `assert-upload-styles.js` pass. Inspect each PNG individually before adding a
 human review row. On the narrowest viewports the normal Composer surface can
 continue below the scroll owner; the geometry contract therefore checks that
-the upload card itself remains fully visible and bounded. The synthetic matrix
+the shared attachment presentation remains fully visible and bounded. The synthetic matrix
 is not evidence of a live Bot upload or 10 GiB behavior.
 
 ## Agent lifecycle acceptance matrix

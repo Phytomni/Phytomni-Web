@@ -153,7 +153,7 @@ export type ChatVisualFixtureDefinition = {
   offCanvas: boolean;
   isSending: boolean;
   hasAttachment: boolean;
-  /** Optional resumable-upload lifecycle state rendered by ChatUploadCard. */
+  /** Optional resumable-upload lifecycle state rendered by AttachmentChipStrip. */
   uploadStatus?: import("@/views/chat/upload/types").UploadStatus;
   selectedAgent: string;
   pickerOpen: boolean;
