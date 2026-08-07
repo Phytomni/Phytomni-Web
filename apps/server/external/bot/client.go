@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -215,18 +216,23 @@ func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string,
 	if readErr != nil {
 		return meta, wrapTransportError(readErr)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
-	}
-	if rejectDuplicateKeys {
+	if rejectDuplicateKeys && (resp.StatusCode >= 200 && resp.StatusCode < 300 || strictUploadControlErrorPath(method, path)) {
 		if err := rejectDuplicateJSONKeys(raw); err != nil {
 			return meta, err
 		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
 	}
 	if out != nil {
 		return meta, json.Unmarshal(raw, out)
 	}
 	return meta, nil
+}
+
+func strictUploadControlErrorPath(method, path string) bool {
+	return method == http.MethodPost && (path == "/v1/files" ||
+		strings.HasPrefix(path, "/v1/files/") && strings.HasSuffix(path, "/capability"))
 }
 
 var errDuplicateJSONKey = errors.New("duplicate JSON object key")

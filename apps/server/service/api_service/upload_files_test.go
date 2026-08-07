@@ -705,6 +705,93 @@ func TestUploadControlErrorClassifierIsUsedByCreateAndRenew(t *testing.T) {
 	}
 }
 
+func TestUploadControlErrorMalformedHTTPBodiesStayGeneric(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		body      string
+		operation string
+	}{
+		{
+			name:      "create_duplicate_code",
+			status:    http.StatusConflict,
+			body:      `{"error":{"code":"unknown","code":"upload_state_conflict","message":"private-duplicate-create-marker"}}`,
+			operation: "create",
+		},
+		{
+			name:      "create_malformed_json",
+			status:    http.StatusConflict,
+			body:      `{"error":{"code":"upload_state_conflict","message":"private-malformed-create-marker"`,
+			operation: "create",
+		},
+		{
+			name:      "renew_duplicate_code",
+			status:    http.StatusGone,
+			body:      `{"error":{"code":"unknown","code":"upload_session_expired","message":"private-duplicate-renew-marker"}}`,
+			operation: "renew",
+		},
+		{
+			name:      "renew_malformed_json",
+			status:    http.StatusGone,
+			body:      `{"error":{"code":"upload_session_expired","message":"private-malformed-renew-marker"`,
+			operation: "renew",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == "/v1/agents" {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(uploadAgentManifestJSON(t, true)))
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(test.body))
+			}))
+			t.Cleanup(server.Close)
+			useUploadBotConfig(t, rxBot.Config{
+				ProxyEnabled:           true,
+				ResumableUploadEnabled: true,
+				UploadPublicOrigin:     server.URL,
+			}, server.URL)
+
+			var err error
+			if test.operation == "create" {
+				_, err = NewService().CreateUpload(
+					context.Background(),
+					"alice@example.com",
+					UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1},
+					"550e8400-e29b-41d4-a716-446655440000",
+				)
+			} else {
+				_, err = NewService().RenewUploadCapability(
+					context.Background(), "alice@example.com", "file_test",
+				)
+			}
+			if !errors.Is(err, ErrUploadControlUnavailable) {
+				t.Fatalf("malformed %s error = %v, want unavailable", test.operation, err)
+			}
+			for _, sentinel := range []error{ErrUploadStateConflict, ErrUploadSessionExpired, ErrUploadLimitExceeded} {
+				if errors.Is(err, sentinel) {
+					t.Fatalf("malformed %s error matched allowlisted sentinel %v", test.operation, sentinel)
+				}
+			}
+			for _, marker := range []string{
+				"private-duplicate-create-marker",
+				"private-malformed-create-marker",
+				"private-duplicate-renew-marker",
+				"private-malformed-renew-marker",
+			} {
+				if strings.Contains(err.Error(), marker) {
+					t.Fatalf("malformed %s error leaked %q: %v", test.operation, marker, err)
+				}
+			}
+		})
+	}
+}
+
 func TestCreateUploadLogsCategoriesWithoutSensitiveMarkers(t *testing.T) {
 	logPath := captureUploadLogs(t)
 	_ = classifyUploadControlError(&rxBot.APIError{

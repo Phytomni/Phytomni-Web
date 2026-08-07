@@ -61,6 +61,35 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestUploadControlStrictModeRejectsDuplicateNon2xxEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":{"code":"unknown","code":"upload_state_conflict","message":"upload state conflict"}}`))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, strictErr := client.doJSONWithMetaOptions(
+		context.Background(), http.MethodPost, "/v1/files", nil, nil, true,
+	)
+	if !errors.Is(strictErr, errDuplicateJSONKey) {
+		t.Fatalf("strict upload error = %T %v, want duplicate-key rejection", strictErr, strictErr)
+	}
+	var strictAPIError *APIError
+	if errors.As(strictErr, &strictAPIError) {
+		t.Fatalf("strict upload error was decoded before duplicate validation: %#v", strictAPIError)
+	}
+
+	_, nonUploadErr := client.doJSONWithMetaOptions(
+		context.Background(), http.MethodPost, "/v1/agents/analyst/runs", nil, nil, true,
+	)
+	var nonUploadAPIError *APIError
+	if !errors.As(nonUploadErr, &nonUploadAPIError) || nonUploadAPIError.Code != "upload_state_conflict" {
+		t.Fatalf("non-upload error behavior changed: %T %#v", nonUploadErr, nonUploadErr)
+	}
+}
+
 func TestChatCompletionClientsDropObsoleteDatasetDescriptionAcrossRequestPaths(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
