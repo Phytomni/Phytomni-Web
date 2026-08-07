@@ -983,6 +983,42 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).not.toHaveBeenCalled();
   });
 
+  it("keeps an in-flight background reload authoritative when the live dialogue is reselected", async () => {
+    const pending = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
+    const state = getChatState("d1");
+    state.renderedChat = {
+      dialogue_id: "d1",
+      messages: [{ role: "assistant", content: "stale rendered answer" }],
+    };
+    state.historyHydration = "ready";
+    mockGetAnswerCheck.mockReturnValueOnce(pending.promise);
+
+    const { reloadChat, selectChat } = makeComposable();
+    const reload = reloadChat("d1");
+    await expect(selectChat("d1")).resolves.toBeUndefined();
+
+    expect(mockGetAnswerCheck).toHaveBeenCalledOnce();
+    expect(currentChatId.value).toBe("d1");
+    expect(updateUrlWithChatId).toHaveBeenCalledOnce();
+    expect(scrollToBottom).toHaveBeenCalledOnce();
+
+    pending.resolve(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "material-update",
+          query: "updated question",
+          answer: "updated material answer",
+          tool_name: "ChatAgent",
+        }),
+      ])
+    );
+
+    await expect(reload).resolves.toBe("applied");
+    expect(messageAt("d1", 1, "reselected material reload").content).toBe(
+      "updated material answer"
+    );
+  });
+
   it("supersedes an in-flight reload when its captured state is rekeyed", async () => {
     const pending = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
     const capturedState = getChatState("d1");

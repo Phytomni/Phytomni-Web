@@ -231,7 +231,11 @@ export function useChatAgentRunLifecycle(options: {
   const synchronize = (): void => {
     const desiredRows = new Map<
       string,
-      { dialogueId: string; initial?: AgentTaskLifecycle }
+      {
+        dialogueId: string;
+        state: ChatUIState;
+        initial?: AgentTaskLifecycle;
+      }
     >();
     for (const [dialogueId, state] of Object.entries(
       options.chatStates.value
@@ -244,22 +248,43 @@ export function useChatAgentRunLifecycle(options: {
         const reloadWork = reloadWorkByRow.get(rowId);
         if (
           snapshot?.terminal &&
-          (!reloadWork?.terminal ||
-            reloadWork.dialogueId !== dialogueId ||
-            reloadWork.state !== state)
+          (!reloadWork?.terminal || reloadWork.state !== state)
         ) {
           continue;
         }
         if (desiredRows.has(rowId)) continue;
         desiredRows.set(rowId, {
           dialogueId,
+          state,
           initial: state.agentRunLifecycles[rowId],
         });
       }
     }
 
     for (const [rowId, dialogueId] of watchedRows) {
-      if (desiredRows.get(rowId)?.dialogueId === dialogueId) continue;
+      const desired = desiredRows.get(rowId);
+      if (desired?.dialogueId === dialogueId) continue;
+      const reloadWork = reloadWorkByRow.get(rowId);
+      if (
+        desired &&
+        reloadWork?.dialogueId === dialogueId &&
+        reloadWork.state === desired.state
+      ) {
+        clearReloadTimer(reloadWork);
+        const migratedWork: ReloadWork = {
+          dialogueId: desired.dialogueId,
+          state: desired.state,
+          signature: reloadWork.signature,
+          terminal: reloadWork.terminal,
+          attempts: 0,
+        };
+        reloadWorkByRow.set(rowId, migratedWork);
+        watchedRows.set(rowId, desired.dialogueId);
+        if (!activeReloadRows.has(rowId)) {
+          void runReloadWork(rowId, migratedWork);
+        }
+        continue;
+      }
       lifecycle.unwatchRow(rowId);
       watchedRows.delete(rowId);
       cancelReloadWork(rowId);

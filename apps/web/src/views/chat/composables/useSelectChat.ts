@@ -175,31 +175,38 @@ export function useSelectChat(opts: {
     // another dialogue's renderedChat or steals foreground URL/scroll.
     const capturedDialogueId = dialogueId;
     const chatState = getChatState(capturedDialogueId);
-    // A newer selection of this same dialogue supersedes any older fetch.
-    const hydrationGeneration = beginHydration(capturedDialogueId);
-    const isCurrentHydration = () =>
-      hydrationGenerations.get(capturedDialogueId) === hydrationGeneration &&
-      ownsChatState(capturedDialogueId, chatState);
     if (mode.foreground) currentChatId.value = capturedDialogueId;
     const chat = chatList.value.find(
       (c: Chat) => c.dialogue_id === capturedDialogueId
     );
 
     // A live rendered owner already contains message-scoped stream/runtime
-    // state. Re-selecting it must not rehydrate stale history over that tree.
+    // state. Re-selecting it must not rehydrate stale history over that tree or
+    // supersede a material background hydration that is already in flight.
     if (!mode.force && chatState.renderedChat) {
-      if (chatState.renderedChat.messages.length > 0 && isCurrentHydration()) {
+      const ownsLiveRenderedState = () =>
+        ownsChatState(capturedDialogueId, chatState);
+      if (
+        chatState.renderedChat.messages.length > 0 &&
+        ownsLiveRenderedState()
+      ) {
         if (mode.foreground) await scrollToBottom();
       }
       if (
         mode.foreground &&
-        isCurrentHydration() &&
+        ownsLiveRenderedState() &&
         currentChatId.value === capturedDialogueId
       ) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return "applied";
     }
+
+    // Only a hydration that issues a history request supersedes an older one.
+    const hydrationGeneration = beginHydration(capturedDialogueId);
+    const isCurrentHydration = () =>
+      hydrationGenerations.get(capturedDialogueId) === hydrationGeneration &&
+      ownsChatState(capturedDialogueId, chatState);
 
     const previousHistoryHydration = chatState.historyHydration;
     if (!mode.force) chatState.historyHydration = "loading";

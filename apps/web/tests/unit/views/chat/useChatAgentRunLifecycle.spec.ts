@@ -87,6 +87,179 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
+  it("recreates nonterminal material hydration under a same-state dialogue rekey", async () => {
+    vi.useFakeTimers();
+    const oldReload = deferred<"superseded">();
+    const newReload = deferred<"applied">();
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        dialogue_id: "temporary",
+        messages: [
+          buildChatMessage({
+            id: "311",
+            tool_name: "DeepGenomeAgent",
+            status: "RUNNING",
+            content: "stale partial report",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref<Record<string, typeof state>>({ temporary: state });
+    const reloadChat = vi.fn(async (dialogueId: string) => {
+      if (dialogueId === "temporary") {
+        const outcome = await oldReload.promise;
+        const owner = chatStates.value[dialogueId];
+        if (owner?.renderedChat) {
+          owner.renderedChat.messages[0].content = "stale old-owner write";
+        }
+        return outcome;
+      }
+      const outcome = await newReload.promise;
+      const owner = chatStates.value[dialogueId];
+      if (owner?.renderedChat) {
+        owner.renderedChat.messages[0].content = "hydrated server report";
+      }
+      return outcome;
+    });
+    const fetchLifecycle = vi.fn().mockResolvedValue(
+      response(
+        lifecycle(311, {
+          phase: "RUNNING",
+          report_revision: 1,
+          artifact_summary: {
+            image_count: 0,
+            output_directory_count: 0,
+            has_report: true,
+          },
+        })
+      )
+    );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    expect(reloadChat).toHaveBeenCalledOnce();
+    expect(reloadChat).toHaveBeenCalledWith("temporary");
+
+    if (!state.renderedChat) throw new Error("expected rendered Chat owner");
+    state.renderedChat.dialogue_id = "server";
+    chatStates.value = { server: state };
+    await flush();
+
+    oldReload.resolve("superseded");
+    await flush();
+    expect(state.renderedChat.messages[0].content).toBe("stale partial report");
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+    expect(reloadChat).toHaveBeenLastCalledWith("server");
+
+    newReload.resolve("applied");
+    await flush();
+    expect(state.renderedChat.messages[0].content).toBe(
+      "hydrated server report"
+    );
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("settles terminal material hydration under a same-state dialogue rekey before cleanup", async () => {
+    vi.useFakeTimers();
+    const oldReload = deferred<"superseded">();
+    const newReload = deferred<"applied">();
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        dialogue_id: "temporary",
+        messages: [
+          buildChatMessage({
+            id: "312",
+            tool_name: "DeepGenomeAgent",
+            status: "RUNNING",
+            content: "stale terminal report",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref<Record<string, typeof state>>({ temporary: state });
+    const reloadChat = vi.fn(async (dialogueId: string) => {
+      if (dialogueId === "temporary") {
+        const outcome = await oldReload.promise;
+        const owner = chatStates.value[dialogueId];
+        if (owner?.renderedChat) {
+          owner.renderedChat.messages[0].content = "stale old-owner final";
+        }
+        return outcome;
+      }
+      const outcome = await newReload.promise;
+      const owner = chatStates.value[dialogueId];
+      if (owner?.renderedChat) {
+        owner.renderedChat.messages[0] = {
+          ...owner.renderedChat.messages[0],
+          content: "hydrated server final",
+          status: "SUCCEEDED",
+        };
+      }
+      return outcome;
+    });
+    const fetchLifecycle = vi.fn().mockResolvedValue(
+      response(
+        lifecycle(312, {
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+          artifact_summary: {
+            image_count: 0,
+            output_directory_count: 0,
+            has_report: true,
+          },
+        })
+      )
+    );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    expect(reloadChat).toHaveBeenCalledOnce();
+
+    if (!state.renderedChat) throw new Error("expected rendered Chat owner");
+    state.renderedChat.dialogue_id = "server";
+    chatStates.value = { server: state };
+    await flush();
+
+    oldReload.resolve("superseded");
+    await flush();
+    expect(state.renderedChat.messages[0].content).toBe(
+      "stale terminal report"
+    );
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+    expect(reloadChat).toHaveBeenLastCalledWith("server");
+
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fetchLifecycle).toHaveBeenCalledOnce();
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+
+    newReload.resolve("applied");
+    await flush();
+    expect(state.renderedChat.messages[0]).toMatchObject({
+      content: "hydrated server final",
+      status: "SUCCEEDED",
+    });
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fetchLifecycle).toHaveBeenCalledOnce();
+    expect(reloadChat).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
   it("converges successive Deep Genome revisions without disturbing another dialogue", async () => {
     vi.useFakeTimers();
     const owner = buildChatState({
@@ -478,7 +651,7 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
-  it.each(["removed", "rekeyed", "dialogue-disposed", "disposed"] as const)(
+  it.each(["removed", "dialogue-disposed", "disposed"] as const)(
     "cancels a pending hydration retry when its row is %s",
     async (mode) => {
       vi.useFakeTimers();
@@ -521,9 +694,6 @@ describe("useChatAgentRunLifecycle", () => {
 
       if (mode === "removed") {
         chatStates.value.deep.renderedChat = { messages: [] };
-        await flush();
-      } else if (mode === "rekeyed") {
-        chatStates.value = { moved: state };
         await flush();
       } else if (mode === "dialogue-disposed") {
         coordinator.disposeDialogue("deep");
