@@ -559,7 +559,11 @@ describe("ChatInteractionV2 — behavior matrix", () => {
           },
           ChatComposer: {
             name: "ChatComposer",
-            props: ["fileList", "attachmentAnnouncement"],
+            props: [
+              "fileList",
+              "attachmentAnnouncement",
+              "attachmentAnnouncementNonce",
+            ],
             setup(
               _props: unknown,
               { expose }: { expose: (value: Record<string, unknown>) => void }
@@ -599,6 +603,9 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     await nextTick();
 
     const composer = wrapper.findComponent({ name: "ChatComposer" });
+    const initialAnnouncementNonce = Number(
+      composer.props("attachmentAnnouncementNonce")
+    );
     chatUploadQueueState.options?.onValidationError?.({
       code: "invalid_size",
       fileName: "first.bam",
@@ -606,6 +613,35 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     await nextTick();
     await flushPromises();
     expect(composer.props("attachmentAnnouncement")).toContain("first.bam");
+    const firstRejectionNonce = Number(
+      composer.props("attachmentAnnouncementNonce")
+    );
+    expect(firstRejectionNonce).toBe(initialAnnouncementNonce + 1);
+
+    chatUploadQueueState.options?.onValidationError?.({
+      code: "invalid_size",
+      fileName: "first.bam",
+    });
+    await nextTick();
+    await flushPromises();
+    expect(composer.props("attachmentAnnouncement")).toContain("first.bam");
+    expect(composer.props("attachmentAnnouncementNonce")).toBe(
+      firstRejectionNonce + 1
+    );
+
+    const craftedFileName = `<script>${"x".repeat(240)}</script>.bam`;
+    chatUploadQueueState.options?.onValidationError?.({
+      code: "invalid_filename",
+      fileName: craftedFileName,
+    });
+    await nextTick();
+    await flushPromises();
+    const boundedAnnouncement = String(
+      composer.props("attachmentAnnouncement")
+    );
+    expect(boundedAnnouncement).not.toContain("<");
+    expect(boundedAnnouncement).not.toContain(">");
+    expect(boundedAnnouncement.length).toBeLessThan(180);
 
     states.getChatState(dialogueId).fileList = [item];
     await nextTick();

@@ -408,6 +408,7 @@ export function removeDeletedChat(options: {
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
                   :attachment-announcement="attachmentAnnouncement"
+                  :attachment-announcement-nonce="attachmentAnnouncementNonce"
                   :has-blocking-uploads="hasBlockingUploads"
                   :attachment-target-available="attachmentTargetAvailable"
                   :attachment-target-blocked="attachmentTargetBlocked"
@@ -608,6 +609,7 @@ import {
   nextTick,
   watch,
   computed,
+  reactive,
 } from "vue";
 import Sidebar from "./ChatSidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
@@ -777,10 +779,29 @@ const {
 
 const botAvatar = chatLogo;
 
+const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
+
+function boundedAttachmentAnnouncementFileName(fileName: string): string {
+  const normalized = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return t("chat.upload.fileSuffixFallback");
+  const codePoints = Array.from(normalized);
+  if (codePoints.length <= MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH) {
+    return normalized;
+  }
+  return `${codePoints
+    .slice(0, MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH - 1)
+    .join("")}…`;
+}
+
 const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
   const messageKey = `chat.attachmentErrors.${error.code}`;
   const message = t(messageKey, {
-    file: error.fileName ?? "",
+    file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
     maxFiles: CHAT_ATTACHMENT_LIMITS.maxFiles,
     maxFileMb: CHAT_ATTACHMENT_LIMITS.maxFileBytes / 1024 / 1024,
     maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
@@ -957,10 +978,22 @@ const {
   refreshingMessages,
 } = useChatStates();
 
+const attachmentAnnouncementNonces = reactive(new Map<string, number>());
+const attachmentAnnouncementNonce = computed(() => {
+  const dialogueId = currentChatId.value;
+  // Keep the computed invalidated when the per-dialogue nonce changes.
+  void attachmentAnnouncement.value;
+  return dialogueId ? (attachmentAnnouncementNonces.get(dialogueId) ?? 0) : 0;
+});
+
 function announceAttachment(message: string): void {
   const ownerDialogueId = currentChatId.value;
   if (!ownerDialogueId) return;
   const ownerState = getChatState(ownerDialogueId);
+  attachmentAnnouncementNonces.set(
+    ownerDialogueId,
+    (attachmentAnnouncementNonces.get(ownerDialogueId) ?? 0) + 1
+  );
   ownerState.attachmentAnnouncement = "";
   void nextTick(() => {
     if (currentChatId.value === ownerDialogueId) {
@@ -976,13 +1009,13 @@ async function onAttachmentDuplicate(
   const ownerDialogueId = currentChatId.value;
   if (!ownerDialogueId) return;
   focusedUploadLocalId.value = localId;
-  attachmentAnnouncement.value = "";
+  announceAttachment(
+    t("chat.upload.alreadyAttached", {
+      file: boundedAttachmentAnnouncementFileName(fileName),
+    })
+  );
   composerRef.value?.openHeader();
   await nextTick();
-  const ownerState = getChatState(ownerDialogueId);
-  ownerState.attachmentAnnouncement = t("chat.upload.alreadyAttached", {
-    file: fileName,
-  });
   if (currentChatId.value !== ownerDialogueId) return;
   const itemIndex = fileList.value.findIndex(
     (item) => item.localId === localId

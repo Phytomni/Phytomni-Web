@@ -103,6 +103,12 @@ describe("Chat progress placement integration", () => {
     expect(CHAT_SOURCE).not.toContain(
       'data-testid="chat-attachment-announcement"'
     );
+    expect(CHAT_SOURCE).toContain(
+      ':attachment-announcement-nonce="attachmentAnnouncementNonce"'
+    );
+    expect(CHAT_SOURCE).toContain(
+      "MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH"
+    );
     expect(COMPOSER_SOURCE).not.toContain("CHAT_ATTACHMENT_ACCEPT");
     expect(UPLOAD_CARD_SOURCE).toContain('role="progressbar"');
     expect(UPLOAD_CARD_SOURCE).toContain('aria-live="polite"');
