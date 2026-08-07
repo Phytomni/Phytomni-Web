@@ -140,6 +140,8 @@
     fail("available Analyst log content is missing");
   }
   if (state === "deep-genome-preparing") {
+    if (!visibleText(lifecycleStatus))
+      fail("preparing DeepGenome lifecycle status is missing or empty");
     if (root.querySelector('[data-testid="deep-genome-viewer"]'))
       fail("preparing DeepGenome mounted the result viewer");
     if (/Server task created:/u.test(visibleText(root)))
