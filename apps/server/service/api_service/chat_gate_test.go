@@ -345,6 +345,46 @@ func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *
 	}
 }
 
+func TestCheckRemoteProductAllowedResearchRejectsIncompleteFormatMatrix(t *testing.T) {
+	for _, missing := range []string{"gz", "tsv", "mtx", "tar"} {
+		t.Run("missing "+missing, func(t *testing.T) {
+			gdb := setupChatGateDB(t)
+			seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)
+			seedRemoteProductPermission(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			response := validResearchCapabilityCatalog()
+			for index := range response.Data {
+				if response.Data[index].Slug != "research" {
+					continue
+				}
+				dataset := response.Data[index].Capabilities.Attachments.Datasets
+				formats := make([]string, 0, len(dataset.Formats)-1)
+				for _, format := range dataset.Formats {
+					if format != missing {
+						formats = append(formats, format)
+					}
+				}
+				dataset.Formats = formats
+			}
+			reader := &countingResearchCatalogReader{response: response}
+			service := &Service{catalogReader: reader}
+
+			err := service.CheckRemoteProductAllowed(
+				context.Background(), "research@example.com", "InSilicoResearchAgent",
+			)
+			if !errors.Is(err, ErrResearchInputIncompatible) {
+				t.Fatalf("Research admission without %q = %v, want ErrResearchInputIncompatible", missing, err)
+			}
+			if reader.calls != 1 {
+				t.Fatalf("Research catalog calls without %q = %d, want 1", missing, reader.calls)
+			}
+		})
+	}
+}
+
 func TestDirectExplicitResearchWithoutAdmissionFetchesAndFailsClosed(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)

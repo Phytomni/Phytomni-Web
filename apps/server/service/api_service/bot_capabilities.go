@@ -196,10 +196,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		return manifest, nil
 	}
 	researchContract, researchErr := ps.validatedResearchInputContract(ctx, response)
-	researchCompatible := researchErr == nil && rxBot.ResearchFormatsCompatible(
-		RequiredResearchDatasetFormats(),
-		researchContract.DatasetFormats,
-	)
+	researchCompatible := researchErr == nil
 	if researchCompatible {
 		maxQueryChars := rxBot.ConfiguredMaxUserQueryChars()
 		if maxQueryChars < 1 {
@@ -293,7 +290,14 @@ func (ps *Service) validatedResearchInputContract(
 			return rxBot.ResearchInputContract{}, err
 		}
 	}
-	return rxBot.ValidateResearchInputContract(response)
+	contract, err := rxBot.ValidateResearchInputContract(response)
+	if err != nil {
+		return rxBot.ResearchInputContract{}, err
+	}
+	if !rxBot.ResearchFormatsCompatible(RequiredResearchDatasetFormats(), contract.DatasetFormats) {
+		return rxBot.ResearchInputContract{}, ErrResearchInputIncompatible
+	}
+	return contract, nil
 }
 
 func disabledBotResearchInputCapability() BotResearchInputCapability {

@@ -106,6 +106,28 @@ func TestResearchFormatsCompatibleCoversCompleteAndMissingMatrices(t *testing.T)
 	}
 }
 
+func TestResearchFormatsCompatibleOnlyFallsBackToArchiveSuffixes(t *testing.T) {
+	tests := []struct {
+		name       string
+		required   string
+		advertised string
+		want       bool
+	}{
+		{name: "exact compound token", required: "matrix.tsv", advertised: "matrix.tsv", want: true},
+		{name: "accepted archive suffix", required: "matrix.mtx.gz", advertised: "gz", want: true},
+		{name: "non-archive final segment", required: "matrix.tsv", advertised: "tsv", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResearchFormatsCompatible([]string{tt.required}, []string{tt.advertised})
+			if got != tt.want {
+				t.Fatalf("ResearchFormatsCompatible(%q, %q) = %v, want %v", tt.required, tt.advertised, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateResearchInputContractRejectsInvalidCatalog(t *testing.T) {
 	tests := []struct {
 		name   string

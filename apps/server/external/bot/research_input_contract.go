@@ -14,6 +14,13 @@ const (
 	maxResearchDatasetFormatSize = 64
 )
 
+var acceptedResearchArchiveFormats = map[string]struct{}{
+	"zip": {}, "zipx": {},
+	"tar": {}, "tgz": {}, "tbz": {}, "tbz2": {}, "txz": {}, "tlz": {}, "tzst": {},
+	"gz": {}, "bgz": {}, "bgzf": {}, "bgzip": {}, "bz": {}, "bz2": {}, "xz": {}, "lz": {}, "lzma": {}, "lz4": {}, "lzo": {}, "br": {}, "z": {}, "zst": {},
+	"7z": {}, "rar": {}, "cab": {}, "ace": {}, "arj": {},
+}
+
 // ResearchInputResolutionDescriptor is the bounded limit descriptor advertised
 // beside the Bot protocol-version arrays.
 type ResearchInputResolutionDescriptor struct {
@@ -50,7 +57,10 @@ func ResearchFormatsCompatible(required, advertised []string) bool {
 		}
 		separator := strings.LastIndexByte(format, '.')
 		if separator > 0 {
-			if _, ok := advertisedSet[format[separator+1:]]; ok {
+			archiveFormat := format[separator+1:]
+			_, acceptedArchive := acceptedResearchArchiveFormats[archiveFormat]
+			_, advertisedArchive := advertisedSet[archiveFormat]
+			if acceptedArchive && advertisedArchive {
 				continue
 			}
 		}
