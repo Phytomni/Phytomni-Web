@@ -142,6 +142,18 @@ func uploadRequestBodyEmpty(ctx *gin.Context) bool {
 }
 
 func writeUploadServiceError(ctx *gin.Context, err error) {
+	if errors.Is(err, api_service.ErrUploadStateConflict) {
+		writeUploadControlError(ctx, http.StatusConflict, "upload_state_conflict", "upload.state_conflict")
+		return
+	}
+	if errors.Is(err, api_service.ErrUploadSessionExpired) {
+		writeUploadControlError(ctx, http.StatusGone, "upload_session_expired", "upload.session_expired")
+		return
+	}
+	if errors.Is(err, api_service.ErrUploadLimitExceeded) {
+		writeUploadControlError(ctx, http.StatusRequestEntityTooLarge, "upload_limit_exceeded", "upload.limit_exceeded")
+		return
+	}
 	if errors.Is(err, api_service.ErrAttachmentTypeUnsupported) {
 		writeUploadClassificationError(ctx, "attachment_type_unsupported", "upload.attachment_type_unsupported")
 		return
@@ -155,6 +167,14 @@ func writeUploadServiceError(ctx *gin.Context, err error) {
 		return
 	}
 	writeUploadError(ctx, http.StatusServiceUnavailable, "upload.unavailable")
+}
+
+func writeUploadControlError(ctx *gin.Context, status int, errorCode, messageKey string) {
+	ctx.JSON(status, gin.H{
+		"code":       status,
+		"error_code": errorCode,
+		"message":    i18n.T(ctx, messageKey),
+	})
 }
 
 func writeUploadClassificationError(ctx *gin.Context, code, messageKey string) {

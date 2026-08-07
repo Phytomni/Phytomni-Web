@@ -58,6 +58,9 @@ attachment_type_ambiguous = "文件名同时匹配文档和分析数据"
 unsupported_media_type = "上传请求必须使用 JSON"
 request_too_large = "上传元数据过大"
 unavailable = "文件上传暂时不可用"
+state_conflict = "上传状态已变更，请重试上传"
+session_expired = "上传会话已过期，请重新开始上传"
+limit_exceeded = "已超出上传限制"
 
 [gene]
 file_name_required = "参数file_name不能为空"

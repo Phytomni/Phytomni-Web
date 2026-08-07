@@ -58,6 +58,9 @@ attachment_type_ambiguous = "file name matches both document and analysis data"
 unsupported_media_type = "upload requests must use JSON"
 request_too_large = "upload metadata is too large"
 unavailable = "file upload is temporarily unavailable"
+state_conflict = "upload state changed; retry the upload"
+session_expired = "upload session expired; start the upload again"
+limit_exceeded = "upload limit exceeded"
 
 [gene]
 file_name_required = "parameter file_name cannot be empty"
