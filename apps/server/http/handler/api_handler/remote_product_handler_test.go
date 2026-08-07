@@ -341,6 +341,9 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if serveHandlerResearchCatalog(t, w, r) {
+					return
+				}
 				gotPath = r.URL.Path
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
@@ -446,7 +449,12 @@ func TestAgentProductResolverRejectsBeforeBot(t *testing.T) {
 			}
 			previousConfig := rxBot.BotConfig
 			hits := 0
-			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if serveHandlerResearchCatalog(t, w, r) {
+					return
+				}
+				hits++
+			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
@@ -480,7 +488,12 @@ func TestAgentProductRunRejectsFilePartsBeforeBot(t *testing.T) {
 			}
 			previousConfig := rxBot.BotConfig
 			hits := 0
-			srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if serveHandlerResearchCatalog(t, w, r) {
+					return
+				}
+				hits++
+			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
 				BaseURL:         srv.URL,
@@ -516,7 +529,10 @@ func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
 				t.Fatalf("seed user: %v", err)
 			}
 			previousConfig := rxBot.BotConfig
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if serveHandlerResearchCatalog(t, w, r) {
+					return
+				}
 				w.WriteHeader(http.StatusServiceUnavailable)
 				_, _ = w.Write([]byte("Bot implementation detail"))
 			}))

@@ -354,6 +354,135 @@ func TestQueryRejectsInvalidChatRouting(t *testing.T) {
 	}
 }
 
+func seedResearchHandlerPermission(t *testing.T) {
+	t.Helper()
+	gdb := setupRemoteProductHandlerDB(t)
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`,
+		"research@example.com", "research-role", 5,
+	).Error; err != nil {
+		t.Fatalf("seed Research user: %v", err)
+	}
+	if err := gdb.Exec(
+		`INSERT INTO tool_names (id, tool_name) VALUES (?, ?)`,
+		1, "InSilicoResearchAgent",
+	).Error; err != nil {
+		t.Fatalf("seed Research tool: %v", err)
+	}
+	if err := gdb.Exec(
+		`INSERT INTO user_tool_names (code, tool_id) VALUES (?, ?)`,
+		"research-role", 1,
+	).Error; err != nil {
+		t.Fatalf("seed Research permission: %v", err)
+	}
+}
+
+func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		language string
+		message  string
+	}{
+		{name: "English", language: "en-US", message: "Research input compatibility is temporarily unavailable"},
+		{name: "Chinese", language: "zh-CN", message: "研究输入兼容能力暂时不可用"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seedResearchHandlerPermission(t)
+			previousConfig := rxBot.BotConfig
+			catalogCalls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				catalogCalls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"upstream_diagnostic":"must-not-leak"}`))
+			}))
+			t.Cleanup(srv.Close)
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+			c, w, tracked := newAttachmentTrackingRequest(t, "InSilicoResearchAgent")
+			c.Request.Header.Set("Accept-Language", tt.language)
+			i18n.Localize()(c)
+			c.Set("username", "research@example.com")
+
+			NewHandler().AgentProductRun(c)
+
+			if w.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s, want 503", w.Code, w.Body.String())
+			}
+			var body struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.Code != http.StatusServiceUnavailable || body.Message != tt.message {
+				t.Fatalf("response=%#v, want localized compatibility 503", body)
+			}
+			if tracked.reads != 0 || tracked.bytes != 0 {
+				t.Fatalf("compatibility gate read body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+			}
+			if catalogCalls != 1 {
+				t.Fatalf("catalog calls=%d, want 1", catalogCalls)
+			}
+			if strings.Contains(w.Body.String(), "must-not-leak") {
+				t.Fatalf("upstream diagnostic leaked: %s", w.Body.String())
+			}
+		})
+	}
+}
+
+func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	previousConfig := rxBot.BotConfig
+	catalogCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		catalogCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
+	form := unreadablePreparsedMultipartForm(t, "expert", "InSilicoResearchAgent")
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c.Request.Body = tracked
+	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=already-parsed")
+	c.Request.PostForm = form.Value
+	c.Request.MultipartForm = form
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("username", "research@example.com")
+	i18n.Localize()(c)
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want 503", w.Code, w.Body.String())
+	}
+	if tracked.reads != 0 || tracked.bytes != 0 {
+		t.Fatalf("explicit Research compatibility gate read body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+	}
+	if catalogCalls != 1 {
+		t.Fatalf("explicit Research catalog calls=%d, want 1", catalogCalls)
+	}
+}
+
 func newUpdateLogRequest(t *testing.T, fields map[string]string) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var buf bytes.Buffer

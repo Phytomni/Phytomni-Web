@@ -69,6 +69,10 @@ var ErrRemoteProductDisabled = errors.New("remote product is disabled")
 // dark flag so the HTTP layer can use a safe 404 for unauthorized routes.
 var ErrRemoteProductForbidden = errors.New("remote product permission denied")
 
+// ErrResearchInputIncompatible means Bot did not advertise the exact bounded
+// Research input contract required for server-side admission.
+var ErrResearchInputIncompatible = errors.New("research input contract is incompatible")
+
 // Backward-compatible names for callers that describe the same closed gate in
 // terms of authorization or capability. Keep one sentinel so errors.Is works
 // consistently across handlers and tests.
@@ -197,6 +201,11 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 	}
 	if !containsAgentTool(resolution.AllowedTools, requirement.tool) {
 		return ErrRemoteProductDisabled
+	}
+	if requirement.tool == "InSilicoResearchAgent" {
+		if _, err := ps.validatedResearchInputContract(ctx, nil); err != nil {
+			return ErrResearchInputIncompatible
+		}
 	}
 	return nil
 }

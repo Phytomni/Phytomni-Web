@@ -94,7 +94,7 @@ func TestResearchInteropOffSkipsDiscoveryAndForwardsNoTargets(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`)
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "off", InteropTargets: []string{"mcp-peer"},
 	})
@@ -124,7 +124,7 @@ func TestResearchInteropAutoFallsBackWithoutPseudoSuccess(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusServiceUnavailable, "upstream unavailable")
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
 	})
@@ -158,7 +158,7 @@ func TestResearchInteropAutoDelegatesOnlyDiscoveredTarget(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`)
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
 	})
@@ -221,7 +221,7 @@ func TestRequiredInteropFailsBeforeAgentSubmission(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[],"errors":[{"target_id":"mcp-peer","kind":"mcp","code":"discovery_failed"}]}`)
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
 	})
@@ -241,7 +241,7 @@ func TestRequiredInteropRuntimeFailureDoesNotPersistRunning(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`, `{"id":"run-failed","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{"formatted":{"answer":"required peer failed","metadata":{"status":"FAILED","interop":[{"target_id":"mcp-peer","kind":"mcp","capability":"private-capability","status":"failed","latency_ms":11,"endpoint":"https://private.invalid","credential":"secret"}]}}}}`)
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
 	})
@@ -281,7 +281,7 @@ func TestInteropUnknownTargetFailsBeforeAgentSubmission(t *testing.T) {
 	h := newInteropDelegationServer(t, http.StatusOK, `{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"}],"errors":[]}`)
 	h.configure(t)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		InteropMode: "auto", InteropTargets: []string{"unknown-peer"},
 	})

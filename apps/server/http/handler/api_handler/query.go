@@ -61,6 +61,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusServiceUnavailable, "remote product temporarily unavailable"
 	case errors.Is(err, api_service.ErrRemoteProductForbidden):
 		return http.StatusNotFound, "remote product not found"
+	case errors.Is(err, api_service.ErrResearchInputIncompatible):
+		return http.StatusServiceUnavailable, "Research input compatibility is temporarily unavailable"
 	case errors.Is(err, api_service.ErrMissingBotRunID):
 		return http.StatusConflict, "task is not syncable through bot run state"
 	case errors.Is(err, api_service.ErrInteropRequired):
@@ -87,6 +89,14 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusBadRequest, msg
 	}
 	return http.StatusInternalServerError, "request failed"
+}
+
+func localizedQueryErrorStatus(ctx *gin.Context, err error) (int, string) {
+	status, message := queryErrorStatus(err)
+	if errors.Is(err, api_service.ErrResearchInputIncompatible) {
+		message = i18n.T(ctx, "query.research_input_incompatible")
+	}
+	return status, message
 }
 
 func writeQueryError(ctx *gin.Context, status int, message string) {
@@ -331,7 +341,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	// compatibility tool below.
 	if surface == api_service.QuerySurfaceAgentProduct {
 		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), routeTool); err != nil {
-			status, message := queryErrorStatus(err)
+			status, message := localizedQueryErrorStatus(ctx, err)
 			writeQueryError(ctx, status, message)
 			return
 		}
@@ -403,6 +413,13 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		if rxBot.BotConfig != nil && rxBot.BotConfig.MultiturnV1Enabled &&
 			in.Mode == "instant" {
 			in.Tool = "ChatAgent"
+		}
+		if in.Mode == "expert" && in.Tool == "InSilicoResearchAgent" {
+			if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
+				status, message := localizedQueryErrorStatus(ctx, err)
+				writeQueryError(ctx, status, message)
+				return
+			}
 		}
 	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
@@ -522,7 +539,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 
 	data, err := ph.service.Query(ctx, name.(string), in)
 	if err != nil {
-		status, msg := queryErrorStatus(err)
+		status, msg := localizedQueryErrorStatus(ctx, err)
 		if status >= http.StatusInternalServerError {
 			rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)
 		} else {

@@ -87,6 +87,7 @@ file_unreadable = "无法读取上传的文件"
 task_id_required = "task_id必填"
 invalid_interop_controls = "互操作控制参数无效"
 invalid_artifact_ids = "工件标识无效"
+research_input_incompatible = "研究输入兼容能力暂时不可用"
 
 [permission]
 user_id_required = "用户ID不能为空"

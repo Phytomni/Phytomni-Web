@@ -87,6 +87,7 @@ file_unreadable = "cannot read uploaded file"
 task_id_required = "task_id is required"
 invalid_interop_controls = "invalid interop controls"
 invalid_artifact_ids = "invalid artifact identifiers"
+research_input_incompatible = "Research input compatibility is temporarily unavailable"
 
 [permission]
 user_id_required = "user ID cannot be empty"

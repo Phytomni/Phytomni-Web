@@ -188,7 +188,11 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
-			out, err := NewService().Query(context.Background(), "alice", QueryInput{
+			service := NewService()
+			if tt.slug == "research" {
+				service = serviceWithValidResearchCatalog()
+			}
+			out, err := service.Query(context.Background(), "alice", QueryInput{
 				Query: "q", Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceAgentProduct,
 			})
 			if err != nil {

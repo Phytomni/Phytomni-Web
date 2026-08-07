@@ -70,6 +70,45 @@ func capabilityManifestResponse(t *testing.T, descriptors []rxBot.AgentDescripto
 	return string(body)
 }
 
+func validResearchCapabilityCatalog() *rxBot.AgentsListResponse {
+	descriptors := capabilityDescriptors()
+	for index := range descriptors {
+		if descriptors[index].Slug != "research" {
+			continue
+		}
+		descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{
+			Formats:       []string{"csv", "vcf"},
+			MaxFiles:      64,
+			MaxFileBytes:  10 << 30,
+			MaxTotalBytes: (10 << 30) * 64,
+		}
+	}
+	return &rxBot.AgentsListResponse{
+		Object: "list",
+		Data:   descriptors,
+		Protocols: map[string][]int{
+			rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion},
+			rxBot.ResultArchiveProtocol:   {rxBot.ResultArchiveProtocolVersion},
+			rxBot.ResearchInputProtocol:   {rxBot.ResearchInputProtocolVersion},
+		},
+		ResearchInputResolution: &rxBot.ResearchInputResolutionDescriptor{
+			MaxUserQueryChars: 262_144,
+			MaxAttachments:    64,
+			MaxDatasetPaths:   64,
+			MaxReferences:     128,
+		},
+	}
+}
+
+func researchCapabilityResponse(t *testing.T, response *rxBot.AgentsListResponse) string {
+	t.Helper()
+	body, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal Research capability response: %v", err)
+	}
+	return string(body)
+}
+
 func capabilityBySlug(rows []BotCapability, slug string) BotCapability {
 	for _, row := range rows {
 		if row.Slug == slug {
@@ -95,6 +134,122 @@ func disabledManifest(t *testing.T, manifest BotCapabilityManifest) {
 		if row.AttachmentPurposes == nil || len(row.AttachmentPurposes) != 0 {
 			t.Fatalf("row %q attachment purposes = %#v, want non-nil empty slice", row.Slug, row.AttachmentPurposes)
 		}
+	}
+}
+
+func TestBotCapabilitiesProjectsResearchInputContract(t *testing.T) {
+	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, validResearchCapabilityCatalog()), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+		ProxyEnabled:           true,
+		ResumableUploadEnabled: true,
+		UploadPublicOrigin:     "https://upload.example",
+		ResearchEnabled:        true,
+		MaxQueryChars:          131_072,
+	})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.ResearchInput.Enabled ||
+		manifest.ResearchInput.Protocol != rxBot.ResearchInputProtocol ||
+		manifest.ResearchInput.MaxQueryChars != 131_072 ||
+		manifest.ResearchInput.MaxAttachments != 64 ||
+		manifest.ResearchInput.MaxDatasetPaths != 64 ||
+		manifest.ResearchInput.MaxReferences != 128 {
+		t.Fatalf("Research input capability = %#v", manifest.ResearchInput)
+	}
+	if manifest.Upload.MaxAttachments != 64 {
+		t.Fatalf("upload max attachments = %d, want 64", manifest.Upload.MaxAttachments)
+	}
+	if !capabilityBySlug(manifest.Agents, "research").Enabled {
+		t.Fatal("validated Research capability remained disabled")
+	}
+}
+
+func TestBotCapabilitiesMalformedResearchInputDisablesOnlyResearch(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*rxBot.AgentsListResponse)
+	}{
+		{
+			name: "missing protocol",
+			mutate: func(response *rxBot.AgentsListResponse) {
+				delete(response.Protocols, rxBot.ResearchInputProtocol)
+			},
+		},
+		{
+			name: "malformed limits",
+			mutate: func(response *rxBot.AgentsListResponse) {
+				response.ResearchInputResolution.MaxAttachments = 257
+			},
+		},
+		{
+			name: "incompatible formats",
+			mutate: func(response *rxBot.AgentsListResponse) {
+				for index := range response.Data {
+					if response.Data[index].Slug == "research" {
+						response.Data[index].Capabilities.Attachments.Datasets.Formats = []string{"csv"}
+					}
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := validResearchCapabilityCatalog()
+			tt.mutate(response)
+			response.Data[0].Origin = "private-upstream-diagnostic"
+			srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
+			t.Cleanup(srv.Close)
+			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+				ProxyEnabled:           true,
+				ResumableUploadEnabled: true,
+				UploadPublicOrigin:     "https://upload.example",
+				ResearchEnabled:        true,
+				MaxQueryChars:          131_072,
+			})
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.ResearchInput.Enabled || capabilityBySlug(manifest.Agents, "research").Enabled {
+				t.Fatalf("incompatible Research remained enabled: %#v", manifest)
+			}
+			if !capabilityBySlug(manifest.Agents, "chat").Enabled || !manifest.Upload.Enabled {
+				t.Fatalf("unrelated capabilities were disabled: %#v", manifest)
+			}
+			encoded, err := json.Marshal(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(encoded), "private-upstream-diagnostic") {
+				t.Fatalf("upstream diagnostics leaked: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestBotCapabilitiesResearchInputDoesNotEnableDisabledUpload(t *testing.T) {
+	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, validResearchCapabilityCatalog()), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+		ProxyEnabled:    true,
+		ResearchEnabled: true,
+		MaxQueryChars:   131_072,
+	})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Upload.Enabled || capabilityBySlug(manifest.Agents, "research").Enabled {
+		t.Fatalf("Research contract bypassed the upload gate: %#v", manifest)
+	}
+	if !manifest.ResearchInput.Enabled {
+		t.Fatalf("validated input descriptor should remain finite and enabled: %#v", manifest.ResearchInput)
 	}
 }
 
@@ -155,13 +310,15 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 }
 
 func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
-	descriptors := capabilityDescriptors()
+	response := validResearchCapabilityCatalog()
+	descriptors := response.Data
 	for index := range descriptors {
-		if descriptors[index].Slug == "analyst" || descriptors[index].Slug == "research" {
-			descriptors[index].Capabilities.Attachments.Datasets = &struct{}{}
+		if descriptors[index].Slug == "analyst" {
+			descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{}
 		}
 	}
-	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
+	response.Data = descriptors
+	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
 		ProxyEnabled:           true,
@@ -190,7 +347,8 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 			descriptors[index].Capabilities.Attachments.Datasets = nil
 		}
 	}
-	srvNoDataset := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
+	response.Data = descriptors
+	srvNoDataset := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 	t.Cleanup(srvNoDataset.Close)
 	useCapabilityBotConfig(t, srvNoDataset.URL, rxBot.Config{
 		ProxyEnabled:           true,
@@ -212,7 +370,7 @@ func TestBotCapabilitiesProjectsAdvertisedAttachmentChannelsForEveryEnabledAgent
 	descriptors := capabilityDescriptors()
 	for index := range descriptors {
 		if descriptors[index].Slug == "data" || descriptors[index].Slug == "design" {
-			descriptors[index].Capabilities.Attachments.Datasets = &struct{}{}
+			descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{}
 		}
 	}
 	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
@@ -307,7 +465,8 @@ func TestLocalCapabilityEnabledUsesDedicatedRemoteFlags(t *testing.T) {
 }
 
 func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing.T) {
-	descriptors := capabilityDescriptors()
+	researchCatalog := validResearchCapabilityCatalog()
+	descriptors := researchCatalog.Data
 	config := rxBot.Config{
 		ProxyEnabled:           true,
 		ResumableUploadEnabled: true,
@@ -318,7 +477,10 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 		DesignEnabled:          true,
 	}
 	protocols := func(resultArchive bool) map[string][]int {
-		values := map[string][]int{rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion}}
+		values := map[string][]int{
+			rxBot.ResumableUploadProtocol: {rxBot.ResumableUploadProtocolVersion},
+			rxBot.ResearchInputProtocol:   {rxBot.ResearchInputProtocolVersion},
+		}
 		if resultArchive {
 			values[rxBot.ResultArchiveProtocol] = []int{rxBot.ResultArchiveProtocolVersion}
 		}
@@ -370,7 +532,12 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, err := json.Marshal(rxBot.AgentsListResponse{Object: "list", Data: tt.descriptors, Protocols: tt.protocols})
+			body, err := json.Marshal(rxBot.AgentsListResponse{
+				Object:                  "list",
+				Data:                    tt.descriptors,
+				Protocols:               tt.protocols,
+				ResearchInputResolution: researchCatalog.ResearchInputResolution,
+			})
 			if err != nil {
 				t.Fatalf("marshal agent response: %v", err)
 			}
@@ -400,7 +567,7 @@ func TestBotCapabilitiesAnalystResearchRequireIndependentLocalFlags(t *testing.T
 	descriptors := capabilityDescriptors()
 	for index := range descriptors {
 		if descriptors[index].Slug == "analyst" || descriptors[index].Slug == "research" {
-			descriptors[index].Capabilities.Attachments.Datasets = &struct{}{}
+			descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{}
 		}
 	}
 	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)

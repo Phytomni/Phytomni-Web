@@ -276,6 +276,91 @@ func TestCheckRemoteProductAllowed_GrantedRole(t *testing.T) {
 	}
 }
 
+func researchCatalogServer(t *testing.T, response string, calls *int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		(*calls)++
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/agents" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
+}
+
+type staticResearchCatalogReader struct {
+	response *rxBot.AgentsListResponse
+}
+
+func (reader staticResearchCatalogReader) GetAgents(context.Context) (*rxBot.AgentsListResponse, error) {
+	return reader.response, nil
+}
+
+func serviceWithValidResearchCatalog() *Service {
+	return &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+}
+
+func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)
+	seedRemoteProductPermission(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+	calls := 0
+	srv := researchCatalogServer(t, `{}`, &calls)
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckRemoteProductAllowed(context.Background(), "research@example.com", "InSilicoResearchAgent")
+	if !errors.Is(err, ErrResearchInputIncompatible) {
+		t.Fatalf("Research admission error = %v, want ErrResearchInputIncompatible", err)
+	}
+	if calls != 1 {
+		t.Fatalf("Research catalog calls = %d, want 1", calls)
+	}
+}
+
+func TestCheckRemoteProductAllowedUnauthorizedResearchSkipsResearchContract(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "denied@example.com", "ordinary", 5)
+	calls := 0
+	srv := researchCatalogServer(t, `{}`, &calls)
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	err := NewService().CheckRemoteProductAllowed(context.Background(), "denied@example.com", "InSilicoResearchAgent")
+	if !errors.Is(err, ErrRemoteProductForbidden) {
+		t.Fatalf("unauthorized Research error = %v, want ErrRemoteProductForbidden", err)
+	}
+	if calls != 0 {
+		t.Fatalf("unauthorized Research called catalog %d time(s)", calls)
+	}
+}
+
+func TestCheckRemoteProductAllowedOtherAgentDoesNotRequireResearchContract(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "design@example.com", "design-role", 5)
+	seedRemoteProductPermission(t, gdb, "design-role", "DigitalDesignAgent", 1)
+	calls := 0
+	srv := researchCatalogServer(t, `{}`, &calls)
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, DesignEnabled: true}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	if err := NewService().CheckRemoteProductAllowed(context.Background(), "design@example.com", "DigitalDesignAgent"); err != nil {
+		t.Fatalf("Design admission changed with incompatible Research: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("Design admission called Research catalog %d time(s)", calls)
+	}
+}
+
 func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
 	setupChatGateDB(t)
 	previous := rxBot.BotConfig

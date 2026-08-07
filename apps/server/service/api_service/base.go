@@ -19,9 +19,21 @@ type resultDeliveryClient interface {
 	RetryRunDelivery(context.Context, string) (*rxBot.RunDelivery, error)
 }
 
+type agentCatalogReader interface {
+	GetAgents(context.Context) (*rxBot.AgentsListResponse, error)
+}
+
 type Service struct {
 	runReader      agentRunReader
 	deliveryClient resultDeliveryClient
+	catalogReader  agentCatalogReader
+}
+
+func (ps *Service) agentCatalogReader() agentCatalogReader {
+	if ps != nil && ps.catalogReader != nil {
+		return ps.catalogReader
+	}
+	return rxBot.NewClient()
 }
 
 func (ps *Service) agentRunReader() agentRunReader {

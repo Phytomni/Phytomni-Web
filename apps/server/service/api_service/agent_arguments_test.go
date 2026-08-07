@@ -38,7 +38,7 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "paper", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
 		Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_research"}},
 	})

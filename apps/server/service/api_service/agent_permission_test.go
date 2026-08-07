@@ -111,7 +111,7 @@ func TestResolveAgentPermissions(t *testing.T) {
 			if !reflect.DeepEqual(got.GrantedTools, want) || !reflect.DeepEqual(got.AllowedTools, want) {
 				t.Fatalf("granted/allowed = %#v/%#v, want %#v", got.GrantedTools, got.AllowedTools, want)
 			}
-			if err := NewService().CheckRemoteProductAllowed(context.Background(), role+"@example.com", "research"); err != nil {
+			if err := serviceWithValidResearchCatalog().CheckRemoteProductAllowed(context.Background(), role+"@example.com", "research"); err != nil {
 				t.Fatalf("remote product gate: %v", err)
 			}
 		})

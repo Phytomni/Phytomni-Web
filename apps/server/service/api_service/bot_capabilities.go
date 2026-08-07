@@ -138,6 +138,18 @@ const (
 	resumableUploadMaxAttachments       = 10
 )
 
+// BotResearchInputCapability is the finite browser-facing projection of the
+// validated Research input contract. Dataset formats remain server-owned and
+// are not exposed because the browser does not make admission decisions.
+type BotResearchInputCapability struct {
+	Enabled         bool   `json:"enabled"`
+	Protocol        string `json:"protocol"`
+	MaxQueryChars   int    `json:"max_user_query_chars"`
+	MaxAttachments  int    `json:"max_attachments_per_request"`
+	MaxDatasetPaths int    `json:"max_research_dataset_paths"`
+	MaxReferences   int    `json:"max_research_input_references"`
+}
+
 // BotUploadCapability is the bounded browser-facing upload contract. The
 // origin is copied only from the explicitly configured public origin; it is
 // never derived from the internal Bot BaseURL.
@@ -152,8 +164,9 @@ type BotUploadCapability struct {
 // BotCapabilityManifest keeps the existing agent capability list and the
 // negotiated upload contract under one bounded response object.
 type BotCapabilityManifest struct {
-	Agents []BotCapability     `json:"agents"`
-	Upload BotUploadCapability `json:"upload"`
+	Agents        []BotCapability            `json:"agents"`
+	Upload        BotUploadCapability        `json:"upload"`
+	ResearchInput BotResearchInputCapability `json:"research_input"`
 }
 
 // BotCapabilities returns the Web capability manifest. Bot /v1/agents is only
@@ -162,8 +175,9 @@ type BotCapabilityManifest struct {
 // bounded all-disabled shape so callers never receive private upstream data.
 func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapabilityManifest, error) {
 	manifest := BotCapabilityManifest{
-		Agents: disabledBotCapabilities(),
-		Upload: disabledBotUploadCapability(),
+		Agents:        disabledBotCapabilities(),
+		Upload:        disabledBotUploadCapability(),
+		ResearchInput: disabledBotResearchInputCapability(),
 	}
 	cfg := rxBot.BotConfig
 	if cfg == nil || !cfg.ProxyEnabled || strings.TrimSpace(cfg.BaseURL) == "" {
@@ -173,13 +187,32 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	response, err := rxBot.NewClient().GetAgents(ctx)
+	response, err := ps.agentCatalogReader().GetAgents(ctx)
 	if err != nil {
 		return manifest, nil
 	}
 	presence, err := rxBot.ValidateWebAgentDescriptors(response)
 	if err != nil {
 		return manifest, nil
+	}
+	researchContract, researchErr := ps.validatedResearchInputContract(ctx, response)
+	researchCompatible := researchErr == nil
+	if researchCompatible {
+		maxQueryChars := rxBot.ConfiguredMaxUserQueryChars()
+		if maxQueryChars < 1 {
+			maxQueryChars = rxBot.DefaultMaxUserQueryChars
+		}
+		if researchContract.MaxUserQueryChars < maxQueryChars {
+			maxQueryChars = researchContract.MaxUserQueryChars
+		}
+		manifest.ResearchInput = BotResearchInputCapability{
+			Enabled:         true,
+			Protocol:        rxBot.ResearchInputProtocol,
+			MaxQueryChars:   maxQueryChars,
+			MaxAttachments:  researchContract.MaxAttachments,
+			MaxDatasetPaths: researchContract.MaxDatasetPaths,
+			MaxReferences:   researchContract.MaxReferences,
+		}
 	}
 	uploadOrigin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)
 	uploadEnabled := cfg.ResumableUploadEnabled && validOrigin && rxBot.SupportsProtocol(
@@ -188,12 +221,19 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		rxBot.ResumableUploadProtocolVersion,
 	)
 	if uploadEnabled {
+		maxAttachments := resumableUploadMaxAttachments
+		if researchCompatible {
+			maxAttachments = researchContract.MaxAttachments
+			if maxAttachments > rxBot.HardMaxAssetAttachmentRefs {
+				maxAttachments = rxBot.HardMaxAssetAttachmentRefs
+			}
+		}
 		manifest.Upload = BotUploadCapability{
 			Enabled:        true,
 			Protocol:       rxBot.ResumableUploadProtocol,
 			UploadOrigin:   uploadOrigin,
 			MaxFileBytes:   resumableUploadMaxFileBytes,
-			MaxAttachments: resumableUploadMaxAttachments,
+			MaxAttachments: maxAttachments,
 		}
 	}
 
@@ -203,6 +243,9 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 			continue
 		}
 		if !localCapabilityEnabled(definition.Slug, cfg) {
+			continue
+		}
+		if definition.Slug == "research" && !researchCompatible {
 			continue
 		}
 		attachmentPurposes := attachmentPurposesFor(agentPresence, uploadEnabled)
@@ -228,6 +271,30 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		}
 	}
 	return manifest, nil
+}
+
+// validatedResearchInputContract reuses an already-fetched catalog for public
+// projection and fetches through the injectable server-side reader for direct
+// admission. It returns only the validated finite contract, never diagnostics.
+func (ps *Service) validatedResearchInputContract(
+	ctx context.Context,
+	response *rxBot.AgentsListResponse,
+) (rxBot.ResearchInputContract, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if response == nil {
+		var err error
+		response, err = ps.agentCatalogReader().GetAgents(ctx)
+		if err != nil {
+			return rxBot.ResearchInputContract{}, err
+		}
+	}
+	return rxBot.ValidateResearchInputContract(response)
+}
+
+func disabledBotResearchInputCapability() BotResearchInputCapability {
+	return BotResearchInputCapability{Protocol: rxBot.ResearchInputProtocol}
 }
 
 func disabledBotUploadCapability() BotUploadCapability {
