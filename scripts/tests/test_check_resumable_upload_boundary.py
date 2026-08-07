@@ -219,6 +219,62 @@ class ResumableUploadBoundaryTests(unittest.TestCase):
 
         self.assertEqual(checker.check(tmp_path), [])
 
+    def test_trusted_web_go_upload_service_derives_purpose(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+        source = tmp_path / checker.WEB_GO_UPLOAD_SERVICE_PATH
+        source.write_text(
+            "client.CreateUpload(ctx, rxBot.UploadCreateRequest{\n"
+            "    Purpose: string(purpose),\n"
+            "})\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(checker.check(tmp_path), [])
+
+    def test_untrusted_web_go_purpose_assignment_is_rejected(self):
+        tmp_path = self._tmp_root()
+        checker = _clean_root(tmp_path)
+        source = tmp_path / checker.GO_RELAY_PATHS[0]
+        source.write_text(
+            "Purpose: string(purpose)\n",
+            encoding="utf-8",
+        )
+
+        violations = checker.check(tmp_path)
+
+        self.assertTrue(
+            any("forbidden attachment field" in item for item in violations)
+        )
+
+    def test_trusted_web_go_upload_service_rejects_description_and_storage_fields(self):
+        fixtures = (
+            'payload["dataset_description"] = value\n',
+            'payload["object_key"] = value\n',
+        )
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                tmp_path = self._tmp_root()
+                checker = _clean_root(tmp_path)
+                source = tmp_path / checker.WEB_GO_UPLOAD_SERVICE_PATH
+                source.write_text(
+                    "client.CreateUpload(ctx, rxBot.UploadCreateRequest{\n"
+                    "    Purpose: string(purpose),\n"
+                    "})\n"
+                    + fixture,
+                    encoding="utf-8",
+                )
+
+                violations = checker.check(tmp_path)
+
+                self.assertTrue(
+                    any(
+                        "dataset description" in item
+                        or "forbidden attachment field" in item
+                        for item in violations
+                    )
+                )
+
     def test_dataset_description_is_rejected_on_browser_and_go_paths(self):
         fixtures = (
             ("web", 'formData.append("dataset_description", description)\n'),

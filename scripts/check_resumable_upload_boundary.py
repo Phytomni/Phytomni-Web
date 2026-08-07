@@ -24,7 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 # opaque capability and is governed by its own transport tests.
 BROWSER_UPLOAD_CONTROL_PATH = Path("apps/web/src/api/upload.ts")
 PUBLIC_UPLOAD_HANDLER_PATH = Path("apps/server/http/handler/api_handler/upload_files.go")
+WEB_GO_UPLOAD_SERVICE_PATH = Path("apps/server/service/api_service/upload_files.go")
 BOT_UPLOAD_CREATE_PATH = Path("apps/server/external/bot/upload_contract.go")
+
+# These are the only Web Go sources that are trusted to derive and carry the
+# classified upload purpose into the Bot create DTO. Browser-facing handlers
+# and ordinary Bot request builders must still reject the field.
+TRUSTED_UPLOAD_CREATE_PATHS = frozenset(
+    {WEB_GO_UPLOAD_SERVICE_PATH, BOT_UPLOAD_CREATE_PATH}
+)
 
 WEB_RELAY_PATHS = (
     Path("apps/web/src/views/chat/composables/useSendMessage.ts"),
@@ -37,6 +45,7 @@ GO_RELAY_PATHS = (
     Path("apps/server/http/handler/api_handler/query.go"),
     Path("apps/server/service/api_service/query.go"),
     Path("apps/server/service/api_service/agent_task.go"),
+    WEB_GO_UPLOAD_SERVICE_PATH,
     Path("apps/server/external/bot/client.go"),
     Path("apps/server/external/bot/types.go"),
     Path("apps/server/external/bot/agent_arguments.go"),
@@ -328,6 +337,14 @@ def _scan_go_file(
         "dataset description serialized by Web Go",
         violations,
     )
+    if not allow_trusted_purpose:
+        _find(
+            relative,
+            source,
+            r"(?<![\w.])Purpose\s*:",
+            "forbidden attachment field serialized by Web Go",
+            violations,
+        )
     _find(
         relative,
         source,
@@ -423,7 +440,7 @@ def _scan_go_boundary_file(relative: Path, source: str, violations: list[str]) -
         relative,
         source,
         violations,
-        allow_trusted_purpose=relative == BOT_UPLOAD_CREATE_PATH,
+        allow_trusted_purpose=relative in TRUSTED_UPLOAD_CREATE_PATHS,
     )
 
 
