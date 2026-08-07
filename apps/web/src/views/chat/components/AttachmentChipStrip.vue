@@ -5,73 +5,76 @@
     data-testid="attachment-chip-strip"
     role="group"
     :aria-label="t('chat.upload.attachments')"
+    ref="detailAnchor"
   >
-    <button
-      v-for="item in directItems"
-      :key="item.localId"
-      type="button"
-      class="attachment-chip"
-      data-testid="attachment-chip"
-      :data-state="item.status"
-      :disabled="disabled"
-      :aria-label="chipAccessibleName(item)"
-      @click="openDetails(item, $event)"
-      @keydown.enter.prevent="openDetails(item, $event)"
-      @keydown.space.prevent="openDetails(item, $event)"
-    >
-      <el-icon
-        class="attachment-chip__icon"
-        data-testid="attachment-chip-file-icon"
-        aria-hidden="true"
+    <div class="attachment-chip-strip__row">
+      <button
+        v-for="item in directItems"
+        :key="item.localId"
+        type="button"
+        class="attachment-chip"
+        data-testid="attachment-chip"
+        :data-state="item.status"
+        :disabled="disabled"
+        :aria-label="chipAccessibleName(item)"
+        @click="openDetails(item, $event)"
+        @keydown.enter.prevent="openDetails(item, $event)"
+        @keydown.space.prevent="openDetails(item, $event)"
       >
-        <Document />
-      </el-icon>
-      <span
-        class="attachment-chip__suffix"
-        data-testid="attachment-chip-suffix"
-        aria-hidden="true"
-      >
-        {{ fileSuffix(item.name) }}
-      </span>
-      <span
-        class="attachment-chip__name"
-        data-testid="attachment-chip-name"
-        aria-hidden="true"
-      >
-        {{ item.name }}
-      </span>
-      <span
-        class="attachment-chip__status"
-        data-testid="attachment-chip-status"
-        aria-hidden="true"
-      >
-        {{ statusLabel(item) }}
-      </span>
-      <span
-        class="attachment-chip__metric"
-        data-testid="attachment-chip-metric"
-        aria-hidden="true"
-      >
-        {{ metricLabel(item) }}
-      </span>
-    </button>
+        <el-icon
+          class="attachment-chip__icon"
+          data-testid="attachment-chip-file-icon"
+          aria-hidden="true"
+        >
+          <Document />
+        </el-icon>
+        <span
+          class="attachment-chip__suffix"
+          data-testid="attachment-chip-suffix"
+          aria-hidden="true"
+        >
+          {{ fileSuffix(item.name) }}
+        </span>
+        <span
+          class="attachment-chip__name"
+          data-testid="attachment-chip-name"
+          aria-hidden="true"
+        >
+          {{ item.name }}
+        </span>
+        <span
+          class="attachment-chip__status"
+          data-testid="attachment-chip-status"
+          aria-hidden="true"
+        >
+          {{ statusLabel(item) }}
+        </span>
+        <span
+          class="attachment-chip__metric"
+          data-testid="attachment-chip-metric"
+          aria-hidden="true"
+        >
+          {{ metricLabel(item) }}
+        </span>
+      </button>
 
-    <button
-      v-if="hiddenItems.length > 0"
-      type="button"
-      class="attachment-chip attachment-chip--overflow"
-      data-testid="attachment-chip-overflow"
-      :disabled="disabled"
-      :aria-label="overflowLabel"
-      @click="openOverflowDetails($event)"
-      @keydown.enter.prevent="openOverflowDetails($event)"
-      @keydown.space.prevent="openOverflowDetails($event)"
-    >
-      <el-icon class="attachment-chip__icon" aria-hidden="true">
-        <MoreFilled />
-      </el-icon>
-      <span>{{ overflowLabel }}</span>
-    </button>
+      <button
+        v-if="hiddenItems.length > 0"
+        type="button"
+        class="attachment-chip attachment-chip--overflow"
+        data-testid="attachment-chip-overflow"
+        :disabled="disabled"
+        :aria-label="overflowLabel"
+        @click="openOverflowDetails($event)"
+        @keydown.enter.prevent="openOverflowDetails($event)"
+        @keydown.space.prevent="openOverflowDetails($event)"
+      >
+        <el-icon class="attachment-chip__icon" aria-hidden="true">
+          <MoreFilled />
+        </el-icon>
+        <span>{{ overflowLabel }}</span>
+      </button>
+    </div>
 
     <section
       v-if="activeItem"
@@ -81,6 +84,7 @@
       tabindex="-1"
       role="region"
       :aria-label="chipAccessibleName(activeItem)"
+      :style="detailSurfaceStyle"
       @keydown.esc.prevent.stop="closeDetails"
     >
       <div class="attachment-chip-detail__heading">
@@ -93,15 +97,37 @@
         <span data-testid="attachment-chip-detail-progress">
           {{ detailProgressText(activeItem) }}
         </span>
-        <span data-testid="attachment-chip-detail-speed">
-          {{ speedText(activeItem) }}
-        </span>
-        <span
-          v-if="etaText(activeItem)"
-          data-testid="attachment-chip-detail-eta"
+        <template v-if="showsTransferMetrics(activeItem)">
+          <span data-testid="attachment-chip-detail-speed">
+            {{ speedText(activeItem) }}
+          </span>
+          <span
+            v-if="etaText(activeItem)"
+            data-testid="attachment-chip-detail-eta"
+          >
+            {{ etaText(activeItem) }}
+          </span>
+        </template>
+      </div>
+      <div
+        v-if="isHiddenItem(activeItem)"
+        class="attachment-chip-detail__overflow-list"
+        data-testid="attachment-chip-overflow-list"
+      >
+        <button
+          v-for="item in hiddenItems"
+          :key="item.localId"
+          type="button"
+          class="attachment-chip-detail__overflow-item"
+          data-testid="attachment-chip-overflow-item"
+          :data-state="item.status"
+          :aria-label="chipAccessibleName(item)"
+          @click="openHiddenDetails(item, $event)"
+          @keydown.enter.prevent="openHiddenDetails(item, $event)"
+          @keydown.space.prevent="openHiddenDetails(item, $event)"
         >
-          {{ etaText(activeItem) }}
-        </span>
+          {{ item.name }}
+        </button>
       </div>
       <div class="attachment-chip-detail__actions">
         <button
@@ -190,7 +216,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { Document, MoreFilled } from "@element-plus/icons-vue";
 import { useI18n } from "vue-i18n";
 import { formatBytes, formatEta } from "@/utils/transfer-progress";
@@ -218,9 +251,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const activeLocalId = ref<string | null>(null);
+const detailAnchor = ref<HTMLElement | null>(null);
 const detailSurface = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const originControl = ref<HTMLButtonElement | null>(null);
+const detailMaxBlockSize = ref("20rem");
 
 const directItems = computed(() => props.items.slice(0, 3));
 const hiddenItems = computed(() =>
@@ -229,6 +264,9 @@ const hiddenItems = computed(() =>
 const activeItem = computed(
   () => props.items.find((item) => item.localId === activeLocalId.value) ?? null
 );
+const detailSurfaceStyle = computed(() => ({
+  "--attachment-chip-detail-max-block-size": detailMaxBlockSize.value,
+}));
 
 const progressStatuses = new Set([
   "creating",
@@ -259,11 +297,13 @@ const metricLabel = (item: ResumableUploadItem): string => {
 };
 
 const detailProgressText = (item: ResumableUploadItem): string =>
-  t("chat.upload.progress", {
-    loaded: formatBytes(item.loadedBytes),
-    total: formatBytes(item.size),
-    percent: progressPercent(item),
-  });
+  progressStatuses.has(item.status)
+    ? t("chat.upload.progress", {
+        loaded: formatBytes(item.loadedBytes),
+        total: formatBytes(item.size),
+        percent: progressPercent(item),
+      })
+    : formatBytes(item.size);
 
 const speedText = (item: ResumableUploadItem): string =>
   t("chat.upload.speed", {
@@ -274,6 +314,12 @@ const etaText = (item: ResumableUploadItem): string => {
   const seconds = formatEta(item.etaSeconds);
   return seconds === null ? "" : t("chat.upload.eta", { seconds });
 };
+
+const showsTransferMetrics = (item: ResumableUploadItem): boolean =>
+  ["creating", "uploading", "completing"].includes(item.status);
+
+const isHiddenItem = (item: ResumableUploadItem): boolean =>
+  hiddenItems.value.some((hiddenItem) => hiddenItem.localId === item.localId);
 
 const canPause = (item: ResumableUploadItem): boolean =>
   item.status === "creating" || item.status === "uploading";
@@ -289,20 +335,31 @@ const needsReselect = (item: ResumableUploadItem): boolean =>
 
 const openDetails = (
   item: ResumableUploadItem,
-  event: MouseEvent | KeyboardEvent
+  event: MouseEvent | KeyboardEvent,
+  preserveOrigin = false
 ) => {
   emit("select", item.localId);
   activeLocalId.value = item.localId;
-  originControl.value =
-    event.currentTarget instanceof HTMLButtonElement
-      ? event.currentTarget
-      : null;
+  if (!preserveOrigin) {
+    originControl.value =
+      event.currentTarget instanceof HTMLButtonElement
+        ? event.currentTarget
+        : null;
+  }
+  updateDetailMaxHeight();
   nextTick(() => detailSurface.value?.focus());
 };
 
 const openOverflowDetails = (event: MouseEvent | KeyboardEvent) => {
   const item = hiddenItems.value[0];
   if (item) openDetails(item, event);
+};
+
+const openHiddenDetails = (
+  item: ResumableUploadItem,
+  event: MouseEvent | KeyboardEvent
+) => {
+  openDetails(item, event, true);
 };
 
 const closeDetails = () => {
@@ -325,6 +382,21 @@ const handleFileChange = (event: Event) => {
 watch(activeItem, (item) => {
   if (activeLocalId.value && !item) closeDetails();
 });
+
+const updateDetailMaxHeight = () => {
+  const anchorTop = detailAnchor.value?.getBoundingClientRect().top;
+  if (typeof anchorTop !== "number") return;
+  detailMaxBlockSize.value = `${Math.max(1, Math.floor(anchorTop - 16))}px`;
+};
+
+const handleViewportResize = () => {
+  if (activeLocalId.value) updateDetailMaxHeight();
+};
+
+onMounted(() => window.addEventListener("resize", handleViewportResize));
+onBeforeUnmount(() =>
+  window.removeEventListener("resize", handleViewportResize)
+);
 
 const chipAccessibleName = (item: ResumableUploadItem): string =>
   t("chat.upload.chipLabel", {
@@ -368,13 +440,17 @@ const overflowLabel = computed(() => {
 <style scoped>
 .attachment-chip-strip {
   position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-block: 2px;
+  overflow: visible;
+}
+
+.attachment-chip-strip__row {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: clamp(4px, 1vw, 8px);
-  inline-size: 100%;
-  min-inline-size: 0;
-  padding-block: 2px;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
@@ -467,7 +543,7 @@ const overflowLabel = computed(() => {
   gap: var(--phy-space-8);
   inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
   max-inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
-  max-block-size: min(20rem, calc(100dvh - var(--phy-space-40)));
+  max-block-size: var(--attachment-chip-detail-max-block-size);
   padding: var(--phy-space-12);
   overflow-y: auto;
   border: 1px solid var(--phy-color-border-subtle);
@@ -483,7 +559,8 @@ const overflowLabel = computed(() => {
 
 .attachment-chip-detail__heading,
 .attachment-chip-detail__metrics,
-.attachment-chip-detail__actions {
+.attachment-chip-detail__actions,
+.attachment-chip-detail__overflow-list {
   display: flex;
   align-items: center;
   gap: var(--phy-space-8);
@@ -519,6 +596,31 @@ const overflowLabel = computed(() => {
 
 .attachment-chip-detail__actions {
   flex-wrap: wrap;
+}
+
+.attachment-chip-detail__overflow-list {
+  flex-wrap: wrap;
+}
+
+.attachment-chip-detail__overflow-item {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--phy-color-action-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip-detail__overflow-item:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 .attachment-chip-detail__action {

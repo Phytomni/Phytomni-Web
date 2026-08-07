@@ -189,6 +189,26 @@ describe("AttachmentChipStrip", () => {
     ).toContain("sample-1.fastq.gz");
   });
 
+  it("lets the overflow detail select every retained hidden attachment", async () => {
+    const wrapper = mountStrip(
+      Array.from({ length: 6 }, (_, index) => makeItem(index + 1))
+    );
+
+    await wrapper
+      .get('[data-testid="attachment-chip-overflow"]')
+      .trigger("click");
+    const hiddenItems = wrapper.findAll(
+      '[data-testid="attachment-chip-overflow-item"]'
+    );
+
+    expect(hiddenItems).toHaveLength(3);
+    await hiddenItems[2].trigger("keydown", { key: "Enter" });
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail"]').text()
+    ).toContain("sample-6.fastq.gz");
+    expect(wrapper.emitted("select")?.at(-1)).toEqual(["upload-6"]);
+  });
+
   it("shows transfer facts and state-specific actions with exact local IDs", async () => {
     const item = makeItem(1);
     const wrapper = mountStrip([item]);
@@ -272,24 +292,59 @@ describe("AttachmentChipStrip", () => {
       props: { items: [makeItem(1)] },
     });
     const chip = wrapper.get('[data-testid="attachment-chip"]');
+    const strip = wrapper.get('[data-testid="attachment-chip-strip"]');
+    Object.defineProperty(strip.element, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ top: 240 }),
+    });
     (chip.element as HTMLButtonElement).focus();
 
     await chip.trigger("click");
     const detail = wrapper.get('[data-testid="attachment-chip-detail"]');
     expect(document.activeElement).toBe(detail.element);
+    expect(detail.element.parentElement).toBe(strip.element);
+    expect(detail.element.parentElement).not.toBe(
+      wrapper.get(".attachment-chip-strip__row").element
+    );
+    expect(detail.attributes("style")).toContain(
+      "--attachment-chip-detail-max-block-size: 224px"
+    );
 
     await detail.trigger("keydown", { key: "Escape" });
     expect(
       wrapper.find('[data-testid="attachment-chip-detail"]').exists()
     ).toBe(false);
     expect(document.activeElement).toBe(chip.element);
-    expect(STRIP_SOURCE).toContain("inset-block-end");
-    expect(STRIP_SOURCE).toContain("max-block-size");
+    expect(STRIP_SOURCE).toContain("attachment-chip-strip__row");
+    expect(STRIP_SOURCE).toContain("overflow: visible");
     expect(STRIP_SOURCE).toContain("overflow-y: auto");
     expect(STRIP_SOURCE).not.toContain("inset-block-start");
 
     wrapper.unmount();
     host.remove();
+  });
+
+  it("suppresses stale speed and ETA for terminal detail states", async () => {
+    const wrapper = mountStrip([
+      makeItem(1, {
+        status: "completed",
+        loadedBytes: 1024,
+        speedBytesPerSecond: 1024,
+        etaSeconds: 0,
+      }),
+    ]);
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+
+    expect(
+      wrapper.find('[data-testid="attachment-chip-detail-speed"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.find('[data-testid="attachment-chip-detail-eta"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail-progress"]').text()
+    ).toContain("4.0 KB");
   });
 
   it("uses one non-wrapping scroll row, semantic tokens, and installed icons", () => {
