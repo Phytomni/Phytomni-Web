@@ -6,17 +6,20 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"golang.org/x/text/unicode/norm"
 
 	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
 )
 
 const (
 	maxUploadFilenameBytes    = 255
 	maxUploadContentTypeBytes = 256
+	uploadCompensationTimeout = 5 * time.Second
 )
 
 var (
@@ -28,6 +31,14 @@ var (
 	// ErrUploadControlUnavailable covers transport and contract failures after
 	// the local request has passed validation.
 	ErrUploadControlUnavailable = errors.New("upload control unavailable")
+	// ErrUploadStateConflict marks Bot's exact upload-state conflict response.
+	ErrUploadStateConflict = errors.New("upload state conflict")
+	// ErrUploadSessionExpired marks Bot's exact expired-session response.
+	ErrUploadSessionExpired = errors.New("upload session expired")
+	// ErrUploadLimitExceeded marks Bot's exact upload-quota response.
+	ErrUploadLimitExceeded = errors.New("upload limit exceeded")
+
+	errUploadResponseOriginMismatch = errors.New("upload response origin mismatch")
 )
 
 // UploadCreateInput contains the only metadata accepted from the browser.
@@ -97,14 +108,15 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 		return nil, err
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	origin, err := ps.uploadControlOrigin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	out, _, err := rxBot.NewClient().CreateUpload(ctx, rxBot.UploadCreateRequest{
+	client := rxBot.NewClient()
+	out, _, err := client.CreateUpload(ctx, rxBot.UploadCreateRequest{
 		OwnerSubject:   owner,
 		Filename:       filename,
 		SizeBytes:      input.SizeBytes,
@@ -114,9 +126,12 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 		IdempotencyKey: idempotency,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: create", ErrUploadControlUnavailable)
+		return nil, classifyUploadControlError(err, "create")
 	}
 	if err := validateUploadResponseURL(out.UploadURL, origin, out.AssetID); err != nil {
+		if errors.Is(err, errUploadResponseOriginMismatch) {
+			compensateRejectedUpload(ctx, client, out.AssetID, out.Capability)
+		}
 		return nil, fmt.Errorf("%w: create response", ErrUploadControlUnavailable)
 	}
 	return &UploadCreateResult{
@@ -152,7 +167,7 @@ func (ps *Service) RenewUploadCapability(ctx context.Context, ownerSubject, asse
 	}
 	out, _, err := rxBot.NewClient().RenewUploadCapability(ctx, assetID, owner)
 	if err != nil {
-		return nil, fmt.Errorf("%w: renew", ErrUploadControlUnavailable)
+		return nil, classifyUploadControlError(err, "renew")
 	}
 	if err := validateUploadResponseURL(out.UploadURL, origin, out.AssetID); err != nil {
 		return nil, fmt.Errorf("%w: renew response", ErrUploadControlUnavailable)
@@ -166,6 +181,42 @@ func (ps *Service) RenewUploadCapability(ctx context.Context, ownerSubject, asse
 		CapabilityExpiresAt: out.CapabilityExpiresAt,
 		SessionExpiresAt:    out.SessionExpiresAt,
 	}, nil
+}
+
+func classifyUploadControlError(err error, operation string) error {
+	sentinel := ErrUploadControlUnavailable
+	category := "upload_control_unavailable"
+	var apiErr *rxBot.APIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.Status == 409 && apiErr.Code == "upload_state_conflict":
+			sentinel = ErrUploadStateConflict
+			category = "upload_state_conflict"
+		case apiErr.Status == 410 && apiErr.Code == "upload_session_expired":
+			sentinel = ErrUploadSessionExpired
+			category = "upload_session_expired"
+		case apiErr.Status == 413 && apiErr.Code == "upload_limit_exceeded":
+			sentinel = ErrUploadLimitExceeded
+			category = "upload_limit_exceeded"
+		}
+	}
+	rxLog.Sugar().Warnw(
+		"upload control error classified",
+		"operation", operation,
+		"category", category,
+	)
+	return fmt.Errorf("%w: %s", sentinel, operation)
+}
+
+func compensateRejectedUpload(ctx context.Context, client *rxBot.Client, assetID, capability string) {
+	rxLog.Sugar().Info("upload compensation attempted")
+	compensationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadCompensationTimeout)
+	defer cancel()
+	if _, _, err := client.AbortUpload(compensationCtx, assetID, capability); err != nil {
+		rxLog.Sugar().Warn("upload compensation failed")
+		return
+	}
+	rxLog.Sugar().Info("upload compensation succeeded")
 }
 
 func (ps *Service) uploadControlOrigin(ctx context.Context) (string, error) {
@@ -257,7 +308,7 @@ func validateUploadResponseURL(raw, expectedOrigin, assetID string) error {
 	}
 	responseOrigin, ok := validUploadPublicOrigin(u.Scheme + "://" + u.Host)
 	if !ok || !strings.EqualFold(responseOrigin, expectedOrigin) {
-		return errors.New("upload URL origin mismatch")
+		return errUploadResponseOriginMismatch
 	}
 	return nil
 }
