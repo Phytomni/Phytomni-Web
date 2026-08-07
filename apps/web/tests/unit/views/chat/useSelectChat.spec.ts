@@ -626,6 +626,115 @@ describe("useSelectChat", () => {
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
   });
 
+  it("hydrates a persisted A2UI pause as expired instead of dropping the message", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          ...buildChatHistoryRecord({
+            id: "history-a2ui",
+            query: "Please complete this form",
+            answer: "",
+            status: "INPUT_REQUIRED",
+            tool_name: "ChatAgent",
+          }),
+          a2ui: {
+            catalog_version: "v1.0",
+            surface_id: "history-surface",
+            widget: "confirm",
+            props: { title: "Continue?" },
+          },
+        }),
+      ])
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat("d1");
+
+    const assistant = messageAt("d1", 1, "history A2UI pause");
+    expect(assistant).toMatchObject({
+      role: "assistant",
+      id: "history-a2ui",
+      tool_name: "ChatAgent",
+    });
+    expect(assistant.blocks?.[0]?.a2ui?.state).toEqual({
+      status: "expired",
+      round: 1,
+      code: "reload_unverified",
+    });
+    expect(assistant.a2uiRuntime).toBeUndefined();
+  });
+
+  it("keeps a live A2UI runtime when a background reload returns the same pause", async () => {
+    const transport = vi.fn();
+    const runtime = {
+      dialogueId: "d1",
+      messageId: "live-a2ui",
+      runId: "live-run",
+      transport,
+    };
+    const state = getChatState("d1");
+    const liveMessage: ChatMessage = {
+      role: "assistant",
+      content: "",
+      id: "live-a2ui",
+      tool_name: "ChatAgent",
+      blocks: [
+        {
+          type: "agent-surface",
+          authority: "agent",
+          interactive: true,
+          a2ui: {
+            surface: {
+              catalog_version: "v1.0",
+              surface_id: "live-surface",
+              widget: "confirm",
+              props: { title: "Continue?" },
+            },
+            state: { status: "ready", round: 1 },
+          },
+        },
+      ],
+      a2uiRuntime: runtime,
+    };
+    state.renderedChat = {
+      dialogue_id: "d1",
+      messages: [
+        { role: "user", content: "Please complete this form" },
+        liveMessage,
+      ],
+    };
+    state.historyHydration = "ready";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        invalidInput<ChatHistoryRecord>({
+          ...buildChatHistoryRecord({
+            id: "live-a2ui",
+            query: "Please complete this form",
+            answer: "",
+            status: "INPUT_REQUIRED",
+            tool_name: "ChatAgent",
+          }),
+          a2ui: {
+            catalog_version: "v1.0",
+            surface_id: "live-surface",
+            widget: "confirm",
+            props: { title: "Continue?" },
+          },
+        }),
+      ])
+    );
+
+    const { reloadChat } = makeComposable();
+    await expect(reloadChat("d1")).resolves.toBe("applied");
+
+    const assistant = messageAt("d1", 1, "live A2UI reload");
+    expect(assistant.a2uiRuntime).toBe(runtime);
+    expect(assistant.blocks?.[0]?.a2ui?.state).toEqual({
+      status: "ready",
+      round: 1,
+    });
+  });
+
   it("non-200 response: clears stale history and records a recoverable request error", async () => {
     // Seed stale rendered/history state to verify this dialogue is reset before fetch.
     const st = getChatState("d1");

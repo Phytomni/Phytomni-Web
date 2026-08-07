@@ -2,7 +2,13 @@ import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { AssetAttachmentRef } from "@/api/types";
-import type { Chat, ChatMessage, ChatResponse, ChatUIState } from "../types";
+import type {
+  Chat,
+  ChatMessage,
+  ChatResponse,
+  ChatUIState,
+  ContentBlock,
+} from "../types";
 import { normalizeChatContextNotice } from "../types";
 import { parseMessageWithFiles } from "../utils/message-parse";
 import {
@@ -17,6 +23,7 @@ import { getAnswerCheck } from "@/api/chat";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import i18n from "@/locales";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
+import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { decodeAgentSteps, decodeFollowUpQuestions } from "../messageTypes";
 import {
   normalizeHistoryRows,
@@ -106,6 +113,76 @@ function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   } catch {
     return false;
   }
+}
+
+function historyA2uiBlocks(
+  item: Partial<ChatResponse>
+): ContentBlock[] | undefined {
+  const decoded = decodeA2uiOpenSurface(item.a2ui);
+  if (!decoded.ok) return undefined;
+  return [
+    {
+      type: "agent-surface",
+      authority: "agent",
+      interactive: true,
+      a2ui: {
+        surface: decoded.value,
+        state: { status: "ready", round: 1 },
+      },
+    },
+  ];
+}
+
+function isOpenA2uiBlock(block: ContentBlock): boolean {
+  const status = block.a2ui?.state.status;
+  return (
+    status === "ready" ||
+    status === "submitting" ||
+    status === "temporarily_rejected"
+  );
+}
+
+function mergeLiveA2uiMessages(
+  messages: ChatMessage[],
+  liveMessages: readonly ChatMessage[] | undefined,
+  dialogueId: string
+): ChatMessage[] {
+  if (!liveMessages?.length) return messages;
+
+  const liveByMessageId = new Map<string, ChatMessage>();
+  for (const message of liveMessages) {
+    if (
+      message.role !== "assistant" ||
+      !message.a2uiRuntime ||
+      message.a2uiRuntime.dialogueId !== dialogueId ||
+      String(message.a2uiRuntime.messageId) !== String(message.id ?? "") ||
+      !message.blocks?.some(isOpenA2uiBlock)
+    ) {
+      continue;
+    }
+    liveByMessageId.set(String(message.id), message);
+  }
+  if (!liveByMessageId.size) return messages;
+
+  const mergedIds = new Set<string>();
+  const nextMessages = messages.map((message) => {
+    const messageId = message.id === undefined ? "" : String(message.id);
+    const liveMessage = messageId ? liveByMessageId.get(messageId) : undefined;
+    if (!liveMessage) return message;
+    mergedIds.add(messageId);
+    return {
+      ...message,
+      blocks: liveMessage.blocks,
+      a2uiRuntime: liveMessage.a2uiRuntime,
+      streaming: liveMessage.streaming,
+      streamPresentationKey: liveMessage.streamPresentationKey,
+    };
+  });
+
+  for (const [messageId, liveMessage] of liveByMessageId) {
+    if (!mergedIds.has(messageId)) nextMessages.push({ ...liveMessage });
+  }
+  return nextMessages;
 }
 
 export function useSelectChat(opts: {
@@ -283,6 +360,7 @@ export function useSelectChat(opts: {
           const item = withoutActiveArchiveLegacyFields(
             row as Partial<ChatResponse>
           );
+          const a2uiBlocks = historyA2uiBlocks(item);
           const assistantMetadata = historyAssistantMetadata(item);
           // sync the reaction state returned by the server
           if (item.id && item.reaction_type) {
@@ -342,7 +420,8 @@ export function useSelectChat(opts: {
             }
           }
 
-          if (blankBackgroundAssistantRow(item)) {
+          const isBlankBackground = blankBackgroundAssistantRow(item);
+          if (isBlankBackground) {
             messages.push({
               role: "assistant",
               ...assistantMetadata,
@@ -360,6 +439,28 @@ export function useSelectChat(opts: {
               showLog: false,
               instantMessage: false,
               compute_resource: item.compute_resource || "",
+            });
+          }
+
+          if (
+            a2uiBlocks &&
+            !isBlankBackground &&
+            (typeof item.answer !== "string" || item.answer.trim() === "")
+          ) {
+            messages.push({
+              role: "assistant",
+              ...assistantMetadata,
+              content: "",
+              status: item.status || "INPUT_REQUIRED",
+              id: String(item.id),
+              tool_name: item.tool_name,
+              followUpQuestions: decodeFollowUpQuestions(
+                item.follow_up_questions
+              ),
+              showFollowUpQuestions: false,
+              showLog: false,
+              instantMessage: false,
+              blocks: a2uiBlocks,
             });
           }
 
@@ -628,6 +729,14 @@ export function useSelectChat(opts: {
               });
               timestamp.value = Date.now();
             }
+            if (a2uiBlocks) {
+              const rowAssistant = messages
+                .slice(rowMessageStart)
+                .reverse()
+                .find((message) => message.role === "assistant");
+              if (rowAssistant) rowAssistant.blocks = a2uiBlocks;
+            }
+
             const contextNotice = normalizeChatContextNotice(item);
             const lastMessage = messages.at(-1);
             if (contextNotice && lastMessage?.role === "assistant") {
@@ -667,10 +776,16 @@ export function useSelectChat(opts: {
       chatState.mode = nextMode;
       chatState.reactions = nextReactions;
       chatState.historyQuestion = historyMessages;
+      const historyMessagesWithLockedA2ui = lockUnverifiedHistoryA2ui(messages);
+      const liveMessages = chatState.renderedChat?.messages;
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,
-        messages: lockUnverifiedHistoryA2ui(messages),
+        messages: mergeLiveA2uiMessages(
+          historyMessagesWithLockedA2ui,
+          liveMessages,
+          capturedDialogueId
+        ),
       };
       chatState.historyHydration =
         messages.length > 0 ? "ready" : "history-empty";
