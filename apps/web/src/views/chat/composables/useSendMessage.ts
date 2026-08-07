@@ -493,6 +493,7 @@ export function useSendMessage(opts: {
 
     const sendingTitle = currentMessage;
     let blockingDialogueId: string | undefined;
+    let acceptedTurn = false;
 
     if (parentRowId === null) {
       // Hard no-send: missing/ambiguous existing parent mapping.
@@ -609,8 +610,7 @@ export function useSendMessage(opts: {
       // Stream branch: chat-family + instant mode + dark-launch flag. The
       // insertion point is inside the existing try, so returning here still
       // runs the enclosing finally (request-id cleanup, history refresh via
-      // coordinator, title update, fileList clear) exactly once — no duplicate
-      // cleanup needed, and none is done here.
+      // coordinator, and title update) exactly once.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
       if (shouldStream(chatState.activeAgentName, capturedMode, streamFlag)) {
         const placeholder: ChatMessage = {
@@ -659,6 +659,7 @@ export function useSendMessage(opts: {
           !chatState.generationStopped &&
           streamResult.completed === true
         ) {
+          acceptedTurn = true;
           commitSuccessfulTurn(chatState, userMessage, placeholder);
           if (streamResult.messageId) {
             settlePendingTurnIdentity(
@@ -1014,6 +1015,7 @@ export function useSendMessage(opts: {
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          acceptedTurn = capturedMode !== "expert" || acceptedExpertResponse;
           if (responseData.context_degraded === true) {
             ElMessage.warning(t("chat.contextDegraded"));
           }
@@ -1050,6 +1052,7 @@ export function useSendMessage(opts: {
           }
           sendingMessages.push(assistantMessage);
           commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          acceptedTurn = capturedMode !== "expert" || acceptedExpertResponse;
           settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         }
       } else {
@@ -1168,6 +1171,7 @@ export function useSendMessage(opts: {
               if (isForeground(sendingDialogueId)) {
                 await selectChat(sendingDialogueId);
               }
+              acceptedTurn = true;
               return;
             }
           }
@@ -1209,6 +1213,7 @@ export function useSendMessage(opts: {
       // release lifecycle fields. A stale request must be entirely read-only.
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
+        const wasStopped = chatState.generationStopped;
         const historyOpts =
           blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
         const reconciliation = await getHistoryQuestionData(
@@ -1247,8 +1252,10 @@ export function useSendMessage(opts: {
         chatState.uploadTransfer = null;
         chatState.generationStopped = false;
 
-        // clear the file list
-        if (chatState.fileList.length > 0) {
+        // Clear completed attachments only after the request was accepted. A
+        // rejected or transport-uncertain turn keeps the retained files so the
+        // user can retry without reselecting them.
+        if ((acceptedTurn || wasStopped) && chatState.fileList.length > 0) {
           chatState.fileList = [];
           // close the header after clearing the file list (foreground only)
           if (isForeground(sendingDialogueId)) {

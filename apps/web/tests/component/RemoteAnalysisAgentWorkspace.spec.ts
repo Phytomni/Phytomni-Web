@@ -247,7 +247,7 @@ function makeUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
       for (const status of statuses) {
         wrapper?.unmount();
         mocks.chatState.fileList = [activeUpload(status)];
-        mocks.uploadQueue.hasBlockingUploads.value = true;
+        mocks.uploadQueue.hasBlockingUploads.value = status !== "completed";
         const current = mountSurface();
         result[status] = Boolean(
           (

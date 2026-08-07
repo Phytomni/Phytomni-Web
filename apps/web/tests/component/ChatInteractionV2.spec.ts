@@ -89,6 +89,12 @@ const chatUploadQueueState = vi.hoisted(() => ({
   options: null as ResumableUploadQueueOptions | null,
 }));
 
+const chatSendHarness = vi.hoisted(() => ({
+  resolveHistory: false,
+  historyData: [] as Array<Record<string, unknown>>,
+  getQueryAbortable: vi.fn(),
+}));
+
 const mockBotCapabilities = {
   byTool: ref<BotCapabilityByTool>({}),
   upload: ref<BotUploadCapability>({
@@ -120,7 +126,12 @@ vi.mock("@/api/chat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/chat")>();
   return {
     ...actual,
-    getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
+    getHistoryQuestionList: vi.fn(() =>
+      chatSendHarness.resolveHistory
+        ? Promise.resolve({ code: 200, data: chatSendHarness.historyData })
+        : new Promise(() => undefined)
+    ),
+    getQueryAbortable: chatSendHarness.getQueryAbortable,
   };
 });
 
@@ -436,6 +447,118 @@ function mountChatComposerBehavior(
   });
 }
 
+async function exerciseChatViewSubmission(
+  outcome: "success" | "failure"
+): Promise<{ fileCount: number; queryCalls: number }> {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
+  });
+  await router.push("/chat");
+  await router.isReady();
+
+  const dialogueId = `chat-send-${outcome}`;
+  chatSendHarness.resolveHistory = true;
+  chatSendHarness.historyData = [
+    {
+      id: 1,
+      dialogue_id: dialogueId,
+      title_query: "Existing chat",
+      query: "Existing chat",
+      created_at: "2026-08-07T00:00:00Z",
+    },
+  ];
+  chatSendHarness.getQueryAbortable.mockReset();
+  if (outcome === "success") {
+    chatSendHarness.getQueryAbortable.mockResolvedValueOnce({
+      data: {
+        tool_name: "ChatAgent",
+        answer: "Accepted answer",
+        id: "chat-message-success",
+        status: "SUCCEEDED",
+        dialogue_id: dialogueId,
+      },
+    });
+  } else {
+    chatSendHarness.getQueryAbortable.mockRejectedValueOnce(
+      new Error("send failed")
+    );
+  }
+
+  vi.useFakeTimers();
+  const context = createTestAppContext({ router });
+  userStore().SET_ROLES(["ChatAgent"]);
+  userStore().expertEnabled = true;
+  mockBotCapabilities.byTool.value = {
+    ChatAgent: {
+      enabled: true,
+      attachments: true,
+      attachmentChannels: ["document"],
+    },
+  };
+  mockBotCapabilities.upload.value = {
+    enabled: true,
+    protocol: "obs-multipart-v2",
+    upload_origin: "https://upload.example",
+    max_file_bytes: 10 * 1024 * 1024 * 1024,
+    max_attachments: 10,
+  };
+
+  const wrapper = context.mount(ChatView, {
+    attachTo: document.body,
+    shallow: true,
+    global: {
+      stubs: {
+        PhyAdaptiveShell: {
+          template:
+            '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+        },
+        ChatComposer: {
+          name: "ChatComposer",
+          props: ["fileList", "hasBlockingUploads", "attachmentTargetBlocked"],
+          emits: ["submit"],
+          setup(
+            _props: unknown,
+            { expose }: { expose: (value: Record<string, unknown>) => void }
+          ) {
+            expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
+            return {};
+          },
+          template:
+            '<button data-testid="chat-submit" :disabled="hasBlockingUploads || attachmentTargetBlocked" @click="$emit(\'submit\')">Send</button>',
+        },
+      },
+    },
+  });
+
+  try {
+    await flushPromises();
+    const states = chatViewState.states;
+    if (!states) throw new Error("ChatView state was not captured");
+    states.currentChatId.value = dialogueId;
+    const state = states.getChatState(dialogueId);
+    state.renderedChat = { messages: [] };
+    state.messageInput = "Run with retained attachment";
+    state.mode = "instant";
+    state.selectedAgent = "";
+    state.fileList = [chatBehaviorItem("completed", `upload-${outcome}`)];
+    await nextTick();
+    await wrapper.get('[data-testid="chat-submit"]').trigger("click");
+    await vi.runAllTimersAsync();
+    await flushPromises();
+    await nextTick();
+    return {
+      fileCount: state.fileList.length,
+      queryCalls: chatSendHarness.getQueryAbortable.mock.calls.length,
+    };
+  } finally {
+    wrapper.unmount();
+    chatSendHarness.resolveHistory = false;
+    chatSendHarness.historyData = [];
+    vi.useRealTimers();
+  }
+}
+
 function makeChatUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
   let wrapper: ReturnType<TestAppContext["mount"]> | null = null;
 
@@ -473,13 +596,14 @@ function makeChatUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
     },
     async typingDuringUpload() {
       const current = mountSurface({
-        modelValue: "draft while uploading",
+        modelValue: "",
         fileList: [chatBehaviorItem("uploading")],
         hasBlockingUploads: true,
       });
       const sender = current.findComponent({ name: "MentionSender" });
+      await sender.vm.$emit("update:modelValue", "draft while uploading");
       return {
-        query: String(sender.props("modelValue")),
+        query: String(current.emitted("update:modelValue")?.at(-1)?.[0] ?? ""),
         editorDisabled: Boolean(sender.props("disabled")),
       };
     },
@@ -488,7 +612,7 @@ function makeChatUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
       for (const status of statuses) {
         const current = mountSurface({
           fileList: [chatBehaviorItem(status)],
-          hasBlockingUploads: true,
+          hasBlockingUploads: status !== "completed",
         });
         result[status] = Boolean(
           current.find(".composer-send-button").attributes("disabled") !==
@@ -576,20 +700,12 @@ function makeChatUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
       return result;
     },
     async submission() {
-      let current = mountSurface({ fileList: [chatBehaviorItem("completed")] });
-      await current.get(".composer-send-button").trigger("click");
-      const accepted = (current.emitted("submit")?.length ?? 0) === 1;
-      await current.setProps({ fileList: [] });
-      await nextTick();
-      const successfulClear =
-        accepted && !current.find('[data-testid="attachment-chip"]').exists();
-      current.unmount();
-
-      current = mountSurface({ fileList: [chatBehaviorItem("completed")] });
-      const failedPreservation = current
-        .find('[data-testid="attachment-chip"]')
-        .exists();
-      return { successfulClear, failedPreservation };
+      const success = await exerciseChatViewSubmission("success");
+      const failure = await exerciseChatViewSubmission("failure");
+      return {
+        successfulClear: success.queryCalls === 1 && success.fileCount === 0,
+        failedPreservation: failure.queryCalls === 1 && failure.fileCount === 1,
+      };
     },
     async incompatible() {
       const current = mountSurface({
