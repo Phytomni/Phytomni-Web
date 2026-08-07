@@ -205,7 +205,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		if !localCapabilityEnabled(definition.Slug, cfg) {
 			continue
 		}
-		attachmentPurposes := attachmentPurposesFor(definition.Slug, agentPresence, uploadEnabled)
+		attachmentPurposes := attachmentPurposesFor(agentPresence, uploadEnabled)
 		if productAttachmentCapability(definition.Slug) && len(attachmentPurposes) == 0 {
 			// Analyst and Research are attachment-enabled product surfaces. Their
 			// browser records remain dark until local product, upload negotiation,
@@ -315,11 +315,7 @@ func streamEligible(slug string) bool {
 	}
 }
 
-func attachmentPurposesFor(
-	slug string,
-	presence rxBot.WebAgentPresence,
-	uploadEnabled bool,
-) []string {
+func attachmentPurposesFor(presence rxBot.WebAgentPresence, uploadEnabled bool) []string {
 	if !uploadEnabled {
 		return []string{}
 	}
@@ -327,7 +323,7 @@ func attachmentPurposesFor(
 	if presence.Documents {
 		purposes = append(purposes, "document")
 	}
-	if presence.Datasets && (slug == "analyst" || slug == "research") {
+	if presence.Datasets {
 		purposes = append(purposes, "dataset")
 	}
 	return purposes

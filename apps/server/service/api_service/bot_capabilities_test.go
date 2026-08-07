@@ -208,6 +208,38 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	}
 }
 
+func TestBotCapabilitiesProjectsAdvertisedAttachmentChannelsForEveryEnabledAgent(t *testing.T) {
+	descriptors := capabilityDescriptors()
+	for index := range descriptors {
+		if descriptors[index].Slug == "data" || descriptors[index].Slug == "design" {
+			descriptors[index].Capabilities.Attachments.Datasets = &struct{}{}
+		}
+	}
+	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+		ProxyEnabled:           true,
+		ResumableUploadEnabled: true,
+		UploadPublicOrigin:     "https://upload.example",
+	})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := capabilityBySlug(manifest.Agents, "data")
+	if !data.Enabled || !data.Attachments {
+		t.Fatalf("data capability = %#v", data)
+	}
+	if got := strings.Join(data.AttachmentPurposes, ","); got != "document,dataset" {
+		t.Fatalf("data attachment purposes = %q, want document,dataset", got)
+	}
+	design := capabilityBySlug(manifest.Agents, "design")
+	if design.Enabled || design.Attachments || len(design.AttachmentPurposes) != 0 {
+		t.Fatalf("disabled design capability = %#v", design)
+	}
+}
+
 func TestResultArchiveV1Effective(t *testing.T) {
 	configFor := func(slug string) *rxBot.Config {
 		cfg := &rxBot.Config{}
