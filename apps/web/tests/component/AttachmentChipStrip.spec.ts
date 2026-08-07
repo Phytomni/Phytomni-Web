@@ -325,7 +325,7 @@ describe("AttachmentChipStrip", () => {
   });
 
   it.each([
-    ["completed", "1.0 KB / 4.0 KB (100%)"],
+    ["completed", "4.0 KB / 4.0 KB (100%)"],
     ["failed", "1.0 KB / 4.0 KB (25%)"],
     ["expired", "1.0 KB / 4.0 KB (25%)"],
   ] as const)(
@@ -334,7 +334,7 @@ describe("AttachmentChipStrip", () => {
       const wrapper = mountStrip([
         makeItem(1, {
           status,
-          loadedBytes: 1024,
+          loadedBytes: status === "completed" ? 4 * 1024 : 1024,
           speedBytesPerSecond: 1024,
           etaSeconds: 0,
         }),
