@@ -22,11 +22,21 @@ export interface BotCapability {
   enabled: boolean;
 }
 
+export interface BotResearchInputCapability {
+  enabled: boolean;
+  protocol: string;
+  max_user_query_chars: number;
+  max_attachments_per_request: number;
+  max_research_dataset_paths: number;
+  max_research_input_references: number;
+}
+
 export type { BotUploadCapability } from "@/api/types";
 
 export interface BotCapabilityManifest {
   agents: BotCapability[];
   upload: BotUploadCapability;
+  researchInput: BotResearchInputCapability;
 }
 
 export type BotCapabilityByTool = Partial<
@@ -39,7 +49,12 @@ export const MAX_BOT_CAPABILITIES = CANONICAL_AGENT_TOOLS.length;
 export const MAX_BOT_CAPABILITY_CACHE_ENTRIES = 32;
 export const RESUMABLE_UPLOAD_PROTOCOL = "obs-multipart-v2";
 export const RESUMABLE_UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024;
-export const RESUMABLE_UPLOAD_MAX_ATTACHMENTS = 10;
+export const RESUMABLE_UPLOAD_MAX_ATTACHMENTS = 256;
+const RESEARCH_INPUT_PROTOCOL = "research_input_resolution_v1";
+const RESEARCH_INPUT_MAX_USER_QUERY_CHARS = 1048576;
+const RESEARCH_INPUT_MAX_ATTACHMENTS = 256;
+const RESEARCH_INPUT_MAX_DATASET_PATHS = 256;
+const RESEARCH_INPUT_MAX_REFERENCES = 256;
 
 const TOOL_TO_SLUG: Record<CanonicalAgentTool, string> = {
   ChatAgent: "chat",
@@ -119,12 +134,19 @@ function cloneUploadCapability(
   return { ...capability };
 }
 
+function cloneResearchInputCapability(
+  capability: BotResearchInputCapability
+): BotResearchInputCapability {
+  return { ...capability };
+}
+
 function cloneCapabilityManifest(
   manifest: BotCapabilityManifest
 ): BotCapabilityManifest {
   return {
     agents: cloneManifest(manifest.agents),
     upload: cloneUploadCapability(manifest.upload),
+    researchInput: cloneResearchInputCapability(manifest.researchInput),
   };
 }
 
@@ -155,6 +177,17 @@ export function disabledBotUploadCapability(): BotUploadCapability {
     upload_origin: "",
     max_file_bytes: RESUMABLE_UPLOAD_MAX_FILE_BYTES,
     max_attachments: RESUMABLE_UPLOAD_MAX_ATTACHMENTS,
+  };
+}
+
+export function disabledBotResearchInputCapability(): BotResearchInputCapability {
+  return {
+    enabled: false,
+    protocol: RESEARCH_INPUT_PROTOCOL,
+    max_user_query_chars: 0,
+    max_attachments_per_request: 0,
+    max_research_dataset_paths: 0,
+    max_research_input_references: 0,
   };
 }
 
@@ -203,6 +236,58 @@ function parseUploadCapability(value: unknown): BotUploadCapability {
     upload_origin: value.upload_origin as string,
     max_file_bytes: value.max_file_bytes as number,
     max_attachments: value.max_attachments as number,
+  };
+}
+
+function parseResearchInputCapability(
+  value: unknown,
+  agents: readonly BotCapability[]
+): BotResearchInputCapability {
+  const disabled = disabledBotResearchInputCapability();
+  if (
+    !agents.some(
+      (agent) => agent.tool === "InSilicoResearchAgent" && agent.enabled
+    ) ||
+    !isRecord(value) ||
+    value.enabled !== true ||
+    value.protocol !== RESEARCH_INPUT_PROTOCOL
+  ) {
+    return disabled;
+  }
+
+  const maxUserQueryChars = value.max_user_query_chars;
+  const maxAttachments = value.max_attachments_per_request;
+  const maxDatasetPaths = value.max_research_dataset_paths;
+  const maxReferences = value.max_research_input_references;
+  if (
+    typeof maxUserQueryChars !== "number" ||
+    !Number.isSafeInteger(maxUserQueryChars) ||
+    maxUserQueryChars < 1 ||
+    maxUserQueryChars > RESEARCH_INPUT_MAX_USER_QUERY_CHARS ||
+    typeof maxAttachments !== "number" ||
+    !Number.isSafeInteger(maxAttachments) ||
+    maxAttachments < 1 ||
+    maxAttachments > RESEARCH_INPUT_MAX_ATTACHMENTS ||
+    typeof maxDatasetPaths !== "number" ||
+    !Number.isSafeInteger(maxDatasetPaths) ||
+    maxDatasetPaths < 1 ||
+    maxDatasetPaths > RESEARCH_INPUT_MAX_DATASET_PATHS ||
+    typeof maxReferences !== "number" ||
+    !Number.isSafeInteger(maxReferences) ||
+    maxReferences < maxAttachments ||
+    maxReferences < maxDatasetPaths ||
+    maxReferences > RESEARCH_INPUT_MAX_REFERENCES
+  ) {
+    return disabled;
+  }
+
+  return {
+    enabled: true,
+    protocol: RESEARCH_INPUT_PROTOCOL,
+    max_user_query_chars: maxUserQueryChars,
+    max_attachments_per_request: maxAttachments,
+    max_research_dataset_paths: maxDatasetPaths,
+    max_research_input_references: maxReferences,
   };
 }
 
@@ -281,18 +366,21 @@ export function parseCapabilityResponse(
   const fallback: BotCapabilityManifest = {
     agents: disabledBotCapabilities(),
     upload: disabledBotUploadCapability(),
+    researchInput: disabledBotResearchInputCapability(),
   };
   if (!isRecord(payload) || ("code" in payload && payload.code !== 200)) {
     return fallback;
   }
   if (!isRecord(payload.data)) return fallback;
   const upload = parseUploadCapability(payload.data.upload);
+  const agents = parseAgentCapabilities(payload.data.agents);
   return {
-    agents: applyUploadAttachmentPolicy(
-      parseAgentCapabilities(payload.data.agents),
-      upload
-    ),
+    agents: applyUploadAttachmentPolicy(agents, upload),
     upload,
+    researchInput: parseResearchInputCapability(
+      payload.data.research_input,
+      agents
+    ),
   };
 }
 
@@ -311,6 +399,7 @@ export function clearBotCapabilitiesCache(): void {
 export function useBotCapabilities(caller?: CacheKeyInput): {
   capabilities: Ref<BotCapability[]>;
   upload: Ref<BotUploadCapability>;
+  researchInput: Ref<BotResearchInputCapability>;
   loading: Ref<boolean>;
   loaded: Ref<boolean>;
   byTool: Readonly<Ref<BotCapabilityByTool>>;
@@ -320,6 +409,9 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
   const key = cacheKeyFor(caller);
   const capabilities = ref<BotCapability[]>(disabledBotCapabilities());
   const upload = ref<BotUploadCapability>(disabledBotUploadCapability());
+  const researchInput = ref<BotResearchInputCapability>(
+    disabledBotResearchInputCapability()
+  );
   const loading = ref(false);
   const loaded = ref(false);
 
@@ -345,6 +437,7 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
         const cloned = cloneCapabilityManifest(cached);
         capabilities.value = cloned.agents;
         upload.value = cloned.upload;
+        researchInput.value = cloned.researchInput;
         loaded.value = true;
         return cloneManifest(cloned.agents);
       }
@@ -359,6 +452,7 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
       const parsed = parseCapabilityResponse(response);
       capabilities.value = parsed.agents;
       upload.value = parsed.upload;
+      researchInput.value = parsed.researchInput;
       setCache(key, parsed);
       loaded.value = true;
       return cloneManifest(parsed.agents);
@@ -366,9 +460,11 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
       const fallback: BotCapabilityManifest = {
         agents: disabledBotCapabilities(),
         upload: disabledBotUploadCapability(),
+        researchInput: disabledBotResearchInputCapability(),
       };
       capabilities.value = fallback.agents;
       upload.value = fallback.upload;
+      researchInput.value = fallback.researchInput;
       setCache(key, fallback);
       loaded.value = true;
       return cloneManifest(fallback.agents);
@@ -377,5 +473,14 @@ export function useBotCapabilities(caller?: CacheKeyInput): {
     }
   };
 
-  return { capabilities, upload, loading, loaded, byTool, bySlug, load };
+  return {
+    capabilities,
+    upload,
+    researchInput,
+    loading,
+    loaded,
+    byTool,
+    bySlug,
+    load,
+  };
 }

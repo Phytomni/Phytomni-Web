@@ -8,7 +8,10 @@ import {
   BOT_CAPABILITIES_URL,
   MAX_BOT_CAPABILITIES,
   MAX_BOT_CAPABILITY_CACHE_ENTRIES,
+  type BotResearchInputCapability,
   clearBotCapabilitiesCache,
+  disabledBotResearchInputCapability,
+  parseCapabilityResponse,
   useBotCapabilities,
 } from "@/views/chat/composables/useBotCapabilities";
 
@@ -66,11 +69,29 @@ function uploadRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function researchInputRecord(
+  overrides: Record<string, unknown> = {}
+): BotResearchInputCapability & Record<string, unknown> {
+  return {
+    enabled: true,
+    protocol: "research_input_resolution_v1",
+    max_user_query_chars: 131072,
+    max_attachments_per_request: 64,
+    max_research_dataset_paths: 64,
+    max_research_input_references: 128,
+    ...overrides,
+  };
+}
+
 function manifestPayload(
   agents: unknown[],
-  upload: Record<string, unknown> = uploadRecord()
+  upload: Record<string, unknown> = uploadRecord(),
+  researchInput: unknown = researchInputRecord()
 ) {
-  return { code: 200, data: { agents, upload } };
+  return {
+    code: 200,
+    data: { agents, upload, research_input: researchInput },
+  };
 }
 
 describe("useBotCapabilities", () => {
@@ -266,6 +287,147 @@ describe("useBotCapabilities", () => {
     expect(second.byTool.value.AnalystAgent?.attachmentChannels).toEqual([
       "dataset",
     ]);
+  });
+
+  it("decodes the exact finite Research input projection", () => {
+    const upstream = researchInputRecord({
+      upstream_private_field: "must-not-be-copied",
+    });
+
+    const parsed = parseCapabilityResponse(
+      manifestPayload(
+        [record("InSilicoResearchAgent")],
+        uploadRecord(),
+        upstream
+      )
+    );
+
+    const researchInput = parsed.researchInput;
+    expect(researchInput).toEqual({
+      enabled: true,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    });
+    expect(researchInput).not.toBe(upstream);
+    expect(researchInput).not.toHaveProperty("upstream_private_field");
+  });
+
+  it.each([
+    ["missing descriptor", null],
+    [
+      "missing field",
+      { ...researchInputRecord(), max_user_query_chars: undefined },
+    ],
+    ["zero", researchInputRecord({ max_research_dataset_paths: 0 })],
+    ["non-integer", researchInputRecord({ max_attachments_per_request: 63.5 })],
+    [
+      "query above hard ceiling",
+      researchInputRecord({ max_user_query_chars: 1048577 }),
+    ],
+    [
+      "attachments above hard ceiling",
+      researchInputRecord({ max_attachments_per_request: 257 }),
+    ],
+    [
+      "dataset paths above hard ceiling",
+      researchInputRecord({ max_research_dataset_paths: 257 }),
+    ],
+    [
+      "references above hard ceiling",
+      researchInputRecord({ max_research_input_references: 257 }),
+    ],
+    [
+      "references below attachments",
+      researchInputRecord({ max_research_input_references: 63 }),
+    ],
+    [
+      "references below dataset paths",
+      researchInputRecord({
+        max_attachments_per_request: 32,
+        max_research_dataset_paths: 64,
+        max_research_input_references: 63,
+      }),
+    ],
+    [
+      "unknown protocol",
+      researchInputRecord({
+        protocol: "research_input_resolution_v2",
+        upstream_private_field: "must-not-be-copied",
+      }),
+    ],
+    ["disabled descriptor", researchInputRecord({ enabled: false })],
+  ])("fails closed for %s Research input data", (_name, researchInput) => {
+    const parsed = parseCapabilityResponse(
+      manifestPayload(
+        [record("InSilicoResearchAgent")],
+        uploadRecord(),
+        researchInput
+      )
+    );
+
+    const parsedResearchInput = parsed.researchInput;
+    expect(parsedResearchInput).toEqual(disabledBotResearchInputCapability());
+    expect(parsedResearchInput).not.toBe(researchInput);
+    expect(parsedResearchInput).not.toHaveProperty("upstream_private_field");
+  });
+
+  it("disables Research input when the Research Agent is disabled", () => {
+    const parsed = parseCapabilityResponse(
+      manifestPayload(
+        [record("InSilicoResearchAgent", false)],
+        uploadRecord(),
+        researchInputRecord()
+      )
+    );
+
+    expect(parsed.researchInput).toEqual(disabledBotResearchInputCapability());
+  });
+
+  it("clones Research input limits across cache reads", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload([record("InSilicoResearchAgent")])
+    );
+
+    const first = useBotCapabilities("research-input-cache");
+    await first.load();
+    first.researchInput.value.max_user_query_chars = 1;
+
+    const second = useBotCapabilities("research-input-cache");
+    await second.load();
+
+    expect(second.researchInput.value).toEqual(researchInputRecord());
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts negotiated upload counts through the structural ceiling", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload(
+        [record("InSilicoResearchAgent")],
+        uploadRecord({ max_attachments: 64 })
+      )
+    );
+
+    const state = useBotCapabilities("upload-negotiated-count");
+    await state.load();
+
+    expect(state.upload.value.max_attachments).toBe(64);
+  });
+
+  it("rejects upload counts above the structural ceiling", async () => {
+    mockRequest.mockResolvedValueOnce(
+      manifestPayload(
+        [record("InSilicoResearchAgent")],
+        uploadRecord({ max_attachments: 257 })
+      )
+    );
+
+    const state = useBotCapabilities("upload-count-above-ceiling");
+    await state.load();
+
+    expect(state.upload.value.enabled).toBe(false);
   });
 
   it("decodes upload capability independently from Agent availability", async () => {
