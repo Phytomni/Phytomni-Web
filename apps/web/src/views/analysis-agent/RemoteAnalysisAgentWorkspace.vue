@@ -154,7 +154,10 @@
             :data-test="`${agentKey}-submit`"
             :data-testid="`${agentKey}-submit`"
             :disabled="
-              isSubmitting || hasBlockingUploads || attachmentTargetBlocked
+              isSubmitting ||
+              isRunActive ||
+              hasBlockingUploads ||
+              attachmentTargetBlocked
             "
             @click="submit"
           >
@@ -601,6 +604,7 @@ async function submit(): Promise<void> {
   if (
     !capabilityAllowed.value ||
     isSubmitting.value ||
+    isRunActive.value ||
     hasBlockingUploads.value ||
     attachmentTargetBlocked.value
   )

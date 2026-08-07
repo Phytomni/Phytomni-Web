@@ -165,6 +165,13 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     vi.clearAllMocks();
     mocks.uploadOptions = null;
     mocks.chatState = reactive({ fileList: [] as unknown[] });
+    mocks.state = reactive(mocks.state);
+    mocks.state.value = {
+      ...mocks.state.value,
+      phase: "idle",
+      projection: null,
+      degraded: false,
+    };
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     mocks.submit.mockResolvedValue(null);
     mocks.chatState.fileList = [
@@ -442,6 +449,32 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
     await wrapper.get("form.analysis-agent-form").trigger("submit");
     expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("blocks a second submit after acceptance when cleanup leaves chips visible", async () => {
+    mocks.submit.mockImplementationOnce(async () => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        phase: "running",
+      };
+    });
+    mocks.uploadQueue.removeUpload.mockRejectedValueOnce(
+      new Error("cleanup failed")
+    );
+    const wrapper = mountWorkspace();
+
+    await wrapper.get('[data-testid="analyst-query"]').setValue("Run once");
+    const submit = wrapper.get('[data-testid="analyst-submit"]');
+    await submit.trigger("click");
+    await flushPromises();
+
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(submit.element).toHaveProperty("disabled", true);
+    expect(wrapper.find('[data-testid="attachment-chip"]').exists()).toBe(true);
+
+    await submit.trigger("click");
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 

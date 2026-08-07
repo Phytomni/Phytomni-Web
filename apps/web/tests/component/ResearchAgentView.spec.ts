@@ -1,3 +1,4 @@
+import { flushPromises } from "@vue/test-utils";
 import { reactive, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentTaskLifecycle } from "@/api/types";
@@ -421,6 +422,52 @@ describe("ResearchAgentView", () => {
       true
     );
     rejected.unmount();
+  });
+
+  it("blocks a second submit after acceptance when cleanup leaves chips visible", async () => {
+    const item = {
+      localId: "research-cleanup-failed",
+      assetId: "file_dataset",
+      name: "reads.fastq.gz",
+      size: 6,
+      type: "application/gzip",
+      file: null,
+      lastModified: 42,
+      status: "completed" as const,
+      partSize: 6,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 6,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    mocks.chatState.fileList = [item];
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: item.assetId }];
+    mocks.submit.mockImplementationOnce(async () => {
+      mocks.state.value = {
+        ...mocks.state.value,
+        phase: "running",
+      };
+    });
+    mocks.uploadQueue.removeUpload.mockRejectedValueOnce(
+      new Error("cleanup failed")
+    );
+    const view = mountView();
+
+    await view.get('[data-test="research-question"]').setValue("Run once");
+    const submit = view.get('[data-test="research-submit"]');
+    await submit.trigger("click");
+    await flushPromises();
+
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(submit.element).toHaveProperty("disabled", true);
+    expect(view.find('[data-testid="attachment-chip"]').exists()).toBe(true);
+
+    await submit.trigger("click");
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    view.unmount();
   });
 
   it("keeps loading and dark-product Back actions reachable", async () => {
