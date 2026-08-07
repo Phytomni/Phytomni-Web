@@ -515,10 +515,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         ChatAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      ["document"],
+      true,
     ],
     [
       "Explicit Analyst + authorized(dataset,document)",
@@ -529,10 +529,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         AnalystAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["dataset", "document"],
+          attachmentChannels: ["dataset", "document"],
         },
       },
-      ["document", "dataset"],
+      true,
     ],
     [
       "Explicit Review + authorized(document)",
@@ -543,10 +543,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         ReviewAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      ["document"],
+      true,
     ],
     [
       "Instant Chat without Chat permission",
@@ -557,10 +557,10 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         ChatAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      [],
+      false,
     ],
     [
       "Explicit Analyst without Analyst permission",
@@ -571,15 +571,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         AnalystAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["dataset"],
+          attachmentChannels: ["dataset"],
         },
         ReviewAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      [],
+      false,
     ],
     [
       "Autonomous Expert + Analyst permission",
@@ -590,15 +590,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         AnalystAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["dataset", "document"],
+          attachmentChannels: ["dataset", "document"],
         },
         ReviewAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      ["document", "dataset"],
+      true,
     ],
     [
       "Autonomous Expert + Review permission only",
@@ -609,15 +609,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         AnalystAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["dataset"],
+          attachmentChannels: ["dataset"],
         },
         ReviewAgent: {
           enabled: true,
           attachments: true,
-          attachmentPurposes: ["document"],
+          attachmentChannels: ["document"],
         },
       },
-      ["document"],
+      true,
     ],
     [
       "No enabled authorized capability",
@@ -628,13 +628,13 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         AnalystAgent: {
           enabled: false,
           attachments: true,
-          attachmentPurposes: ["dataset"],
+          attachmentChannels: ["dataset"],
         },
       },
-      [],
+      false,
     ],
   ])(
-    "derives upload purposes for %s without widening the authorized Agent set",
+    "derives attachment availability for %s without widening the authorized Agent set",
     async (_name, roles, mode, selectedAgent, capabilities, expected) => {
       const router = createRouter({
         history: createMemoryHistory(),
@@ -666,7 +666,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
             },
             ChatComposer: {
               name: "ChatComposer",
-              props: ["allowedUploadPurposes"],
+              props: ["attachmentTargetAvailable", "attachmentTargetBlocked"],
               setup(
                 _props: unknown,
                 { expose }: { expose: (value: Record<string, unknown>) => void }
@@ -688,13 +688,40 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         states.currentChatId.value = dialogueId;
         states.chatMode.value = mode;
         states.selectedAgent.value = selectedAgent;
+        if (!expected) {
+          states.fileList.value = [
+            {
+              localId: "upload-incompatible",
+              assetId: "file_incompatible",
+              name: "counts.csv",
+              size: 1,
+              type: "text/csv",
+              file: null,
+              lastModified: 0,
+              status: "completed",
+              partSize: 1,
+              partCount: 1,
+              receivedParts: [1],
+              loadedBytes: 1,
+              speedBytesPerSecond: 0,
+              etaSeconds: 0,
+              retryCount: 0,
+              errorCode: null,
+            },
+          ];
+        }
         await nextTick();
 
         expect(
           wrapper
             .findComponent({ name: "ChatComposer" })
-            .props("allowedUploadPurposes")
+            .props("attachmentTargetAvailable")
         ).toEqual(expected);
+        expect(
+          wrapper
+            .findComponent({ name: "ChatComposer" })
+            .props("attachmentTargetBlocked")
+        ).toBe(!expected);
       } finally {
         wrapper.unmount();
       }

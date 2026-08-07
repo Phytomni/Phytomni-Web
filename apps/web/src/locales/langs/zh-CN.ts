@@ -426,6 +426,8 @@ export default {
     inputPlaceholderTip: "请输入您的问题",
     uploadFile:
       "支持生物学数据和文本文件，单个最大 10 GiB，最多 10 个，也可直接粘贴复制的文件。",
+    attachmentTargetUnavailable:
+      "当前智能体无法接收附件。请移除附件或选择兼容的智能体。",
     attachmentErrors: {
       unsupported_type: "当前智能体不支持“{file}”，请查看智能体能力后重试。",
       file_too_large: "“{file}”超过单个文件 {maxFileMb} MB 的限制。",

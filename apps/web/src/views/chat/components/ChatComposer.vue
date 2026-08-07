@@ -28,6 +28,14 @@
             </div>
           </div>
         </div>
+        <p
+          v-if="attachmentTargetBlocked && !isSending"
+          class="composer-attachment-status"
+          data-testid="attachment-target-status"
+          role="status"
+        >
+          {{ t("chat.attachmentTargetUnavailable") }}
+        </p>
 
         <div class="chat-composer-body">
           <MentionSender
@@ -44,7 +52,7 @@
             :whole="true"
             submit-type="enter"
             @update:model-value="emit('update:modelValue', $event)"
-            @submit="emit('submit')"
+            @submit="onSubmit"
             @select="emit('select', $event)"
             @search="emit('search', $event)"
             @keydown.enter.capture="onComposerEnterCapture"
@@ -212,6 +220,8 @@ const props = defineProps<{
   showModeSelector: boolean;
   fileList: ResumableUploadItem[];
   hasBlockingUploads: boolean;
+  attachmentTargetAvailable: boolean;
+  attachmentTargetBlocked: boolean;
   rolesLoading: boolean;
   hasMessages: boolean;
   selectedAgent: string;
@@ -262,7 +272,9 @@ const mentionTriggers = computed(() =>
 const composerDisabled = computed(
   () => props.isSending || props.rolesLoading || !props.modeUsable
 );
-const canQueueFiles = computed(() => !composerDisabled.value);
+const canQueueFiles = computed(
+  () => !composerDisabled.value && props.attachmentTargetAvailable
+);
 const permissionUnavailable = computed(
   () => !props.rolesLoading && !props.modeUsable
 );
@@ -276,8 +288,13 @@ const canSubmit = computed(
   () =>
     Boolean(props.modelValue.trim()) &&
     !composerDisabled.value &&
-    !props.hasBlockingUploads
+    !props.hasBlockingUploads &&
+    !props.attachmentTargetBlocked
 );
+
+const onSubmit = () => {
+  if (canSubmit.value) emit("submit");
+};
 
 const popoverVisible = computed(() =>
   unref(senderRef.value?.popoverVisible as boolean | undefined)
@@ -339,6 +356,13 @@ defineExpose<ChatComposerHandle>({
 
 .composer-permission-status {
   padding: var(--phy-space-8) var(--phy-space-12) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.composer-attachment-status {
+  margin: var(--phy-space-4) var(--phy-space-12) 0;
   color: var(--phy-color-text-muted);
   font-size: 0.8125rem;
   line-height: 1.4;

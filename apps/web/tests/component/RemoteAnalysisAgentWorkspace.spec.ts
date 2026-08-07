@@ -38,9 +38,17 @@ const mocks = vi.hoisted(() => {
       },
     ],
   };
+  const analystCapability = {
+    enabled: true,
+    execution: "agent_run",
+    attachments: true,
+    attachmentChannels: ["document", "dataset"],
+    artifacts: true,
+  };
   return {
     state,
     chatState,
+    analystCapability,
     submit: vi.fn().mockResolvedValue(null),
     cancel: vi.fn(),
     reset: vi.fn(),
@@ -69,11 +77,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
     byTool: {
       value: {
         AnalystAgent: {
-          enabled: true,
-          execution: "agent_run",
-          attachments: true,
-          attachmentPurposes: ["document", "dataset"],
-          artifacts: true,
+          ...mocks.analystCapability,
         },
       },
     },
@@ -142,6 +146,8 @@ describe("RemoteAnalysisAgentWorkspace", () => {
         status: "completed",
       },
     ];
+    mocks.analystCapability.attachments = true;
+    mocks.analystCapability.attachmentChannels = ["document", "dataset"];
   });
 
   afterEach(() => {
@@ -184,6 +190,32 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       [file],
       "document"
     );
+    wrapper.unmount();
+  });
+
+  it("keeps the query editable but blocks attachment submission when the Agent has zero channels", async () => {
+    mocks.analystCapability.attachmentChannels = [];
+    const wrapper = mountWorkspace();
+
+    const query = wrapper.get('[data-testid="analyst-query"]');
+    await query.setValue("Keep this draft");
+
+    expect(query.element).toHaveProperty("disabled", false);
+    expect(wrapper.get('[data-test="analyst-files"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      wrapper.get('[data-testid="analyst-submit"]').element
+    ).toHaveProperty("disabled", true);
+    expect(
+      wrapper.get('[data-test="analyst-attachment-target-status"]').text()
+    ).toBe(
+      "This agent can't accept attachments. Remove them or choose a compatible agent."
+    );
+
+    await wrapper.get("form.analysis-agent-form").trigger("submit");
+    expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

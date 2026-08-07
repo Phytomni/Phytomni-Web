@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => {
           a2ui: false,
           resolver: true,
           attachments: true,
+          attachmentChannels: ["document", "dataset"],
           artifacts: true,
           enabled: true,
         },
@@ -198,6 +199,7 @@ function resetState(): void {
     a2ui: false,
     resolver: true,
     attachments: true,
+    attachmentChannels: ["document", "dataset"],
     artifacts: true,
     enabled: true,
   };
@@ -396,6 +398,53 @@ describe("DigitalDesignAgentView", () => {
       attachments: [],
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
     });
+    wrapper.unmount();
+  });
+
+  it("keeps form fields editable but blocks attachment submission when the Agent has zero channels", async () => {
+    mocks.capabilities.byTool.value.DigitalDesignAgent.attachmentChannels = [];
+    mocks.chatState.fileList = [
+      {
+        localId: "upload-incompatible",
+        assetId: "file_incompatible",
+        name: "counts.csv",
+        size: 1,
+        type: "text/csv",
+        file: null,
+        lastModified: 0,
+        status: "completed",
+        partSize: 1,
+        partCount: 1,
+        receivedParts: [1],
+        loadedBytes: 1,
+        speedBytesPerSecond: 0,
+        etaSeconds: 0,
+        retryCount: 0,
+        errorCode: null,
+      },
+    ];
+    const wrapper = mountView();
+
+    const question = wrapper.get('[data-test="design-question"]');
+    await question.setValue("Keep this draft");
+
+    expect(question.element).toHaveProperty("disabled", false);
+    expect(wrapper.get('[data-test="design-files"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(wrapper.get('[data-test="design-submit"]').element).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      wrapper.get('[data-test="design-attachment-target-status"]').text()
+    ).toBe(
+      "This agent can't accept attachments. Remove them or choose a compatible agent."
+    );
+
+    await wrapper.get("form.digital-design-form").trigger("submit");
+    expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

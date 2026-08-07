@@ -81,6 +81,8 @@ const baseProps = () => ({
   showModeSelector: true,
   fileList: [] as ResumableUploadItem[],
   hasBlockingUploads: false,
+  attachmentTargetAvailable: true,
+  attachmentTargetBlocked: false,
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
@@ -456,6 +458,54 @@ describe("ChatComposer", () => {
     expect(
       wrapper.findComponent(".composer-send-button").props("disabled")
     ).toBe(true);
+  });
+
+  it("keeps editing, removal, and Agent switching available when attachments are incompatible", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-incompatible",
+      assetId: "file_incompatible",
+      name: "counts.csv",
+      size: 10,
+      type: "text/csv",
+      file: null,
+      lastModified: 0,
+      status: "completed",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 10,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    const wrapper = mountComposer({
+      modelValue: "keep editing",
+      fileList: [file],
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: true,
+    });
+
+    expect(wrapper.get('[data-testid="attachment-target-status"]').text()).toBe(
+      "This agent can't accept attachments. Remove them or choose a compatible agent."
+    );
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(false);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent({ name: "ChatAgentPicker" }).props("disabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+
+    await wrapper
+      .findComponent({ name: "ChatUploadCard" })
+      .vm.$emit("remove", file.localId);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
   });
 
   it("emits file-change from the upload control", async () => {

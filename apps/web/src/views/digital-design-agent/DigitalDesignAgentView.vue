@@ -147,6 +147,14 @@
               />
             </li>
           </ul>
+          <p
+            v-if="attachmentTargetBlocked"
+            class="digital-design-hint"
+            data-test="design-attachment-target-status"
+            role="status"
+          >
+            {{ t("chat.attachmentTargetUnavailable") }}
+          </p>
         </div>
 
         <ul
@@ -185,7 +193,9 @@
             type="submit"
             class="digital-design-submit"
             data-test="design-submit"
-            :disabled="isSubmitting || hasBlockingUploads"
+            :disabled="
+              isSubmitting || hasBlockingUploads || attachmentTargetBlocked
+            "
             @keydown.enter.prevent="submitDesign"
           >
             {{
@@ -405,6 +415,7 @@ const capabilityAllowed = computed(() => {
 const canPickAttachments = computed(
   () =>
     digitalDesignCapability.value?.attachments === true &&
+    (digitalDesignCapability.value?.attachmentChannels?.length ?? 0) > 0 &&
     capabilities.upload.value.enabled === true
 );
 const uploadQueue = useResumableUploads({
@@ -418,6 +429,9 @@ const uploadQueue = useResumableUploads({
 });
 const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
 const hasBlockingUploads = uploadQueue.hasBlockingUploads;
+const attachmentTargetBlocked = computed(
+  () => uploadItems.value.length > 0 && !canPickAttachments.value
+);
 
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
@@ -575,7 +589,8 @@ async function submitDesign(): Promise<void> {
   if (
     !capabilityAllowed.value ||
     isSubmitting.value ||
-    hasBlockingUploads.value
+    hasBlockingUploads.value ||
+    attachmentTargetBlocked.value
   )
     return;
 

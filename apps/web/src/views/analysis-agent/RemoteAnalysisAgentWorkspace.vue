@@ -122,6 +122,14 @@
               />
             </li>
           </ul>
+          <p
+            v-if="attachmentTargetBlocked"
+            class="analysis-agent-hint"
+            :data-test="`${agentKey}-attachment-target-status`"
+            role="status"
+          >
+            {{ t("chat.attachmentTargetUnavailable") }}
+          </p>
         </div>
 
         <p
@@ -147,7 +155,9 @@
             class="analysis-agent-submit"
             :data-test="`${agentKey}-submit`"
             :data-testid="`${agentKey}-submit`"
-            :disabled="isSubmitting || hasBlockingUploads"
+            :disabled="
+              isSubmitting || hasBlockingUploads || attachmentTargetBlocked
+            "
             @click="submit"
           >
             {{
@@ -283,7 +293,10 @@ import {
 } from "@/constants/agents";
 import { userStore } from "@/stores";
 import ChatUploadCard from "@/views/chat/components/ChatUploadCard.vue";
-import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
+import {
+  useBotCapabilities,
+  type AttachmentChannel,
+} from "@/views/chat/composables/useBotCapabilities";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import {
   useBotRemoteAgentRun,
@@ -361,8 +374,8 @@ const isSubmitting = ref(false);
 const capabilityLoaded = computed(() => capabilities.loaded.value === true);
 const product = computed(() => REMOTE_AGENT_PRODUCT_REGISTRY[props.tool]);
 const agentCapability = computed(() => capabilities.byTool.value[props.tool]);
-const allowedPurposes = computed<UploadPurpose[]>(
-  () => agentCapability.value?.attachmentPurposes ?? []
+const attachmentChannels = computed<AttachmentChannel[]>(
+  () => agentCapability.value?.attachmentChannels ?? []
 );
 const capabilityAllowed = computed(() => {
   const capability = agentCapability.value;
@@ -377,7 +390,7 @@ const capabilityAllowed = computed(() => {
 const canPickAttachments = computed(
   () =>
     agentCapability.value?.attachments === true &&
-    allowedPurposes.value.length > 0 &&
+    attachmentChannels.value.length > 0 &&
     capabilities.upload.value.enabled === true
 );
 const uploadQueue = useResumableUploads({
@@ -391,6 +404,9 @@ const uploadQueue = useResumableUploads({
 });
 const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
 const hasBlockingUploads = uploadQueue.hasBlockingUploads;
+const attachmentTargetBlocked = computed(
+  () => uploadItems.value.length > 0 && !canPickAttachments.value
+);
 
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
@@ -521,7 +537,8 @@ async function submit(): Promise<void> {
   if (
     !capabilityAllowed.value ||
     isSubmitting.value ||
-    hasBlockingUploads.value
+    hasBlockingUploads.value ||
+    attachmentTargetBlocked.value
   )
     return;
 

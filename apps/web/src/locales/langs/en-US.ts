@@ -429,6 +429,8 @@ export default {
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
       "Attach biological data or text files (up to 10 GiB each, 10 files). You can also paste copied files.",
+    attachmentTargetUnavailable:
+      "This agent can't accept attachments. Remove them or choose a compatible agent.",
     attachmentErrors: {
       unsupported_type:
         '"{file}" is not supported by this Agent. Check the Agent capability before retrying.',

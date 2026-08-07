@@ -5,9 +5,9 @@ import {
   CANONICAL_AGENT_TOOLS,
   type CanonicalAgentTool,
 } from "@/constants/agents";
-import type { UploadPurpose } from "../upload/types";
 
 export type BotCapabilityExecution = "chat" | "agent_run" | "blocking";
+export type AttachmentChannel = "document" | "dataset";
 
 export interface BotCapability {
   tool: CanonicalAgentTool;
@@ -17,7 +17,7 @@ export interface BotCapability {
   a2ui: boolean;
   resolver: boolean;
   attachments: boolean;
-  attachmentPurposes: UploadPurpose[];
+  attachmentChannels: AttachmentChannel[];
   artifacts: boolean;
   enabled: boolean;
 }
@@ -96,7 +96,7 @@ function disabledCapability(tool: CanonicalAgentTool): BotCapability {
     a2ui: false,
     resolver: false,
     attachments: false,
-    attachmentPurposes: [],
+    attachmentChannels: [],
     artifacts: false,
     enabled: false,
   };
@@ -109,7 +109,7 @@ export function disabledBotCapabilities(): BotCapability[] {
 function cloneManifest(manifest: readonly BotCapability[]): BotCapability[] {
   return manifest.map((capability) => ({
     ...capability,
-    attachmentPurposes: [...capability.attachmentPurposes],
+    attachmentChannels: [...capability.attachmentChannels],
   }));
 }
 
@@ -136,9 +136,9 @@ function isBooleanRecord(record: CapabilityRecord, key: string): boolean {
   return typeof record[key] === "boolean";
 }
 
-function parseAttachmentPurposes(value: unknown): UploadPurpose[] {
+function parseAttachmentChannels(value: unknown): AttachmentChannel[] {
   if (!Array.isArray(value)) return [];
-  const parsed: UploadPurpose[] = [];
+  const parsed: AttachmentChannel[] = [];
   for (const item of value) {
     if ((item !== "dataset" && item !== "document") || parsed.includes(item)) {
       return [];
@@ -251,9 +251,9 @@ function parseAgentCapabilities(records: unknown): BotCapability[] {
       a2ui: candidate.a2ui as boolean,
       resolver: candidate.resolver as boolean,
       attachments,
-      attachmentPurposes:
+      attachmentChannels:
         enabled && attachments
-          ? parseAttachmentPurposes(candidate.attachment_purposes)
+          ? parseAttachmentChannels(candidate.attachment_purposes)
           : [],
       artifacts: candidate.artifacts as boolean,
       enabled,
@@ -269,8 +269,8 @@ function applyUploadAttachmentPolicy(
 ): BotCapability[] {
   if (upload.enabled) return agents;
   return agents.map((agent) =>
-    agent.attachments || agent.attachmentPurposes.length > 0
-      ? { ...agent, attachments: false, attachmentPurposes: [] }
+    agent.attachments || agent.attachmentChannels.length > 0
+      ? { ...agent, attachments: false, attachmentChannels: [] }
       : agent
   );
 }

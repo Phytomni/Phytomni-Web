@@ -406,6 +406,8 @@ export function removeDeletedChat(options: {
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
                   :has-blocking-uploads="hasBlockingUploads"
+                  :attachment-target-available="attachmentTargetAvailable"
+                  :attachment-target-blocked="attachmentTargetBlocked"
                   :roles-loading="rolesLoading"
                   :has-messages="!!currentChat?.messages?.length"
                   :selected-agent="selectedAgent"
@@ -699,7 +701,6 @@ import type {
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
-import type { UploadPurpose } from "./upload/types";
 import type { BotRunProjection } from "./botProjection";
 import {
   cloneBotInterop,
@@ -716,18 +717,11 @@ function messageAttachments(
   }));
 }
 
-function unionPurposes(
-  capabilities: readonly (BotCapability | undefined)[]
-): UploadPurpose[] {
-  const present = new Set<UploadPurpose>();
-  for (const capability of capabilities) {
-    if (!capability?.enabled || !capability.attachments) continue;
-    for (const purpose of capability.attachmentPurposes) {
-      present.add(purpose);
-    }
-  }
-  return (["document", "dataset"] as const).filter((purpose) =>
-    present.has(purpose)
+function hasAttachmentChannel(capability: BotCapability | undefined): boolean {
+  return (
+    capability?.enabled === true &&
+    capability.attachments === true &&
+    (capability.attachmentChannels?.length ?? 0) > 0
   );
 }
 
@@ -958,24 +952,28 @@ const {
 } = useChatStates();
 
 const botCapabilities = useBotCapabilities("chat");
-const allowedUploadPurposes = computed<UploadPurpose[]>(() => {
-  if (!botCapabilities.upload.value.enabled) return [];
+const attachmentTargetAvailable = computed(() => {
+  if (!botCapabilities.upload.value.enabled) return false;
 
   const byTool = botCapabilities.byTool.value;
   if (chatMode.value === "instant") {
-    return authorizedAgentTools.value.includes("ChatAgent")
-      ? unionPurposes([byTool.ChatAgent])
-      : [];
+    return (
+      authorizedAgentTools.value.includes("ChatAgent") &&
+      hasAttachmentChannel(byTool.ChatAgent)
+    );
   }
 
   if (selectedAgent.value) {
     const tool = selectedAgent.value as CanonicalAgentTool;
-    return authorizedAgentTools.value.includes(tool)
-      ? unionPurposes([byTool[tool]])
-      : [];
+    return (
+      authorizedAgentTools.value.includes(tool) &&
+      hasAttachmentChannel(byTool[tool])
+    );
   }
 
-  return unionPurposes(authorizedAgentTools.value.map((tool) => byTool[tool]));
+  return authorizedAgentTools.value.some((tool) =>
+    hasAttachmentChannel(byTool[tool])
+  );
 });
 const uploadUsername = computed(() => userStore().name ?? "");
 const uploadQueue = useResumableUploads({
@@ -986,17 +984,8 @@ const uploadQueue = useResumableUploads({
   onValidationError: onAttachmentValidationError,
 });
 const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
-
-watch(
-  [currentChatId, allowedUploadPurposes],
-  ([dialogueId, allowedPurposes]) => {
-    if (!dialogueId || allowedPurposes.includes(uploadPurpose.value)) return;
-    const fallback = allowedPurposes.includes("document")
-      ? "document"
-      : allowedPurposes[0];
-    if (fallback) uploadPurpose.value = fallback;
-  },
-  { immediate: true }
+const attachmentTargetBlocked = computed(
+  () => fileList.value.length > 0 && !attachmentTargetAvailable.value
 );
 
 watch(
