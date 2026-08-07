@@ -1,5 +1,5 @@
 import { flushPromises } from "@vue/test-utils";
-import { ref } from "vue";
+import { nextTick, reactive, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
@@ -9,6 +9,11 @@ import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemo
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { mustGet } from "../helpers/mockFactories";
 import { createTestAppContext } from "../helpers/test-app-context";
+import {
+  assertUnifiedAttachmentBehaviorTable,
+  type RetainedUploadStatus,
+  type UnifiedAttachmentSurface,
+} from "../helpers/unifiedAttachmentBehavior";
 
 const mocks = vi.hoisted(() => {
   const state: { value: BotRemoteAgentRunState } = {
@@ -260,6 +265,255 @@ function completedUpload(localId: string, name: string) {
   };
 }
 
+function makeUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
+  let wrapper: ReturnType<typeof mountView> | null = null;
+
+  const reset = (): void => {
+    wrapper?.unmount();
+    wrapper = null;
+    mocks.uploadOptions = null;
+    mocks.chatState.fileList = reactive([]);
+    mocks.uploadQueue.hasBlockingUploads.value = false;
+    mocks.uploadQueue.completedAssetIds.value = [];
+    mocks.capabilities.byTool.value.DigitalDesignAgent = {
+      tool: "DigitalDesignAgent",
+      slug: "design",
+      execution: "agent_run",
+      stream: false,
+      a2ui: false,
+      resolver: true,
+      attachments: true,
+      attachmentChannels: ["document", "dataset"],
+      artifacts: true,
+      enabled: true,
+    };
+    mocks.submit.mockReset();
+    mocks.submit.mockResolvedValue(null);
+    mocks.uploadQueue.queueFiles.mockClear();
+    mocks.uploadQueue.pauseUpload.mockClear();
+    mocks.uploadQueue.resumeUpload.mockClear();
+    mocks.uploadQueue.retryUpload.mockClear();
+    mocks.uploadQueue.reselectUpload.mockClear();
+    mocks.uploadQueue.cancelUpload.mockClear();
+    mocks.uploadQueue.removeUploadById.mockClear();
+    mocks.uploadQueue.removeUpload.mockReset();
+    mocks.uploadQueue.removeUpload.mockImplementation(async (item) => {
+      const remaining = mocks.chatState.fileList.filter(
+        (candidate) => candidate.localId !== item.localId
+      );
+      mocks.chatState.fileList.splice(
+        0,
+        mocks.chatState.fileList.length,
+        ...remaining
+      );
+    });
+  };
+
+  const setFileList = (items: unknown[]): void => {
+    mocks.chatState.fileList.splice(
+      0,
+      mocks.chatState.fileList.length,
+      ...items
+    );
+  };
+
+  const mountSurface = () => {
+    wrapper = mountView();
+    return wrapper;
+  };
+
+  const activeUpload = (status: RetainedUploadStatus) => ({
+    ...completedUpload("upload-active", "counts.csv"),
+    status,
+    file:
+      status === "failed" || status === "expired"
+        ? null
+        : new File([], "counts.csv"),
+  });
+
+  const fillForm = async (
+    current: ReturnType<typeof mountView>,
+    query: string
+  ) => {
+    await current.get('[data-test="design-question"]').setValue(query);
+    await current.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+    await current.get('[data-test="design-species-code"]').setValue("ath");
+  };
+
+  return {
+    reset,
+    async attach() {
+      const current = mountSurface();
+      const input = current.get<HTMLInputElement>("[data-test=design-files]");
+      const file = new File(["counts"], "counts.csv", { type: "text/csv" });
+      Object.defineProperty(input.element, "files", {
+        configurable: true,
+        value: [file],
+      });
+      await input.trigger("change");
+      return {
+        attachActionCount: current.findAll("[data-test=design-files]").length,
+        queuedFileCount: mocks.uploadQueue.queueFiles.mock.calls.length,
+        purposeFree:
+          mocks.uploadQueue.queueFiles.mock.calls[0]?.length === 1 &&
+          Array.isArray(mocks.uploadQueue.queueFiles.mock.calls[0]?.[0]) &&
+          mocks.uploadQueue.queueFiles.mock.calls[0]?.[0]?.[0] === file,
+        purposeControls: current.findAll(
+          '[data-test="design-attachment-purpose"]'
+        ).length,
+        descriptionControls: current.findAll('[data-test="design-dataset"]')
+          .length,
+      };
+    },
+    async typingDuringUpload() {
+      setFileList([activeUpload("uploading")]);
+      const current = mountSurface();
+      const query = current.get('[data-test="design-question"]');
+      await query.setValue("draft while uploading");
+      return {
+        query: String((query.element as HTMLInputElement).value),
+        editorDisabled: Boolean((query.element as HTMLInputElement).disabled),
+      };
+    },
+    async sendBlocked(statuses) {
+      const result = {} as Record<RetainedUploadStatus, boolean>;
+      for (const status of statuses) {
+        wrapper?.unmount();
+        setFileList([activeUpload(status)]);
+        mocks.uploadQueue.hasBlockingUploads.value = true;
+        const current = mountSurface();
+        result[status] = Boolean(
+          (
+            current.get('[data-test="design-submit"]')
+              .element as HTMLButtonElement
+          ).disabled
+        );
+      }
+      return result;
+    },
+    async duplicate() {
+      setFileList([completedUpload("upload-existing", "counts.csv")]);
+      const current = mountSurface();
+      mocks.uploadOptions?.onDuplicate?.("upload-existing", "counts.csv");
+      await flushPromises();
+      return {
+        announcement: current
+          .get('[data-testid="attachment-chip-live-region"]')
+          .text(),
+        focused:
+          document.activeElement ===
+          current.get('[data-testid="attachment-chip"]').element,
+      };
+    },
+    async lifecycle() {
+      const item = completedUpload("upload-active", "counts.csv");
+      const result = {
+        pause: false,
+        resume: false,
+        retry: false,
+        reselect: false,
+        cancel: false,
+        remove: false,
+      };
+      setFileList([{ ...item, status: "uploading" }]);
+      let current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-pause"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-cancel"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-remove"]')
+        .trigger("click");
+      result.pause = mocks.uploadQueue.pauseUpload.mock.calls.length > 0;
+      result.cancel = mocks.uploadQueue.cancelUpload.mock.calls.length > 0;
+      result.remove = mocks.uploadQueue.removeUploadById.mock.calls.length > 0;
+      current.unmount();
+
+      setFileList([{ ...item, status: "paused" }]);
+      current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-resume"]')
+        .trigger("click");
+      result.resume = mocks.uploadQueue.resumeUpload.mock.calls.length > 0;
+      current.unmount();
+
+      setFileList([{ ...item, status: "failed", file: null }]);
+      current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-retry"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-reselect"]')
+        .trigger("click");
+      const input = current.get<HTMLInputElement>(
+        "[data-testid=attachment-chip-reselect-input]"
+      );
+      const replacement = new File(["counts"], "counts.csv", {
+        type: "text/csv",
+      });
+      Object.defineProperty(input.element, "files", {
+        configurable: true,
+        value: [replacement],
+      });
+      await input.trigger("change");
+      result.retry = mocks.uploadQueue.retryUpload.mock.calls.length > 0;
+      result.reselect = mocks.uploadQueue.reselectUpload.mock.calls.length > 0;
+      return result;
+    },
+    async submission() {
+      const item = completedUpload("upload-submit", "counts.csv");
+      setFileList([item]);
+      mocks.uploadQueue.completedAssetIds.value = [
+        { asset_id: "file_context" },
+      ];
+      let current = mountSurface();
+      await fillForm(current, "Run it");
+      await current.get('[data-test="design-submit"]').trigger("click");
+      await flushPromises();
+      await nextTick();
+      const successfulClear = !current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      current.unmount();
+
+      const failedItem = completedUpload("upload-failed", "counts.csv");
+      setFileList([failedItem]);
+      mocks.uploadQueue.removeUpload.mockClear();
+      mocks.submit.mockRejectedValueOnce(new Error("submit failed"));
+      current = mountSurface();
+      await fillForm(current, "Keep draft");
+      await current.get('[data-test="design-submit"]').trigger("click");
+      await flushPromises();
+      const failedPreservation = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { successfulClear, failedPreservation };
+    },
+    async incompatible() {
+      mocks.capabilities.byTool.value.DigitalDesignAgent.attachmentChannels =
+        [];
+      const item = completedUpload("upload-incompatible", "counts.csv");
+      setFileList([item]);
+      const current = mountSurface();
+      const zeroChannelRejected = Boolean(
+        (
+          current.get('[data-test="design-submit"]')
+            .element as HTMLButtonElement
+        ).disabled
+      );
+      const incompatiblePreserved = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { zeroChannelRejected, incompatiblePreserved };
+    },
+  };
+}
+
 afterEach(() => {
   REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
   vi.useRealTimers();
@@ -313,6 +567,12 @@ describe("DigitalDesignAgentView", () => {
     mocks.uploadOptions = null;
     mocks.uploadQueue.hasBlockingUploads.value = false;
     mocks.uploadQueue.completedAssetIds.value = [];
+  });
+
+  it("applies the shared attachment behavior contract", async () => {
+    const surface = makeUnifiedAttachmentSurface();
+    await assertUnifiedAttachmentBehaviorTable(surface);
+    await surface.reset();
   });
 
   it("passes the Digital Design tool to the shared product runner", () => {

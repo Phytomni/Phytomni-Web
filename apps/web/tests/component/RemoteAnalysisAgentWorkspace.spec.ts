@@ -5,6 +5,11 @@ import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import RemoteAnalysisAgentWorkspace from "@/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue";
 import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { createTestAppContext } from "../helpers/test-app-context";
+import {
+  assertUnifiedAttachmentBehaviorTable,
+  type RetainedUploadStatus,
+  type UnifiedAttachmentSurface,
+} from "../helpers/unifiedAttachmentBehavior";
 
 vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
@@ -160,6 +165,218 @@ function completedUpload(localId: string, name: string) {
   };
 }
 
+function makeUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
+  let wrapper: ReturnType<typeof mountWorkspace> | null = null;
+
+  const reset = (): void => {
+    wrapper?.unmount();
+    wrapper = null;
+    mocks.uploadOptions = null;
+    mocks.chatState.fileList = [];
+    mocks.uploadQueue.hasBlockingUploads.value = false;
+    mocks.analystCapability.attachments = true;
+    mocks.analystCapability.attachmentChannels = ["document", "dataset"];
+    mocks.submit.mockReset();
+    mocks.submit.mockResolvedValue(null);
+    mocks.uploadQueue.queueFiles.mockClear();
+    mocks.uploadQueue.pauseUpload.mockClear();
+    mocks.uploadQueue.resumeUpload.mockClear();
+    mocks.uploadQueue.retryUpload.mockClear();
+    mocks.uploadQueue.reselectUpload.mockClear();
+    mocks.uploadQueue.cancelUpload.mockClear();
+    mocks.uploadQueue.removeUploadById.mockClear();
+    mocks.uploadQueue.removeUpload.mockReset();
+    mocks.uploadQueue.removeUpload.mockImplementation(async (item) => {
+      mocks.chatState.fileList = mocks.chatState.fileList.filter(
+        (candidate) => candidate !== item
+      );
+    });
+  };
+
+  const mountSurface = () => {
+    wrapper = mountWorkspace();
+    return wrapper;
+  };
+
+  const activeUpload = (status: RetainedUploadStatus) => ({
+    ...completedUpload("upload-active", "counts.csv"),
+    status,
+    file:
+      status === "failed" || status === "expired"
+        ? null
+        : new File([], "counts.csv"),
+  });
+
+  return {
+    reset,
+    async attach() {
+      const current = mountSurface();
+      const input = current.get<HTMLInputElement>("[data-test=analyst-files]");
+      const file = new File(["counts"], "counts.csv", { type: "text/csv" });
+      Object.defineProperty(input.element, "files", {
+        configurable: true,
+        value: [file],
+      });
+      await input.trigger("change");
+      return {
+        attachActionCount: current.findAll("[data-test=analyst-files]").length,
+        queuedFileCount: mocks.uploadQueue.queueFiles.mock.calls.length,
+        purposeFree:
+          mocks.uploadQueue.queueFiles.mock.calls[0]?.length === 1 &&
+          Array.isArray(mocks.uploadQueue.queueFiles.mock.calls[0]?.[0]) &&
+          mocks.uploadQueue.queueFiles.mock.calls[0]?.[0]?.[0] === file,
+        purposeControls: current.findAll(
+          '[data-test="analyst-attachment-purpose"]'
+        ).length,
+        descriptionControls: current.findAll('[data-test="analyst-dataset"]')
+          .length,
+      };
+    },
+    async typingDuringUpload() {
+      mocks.chatState.fileList = [activeUpload("uploading")];
+      const current = mountSurface();
+      const query = current.get('[data-testid="analyst-query"]');
+      await query.setValue("draft while uploading");
+      return {
+        query: String((query.element as HTMLInputElement).value),
+        editorDisabled: Boolean((query.element as HTMLInputElement).disabled),
+      };
+    },
+    async sendBlocked(statuses) {
+      const result = {} as Record<RetainedUploadStatus, boolean>;
+      for (const status of statuses) {
+        wrapper?.unmount();
+        mocks.chatState.fileList = [activeUpload(status)];
+        mocks.uploadQueue.hasBlockingUploads.value = true;
+        const current = mountSurface();
+        result[status] = Boolean(
+          (
+            current.get('[data-testid="analyst-submit"]')
+              .element as HTMLButtonElement
+          ).disabled
+        );
+      }
+      return result;
+    },
+    async duplicate() {
+      mocks.chatState.fileList = [
+        completedUpload("upload-existing", "counts.csv"),
+      ];
+      const current = mountSurface();
+      mocks.uploadOptions?.onDuplicate?.("upload-existing", "counts.csv");
+      await flushPromises();
+      return {
+        announcement: current
+          .get('[data-testid="attachment-chip-live-region"]')
+          .text(),
+        focused:
+          document.activeElement ===
+          current.get('[data-testid="attachment-chip"]').element,
+      };
+    },
+    async lifecycle() {
+      const item = completedUpload("upload-active", "counts.csv");
+      const result = {
+        pause: false,
+        resume: false,
+        retry: false,
+        reselect: false,
+        cancel: false,
+        remove: false,
+      };
+      mocks.chatState.fileList = [{ ...item, status: "uploading" }];
+      let current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-pause"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-cancel"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-remove"]')
+        .trigger("click");
+      result.pause = mocks.uploadQueue.pauseUpload.mock.calls.length > 0;
+      result.cancel = mocks.uploadQueue.cancelUpload.mock.calls.length > 0;
+      result.remove = mocks.uploadQueue.removeUploadById.mock.calls.length > 0;
+      current.unmount();
+
+      mocks.chatState.fileList = [{ ...item, status: "paused" }];
+      current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-resume"]')
+        .trigger("click");
+      result.resume = mocks.uploadQueue.resumeUpload.mock.calls.length > 0;
+      current.unmount();
+
+      mocks.chatState.fileList = [{ ...item, status: "failed", file: null }];
+      current = mountSurface();
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-retry"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-reselect"]')
+        .trigger("click");
+      const input = current.get<HTMLInputElement>(
+        "[data-testid=attachment-chip-reselect-input]"
+      );
+      const replacement = new File(["counts"], "counts.csv", {
+        type: "text/csv",
+      });
+      Object.defineProperty(input.element, "files", {
+        configurable: true,
+        value: [replacement],
+      });
+      await input.trigger("change");
+      result.retry = mocks.uploadQueue.retryUpload.mock.calls.length > 0;
+      result.reselect = mocks.uploadQueue.reselectUpload.mock.calls.length > 0;
+      return result;
+    },
+    async submission() {
+      const item = completedUpload("upload-submit", "counts.csv");
+      mocks.chatState.fileList = [item];
+      let current = mountSurface();
+      await current.get('[data-testid="analyst-query"]').setValue("Run it");
+      await current.get('[data-testid="analyst-submit"]').trigger("click");
+      await flushPromises();
+      const successfulClear = !current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      current.unmount();
+
+      const failedItem = completedUpload("upload-failed", "counts.csv");
+      mocks.chatState.fileList = [failedItem];
+      mocks.submit.mockRejectedValueOnce(new Error("submit failed"));
+      current = mountSurface();
+      await current.get('[data-testid="analyst-query"]').setValue("Keep draft");
+      await current.get('[data-testid="analyst-submit"]').trigger("click");
+      await flushPromises();
+      const failedPreservation = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { successfulClear, failedPreservation };
+    },
+    async incompatible() {
+      mocks.analystCapability.attachmentChannels = [];
+      const item = completedUpload("upload-incompatible", "counts.csv");
+      mocks.chatState.fileList = [item];
+      const current = mountSurface();
+      const zeroChannelRejected = Boolean(
+        (
+          current.get('[data-testid="analyst-submit"]')
+            .element as HTMLButtonElement
+        ).disabled
+      );
+      const incompatiblePreserved = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { zeroChannelRejected, incompatiblePreserved };
+    },
+  };
+}
+
 describe("RemoteAnalysisAgentWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -183,6 +400,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
   afterEach(() => {
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = false;
+  });
+
+  it("applies the shared attachment behavior contract", async () => {
+    const surface = makeUnifiedAttachmentSurface();
+    await assertUnifiedAttachmentBehaviorTable(surface);
+    await surface.reset();
   });
 
   it("submits through the shared runner without separate attachment metadata", async () => {

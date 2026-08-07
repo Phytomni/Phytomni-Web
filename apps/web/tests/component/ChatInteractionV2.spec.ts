@@ -29,6 +29,7 @@ import SendProgress from "@/views/chat/components/SendProgress.vue";
 import TransferProgress from "@/components/TransferProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
+import ChatComposer from "@/views/chat/components/ChatComposer.vue";
 import FollowUpQuestions from "@/views/chat/FollowUpQuestions.vue";
 import chatLogo from "@/assets/images/chat/logo.png";
 import { userStore } from "@/stores";
@@ -64,6 +65,11 @@ import {
   createTestAppContext,
   type TestAppContext,
 } from "../helpers/test-app-context";
+import {
+  assertUnifiedAttachmentBehaviorTable,
+  type RetainedUploadStatus,
+  type UnifiedAttachmentSurface,
+} from "../helpers/unifiedAttachmentBehavior";
 
 const mount: TestAppContext["mount"] = ((component, mountOptions) =>
   createTestAppContext().mount(
@@ -304,10 +310,315 @@ function populateFullChatState(
   };
 }
 
+type ChatBehaviorStatus = RetainedUploadStatus | "completed";
+
+function chatBehaviorItem(
+  status: ChatBehaviorStatus,
+  localId = "upload-chat"
+): ResumableUploadItem {
+  return {
+    localId,
+    assetId: status === "completed" ? "file_chat" : null,
+    name: "counts.csv",
+    size: 6,
+    type: "text/csv",
+    file:
+      status === "failed" || status === "expired"
+        ? null
+        : new File(["counts"], "counts.csv", { type: "text/csv" }),
+    lastModified: 42,
+    status,
+    partSize: 6,
+    partCount: 1,
+    receivedParts: status === "completed" ? [1] : [],
+    loadedBytes: status === "completed" ? 6 : 2,
+    speedBytesPerSecond: 0,
+    etaSeconds: null,
+    retryCount: 0,
+    errorCode: null,
+  };
+}
+
+function mountChatComposerBehavior(
+  overrides: Record<string, unknown> = {}
+): ReturnType<TestAppContext["mount"]> {
+  return createTestAppContext().mount(ChatComposer, {
+    attachTo: document.body,
+    props: {
+      modelValue: "Run it",
+      isSending: false,
+      chatMode: "expert",
+      instantModeEnabled: true,
+      expertModeEnabled: true,
+      modeUsable: true,
+      showModeSelector: true,
+      fileList: [],
+      attachmentAnnouncement: "",
+      attachmentAnnouncementNonce: 0,
+      hasBlockingUploads: false,
+      attachmentTargetAvailable: true,
+      attachmentTargetBlocked: false,
+      rolesLoading: false,
+      hasMessages: false,
+      selectedAgent: "",
+      pickerOptions: [
+        {
+          tool: "ChatAgent",
+          label: "Chat Agent",
+          labelKey: "chat.agents.chatAgent",
+        },
+      ],
+      ...overrides,
+    },
+    global: {
+      stubs: {
+        ChatModeSelector: {
+          name: "ChatModeSelector",
+          template: '<div class="composer-mode-selector" />',
+          props: ["modelValue", "instantEnabled", "expertEnabled"],
+        },
+        ChatAgentPicker: {
+          name: "ChatAgentPicker",
+          template: '<div class="chat-agent-picker" />',
+          props: ["options", "rolesLoading", "selectedAgent", "disabled"],
+        },
+        ChatAgentQuickSelect: {
+          name: "ChatAgentQuickSelect",
+          template: '<div data-testid="chat-agent-quick-select" />',
+          props: ["options", "rolesLoading", "selectedAgent", "disabled"],
+        },
+        ElUpload: {
+          name: "ElUpload",
+          inheritAttrs: false,
+          template: '<div class="upload-demo"><slot name="trigger" /></div>',
+          props: [
+            "disabled",
+            "limit",
+            "accept",
+            "showFileList",
+            "autoUpload",
+            "multiple",
+            "action",
+            "onChange",
+            "onExceed",
+          ],
+        },
+        ElButton: {
+          name: "ElButton",
+          inheritAttrs: false,
+          template:
+            '<button v-bind="$attrs" :disabled="disabled"><slot /></button>',
+          props: ["disabled", "round", "plain", "color", "ariaLabel"],
+        },
+        ElTooltip: {
+          name: "ElTooltip",
+          template: "<div><slot /></div>",
+          props: ["content", "placement"],
+        },
+        ElIcon: { name: "ElIcon", template: "<span><slot /></span>" },
+        ElDropdown: {
+          name: "ElDropdown",
+          template:
+            '<div class="el-dropdown"><slot /><slot name="dropdown" /></div>',
+          props: ["placement", "trigger", "disabled"],
+        },
+        ElDropdownMenu: {
+          name: "ElDropdownMenu",
+          template: "<div><slot /></div>",
+        },
+        ElDropdownItem: {
+          name: "ElDropdownItem",
+          template: "<div><slot /></div>",
+          props: ["command"],
+        },
+      },
+    },
+  });
+}
+
+function makeChatUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
+  let wrapper: ReturnType<TestAppContext["mount"]> | null = null;
+
+  const reset = (): void => {
+    wrapper?.unmount();
+    wrapper = null;
+  };
+
+  const mountSurface = (overrides: Record<string, unknown> = {}) => {
+    wrapper = mountChatComposerBehavior(overrides);
+    return wrapper;
+  };
+
+  return {
+    reset,
+    async attach() {
+      const current = mountSurface();
+      const upload = current.findComponent({ name: "ElUpload" });
+      const file = new File(["counts"], "counts.csv", { type: "text/csv" });
+      upload.props("onChange")?.(file);
+      await nextTick();
+      return {
+        attachActionCount: current.findAllComponents({ name: "ElUpload" })
+          .length,
+        queuedFileCount: current.emitted("file-change")?.length ?? 0,
+        purposeFree:
+          current.emitted("file-change")?.[0]?.length === 1 &&
+          current.emitted("file-change")?.[0]?.[0] instanceof File,
+        purposeControls: current.findAll('[data-test="attachment-purpose"]')
+          .length,
+        descriptionControls: current.findAll(
+          '[data-testid="dataset-description"]'
+        ).length,
+      };
+    },
+    async typingDuringUpload() {
+      const current = mountSurface({
+        modelValue: "draft while uploading",
+        fileList: [chatBehaviorItem("uploading")],
+        hasBlockingUploads: true,
+      });
+      const sender = current.findComponent({ name: "MentionSender" });
+      return {
+        query: String(sender.props("modelValue")),
+        editorDisabled: Boolean(sender.props("disabled")),
+      };
+    },
+    async sendBlocked(statuses) {
+      const result = {} as Record<RetainedUploadStatus, boolean>;
+      for (const status of statuses) {
+        const current = mountSurface({
+          fileList: [chatBehaviorItem(status)],
+          hasBlockingUploads: true,
+        });
+        result[status] = Boolean(
+          current.find(".composer-send-button").attributes("disabled") !==
+          undefined
+        );
+        current.unmount();
+        wrapper = null;
+      }
+      return result;
+    },
+    async duplicate() {
+      const current = mountSurface({
+        fileList: [chatBehaviorItem("completed")],
+        attachmentAnnouncement: "Already attached: counts.csv",
+        attachmentAnnouncementNonce: 1,
+      });
+      await flushPromises();
+      const chip = current.get('[data-testid="attachment-chip"]');
+      await chip.trigger("click");
+      await nextTick();
+      await flushPromises();
+      return {
+        announcement: current
+          .get('[data-testid="attachment-chip-live-region"]')
+          .text(),
+        focused:
+          document.activeElement ===
+          current.get('[data-testid="attachment-chip-detail"]').element,
+      };
+    },
+    async lifecycle() {
+      const result = {
+        pause: false,
+        resume: false,
+        retry: false,
+        reselect: false,
+        cancel: false,
+        remove: false,
+      };
+      let current = mountSurface({ fileList: [chatBehaviorItem("uploading")] });
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-pause"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-cancel"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-remove"]')
+        .trigger("click");
+      result.pause = (current.emitted("pause-upload")?.length ?? 0) > 0;
+      result.cancel = (current.emitted("cancel-upload")?.length ?? 0) > 0;
+      result.remove = (current.emitted("remove-upload")?.length ?? 0) > 0;
+      current.unmount();
+
+      current = mountSurface({ fileList: [chatBehaviorItem("paused")] });
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-resume"]')
+        .trigger("click");
+      result.resume = (current.emitted("resume-upload")?.length ?? 0) > 0;
+      current.unmount();
+
+      current = mountSurface({ fileList: [chatBehaviorItem("failed")] });
+      await current.get('[data-testid="attachment-chip"]').trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-retry"]')
+        .trigger("click");
+      await current
+        .get('[data-testid="attachment-chip-detail-reselect"]')
+        .trigger("click");
+      const input = current.get<HTMLInputElement>(
+        "[data-testid=attachment-chip-reselect-input]"
+      );
+      const replacement = new File(["counts"], "counts.csv", {
+        type: "text/csv",
+      });
+      Object.defineProperty(input.element, "files", {
+        configurable: true,
+        value: [replacement],
+      });
+      await input.trigger("change");
+      result.retry = (current.emitted("retry-upload")?.length ?? 0) > 0;
+      result.reselect = (current.emitted("reselect-upload")?.length ?? 0) > 0;
+      return result;
+    },
+    async submission() {
+      let current = mountSurface({ fileList: [chatBehaviorItem("completed")] });
+      await current.get(".composer-send-button").trigger("click");
+      const accepted = (current.emitted("submit")?.length ?? 0) === 1;
+      await current.setProps({ fileList: [] });
+      await nextTick();
+      const successfulClear =
+        accepted && !current.find('[data-testid="attachment-chip"]').exists();
+      current.unmount();
+
+      current = mountSurface({ fileList: [chatBehaviorItem("completed")] });
+      const failedPreservation = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { successfulClear, failedPreservation };
+    },
+    async incompatible() {
+      const current = mountSurface({
+        fileList: [chatBehaviorItem("completed")],
+        attachmentTargetAvailable: false,
+        attachmentTargetBlocked: true,
+      });
+      const zeroChannelRejected =
+        current.find(".composer-send-button").attributes("disabled") !==
+        undefined;
+      const incompatiblePreserved = current
+        .find('[data-testid="attachment-chip"]')
+        .exists();
+      return { zeroChannelRejected, incompatiblePreserved };
+    },
+  };
+}
+
 describe("ChatInteractionV2 — behavior matrix", () => {
   beforeEach(() => {
     chatUploadQueueState.options = null;
   });
+
+  it("applies the shared attachment behavior contract", async () => {
+    const surface = makeChatUnifiedAttachmentSurface();
+    await assertUnifiedAttachmentBehaviorTable(surface);
+    await surface.reset();
+  });
+
   it("covers Phase 3B message content branches via shared fixtures", () => {
     for (const key of PHASE_3B_MESSAGE_KEYS) {
       expect(MESSAGE_FIXTURES[key]).toBeTruthy();
