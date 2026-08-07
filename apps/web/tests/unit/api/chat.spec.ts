@@ -20,6 +20,8 @@ import {
   getConversationArtifactDownloadURL,
   getConversationArtifactFile,
   getAnalystAgentLog,
+  getQuery,
+  getQueryAbortable,
   getReactionType,
   retryConversationResultArchive,
   getUserTool,
@@ -30,6 +32,73 @@ import { feedback } from "@/api/feedback";
 
 const mockRequest = vi.mocked(request);
 const mockCreateAbortableRequest = vi.mocked(createAbortableRequest);
+
+describe("query routing intent transport", () => {
+  beforeEach(() => {
+    mockRequest.mockReset();
+    mockCreateAbortableRequest.mockReset();
+  });
+
+  it.each([
+    ["blocking", getQuery, mockRequest],
+    ["abortable", getQueryAbortable, mockCreateAbortableRequest],
+  ] as const)(
+    "emits the finite Research intent header for explicit FormData on %s requests",
+    async (_name, send, transport) => {
+      transport.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
+      const data = new FormData();
+      data.set("id", "0");
+      data.set("query", "research question");
+      data.set("mode", "expert");
+      data.set("tool", "InSilicoResearchAgent");
+
+      await send(data);
+
+      expect(transport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: {
+            "X-Phyto-Research-Intent": "expert-research-v1",
+          },
+        })
+      );
+    }
+  );
+
+  it.each([
+    ["autonomous Expert", "expert", ""],
+    ["another Expert tool", "expert", "DataAgent"],
+    ["invalid Instant tool hint", "instant", "InSilicoResearchAgent"],
+  ])(
+    "does not emit the Research intent header for %s",
+    async (_name, mode, tool) => {
+      mockRequest.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
+      const data = new FormData();
+      data.set("query", "question");
+      data.set("mode", mode);
+      if (tool) data.set("tool", tool);
+
+      await getQuery(data);
+
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.not.objectContaining({ headers: expect.anything() })
+      );
+    }
+  );
+
+  it("does not derive the pre-body signal from a JSON-shaped request", async () => {
+    mockRequest.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
+
+    await getQuery({
+      query: "research question",
+      mode: "expert",
+      tool: "InSilicoResearchAgent",
+    });
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.not.objectContaining({ headers: expect.anything() })
+    );
+  });
+});
 
 describe("getReactionType — wire contract", () => {
   beforeEach(() => {

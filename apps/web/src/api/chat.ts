@@ -44,6 +44,24 @@ export type DownloadProgressOpts = {
 
 type FormIdPayload = { id: string | number };
 
+const EXPLICIT_RESEARCH_INTENT_HEADER = "X-Phyto-Research-Intent";
+const EXPLICIT_RESEARCH_INTENT_VALUE = "expert-research-v1";
+
+function explicitResearchIntentHeaders(
+  data: QueryRequest | FormData
+): Record<string, string> | undefined {
+  if (
+    data instanceof FormData &&
+    data.get("mode") === "expert" &&
+    data.get("tool") === "InSilicoResearchAgent"
+  ) {
+    return {
+      [EXPLICIT_RESEARCH_INTENT_HEADER]: EXPLICIT_RESEARCH_INTENT_VALUE,
+    };
+  }
+  return undefined;
+}
+
 function getId(data: FormIdPayload | FormData, label: string): string | number {
   const id = data instanceof FormData ? data.get("id") : data.id;
   if (!(
@@ -88,12 +106,14 @@ export const getQuery = (
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id =
     data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
+  const headers = explicitResearchIntentHeaders(data);
   return requestApi(
     {
       url: `/api/v1/conversations/${id}/messages`,
       method: "post",
       data,
       onUploadProgress: opts?.onUploadProgress,
+      ...(headers ? { headers } : {}),
     },
     decodeQueryData
   );
@@ -107,6 +127,7 @@ export const getQueryAbortable = (
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id =
     data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
+  const headers = explicitResearchIntentHeaders(data);
   return requestAbortableApi(
     {
       url: `/api/v1/conversations/${id}/messages`,
@@ -114,6 +135,7 @@ export const getQueryAbortable = (
       data,
       requestId,
       onUploadProgress: opts?.onUploadProgress,
+      ...(headers ? { headers } : {}),
     },
     decodeQueryData
   );

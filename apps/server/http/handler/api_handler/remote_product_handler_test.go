@@ -338,10 +338,18 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			var gotPath string
 			var gotRequest rxBot.AgentRunRequest
 			var gotBody map[string]json.RawMessage
+			catalogCalls := 0
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if serveHandlerResearchCatalog(t, w, r) {
+				if r.URL.Path == "/v1/agents" {
+					catalogCalls++
+					if catalogCalls == 1 {
+						serveHandlerResearchCatalog(t, w, r)
+					} else {
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(`{}`))
+					}
 					return
 				}
 				gotPath = r.URL.Path
@@ -376,6 +384,13 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 
 			if w.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+			}
+			wantCatalogCalls := 0
+			if tc.slug == "research" {
+				wantCatalogCalls = 1
+			}
+			if catalogCalls != wantCatalogCalls {
+				t.Fatalf("catalog calls=%d, want %d", catalogCalls, wantCatalogCalls)
 			}
 			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
 				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)

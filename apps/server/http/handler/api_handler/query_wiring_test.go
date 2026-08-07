@@ -460,12 +460,10 @@ func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
-	form := unreadablePreparsedMultipartForm(t, "expert", "InSilicoResearchAgent")
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
 	c.Request.Body = tracked
-	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=already-parsed")
-	c.Request.PostForm = form.Value
-	c.Request.MultipartForm = form
+	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=unread")
+	c.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
 	c.Params = gin.Params{{Key: "id", Value: "0"}}
 	c.Set("username", "research@example.com")
 	i18n.Localize()(c)
@@ -480,6 +478,129 @@ func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
 	}
 	if catalogCalls != 1 {
 		t.Fatalf("explicit Research catalog calls=%d, want 1", catalogCalls)
+	}
+}
+
+func TestQueryResearchIntentHeaderDoesNotBypassLocalPermission(t *testing.T) {
+	gdb := setupRemoteProductHandlerDB(t)
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`,
+		"denied@example.com", "ordinary", 5,
+	).Error; err != nil {
+		t.Fatalf("seed denied user: %v", err)
+	}
+	previousConfig := rxBot.BotConfig
+	catalogCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		catalogCalls++
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c.Request.Body = tracked
+	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=unread")
+	c.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("username", "denied@example.com")
+	i18n.Localize()(c)
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s, want permission-safe 404", w.Code, w.Body.String())
+	}
+	if tracked.reads != 0 || tracked.bytes != 0 {
+		t.Fatalf("unauthorized Research intent read body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+	}
+	if catalogCalls != 0 {
+		t.Fatalf("unauthorized Research intent called catalog %d time(s)", catalogCalls)
+	}
+}
+
+func TestQueryResearchIntentMismatchFailsClosedBeforeDispatch(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	previousConfig := rxBot.BotConfig
+	catalogCalls := 0
+	runCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/agents" {
+			catalogCalls++
+			serveHandlerResearchCatalog(t, w, r)
+			return
+		}
+		runCalls++
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	for _, tc := range []struct {
+		name   string
+		mode   string
+		tool   string
+		header bool
+	}{
+		{name: "header body mismatch", mode: "expert", tool: "DataAgent", header: true},
+		{name: "Research body missing header", mode: "expert", tool: "InSilicoResearchAgent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			for key, value := range map[string]string{
+				"query": "research question",
+				"mode":  tc.mode,
+				"tool":  tc.tool,
+			} {
+				if err := writer.WriteField(key, value); err != nil {
+					t.Fatalf("write %s: %v", key, err)
+				}
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatalf("close multipart: %v", err)
+			}
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+			c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+			if tc.header {
+				c.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
+			}
+			c.Params = gin.Params{{Key: "id", Value: "0"}}
+			c.Set("username", "research@example.com")
+			i18n.Localize()(c)
+
+			NewHandler().Query(c)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s, want 400", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "invalid chat routing") {
+				t.Fatalf("mismatch response=%s, want finite routing error", w.Body.String())
+			}
+		})
+	}
+	if catalogCalls != 1 {
+		t.Fatalf("catalog calls=%d, want only the header-signaled admission", catalogCalls)
+	}
+	if runCalls != 0 {
+		t.Fatalf("mismatched Research intent dispatched %d Bot run(s)", runCalls)
 	}
 }
 

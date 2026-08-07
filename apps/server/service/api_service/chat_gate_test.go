@@ -303,6 +303,28 @@ func serviceWithValidResearchCatalog() *Service {
 	}
 }
 
+type alternatingResearchCatalogReader struct {
+	calls int
+}
+
+func (reader *alternatingResearchCatalogReader) GetAgents(context.Context) (*rxBot.AgentsListResponse, error) {
+	reader.calls++
+	if reader.calls == 1 {
+		return validResearchCapabilityCatalog(), nil
+	}
+	return &rxBot.AgentsListResponse{}, nil
+}
+
+type countingResearchCatalogReader struct {
+	calls    int
+	response *rxBot.AgentsListResponse
+}
+
+func (reader *countingResearchCatalogReader) GetAgents(context.Context) (*rxBot.AgentsListResponse, error) {
+	reader.calls++
+	return reader.response, nil
+}
+
 func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)
@@ -320,6 +342,89 @@ func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *
 	}
 	if calls != 1 {
 		t.Fatalf("Research catalog calls = %d, want 1", calls)
+	}
+}
+
+func TestDirectExplicitResearchWithoutAdmissionFetchesAndFailsClosed(t *testing.T) {
+	gdb := setupChatGateDB(t)
+	seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)
+	seedRemoteProductPermission(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	reader := &countingResearchCatalogReader{response: &rxBot.AgentsListResponse{}}
+	service := &Service{catalogReader: reader}
+
+	_, err := service.Query(context.Background(), "research@example.com", QueryInput{
+		Query: "research question", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+	})
+
+	if !errors.Is(err, ErrResearchInputIncompatible) {
+		t.Fatalf("direct explicit Research error=%v, want ErrResearchInputIncompatible", err)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("direct explicit Research catalog calls=%d, want 1", reader.calls)
+	}
+}
+
+func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input QueryInput
+	}{
+		{
+			name: "dedicated Research",
+			input: QueryInput{
+				Query: "research question", Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+			},
+		},
+		{
+			name: "explicit Expert Research",
+			input: QueryInput{
+				Query: "research question", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			seedExpertPermissionUser(t, gdb, "research-admitted@example.com", "research-role")
+			seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+			runs := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				runs++
+				if r.URL.Path != "/v1/agents/research/runs" {
+					t.Errorf("Bot path=%q, want Research run", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"succeeded","task_ids":[],"result":{}}`))
+			}))
+			t.Cleanup(srv.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+			reader := &alternatingResearchCatalogReader{}
+			service := &Service{catalogReader: reader}
+
+			admittedCtx, err := service.AdmitRemoteProduct(
+				context.Background(), "research-admitted@example.com", "InSilicoResearchAgent",
+			)
+			if err != nil {
+				t.Fatalf("admit Research: %v", err)
+			}
+			if _, err := service.Query(admittedCtx, "research-admitted@example.com", tc.input); err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if reader.calls != 1 {
+				t.Fatalf("catalog calls=%d, want exactly 1", reader.calls)
+			}
+			if runs != 1 {
+				t.Fatalf("Research runs=%d, want 1", runs)
+			}
+		})
 	}
 }
 

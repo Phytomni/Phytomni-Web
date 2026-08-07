@@ -87,6 +87,13 @@ type remoteProductRequirement struct {
 	filterGenericPermission bool
 }
 
+type remoteProductAdmissionContextKey struct{}
+
+type remoteProductAdmission struct {
+	email string
+	tool  string
+}
+
 var remoteProductRequirements = map[string]remoteProductRequirement{
 	"AnalystAgent": {
 		tool:                    "AnalystAgent",
@@ -208,6 +215,38 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 		}
 	}
 	return nil
+}
+
+// AdmitRemoteProduct performs the complete server-owned product gate and, on
+// success, returns a request-scoped context that lets Query reuse that exact
+// admission. The private context key cannot be supplied by a browser or by a
+// Gin string value; direct service callers without this context still run the
+// full check below.
+func (ps *Service) AdmitRemoteProduct(ctx context.Context, email, tool string) (context.Context, error) {
+	if err := ps.CheckRemoteProductAllowed(ctx, email, tool); err != nil {
+		return ctx, err
+	}
+	requirement := remoteProductRequirements[strings.TrimSpace(tool)]
+	return context.WithValue(ctx, remoteProductAdmissionContextKey{}, remoteProductAdmission{
+		email: email,
+		tool:  requirement.tool,
+	}), nil
+}
+
+func hasRemoteProductAdmission(ctx context.Context, email, tool string) bool {
+	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
+	if !ok {
+		return false
+	}
+	admission, ok := ctx.Value(remoteProductAdmissionContextKey{}).(remoteProductAdmission)
+	return ok && admission.email == email && admission.tool == requirement.tool
+}
+
+func (ps *Service) ensureRemoteProductAllowed(ctx context.Context, email, tool string) error {
+	if hasRemoteProductAdmission(ctx, email, tool) {
+		return nil
+	}
+	return ps.CheckRemoteProductAllowed(ctx, email, tool)
 }
 
 func containsAgentTool(tools []string, target string) bool {

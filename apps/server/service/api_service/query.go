@@ -1568,7 +1568,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// effective capability set from the resolution above, including forced Expert
 	// selections, rather than treating a browser hint as a product route.
 	if in.Surface == QuerySurfaceAgentProduct {
-		if err = ps.CheckRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+		if err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}
 	}
@@ -1582,6 +1582,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 			if in.Tool != "" && !containsAgentTool(permissions.AllowedTools, in.Tool) {
 				return nil, permissionFailure(permissions, in.Tool)
+			}
+			// A direct service caller has no handler-created admission context,
+			// so explicit Research still validates the live Bot catalog here.
+			if in.Tool == "InSilicoResearchAgent" {
+				if err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

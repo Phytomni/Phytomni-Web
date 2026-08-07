@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+)
+
+const (
+	explicitResearchIntentHeader = "X-Phyto-Research-Intent"
+	explicitResearchIntentValue  = "expert-research-v1"
 )
 
 // queryErrorStatus maps a /query service error to the HTTP status and message
@@ -322,11 +328,24 @@ func hasForbiddenQueryAttachmentFields(ctx *gin.Context) bool {
 	return false
 }
 
+func explicitResearchIntent(ctx *gin.Context) (bool, error) {
+	values := ctx.Request.Header.Values(explicitResearchIntentHeader)
+	if len(values) == 0 {
+		return false, nil
+	}
+	if len(values) != 1 || values[0] != explicitResearchIntentValue {
+		return false, api_service.ErrInvalidChatRouting
+	}
+	return true, nil
+}
+
 func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) {
 	name, _ := ctx.Get("username")
+	email, _ := name.(string)
+	var serviceCtx context.Context = ctx
 
 	// Reject inert accounts before any body parsing or Bot relay.
-	if email, _ := name.(string); email != "" {
+	if email != "" {
 		if err := ph.service.CheckChatAllowed(ctx, email); err != nil {
 			ctx.JSON(http.StatusForbidden, gin.H{
 				"code":    http.StatusForbidden,
@@ -337,13 +356,35 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	}
 	// A dedicated product's canonical tool is validated by AgentProductRun and
 	// owned by the route, so reject disabled or ungranted products before any
-	// multipart/body operation. Chat must wait until it has parsed its explicit
-	// compatibility tool below.
+	// multipart/body operation. Chat uses the finite Research routing intent
+	// below to run the same gate before parsing, then cross-checks the form.
 	if surface == api_service.QuerySurfaceAgentProduct {
-		if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), routeTool); err != nil {
+		var err error
+		serviceCtx, err = ph.service.AdmitRemoteProduct(ctx, email, routeTool)
+		if err != nil {
 			status, message := localizedQueryErrorStatus(ctx, err)
 			writeQueryError(ctx, status, message)
 			return
+		}
+	}
+	researchIntent := false
+	if surface == api_service.QuerySurfaceChat {
+		var err error
+		researchIntent, err = explicitResearchIntent(ctx)
+		if err != nil {
+			status, message := queryErrorStatus(err)
+			writeQueryError(ctx, status, message)
+			return
+		}
+		if researchIntent {
+			serviceCtx, err = ph.service.AdmitRemoteProduct(
+				ctx, email, "InSilicoResearchAgent",
+			)
+			if err != nil {
+				status, message := localizedQueryErrorStatus(ctx, err)
+				writeQueryError(ctx, status, message)
+				return
+			}
 		}
 	}
 
@@ -414,12 +455,11 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			in.Mode == "instant" {
 			in.Tool = "ChatAgent"
 		}
-		if in.Mode == "expert" && in.Tool == "InSilicoResearchAgent" {
-			if err := ph.service.CheckRemoteProductAllowed(ctx, name.(string), in.Tool); err != nil {
-				status, message := localizedQueryErrorStatus(ctx, err)
-				writeQueryError(ctx, status, message)
-				return
-			}
+		bodyResearchIntent := in.Mode == "expert" && in.Tool == "InSilicoResearchAgent"
+		if bodyResearchIntent != researchIntent {
+			status, message := queryErrorStatus(api_service.ErrInvalidChatRouting)
+			writeQueryError(ctx, status, message)
+			return
 		}
 	}
 	in.InteropMode = strings.TrimSpace(ctx.PostForm("interop_mode"))
@@ -537,7 +577,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		// the blocking path rather than panicking.
 	}
 
-	data, err := ph.service.Query(ctx, name.(string), in)
+	data, err := ph.service.Query(serviceCtx, email, in)
 	if err != nil {
 		status, msg := localizedQueryErrorStatus(ctx, err)
 		if status >= http.StatusInternalServerError {

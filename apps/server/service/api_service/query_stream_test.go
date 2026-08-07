@@ -1079,7 +1079,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	ctx := utils.WithRequestID(context.Background(), "web-request-task27")
-	out, err := (&Service{}).Query(ctx, "task27-expert@example.com", QueryInput{
+	out, err := serviceWithValidResearchCatalog().Query(ctx, "task27-expert@example.com", QueryInput{
 		Query: "synthetic", Tool: "InSilicoResearchAgent", Mode: "expert",
 	})
 	if err != nil {
