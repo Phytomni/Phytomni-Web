@@ -6,6 +6,7 @@ import {
   isRetryablePartError,
   needsCapabilityRenewal,
   retryDelayMs,
+  uploadErrorShape,
   waitForRetry,
 } from "@/views/chat/upload/retry";
 import { UploadTransportError } from "@/views/chat/upload/transport";
@@ -30,6 +31,42 @@ describe("resumable upload retry policy", () => {
     expect(
       isPermanentUploadError(new UploadTransportError("", { status: 413 }))
     ).toBe(true);
+  });
+
+  it("classifies Axios-like control errors without projecting provider details", () => {
+    const axiosError = (status: unknown) => ({
+      message: "private provider message",
+      response: {
+        status,
+        data: {
+          code: "private_provider_code",
+          message: "private provider detail",
+        },
+      },
+    });
+
+    expect(isRecreateRequiredError(axiosError(409))).toBe(true);
+    expect(isPermanentUploadError(axiosError(410))).toBe(true);
+    expect(isPermanentUploadError(axiosError(413))).toBe(true);
+    expect(needsCapabilityRenewal(axiosError(401))).toBe(true);
+    expect(uploadErrorShape(axiosError(409))).toEqual({
+      status: 409,
+      code: undefined,
+      retryAfterSeconds: undefined,
+    });
+
+    for (const status of [NaN, Infinity, -Infinity, "409", null]) {
+      const error = axiosError(status);
+      expect(isRecreateRequiredError(error)).toBe(false);
+      expect(isPermanentUploadError(error)).toBe(false);
+      expect(needsCapabilityRenewal(error)).toBe(false);
+      expect(isRetryablePartError(error)).toBe(true);
+      expect(uploadErrorShape(error)).toEqual({
+        status: undefined,
+        code: undefined,
+        retryAfterSeconds: undefined,
+      });
+    }
   });
 
   it("honors Retry-After and bounds exponential jitter", () => {

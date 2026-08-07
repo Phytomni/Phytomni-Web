@@ -18,10 +18,30 @@ export const DEFAULT_UPLOAD_RETRY_POLICY: RetryPolicy = Object.freeze({
   maxDelayMs: 30_000,
 });
 
+function finiteStatus(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function nestedResponseStatus(
+  record: Record<string, unknown>
+): number | undefined {
+  const response = record.response;
+  if (
+    typeof response !== "object" ||
+    response === null ||
+    Array.isArray(response)
+  ) {
+    return undefined;
+  }
+  return finiteStatus((response as Record<string, unknown>).status);
+}
+
 export function uploadErrorShape(error: unknown): RetryErrorShape {
   if (error instanceof UploadTransportError) {
     return {
-      status: error.status ?? undefined,
+      status: finiteStatus(error.status),
       code: error.code,
       retryAfterSeconds: error.retryAfterSeconds,
     };
@@ -31,10 +51,7 @@ export function uploadErrorShape(error: unknown): RetryErrorShape {
   }
   const record = error as Record<string, unknown>;
   return {
-    status:
-      typeof record.status === "number" && Number.isFinite(record.status)
-        ? record.status
-        : undefined,
+    status: finiteStatus(record.status) ?? nestedResponseStatus(record),
     code: typeof record.code === "string" ? record.code : undefined,
     retryAfterSeconds:
       typeof record.retryAfterSeconds === "number" &&
