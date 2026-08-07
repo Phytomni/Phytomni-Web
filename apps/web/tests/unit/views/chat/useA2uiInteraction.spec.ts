@@ -4,6 +4,7 @@ import type {
   A2uiActionEnvelope,
   A2uiActionIntent,
   A2uiActionResponse,
+  A2uiFormattedResult,
   A2uiOpenSurface,
 } from "@/views/chat/streaming/a2uiContract";
 import {
@@ -60,20 +61,34 @@ const event = {
 const terminal = (
   envelope: A2uiActionEnvelope,
   accepted = true,
-  answer?: string
-): A2uiActionResponse => ({
-  status: "succeeded",
-  run_id: envelope.run_id,
-  result: {
-    a2ui: {
-      catalog_version: "v1.0",
-      surface_id: envelope.surface_id,
-      widget: "confirm",
-      props: { status: "submitted", accepted },
+  answer?: string,
+  extras: Omit<A2uiFormattedResult, "answer"> = {}
+): A2uiActionResponse => {
+  const hasFormatted =
+    answer !== undefined ||
+    extras.references !== undefined ||
+    extras.follow_up_questions !== undefined;
+  return {
+    status: "succeeded",
+    run_id: envelope.run_id,
+    result: {
+      a2ui: {
+        catalog_version: "v1.0",
+        surface_id: envelope.surface_id,
+        widget: "confirm",
+        props: { status: "submitted", accepted },
+      },
+      ...(hasFormatted
+        ? {
+            formatted: {
+              ...(answer === undefined ? {} : { answer }),
+              ...extras,
+            },
+          }
+        : {}),
     },
-    ...(answer === undefined ? {} : { formatted: { answer } }),
-  },
-});
+  };
+};
 
 const inputRequired = (envelope: A2uiActionEnvelope): A2uiActionResponse => ({
   status: "input_required",
@@ -415,6 +430,88 @@ describe("useA2uiInteraction", () => {
     ]);
   });
 
+  it("converges a validated long Review result into normal cited message state", async () => {
+    const reply = deferred<A2uiActionResponse>();
+    const transport = vi.fn(() => reply.promise);
+    const answer = `LIVE-START\n${"review ".repeat(900)}\nLIVE-END`;
+    const references = [{ title: "Review source", pm: "12345" }];
+    const followUpQuestions = ["Which breeding evidence should be compared?"];
+    const message = messageWith(transport, {
+      tool_name: "ReviewAgent",
+      streaming: false,
+    });
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-review-terminal",
+    });
+
+    const pending = submitAction(message, event);
+    const submitting = message.blocks?.[1].a2ui?.state;
+    if (!submitting || submitting.status !== "submitting") {
+      throw new Error("expected a submitting Review surface");
+    }
+    reply.resolve(
+      terminal(submitting.envelope, true, answer, {
+        references,
+        follow_up_questions: followUpQuestions,
+      })
+    );
+    await pending;
+
+    expect(message.content).toBe(answer);
+    expect(message.doc_list).toEqual(references);
+    expect(message.followUpQuestions).toEqual(followUpQuestions);
+    expect(message.showFollowUpQuestions).toBe(true);
+    expect(message.status).toBe("SUCCEEDED");
+    expect(message.blocks).toBeUndefined();
+    expect(message.a2uiRuntime).toBeUndefined();
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a blank Review terminal answer on the resolved A2UI path", async () => {
+    const transport = vi.fn(async (envelope: A2uiActionEnvelope) =>
+      terminal(envelope, true, "")
+    );
+    const message = messageWith(transport, { tool_name: "ReviewAgent" });
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-review-blank",
+    });
+
+    await submitAction(message, event);
+
+    expect(message.content).toBe("");
+    expect(message.blocks?.[1].a2ui?.state.status).toBe("resolved");
+    expect(message.a2uiRuntime).toBeDefined();
+  });
+
+  it("does not converge a Review answer when terminal protocol identity fails", async () => {
+    const transport = vi.fn(async (envelope: A2uiActionEnvelope) => {
+      const response = terminal(envelope, true, "must not render");
+      if (response.status !== "succeeded") {
+        throw new Error("expected a terminal success fixture");
+      }
+      return {
+        ...response,
+        result: {
+          ...response.result,
+          a2ui: {
+            ...response.result.a2ui,
+            surface_id: "other-surface",
+          },
+        },
+      };
+    });
+    const message = messageWith(transport, { tool_name: "ReviewAgent" });
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-review-mismatch",
+    });
+
+    await submitAction(message, event);
+
+    expect(message.content).toBe("");
+    expect(message.blocks?.[1].a2ui?.state.status).toBe("protocol_error");
+    expect(message.a2uiRuntime).toBeDefined();
+  });
+
   it.each([
     [
       "runtime replacement",
@@ -443,7 +540,7 @@ describe("useA2uiInteraction", () => {
     async (_label, invalidateRuntime) => {
       const reply = deferred<A2uiActionResponse>();
       const transport = vi.fn(() => reply.promise);
-      const message = messageWith(transport);
+      const message = messageWith(transport, { tool_name: "ReviewAgent" });
       const { submitAction, retryAction } = useA2uiInteraction({
         buildActionId: () => "action-stale",
       });
@@ -469,6 +566,7 @@ describe("useA2uiInteraction", () => {
         message.blocks?.some((block) => block.sourceActionId === "action-stale")
       ).toBe(false);
       expect(transport).toHaveBeenCalledTimes(1);
+      expect(message.content).toBe("");
     }
   );
 

@@ -1,4 +1,8 @@
-import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import type {
+  ChatMessage,
+  CitationDocument,
+  ContentBlock,
+} from "@/views/chat/types";
 import type {
   A2uiActionTransport,
   A2uiTransportError,
@@ -25,6 +29,8 @@ export interface A2uiScenarioOptions {
 
 export interface A2uiSuccessOptions {
   answer?: string;
+  references?: CitationDocument[];
+  followUpQuestions?: string[];
   terminal?: A2uiTerminalSurface;
 }
 
@@ -160,14 +166,23 @@ export function buildA2uiScenario(
       const reply = takePending();
       const envelope = calls[calls.length - 1];
       if (!envelope) throw new Error("A2UI scenario has no action envelope");
+      const formatted = {
+        ...(options.answer === undefined ? {} : { answer: options.answer }),
+        ...(options.references === undefined
+          ? {}
+          : { references: options.references }),
+        ...(options.followUpQuestions === undefined
+          ? {}
+          : { follow_up_questions: options.followUpQuestions }),
+      };
+      const hasFormatted = Object.keys(formatted).length > 0;
+
       reply.resolve({
         status: "succeeded",
         run_id: runId,
         result: {
           a2ui: options.terminal ?? terminalFor(surface, envelope),
-          ...(options.answer === undefined
-            ? {}
-            : { formatted: { answer: options.answer } }),
+          ...(hasFormatted ? { formatted } : {}),
         },
       });
     },

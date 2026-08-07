@@ -160,6 +160,9 @@ describe("blocking Bot response identity", () => {
   });
 
   it("defensively completes a Review answer with a contradictory input-required status", async () => {
+    const completeReviewAnswer = `INITIAL-START\n${"review ".repeat(
+      900
+    )}\nINITIAL-END`;
     mockGetQueryAbortable.mockResolvedValueOnce({
       data: {
         id: 44,
@@ -167,7 +170,7 @@ describe("blocking Bot response identity", () => {
         dialogue_id: "dialogue-a",
         tool_name: "ReviewAgent",
         answer: JSON.stringify({
-          content: "# Complete review\n\nFinal evidence-backed answer.",
+          content: completeReviewAnswer,
           doc_list: [{ title: "Review source" }],
         }),
         status: "INPUT_REQUIRED",
@@ -187,9 +190,11 @@ describe("blocking Bot response identity", () => {
     expect(assistant).toMatchObject({
       tool_name: "ReviewAgent",
       status: "SUCCEEDED",
-      content: "# Complete review\n\nFinal evidence-backed answer.",
       doc_list: [{ title: "Review source" }],
     });
+    expect(assistant.content).toBe(completeReviewAnswer);
+    expect(assistant.doc_list).toEqual([{ title: "Review source" }]);
+    expect(assistant.status).toBe("SUCCEEDED");
     expect(assistant.blocks).toBeUndefined();
     expect(assistant.a2uiRuntime).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../types";
+import type { ChatMessage, ContentBlock } from "../types";
 import {
   A2uiTransportError,
   buildA2uiActionId,
@@ -18,6 +18,7 @@ import type {
   A2uiActionIntent,
   A2uiActionResponse,
 } from "../streaming/a2uiContract";
+import { decodeCitationDocuments } from "../utils/format";
 
 const UNEXPECTED_TRANSPORT_ERROR_CODE = "a2ui_transport_error";
 const SAFE_RUNTIME_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
@@ -53,6 +54,49 @@ function ownsSubmittingAction(
         block.a2ui.state.envelope.action_id === envelope.action_id
     )
   );
+}
+
+function resolvedActionApplied(
+  blocks: readonly ContentBlock[],
+  envelope: A2uiActionEnvelope
+): boolean {
+  return blocks.some((block) => {
+    const runtime = block.a2ui;
+    const state = runtime?.state;
+    return (
+      runtime?.surface.surface_id === envelope.surface_id &&
+      state?.status === "resolved" &&
+      state.actionId === envelope.action_id
+    );
+  });
+}
+
+function convergeReviewTerminalMessage(
+  message: ChatMessage,
+  envelope: A2uiActionEnvelope,
+  response: Extract<A2uiActionResponse, { status: "succeeded" }>,
+  nextBlocks: readonly ContentBlock[]
+): boolean {
+  const formatted = response.result.formatted;
+  const answer = formatted?.answer;
+  if (
+    message.tool_name !== "ReviewAgent" ||
+    typeof answer !== "string" ||
+    answer.trim() === "" ||
+    !resolvedActionApplied(nextBlocks, envelope)
+  ) {
+    return false;
+  }
+
+  const followUpQuestions = [...(formatted?.follow_up_questions ?? [])];
+  message.content = answer;
+  message.doc_list = decodeCitationDocuments(formatted?.references) ?? [];
+  message.followUpQuestions = followUpQuestions;
+  message.showFollowUpQuestions = followUpQuestions.length > 0;
+  message.status = "SUCCEEDED";
+  message.blocks = undefined;
+  message.a2uiRuntime = undefined;
+  return true;
 }
 
 function optionalMessageIdentity(
@@ -154,13 +198,16 @@ async function dispatchTransport(
   if (!ownsSubmittingAction(message, envelope)) return;
 
   switch (response.status) {
-    case "succeeded":
-      message.blocks = reduceA2uiSucceeded(
+    case "succeeded": {
+      const nextBlocks = reduceA2uiSucceeded(
         message.blocks ?? [],
         envelope,
         response
       );
+      message.blocks = nextBlocks;
+      convergeReviewTerminalMessage(message, envelope, response, nextBlocks);
       return;
+    }
     case "input_required":
       message.blocks = reduceA2uiInputRequired(
         message.blocks ?? [],

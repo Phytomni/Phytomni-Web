@@ -1,13 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h, reactive } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
+import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import { useA2uiInteraction } from "@/views/chat/composables/useA2uiInteraction";
 import { A2uiTransportError } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
 import type { ChatMessage } from "@/views/chat/types";
 import { buildA2uiScenario, type A2uiScenario } from "../helpers/a2uiScenario";
 import { createTestAppContext } from "../helpers/test-app-context";
+
+vi.mock("vue-element-plus-x", () => ({
+  Typewriter: { name: "Typewriter", template: "<div></div>" },
+  FilesCard: { name: "FilesCard", template: "<div></div>" },
+  Prompts: { name: "Prompts", template: "<div></div>" },
+}));
 
 function mountScenario(scenario: A2uiScenario) {
   const message = reactive(scenario.message) as ChatMessage;
@@ -32,6 +39,68 @@ function mountScenario(scenario: A2uiScenario) {
       stubs: { ChatActivity: true, CitationReferenceList: true },
     },
   });
+  return { wrapper, message };
+}
+
+function mountReviewScenario(scenario: A2uiScenario) {
+  const message = reactive(scenario.message) as ChatMessage;
+  message.tool_name = "ReviewAgent";
+  message.streaming = false;
+
+  const Harness = defineComponent({
+    setup() {
+      const { submitAction, retryAction } = useA2uiInteraction({
+        buildActionId: () => `${message.id}-action`,
+      });
+      return () =>
+        h(ChatMessageContent, {
+          message,
+          index: 0,
+          isLastMessage: true,
+          artifactPreview: null,
+          geneNetworkImages: {},
+          geneNetworkImagesLoading: {},
+          digitalDesignImages: {},
+          digitalDesignImagesLoading: {},
+          onA2uiAction: (event: A2uiSurfaceActionEvent) =>
+            submitAction(message, event),
+          onA2uiRetry: (surfaceId: string) => retryAction(message, surfaceId),
+        });
+    },
+  });
+
+  const wrapper = createTestAppContext().mount(Harness, {
+    global: {
+      stubs: {
+        ChatActivity: true,
+        CitationReferenceList: true,
+        DeepGenomeResultViewer: true,
+        ResearchArtifactPreview: true,
+        CitedAnswer: {
+          name: "CitedAnswer",
+          props: ["content", "references"],
+          template: `
+            <article data-testid="review-cited">
+              <div data-testid="review-content">{{ content }}</div>
+              <div
+                v-for="reference in references"
+                :key="String(reference.title)"
+                class="doc-list-item"
+              >
+                {{ reference.title }}
+              </div>
+            </article>
+          `,
+        },
+        MarkdownViewer: {
+          name: "MarkdownViewer",
+          props: ["content"],
+          template: '<div data-testid="review-markdown">{{ content }}</div>',
+        },
+      },
+    },
+  });
+
   return { wrapper, message };
 }
 
@@ -274,6 +343,34 @@ describe("A2UI interaction matrix", () => {
     expect(wrapper.find(".md-block").text()).toContain(
       "Stable formatted answer"
     );
+    wrapper.unmount();
+  });
+
+  it("renders the complete cited Review answer and removes A2UI without refresh", async () => {
+    const scenario = buildA2uiScenario("confirm");
+    const { wrapper, message } = mountReviewScenario(scenario);
+    const answer = `COMPONENT-START\n${"evidence ".repeat(900)}\nCOMPONENT-END`;
+
+    await wrapper.findAll(".a2ui-confirm button")[1].trigger("click");
+    scenario.resolveSuccess({
+      answer,
+      references: [{ title: "Component review source" }],
+      followUpQuestions: ["What is the next comparison?"],
+    });
+    await flushPromises();
+
+    const rendered = wrapper.get('[data-testid="review-content"]').text();
+    expect(rendered).toContain("COMPONENT-START");
+    expect(rendered).toContain("COMPONENT-END");
+    expect(rendered.length).toBeGreaterThan(4096);
+    expect(wrapper.get(".doc-list-item").text()).toContain(
+      "Component review source"
+    );
+    expect(wrapper.find(".a2ui-confirm").exists()).toBe(false);
+    expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("This action was submitted");
+    expect(message.blocks).toBeUndefined();
+    expect(message.a2uiRuntime).toBeUndefined();
     wrapper.unmount();
   });
 });
