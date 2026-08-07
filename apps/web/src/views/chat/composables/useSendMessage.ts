@@ -1171,7 +1171,6 @@ export function useSendMessage(opts: {
               if (isForeground(sendingDialogueId)) {
                 await selectChat(sendingDialogueId);
               }
-              acceptedTurn = true;
               return;
             }
           }
