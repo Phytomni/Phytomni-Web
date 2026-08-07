@@ -440,6 +440,7 @@ export default {
       upload_unavailable: "文件上传服务暂时不可用。",
     },
     upload: {
+      alreadyAttached: "已添加：{file}",
       status: {
         queued: "排队中",
         creating: "准备中",

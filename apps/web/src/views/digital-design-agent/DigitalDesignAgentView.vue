@@ -1,5 +1,6 @@
 <template>
   <main
+    ref="designRoot"
     class="digital-design-page"
     data-scroll-root="digital-design-agent"
     aria-labelledby="digital-design-title"
@@ -135,7 +136,15 @@
             class="digital-design-file-list"
             data-test="design-file-list"
           >
-            <li v-for="item in uploadItems" :key="item.localId">
+            <li
+              v-for="item in uploadItems"
+              :key="item.localId"
+              :data-upload-local-id="item.localId"
+              :data-upload-focused="
+                focusedUploadLocalId === item.localId ? 'true' : undefined
+              "
+              tabindex="-1"
+            >
               <ChatUploadCard
                 :item="item"
                 @pause="pauseUpload"
@@ -147,6 +156,15 @@
               />
             </li>
           </ul>
+          <p
+            v-if="attachmentAnnouncement"
+            class="digital-design-hint"
+            data-test="design-attachment-announcement"
+            role="status"
+            aria-live="polite"
+          >
+            {{ attachmentAnnouncement }}
+          </p>
           <p
             v-if="attachmentTargetBlocked"
             class="digital-design-hint"
@@ -325,7 +343,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { getChatdownloadURL } from "@/api/chat";
@@ -392,6 +410,9 @@ const geneId = ref("");
 const speciesCode = ref("");
 const validationMessages = ref<string[]>([]);
 const fileError = ref("");
+const attachmentAnnouncement = ref("");
+const focusedUploadLocalId = ref("");
+const designRoot = ref<HTMLElement | null>(null);
 const formError = ref("");
 const downloadError = ref("");
 const isSubmitting = ref(false);
@@ -426,6 +447,9 @@ const uploadQueue = useResumableUploads({
   onValidationError: (error) => {
     fileError.value = attachmentErrorMessage(error);
   },
+  onDuplicate: (localId, fileName) => {
+    onAttachmentDuplicate(localId, fileName).catch(() => undefined);
+  },
 });
 const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
 const hasBlockingUploads = uploadQueue.hasBlockingUploads;
@@ -443,6 +467,23 @@ function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
     maxTotalMb: Math.ceil(
       capabilities.upload.value.max_file_bytes / 1024 / 1024
     ),
+  });
+}
+
+async function onAttachmentDuplicate(
+  localId: string,
+  fileName: string
+): Promise<void> {
+  focusedUploadLocalId.value = localId;
+  attachmentAnnouncement.value = "";
+  await nextTick();
+  const item = Array.from(
+    designRoot.value?.querySelectorAll<HTMLElement>("[data-upload-local-id]") ??
+      []
+  ).find((candidate) => candidate.dataset.uploadLocalId === localId);
+  item?.focus();
+  attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
+    file: fileName,
   });
 }
 
@@ -532,6 +573,7 @@ function handleFiles(event: Event): void {
   const input = event.target as HTMLInputElement;
   const incoming = Array.from(input.files ?? []);
   fileError.value = "";
+  attachmentAnnouncement.value = "";
   if (canPickAttachments.value) {
     void uploadQueue.queueFiles(incoming).catch(() => undefined);
   }

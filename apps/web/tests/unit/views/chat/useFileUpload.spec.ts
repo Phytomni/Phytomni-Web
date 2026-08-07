@@ -194,6 +194,22 @@ describe("useFileUpload", () => {
     );
   });
 
+  it("lets the resumable queue deduplicate a full draft before count validation", () => {
+    const queueFiles = vi.fn();
+    const duplicate = sizedFile("existing-4.bam", 1, "application/x-bam");
+    chatState.fileList = Array.from(
+      { length: CHAT_ATTACHMENT_LIMITS.maxFiles },
+      (_, index) =>
+        uploadItem(sizedFile(`existing-${index}.bam`, 1), `existing-${index}`)
+    );
+    const { handlePastedFiles } = makeComposable({ queueFiles });
+
+    handlePastedFiles([duplicate]);
+
+    expect(queueFiles).toHaveBeenCalledWith([duplicate]);
+    expect(onValidationError).not.toHaveBeenCalled();
+  });
+
   it("removes a queued item and closes the composer when the queue becomes empty", async () => {
     const { removeFile } = makeComposable();
     chatState.fileList = [uploadItem(rawFile("b.txt", "12345"))];

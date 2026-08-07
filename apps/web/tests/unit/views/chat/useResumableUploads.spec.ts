@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type { ApiEnvelope, BotUploadCapability } from "@/api/types";
 import type { ChatUIState } from "@/views/chat/types";
+import type { ResumableUploadItem } from "@/views/chat/upload/types";
 import { buildChatState } from "../../../helpers/chatBuilders";
 import type {
   UploadRecoveryRecord,
@@ -134,8 +135,39 @@ function fakeDataPlane(): UploadDataPlane {
   };
 }
 
-function fixtureFile(name: string): File {
-  return new File(["abc"], name, { type: "application/octet-stream" });
+function fixtureFile(
+  name: string,
+  options: { content?: string; type?: string; lastModified?: number } = {}
+): File {
+  return new File([options.content ?? "abc"], name, {
+    type: options.type ?? "application/octet-stream",
+    lastModified: options.lastModified ?? 1_786_032_000_000,
+  });
+}
+
+function retainedItem(
+  file: File,
+  status: ResumableUploadItem["status"],
+  localId: string
+): ResumableUploadItem {
+  return {
+    localId,
+    file,
+    assetId: status === "completed" ? `file_${localId}` : null,
+    name: file.name.normalize("NFC"),
+    size: file.size,
+    type: file.type,
+    lastModified: file.lastModified,
+    status,
+    partSize: file.size,
+    partCount: 1,
+    receivedParts: status === "completed" ? [1] : [],
+    loadedBytes: status === "completed" ? file.size : 0,
+    speedBytesPerSecond: 0,
+    etaSeconds: null,
+    retryCount: 0,
+    errorCode: null,
+  };
 }
 
 function setup(store = fakeStore()) {
@@ -151,6 +183,7 @@ function setup(store = fakeStore()) {
   };
   const capability = ref<BotUploadCapability>(enabledCapability);
   const onValidationError = vi.fn();
+  const onDuplicate = vi.fn();
   const queue = useResumableUploads({
     currentChatId,
     getChatState,
@@ -159,6 +192,7 @@ function setup(store = fakeStore()) {
     store,
     random: () => 0.5,
     onValidationError,
+    onDuplicate,
   });
   return {
     currentChatId,
@@ -166,6 +200,7 @@ function setup(store = fakeStore()) {
     getChatState,
     capability,
     onValidationError,
+    onDuplicate,
     store,
     queue,
   };
@@ -225,6 +260,147 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
+  it("deduplicates a normalized tuple before engine creation and ignores MIME differences", async () => {
+    const { queue, getChatState, onDuplicate, onValidationError } = setup();
+    const decomposed = fixtureFile("cafe\u0301.csv", {
+      type: "text/csv",
+      lastModified: 42,
+    });
+    const composed = fixtureFile("caf\u00e9.csv", {
+      type: "application/octet-stream",
+      lastModified: 42,
+    });
+
+    await queue.queueFiles([decomposed]);
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList[0]?.status).toBe("completed");
+    });
+    const existing = getChatState("A").fileList[0];
+    await queue.queueFiles([composed]);
+
+    expect(getChatState("A").fileList).toHaveLength(1);
+    expect(mocks.createUpload).toHaveBeenCalledTimes(1);
+    expect(onDuplicate).toHaveBeenCalledWith(
+      existing?.localId,
+      "caf\u00e9.csv"
+    );
+    expect(onValidationError).not.toHaveBeenCalled();
+    await queue.dispose();
+  });
+
+  it.each([
+    "queued",
+    "creating",
+    "uploading",
+    "paused",
+    "completed",
+    "failed",
+    "completing",
+    "aborted",
+    "expired",
+  ] as const)(
+    "keeps a retained %s item authoritative for draft deduplication",
+    async (status) => {
+      const { queue, getChatState, onDuplicate, onValidationError } = setup();
+      const file = fixtureFile("retained.fastq.gz", { lastModified: 77 });
+      getChatState("A").fileList = [
+        retainedItem(file, status, `retained-${status}`),
+      ];
+
+      await queue.queueFiles([
+        fixtureFile("retained.fastq.gz", {
+          type: "application/gzip",
+          lastModified: 77,
+        }),
+      ]);
+
+      expect(mocks.createUpload).not.toHaveBeenCalled();
+      expect(onDuplicate).toHaveBeenCalledWith(
+        `retained-${status}`,
+        "retained.fastq.gz"
+      );
+      expect(onValidationError).not.toHaveBeenCalled();
+      await queue.dispose();
+    }
+  );
+
+  it("checks duplicates before the retained attachment limit", async () => {
+    const { queue, getChatState, onDuplicate, onValidationError } = setup();
+    const duplicate = fixtureFile("duplicate-at-limit.bam", {
+      lastModified: 88,
+    });
+    getChatState("A").fileList = Array.from({ length: 10 }, (_, index) =>
+      retainedItem(
+        index === 4
+          ? duplicate
+          : fixtureFile(`existing-${index}.bam`, { lastModified: index }),
+        "completed",
+        `existing-${index}`
+      )
+    );
+
+    await queue.queueFiles([
+      fixtureFile("duplicate-at-limit.bam", {
+        type: "application/x-bam",
+        lastModified: 88,
+      }),
+    ]);
+
+    expect(onDuplicate).toHaveBeenCalledWith(
+      "existing-4",
+      "duplicate-at-limit.bam"
+    );
+    expect(onValidationError).not.toHaveBeenCalled();
+    expect(mocks.createUpload).not.toHaveBeenCalled();
+    await queue.dispose();
+  });
+
+  it("creates new tasks for a different normalized name, size, or last-modified time", async () => {
+    const { queue, getChatState, onDuplicate } = setup();
+
+    await queue.queueFiles([
+      fixtureFile("sample-a.csv", { content: "abc", lastModified: 1 }),
+      fixtureFile("sample-b.csv", { content: "abc", lastModified: 1 }),
+      fixtureFile("sample-a.csv", { content: "abcd", lastModified: 1 }),
+      fixtureFile("sample-a.csv", { content: "abc", lastModified: 2 }),
+    ]);
+
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList).toHaveLength(4);
+      expect(mocks.createUpload).toHaveBeenCalledTimes(4);
+    });
+    expect(mocks.createUpload).toHaveBeenCalledTimes(4);
+    expect(onDuplicate).not.toHaveBeenCalled();
+    await queue.dispose();
+  });
+
+  it("scopes duplicate tuples to the current dialogue and allows them after removal", async () => {
+    const { queue, getChatState, currentChatId, onDuplicate } = setup();
+    const file = fixtureFile("scoped.vcf.gz", { lastModified: 99 });
+
+    await queue.queueFiles([file]);
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList[0]?.status).toBe("completed");
+    });
+    await queue.queueFiles([file]);
+    expect(onDuplicate).toHaveBeenCalledTimes(1);
+
+    currentChatId.value = "B";
+    await queue.queueFiles([file]);
+    await vi.waitFor(() => {
+      expect(getChatState("B").fileList[0]?.status).toBe("completed");
+    });
+    expect(mocks.createUpload).toHaveBeenCalledTimes(2);
+
+    await queue.removeUpload(getChatState("B").fileList[0]);
+    await queue.queueFiles([file]);
+    await vi.waitFor(() => {
+      expect(getChatState("B").fileList[0]?.status).toBe("completed");
+    });
+    expect(mocks.createUpload).toHaveBeenCalledTimes(3);
+    await queue.dispose();
+  });
+
   it("moves the engine registry across a temporary-to-canonical dialogue rekey", async () => {
     const { queue, getChatState, states } = setup();
     await queue.queueFiles([fixtureFile("pending.bam")]);
@@ -257,6 +433,32 @@ describe("useResumableUploads", () => {
         fileName: "blocked.fastq",
       })
     );
+    await queue.dispose();
+  });
+
+  it("focuses a retained duplicate even when capability now blocks new uploads", async () => {
+    const { queue, capability, getChatState, onDuplicate, onValidationError } =
+      setup();
+    const file = fixtureFile("retained-after-disable.pdf", {
+      lastModified: 55,
+    });
+    getChatState("A").fileList = [
+      retainedItem(file, "completed", "retained-after-disable"),
+    ];
+    capability.value = {
+      ...enabledCapability,
+      enabled: false,
+      upload_origin: "",
+    };
+
+    await queue.queueFiles([file]);
+
+    expect(onDuplicate).toHaveBeenCalledWith(
+      "retained-after-disable",
+      "retained-after-disable.pdf"
+    );
+    expect(onValidationError).not.toHaveBeenCalled();
+    expect(mocks.createUpload).not.toHaveBeenCalled();
     await queue.dispose();
   });
 

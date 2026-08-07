@@ -99,6 +99,15 @@ export function useFileUpload(opts: {
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
 
+    if (queueFiles) {
+      if (files.length === 0) return;
+      Promise.resolve(queueFiles(files)).catch(() => undefined);
+      nextTick(() => {
+        scrollToBottom().catch(() => undefined);
+      }).catch(() => undefined);
+      return;
+    }
+
     const accepted: File[] = [];
     for (const file of files) {
       if (
@@ -113,14 +122,10 @@ export function useFileUpload(opts: {
     }
     if (accepted.length === 0) return;
 
-    if (queueFiles) {
-      Promise.resolve(queueFiles(accepted)).catch(() => undefined);
-    } else {
-      chatState.fileList = [
-        ...chatState.fileList,
-        ...accepted.map((file, index) => fallbackItem(file, index)),
-      ];
-    }
+    chatState.fileList = [
+      ...chatState.fileList,
+      ...accepted.map((file, index) => fallbackItem(file, index)),
+    ];
 
     nextTick(() => {
       if (composerRef.value && chatState.fileList.length > 0) {

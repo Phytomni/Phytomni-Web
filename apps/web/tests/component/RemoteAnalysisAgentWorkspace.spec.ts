@@ -1,3 +1,4 @@
+import { flushPromises } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import RemoteAnalysisAgentWorkspace from "@/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue";
@@ -29,14 +30,7 @@ const mocks = vi.hoisted(() => {
       messageId: null,
     },
   };
-  const chatState = {
-    fileList: [
-      {
-        assetId: "file_dataset_1234567890",
-        status: "completed",
-      },
-    ],
-  };
+  const chatState = { fileList: [] as unknown[] };
   const analystCapability = {
     enabled: true,
     execution: "agent_run",
@@ -67,6 +61,9 @@ const mocks = vi.hoisted(() => {
       retryUpload: vi.fn(),
       reselectUpload: vi.fn(),
     },
+    uploadOptions: null as {
+      onDuplicate?: (localId: string, fileName: string) => void;
+    } | null,
   };
 });
 
@@ -105,7 +102,12 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useResumableUploads", () => ({
-  useResumableUploads: () => mocks.uploadQueue,
+  useResumableUploads: (options: {
+    onDuplicate?: (localId: string, fileName: string) => void;
+  }) => {
+    mocks.uploadOptions = options;
+    return mocks.uploadQueue;
+  },
 }));
 
 vi.mock("@/views/chat/composables/useRemoteAgentLifecycle", () => ({
@@ -119,6 +121,7 @@ vi.mock("vue-router", () => ({
 
 function mountWorkspace() {
   return createTestAppContext().mount(RemoteAnalysisAgentWorkspace, {
+    attachTo: document.body,
     props: { tool: "AnalystAgent", localePrefix: "agents.analyst" },
     global: {
       stubs: {
@@ -133,16 +136,35 @@ function mountWorkspace() {
   });
 }
 
+function completedUpload(localId: string, name: string) {
+  return {
+    localId,
+    assetId: "file_dataset_1234567890",
+    name,
+    size: 6,
+    type: "text/csv",
+    file: null,
+    lastModified: 42,
+    status: "completed",
+    partSize: 6,
+    partCount: 1,
+    receivedParts: [1],
+    loadedBytes: 6,
+    speedBytesPerSecond: 0,
+    etaSeconds: 0,
+    retryCount: 0,
+    errorCode: null,
+  };
+}
+
 describe("RemoteAnalysisAgentWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.uploadOptions = null;
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     mocks.submit.mockResolvedValue(null);
     mocks.chatState.fileList = [
-      {
-        assetId: "file_dataset_1234567890",
-        status: "completed",
-      },
+      completedUpload("upload-existing", "counts.csv"),
     ];
     mocks.analystCapability.attachments = true;
     mocks.analystCapability.attachmentChannels = ["document", "dataset"];
@@ -185,6 +207,21 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
     expect(wrapper.findAll('[data-test="analyst-files"]')).toHaveLength(1);
     expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([file]);
+    wrapper.unmount();
+  });
+
+  it("announces a duplicate and focuses the retained workspace item", async () => {
+    const wrapper = mountWorkspace();
+
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", "counts.csv");
+    await flushPromises();
+
+    expect(
+      wrapper.get('[data-test="analyst-attachment-announcement"]').text()
+    ).toBe("Already attached: counts.csv");
+    const retained = wrapper.get('[data-upload-local-id="upload-existing"]');
+    expect(retained.attributes("data-upload-focused")).toBe("true");
+    expect(document.activeElement).toBe(retained.element);
     wrapper.unmount();
   });
 

@@ -18,6 +18,7 @@ import type {
 } from "@/views/chat/types";
 import type { BotCapabilityByTool } from "@/views/chat/composables/useBotCapabilities";
 import type { BotUploadCapability } from "@/api/types";
+import type { ResumableUploadQueueOptions } from "@/views/chat/composables/useResumableUploads";
 import type { A2uiActionTransport } from "@/views/chat/streaming/a2uiAction";
 import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
 import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
@@ -78,6 +79,10 @@ const chatViewState = vi.hoisted(() => ({
   > | null,
 }));
 
+const chatUploadQueueState = vi.hoisted(() => ({
+  options: null as ResumableUploadQueueOptions | null,
+}));
+
 const mockBotCapabilities = {
   byTool: ref<BotCapabilityByTool>({}),
   upload: ref<BotUploadCapability>({
@@ -120,6 +125,23 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
     load: mockBotCapabilities.load,
   }),
 }));
+
+vi.mock(
+  "@/views/chat/composables/useResumableUploads",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/views/chat/composables/useResumableUploads")
+      >();
+    return {
+      ...actual,
+      useResumableUploads: (options: ResumableUploadQueueOptions) => {
+        chatUploadQueueState.options = options;
+        return actual.useResumableUploads(options);
+      },
+    };
+  }
+);
 
 vi.mock("vue-element-plus-x", () => ({
   MentionSender: {
@@ -283,6 +305,9 @@ function populateFullChatState(
 }
 
 describe("ChatInteractionV2 — behavior matrix", () => {
+  beforeEach(() => {
+    chatUploadQueueState.options = null;
+  });
   it("covers Phase 3B message content branches via shared fixtures", () => {
     for (const key of PHASE_3B_MESSAGE_KEYS) {
       expect(MESSAGE_FIXTURES[key]).toBeTruthy();
@@ -503,6 +528,90 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     } finally {
       wrapper.unmount();
     }
+  });
+
+  it("announces a duplicate Chat attachment and focuses its retained control", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/:pathMatch(.*)*", component: { template: "<div />" } },
+      ],
+    });
+    await router.push("/chat");
+    await router.isReady();
+    const context = createTestAppContext({ router });
+    userStore().SET_ROLES(["ChatAgent"]);
+    mockBotCapabilities.byTool.value = {
+      ChatAgent: {
+        enabled: true,
+        attachments: true,
+        attachmentChannels: ["document"],
+      },
+    };
+    const wrapper = context.mount(ChatView, {
+      attachTo: document.body,
+      shallow: true,
+      global: {
+        stubs: {
+          PhyAdaptiveShell: {
+            template:
+              '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+          },
+          ChatComposer: {
+            props: ["fileList"],
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({ openHeader: vi.fn(), closeHeader: vi.fn() });
+              return {};
+            },
+            template:
+              '<div><button v-for="item in fileList" :key="item.localId" data-testid="chat-upload-card">{{ item.name }}</button></div>',
+          },
+        },
+      },
+    });
+    const states = chatViewState.states;
+    if (!states) throw new Error("ChatView state was not captured");
+    const dialogueId = "duplicate-chat";
+    const item: ResumableUploadItem = {
+      localId: "upload-existing",
+      assetId: "file_existing",
+      name: "paper.pdf",
+      size: 5,
+      type: "application/pdf",
+      file: null,
+      lastModified: 42,
+      status: "completed",
+      partSize: 5,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 5,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    states.currentChatId.value = dialogueId;
+    states.getChatState(dialogueId).fileList = [item];
+    await nextTick();
+
+    chatUploadQueueState.options?.onDuplicate?.("upload-existing", "paper.pdf");
+    await flushPromises();
+
+    expect(
+      wrapper.get('[data-testid="chat-attachment-announcement"]').text()
+    ).toBe("Already attached: paper.pdf");
+    expect(
+      wrapper
+        .get('[data-testid="chat-root"]')
+        .attributes("data-focused-upload-id")
+    ).toBe("upload-existing");
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="chat-upload-card"]').element
+    );
+    wrapper.unmount();
   });
 
   it.each([

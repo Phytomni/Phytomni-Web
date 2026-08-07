@@ -42,6 +42,7 @@ export interface ResumableUploadQueueOptions {
   random?: () => number;
   browserMemoryLimit?: number;
   onValidationError?: (error: ChatAttachmentValidationError) => void;
+  onDuplicate?: (localId: string, fileName: string) => void;
 }
 
 function defaultBrowserMemoryLimit(): number {
@@ -220,30 +221,47 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
     const dialogueId = options.currentChatId.value;
     if (!dialogueId) return;
     const capability = options.uploadCapability.value;
-    if (!capability.enabled) {
-      files.forEach((file) =>
+    const state = stateFor(dialogueId);
+    let accountScope: string | null | undefined;
+    const engines = mapFor(dialogueId);
+    for (const file of files) {
+      const metadataValidation = validateUploadFile(file, 0);
+      if (!metadataValidation.ok) {
+        options.onValidationError?.({
+          code: metadataValidation.code,
+          fileName: file.name,
+        });
+        continue;
+      }
+      const existing = state.fileList.find(
+        (item) =>
+          item.name.normalize("NFC") === metadataValidation.normalizedName &&
+          item.size === file.size &&
+          item.lastModified === file.lastModified
+      );
+      if (existing) {
+        options.onDuplicate?.(existing.localId, existing.name);
+        continue;
+      }
+      if (!capability.enabled) {
         options.onValidationError?.({
           code: "upload_disabled",
           fileName: file.name,
-        })
-      );
-      return;
-    }
-    const state = stateFor(dialogueId);
-    const accountScope = await accountScopeForUsername(
-      usernameValue(options.username)
-    ).catch(() => null);
-    if (!accountScope) {
-      files.forEach((file) =>
+        });
+        continue;
+      }
+      if (accountScope === undefined) {
+        accountScope = await accountScopeForUsername(
+          usernameValue(options.username)
+        ).catch(() => null);
+      }
+      if (!accountScope) {
         options.onValidationError?.({
           code: "upload_unavailable",
           fileName: file.name,
-        })
-      );
-      return;
-    }
-    const engines = mapFor(dialogueId);
-    for (const file of files) {
+        });
+        continue;
+      }
       if (state.fileList.length >= capability.max_attachments) {
         options.onValidationError?.({
           code: "too_many_files",
@@ -257,18 +275,6 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
           code: validation.code,
           fileName: file.name,
         });
-        continue;
-      }
-      const existing = state.fileList.find(
-        (item) =>
-          item.file === null &&
-          item.name === validation.normalizedName &&
-          item.size === file.size &&
-          item.type === file.type &&
-          item.lastModified === file.lastModified
-      );
-      if (existing) {
-        engines.get(existing.localId)?.reselect(file);
         continue;
       }
       const localId = newLocalId();

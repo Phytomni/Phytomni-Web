@@ -15,10 +15,12 @@ export function removeDeletedChat(options: {
 </script>
 <template>
   <div
+    ref="chatRootRef"
     class="chat-page-root"
     data-testid="chat-root"
     :data-chat-state="chatStateAttr"
     :data-sidebar-drawer-state="sidebarDrawerStateAttr"
+    :data-focused-upload-id="focusedUploadLocalId || undefined"
   >
     <PhyAdaptiveShell
       :sidebar-collapsed="effectiveSidebarCollapsed"
@@ -430,6 +432,15 @@ export function removeDeletedChat(options: {
                   @clear-agent="clearSelectedAgent"
                   @toggle-agent="handleButtonClick"
                 />
+                <p
+                  v-if="attachmentAnnouncement"
+                  class="chat-attachment-announcement"
+                  data-testid="chat-attachment-announcement"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {{ attachmentAnnouncement }}
+                </p>
               </div>
               <div
                 v-if="!currentChat?.messages?.length"
@@ -726,6 +737,7 @@ function hasAttachmentChannel(capability: BotCapability | undefined): boolean {
 }
 
 const composerRef = ref<ComposerHandle | null>(null);
+const chatRootRef = ref<HTMLElement | null>(null);
 
 const timestamp = ref(Date.now());
 const { locale, t } = useI18n();
@@ -950,6 +962,35 @@ const {
   refreshingMessages,
 } = useChatStates();
 
+const focusedUploadLocalId = ref("");
+const attachmentAnnouncement = ref("");
+
+async function onAttachmentDuplicate(
+  localId: string,
+  fileName: string
+): Promise<void> {
+  focusedUploadLocalId.value = localId;
+  attachmentAnnouncement.value = "";
+  composerRef.value?.openHeader();
+  await nextTick();
+  const itemIndex = fileList.value.findIndex(
+    (item) => item.localId === localId
+  );
+  const card =
+    itemIndex >= 0
+      ? chatRootRef.value?.querySelectorAll<HTMLElement>(
+          '[data-testid="chat-upload-card"]'
+        )[itemIndex]
+      : undefined;
+  const focusTarget = card?.matches("button:not(:disabled)")
+    ? card
+    : card?.querySelector<HTMLElement>("button:not(:disabled)");
+  focusTarget?.focus();
+  attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
+    file: fileName,
+  });
+}
+
 const botCapabilities = useBotCapabilities("chat");
 const attachmentTargetAvailable = computed(() => {
   if (!botCapabilities.upload.value.enabled) return false;
@@ -981,6 +1022,9 @@ const uploadQueue = useResumableUploads({
   uploadCapability: botCapabilities.upload,
   username: uploadUsername,
   onValidationError: onAttachmentValidationError,
+  onDuplicate: (localId, fileName) => {
+    onAttachmentDuplicate(localId, fileName).catch(() => undefined);
+  },
 });
 const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
 const attachmentTargetBlocked = computed(

@@ -444,6 +444,7 @@ export default {
       upload_unavailable: "The file upload service is temporarily unavailable.",
     },
     upload: {
+      alreadyAttached: "Already attached: {file}",
       status: {
         queued: "Queued",
         creating: "Preparing",

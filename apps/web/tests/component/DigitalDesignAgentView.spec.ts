@@ -1,3 +1,4 @@
+import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentTaskLifecycle } from "@/api/types";
@@ -86,6 +87,9 @@ const mocks = vi.hoisted(() => {
     load: vi.fn().mockResolvedValue([]),
     chatState,
     uploadQueue,
+    uploadOptions: null as {
+      onDuplicate?: (localId: string, fileName: string) => void;
+    } | null,
     getChatState: vi.fn(() => chatState),
     getChatdownloadURL: vi.fn(),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
@@ -125,7 +129,12 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useResumableUploads", () => ({
-  useResumableUploads: () => mocks.uploadQueue,
+  useResumableUploads: (options: {
+    onDuplicate?: (localId: string, fileName: string) => void;
+  }) => {
+    mocks.uploadOptions = options;
+    return mocks.uploadQueue;
+  },
 }));
 
 vi.mock("@/components/research/ResearchArtifactShell.vue", () => ({
@@ -148,6 +157,7 @@ vi.mock("vue-router", () => ({
 
 function mountView(options: { state?: BotLifecycleState } = {}) {
   return createTestAppContext().mount(DigitalDesignAgentView, {
+    attachTo: document.body,
     props: options.state ? { state: options.state } : undefined,
     global: {
       stubs: {
@@ -227,6 +237,27 @@ function lifecycle(
   };
 }
 
+function completedUpload(localId: string, name: string) {
+  return {
+    localId,
+    assetId: "file_context",
+    name,
+    size: 7,
+    type: "application/pdf",
+    file: null,
+    lastModified: 42,
+    status: "completed",
+    partSize: 7,
+    partCount: 1,
+    receivedParts: [1],
+    loadedBytes: 7,
+    speedBytesPerSecond: 0,
+    etaSeconds: 0,
+    retryCount: 0,
+    errorCode: null,
+  };
+}
+
 afterEach(() => {
   REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = false;
   vi.useRealTimers();
@@ -277,6 +308,7 @@ describe("DigitalDesignAgentView", () => {
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
     mocks.getTaskLifecycle.mockResolvedValue({ data: lifecycle() });
     mocks.chatState.fileList = [];
+    mocks.uploadOptions = null;
     mocks.uploadQueue.hasBlockingUploads.value = false;
     mocks.uploadQueue.completedAssetIds.value = [];
   });
@@ -369,6 +401,24 @@ describe("DigitalDesignAgentView", () => {
     await input.trigger("change");
 
     expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([reads]);
+    wrapper.unmount();
+  });
+
+  it("announces a duplicate and focuses the retained design item", async () => {
+    mocks.chatState.fileList = [
+      completedUpload("upload-existing", "context.pdf"),
+    ];
+    const wrapper = mountView();
+
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", "context.pdf");
+    await flushPromises();
+
+    expect(
+      wrapper.get('[data-test="design-attachment-announcement"]').text()
+    ).toBe("Already attached: context.pdf");
+    const retained = wrapper.get('[data-upload-local-id="upload-existing"]');
+    expect(retained.attributes("data-upload-focused")).toBe("true");
+    expect(document.activeElement).toBe(retained.element);
     wrapper.unmount();
   });
 
