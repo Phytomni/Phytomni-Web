@@ -96,7 +96,9 @@ describe("Chat progress placement integration", () => {
     );
     expect(COMPOSER_SOURCE).toContain("hasBlockingUploads: boolean");
     expect(COMPOSER_SOURCE).toContain("!props.hasBlockingUploads");
-    expect(COMPOSER_SOURCE).toContain("<ChatUploadCard");
+    expect(COMPOSER_SOURCE).toContain("<AttachmentChipStrip");
+    expect(COMPOSER_SOURCE).not.toContain("<ChatUploadCard");
+    expect(COMPOSER_SOURCE).toContain(':announcement="attachmentAnnouncement"');
     expect(COMPOSER_SOURCE).not.toContain("CHAT_ATTACHMENT_ACCEPT");
     expect(UPLOAD_CARD_SOURCE).toContain('role="progressbar"');
     expect(UPLOAD_CARD_SOURCE).toContain('aria-live="polite"');

@@ -567,7 +567,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
               return {};
             },
             template:
-              '<div><button v-for="item in fileList" :key="item.localId" data-testid="chat-upload-card">{{ item.name }}</button></div>',
+              '<div><button v-for="item in fileList" :key="item.localId" data-testid="attachment-chip">{{ item.name }}</button></div>',
           },
         },
       },
@@ -609,7 +609,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         .attributes("data-focused-upload-id")
     ).toBe("upload-existing");
     expect(document.activeElement).toBe(
-      wrapper.get('[data-testid="chat-upload-card"]').element
+      wrapper.get('[data-testid="attachment-chip"]').element
     );
 
     states.currentChatId.value = "duplicate-chat-b";

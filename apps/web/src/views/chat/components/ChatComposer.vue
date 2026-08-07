@@ -11,22 +11,21 @@
           {{ t("chat.agentPicker.noAvailableAgents") }}
         </div>
         <div
-          v-if="fileList.length > 0 && !isSending"
-          class="phy-composer-frame__attachments composer-attachments file-list-container"
+          v-if="fileList.length > 0"
+          class="phy-composer-frame__attachments composer-attachments"
         >
-          <div class="file-list">
-            <div v-for="file in fileList" :key="file.localId" class="file-item">
-              <ChatUploadCard
-                :item="file"
-                @pause="emit('pause-upload', $event)"
-                @resume="emit('resume-upload', $event)"
-                @retry="emit('retry-upload', $event)"
-                @reselect="handleReselect"
-                @cancel="emit('cancel-upload', $event)"
-                @remove="emit('remove-upload', $event)"
-              />
-            </div>
-          </div>
+          <AttachmentChipStrip
+            :items="fileList"
+            :disabled="isSending"
+            :announcement="attachmentAnnouncement"
+            :announcement-nonce="attachmentAnnouncementNonce"
+            @pause="emit('pause-upload', $event)"
+            @resume="emit('resume-upload', $event)"
+            @retry="emit('retry-upload', $event)"
+            @reselect="handleReselect"
+            @cancel="emit('cancel-upload', $event)"
+            @remove="emit('remove-upload', $event)"
+          />
         </div>
         <p
           v-if="attachmentTargetBlocked && !isSending"
@@ -42,7 +41,7 @@
             :model-value="modelValue"
             ref="senderRef"
             :loading="isSending"
-            :disabled="composerDisabled"
+            :disabled="!canEdit"
             variant="updown"
             :auto-size="{ minRows: 1, maxRows: 5 }"
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
@@ -80,7 +79,7 @@
               :options="pickerOptions"
               :roles-loading="rolesLoading"
               :selected-agent="selectedAgent"
-              :disabled="composerDisabled"
+              :disabled="!canEdit"
               @select="emit('command', $event)"
               @clear="emit('clear-agent')"
             />
@@ -118,13 +117,13 @@
               "
               placement="top-start"
               trigger="click"
-              :disabled="composerDisabled"
+              :disabled="!canEdit"
               @command="emit('command', $event)"
             >
               <el-button
                 circle
                 class="composer-tool-button"
-                :disabled="composerDisabled"
+                :disabled="!canEdit"
                 :aria-label="t('chat.agentPicker.label')"
               >
                 <el-icon><Menu /></el-icon>
@@ -186,7 +185,7 @@
         :options="pickerOptions"
         :roles-loading="rolesLoading"
         :selected-agent="selectedAgent"
-        :disabled="composerDisabled"
+        :disabled="!canEdit"
         @toggle="emit('toggle-agent', $event)"
       />
     </div>
@@ -205,7 +204,7 @@ import ChatAgentPicker, {
   type ChatAgentPickerOption,
 } from "./ChatAgentPicker.vue";
 import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
-import ChatUploadCard from "./ChatUploadCard.vue";
+import AttachmentChipStrip from "./AttachmentChipStrip.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
@@ -219,6 +218,8 @@ const props = defineProps<{
   modeUsable: boolean;
   showModeSelector: boolean;
   fileList: ResumableUploadItem[];
+  attachmentAnnouncement?: string;
+  attachmentAnnouncementNonce?: number;
   hasBlockingUploads: boolean;
   attachmentTargetAvailable: boolean;
   attachmentTargetBlocked: boolean;
@@ -269,11 +270,11 @@ const mentionOptions = computed(() =>
 const mentionTriggers = computed(() =>
   expertControlsEnabled.value ? ["@"] : []
 );
-const composerDisabled = computed(
-  () => props.isSending || props.rolesLoading || !props.modeUsable
+const canEdit = computed(
+  () => !props.isSending && !props.rolesLoading && props.modeUsable
 );
 const canQueueFiles = computed(
-  () => !composerDisabled.value && props.attachmentTargetAvailable
+  () => canEdit.value && props.attachmentTargetAvailable
 );
 const permissionUnavailable = computed(
   () => !props.rolesLoading && !props.modeUsable
@@ -287,7 +288,7 @@ const showQuickSelect = computed(
 const canSubmit = computed(
   () =>
     Boolean(props.modelValue.trim()) &&
-    !composerDisabled.value &&
+    canEdit.value &&
     !props.hasBlockingUploads &&
     !props.attachmentTargetBlocked
 );
@@ -494,19 +495,6 @@ defineExpose<ChatComposerHandle>({
   height: 10px;
   border-radius: 2px;
   background: currentColor;
-}
-
-.file-list-container .file-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--phy-space-8);
-  flex-wrap: wrap;
-  padding: var(--phy-space-4);
-}
-
-.file-list-container .file-item {
-  display: block;
-  min-width: 0;
 }
 
 .send-btn,

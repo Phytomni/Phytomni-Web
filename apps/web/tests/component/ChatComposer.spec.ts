@@ -114,6 +114,21 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
           props: ["options", "rolesLoading", "selectedAgent", "disabled"],
           emits: ["toggle"],
         },
+        AttachmentChipStrip: {
+          name: "AttachmentChipStrip",
+          template:
+            '<div data-testid="attachment-chip-strip"><button v-for="item in items" :key="item.localId" data-testid="attachment-chip" @click="$emit(\'select\', item.localId)">{{ item.name }}</button><button data-testid="stub-remove" @click="$emit(\'remove\', items[0]?.localId)">Remove</button></div>',
+          props: ["items", "disabled", "announcement", "announcementNonce"],
+          emits: [
+            "select",
+            "pause",
+            "resume",
+            "retry",
+            "reselect",
+            "cancel",
+            "remove",
+          ],
+        },
         ChatUploadCard: {
           name: "ChatUploadCard",
           template:
@@ -414,7 +429,7 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:chatMode")?.[0]).toEqual(["expert"]);
   });
 
-  it("shows upload cards and emits remove-upload", async () => {
+  it("renders the production chip strip and emits remove-upload", async () => {
     const file: ResumableUploadItem = {
       localId: "upload-doc",
       assetId: null,
@@ -440,11 +455,87 @@ describe("ChatComposer", () => {
         .find(".composer-attachments")
         .element.closest(".phy-composer-frame")
     ).toBeTruthy();
-    expect(wrapper.find(".file-list-container").exists()).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "AttachmentChipStrip" }).exists()
+    ).toBe(true);
+    expect(wrapper.findComponent({ name: "ChatUploadCard" }).exists()).toBe(
+      false
+    );
     await wrapper
-      .findComponent({ name: "ChatUploadCard" })
+      .findComponent({ name: "AttachmentChipStrip" })
       .vm.$emit("remove", file.localId);
     expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("preserves every chip recovery event contract", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-actions",
+      assetId: null,
+      name: "reads.fastq.gz",
+      size: 10,
+      type: "application/gzip",
+      file: new File(["x"], "reads.fastq.gz"),
+      lastModified: 0,
+      status: "uploading",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [],
+      loadedBytes: 5,
+      speedBytesPerSecond: 1,
+      etaSeconds: 5,
+      retryCount: 0,
+      errorCode: null,
+    };
+    const replacement = new File(["y"], "reads.fastq.gz");
+    const wrapper = mountComposer({ fileList: [file] });
+    const strip = wrapper.findComponent({ name: "AttachmentChipStrip" });
+
+    await strip.vm.$emit("pause", file.localId);
+    await strip.vm.$emit("resume", file.localId);
+    await strip.vm.$emit("retry", file.localId);
+    await strip.vm.$emit("reselect", file.localId, replacement);
+    await strip.vm.$emit("cancel", file.localId);
+    await strip.vm.$emit("remove", file.localId);
+
+    expect(wrapper.emitted("pause-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("resume-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("retry-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("reselect-upload")?.[0]).toEqual([
+      file.localId,
+      replacement,
+    ]);
+    expect(wrapper.emitted("cancel-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("passes the duplicate announcement into the production strip", () => {
+    const wrapper = mountComposer({
+      fileList: [
+        {
+          localId: "upload-duplicate",
+          assetId: null,
+          name: "paper.pdf",
+          size: 10,
+          type: "application/pdf",
+          file: null,
+          lastModified: 0,
+          status: "completed",
+          partSize: 10,
+          partCount: 1,
+          receivedParts: [1],
+          loadedBytes: 10,
+          speedBytesPerSecond: 0,
+          etaSeconds: null,
+          retryCount: 0,
+          errorCode: null,
+        },
+      ],
+      attachmentAnnouncement: "Already attached: paper.pdf",
+      attachmentAnnouncementNonce: 1,
+    });
+    const strip = wrapper.findComponent({ name: "AttachmentChipStrip" });
+    expect(strip.props("announcement")).toBe("Already attached: paper.pdf");
+    expect(strip.props("announcementNonce")).toBe(1);
   });
 
   it("blocks only send while an upload is incomplete and keeps the editor usable", () => {
@@ -503,7 +594,7 @@ describe("ChatComposer", () => {
     ).toBe(true);
 
     await wrapper
-      .findComponent({ name: "ChatUploadCard" })
+      .findComponent({ name: "AttachmentChipStrip" })
       .vm.$emit("remove", file.localId);
     expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
   });

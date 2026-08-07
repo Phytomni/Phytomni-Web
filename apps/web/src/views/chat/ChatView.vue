@@ -407,6 +407,7 @@ export function removeDeletedChat(options: {
                   :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
                   :file-list="fileList"
+                  :attachment-announcement="attachmentAnnouncement"
                   :has-blocking-uploads="hasBlockingUploads"
                   :attachment-target-available="attachmentTargetAvailable"
                   :attachment-target-blocked="attachmentTargetBlocked"
@@ -982,15 +983,14 @@ async function onAttachmentDuplicate(
   const itemIndex = fileList.value.findIndex(
     (item) => item.localId === localId
   );
-  const card =
-    itemIndex >= 0
-      ? chatRootRef.value?.querySelectorAll<HTMLElement>(
-          '[data-testid="chat-upload-card"]'
-        )[itemIndex]
-      : undefined;
-  const focusTarget = card?.matches("button:not(:disabled)")
-    ? card
-    : card?.querySelector<HTMLElement>("button:not(:disabled)");
+  const directChips = chatRootRef.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  const overflowChip = chatRootRef.value?.querySelector<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow"]'
+  );
+  const focusTarget =
+    itemIndex >= 0 && itemIndex < 3 ? directChips?.[itemIndex] : overflowChip;
   focusTarget?.focus();
 }
 
