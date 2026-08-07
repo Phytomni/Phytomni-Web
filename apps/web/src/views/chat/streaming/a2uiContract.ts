@@ -112,6 +112,8 @@ export type A2uiTerminalSurface =
 
 export interface A2uiFormattedResult {
   answer?: string;
+  references?: Record<string, unknown>[];
+  follow_up_questions?: string[];
 }
 
 /**

@@ -110,11 +110,18 @@ describe("a2uiAction", () => {
     expect(body.payload.fields.gene).toBe("Os01g0177400");
   });
 
-  it("keeps a successful action when the optional formatted answer exceeds the inline budget", async () => {
+  it("keeps the complete terminal formatted result within the response budget", async () => {
+    const answer = `TRANSPORT-START\n${"x".repeat(13_696)}\nTRANSPORT-END`;
+    const references = [{ title: "Transport source" }];
+    const followUpQuestions = ["What should be reviewed next?"];
     const body = structuredClone(fixture("http/terminal_succeeded.json")) as {
-      result: { formatted: { answer: string } };
+      result: Record<string, unknown>;
     };
-    body.result.formatted.answer = "x".repeat(13_696);
+    body.result.formatted = {
+      answer,
+      references,
+      follow_up_questions: followUpQuestions,
+    };
     const fetchImpl = vi.fn(async () => jsonResponse(200, body));
     const t = createFetchA2uiTransport({
       conversationId: "42",
@@ -126,7 +133,11 @@ describe("a2uiAction", () => {
 
     expect(response.status).toBe("succeeded");
     if (response.status === "succeeded") {
-      expect(response.result).not.toHaveProperty("formatted");
+      expect(response.result.formatted).toEqual({
+        answer,
+        references,
+        follow_up_questions: followUpQuestions,
+      });
     }
   });
 

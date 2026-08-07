@@ -1,6 +1,7 @@
 import { A2UI_LIMITS } from "./a2uiContract";
 import type {
   A2uiActionResponse,
+  A2uiFormattedResult,
   A2uiFormField,
   A2uiOpenSurface,
   A2uiScalar,
@@ -468,20 +469,39 @@ function decodeTerminalSurfaceInternal(
 
 function decodeFormatted(
   value: unknown
-): A2uiDecodeResult<{ answer?: string } | undefined> {
+): A2uiDecodeResult<A2uiFormattedResult | undefined> {
   if (value === undefined) return ok(undefined);
   if (!isOrdinaryObject(value)) return fail("response_invalid");
-  if (!hasOwn(value, "answer")) return ok({});
-  if (typeof value.answer !== "string") return fail("props_invalid");
-  if (value.answer !== value.answer.trim()) return fail("props_invalid");
-  // The terminal A2UI surface is authoritative for the action outcome. A
-  // Review report may legitimately be much longer than the bounded inline
-  // Markdown answer budget, so discard only that optional projection rather
-  // than turning an otherwise valid terminal action into an unknown result.
-  if (value.answer.length > A2UI_LIMITS.textChars) return ok(undefined);
-  return ok({
-    answer: value.answer,
-  });
+
+  const formatted: A2uiFormattedResult = {};
+  if (hasOwn(value, "answer")) {
+    if (typeof value.answer !== "string") return fail("props_invalid");
+    if (value.answer !== value.answer.trim()) return fail("props_invalid");
+    formatted.answer = value.answer;
+  }
+
+  if (hasOwn(value, "references")) {
+    const references = value.references;
+    if (!Array.isArray(references) || !references.every(isOrdinaryObject)) {
+      return fail("props_invalid");
+    }
+    formatted.references = references;
+  }
+
+  if (hasOwn(value, "follow_up_questions")) {
+    const followUpQuestions = value.follow_up_questions;
+    if (
+      !Array.isArray(followUpQuestions) ||
+      !followUpQuestions.every(
+        (question): question is string => typeof question === "string"
+      )
+    ) {
+      return fail("props_invalid");
+    }
+    formatted.follow_up_questions = followUpQuestions;
+  }
+
+  return ok(formatted);
 }
 
 export function isA2uiCatalogSupported(version: string): boolean {
