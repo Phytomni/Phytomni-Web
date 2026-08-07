@@ -1,4 +1,5 @@
 import { flushPromises } from "@vue/test-utils";
+import { reactive } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import RemoteAnalysisAgentWorkspace from "@/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue";
@@ -163,6 +164,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.uploadOptions = null;
+    mocks.chatState = reactive({ fileList: [] as unknown[] });
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     mocks.submit.mockResolvedValue(null);
     mocks.chatState.fileList = [
@@ -337,16 +339,33 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     expect(rejectionAnnouncement.text()).not.toContain(">");
     expect(rejectionAnnouncement.text()).toContain("gene");
     expect(rejectionAnnouncement.text()).not.toContain("gene".repeat(30));
+
+    const normalizedName = `\u0000e\u0301e\u0301e\u0301`;
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", normalizedName);
+    await flushPromises();
+    const normalizedAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(normalizedAnnouncement.text()).not.toContain("\u0000");
+    expect(normalizedAnnouncement.text()).toContain("ééé");
     wrapper.unmount();
   });
 
   it("clears chips only after a successful submission", async () => {
+    mocks.uploadQueue.removeUpload.mockImplementation(async (item) => {
+      mocks.chatState.fileList = mocks.chatState.fileList.filter(
+        (candidate) => candidate !== item
+      );
+    });
     const wrapper = mountWorkspace();
     await wrapper.get('[data-testid="analyst-query"]').setValue("Run it");
     await wrapper.get('[data-testid="analyst-submit"]').trigger("click");
     await flushPromises();
 
     expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="attachment-chip"]').exists()).toBe(
+      false
+    );
     expect(mocks.uploadQueue.removeUpload).toHaveBeenCalledWith(
       expect.objectContaining({ localId: "upload-existing" })
     );
@@ -373,6 +392,31 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       expect.objectContaining({ localId: "upload-failed-submit" })
     );
     rejected.unmount();
+
+    mocks.chatState.fileList = [
+      completedUpload("upload-cleanup-failed", "counts.csv"),
+    ];
+    mocks.submit.mockResolvedValueOnce(null);
+    mocks.uploadQueue.removeUpload.mockRejectedValueOnce(
+      new Error("cleanup failed")
+    );
+    const cleanupFailure = mountWorkspace();
+    await cleanupFailure
+      .get('[data-testid="analyst-query"]')
+      .setValue("Keep accepted run");
+    await cleanupFailure.get('[data-testid="analyst-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(
+      cleanupFailure.find('[data-test="analyst-form-error"]').exists()
+    ).toBe(false);
+    expect(cleanupFailure.get('[data-test="analyst-file-error"]').text()).toBe(
+      "Upload failed"
+    );
+    expect(
+      cleanupFailure.find('[data-testid="attachment-chip"]').exists()
+    ).toBe(true);
+    cleanupFailure.unmount();
   });
 
   it("keeps the query editable but blocks attachment submission when the Agent has zero channels", async () => {

@@ -623,7 +623,11 @@ async function submit(): Promise<void> {
       query,
       attachments: [...uploadQueue.completedAssetIds.value],
     });
-    await clearUploads();
+    await clearUploads().catch(() => {
+      const cleanupMessage = t("chat.upload.status.failed");
+      fileError.value = cleanupMessage;
+      announceAttachment(cleanupMessage);
+    });
   } catch {
     formError.value = t(`${props.localePrefix}.submitFailed`);
   } finally {

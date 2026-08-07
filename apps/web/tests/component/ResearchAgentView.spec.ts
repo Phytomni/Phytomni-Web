@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { reactive, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
@@ -256,6 +256,8 @@ describe("ResearchAgentView", () => {
       reset: mocks.reset,
     }));
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
+    mocks.chatState = reactive({ fileList: [] as unknown[] });
+    mocks.getChatState.mockImplementation(() => mocks.chatState);
     mocks.state = ref({
       runId: null,
       status: "RUNNING",
@@ -361,6 +363,64 @@ describe("ResearchAgentView", () => {
     );
     expect(view.find('[data-testid="chat-upload-card"]').exists()).toBe(false);
     view.unmount();
+  });
+
+  it("renders chip removal after success and preserves chips after rejection", async () => {
+    const item = {
+      localId: "research-submit",
+      assetId: "file_dataset",
+      name: "reads.fastq.gz",
+      size: 6,
+      type: "application/gzip",
+      file: null,
+      lastModified: 42,
+      status: "completed" as const,
+      partSize: 6,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 6,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    mocks.chatState.fileList = [item];
+    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: item.assetId }];
+    mocks.uploadQueue.removeUpload.mockImplementation(async (candidate) => {
+      mocks.chatState.fileList = mocks.chatState.fileList.filter(
+        (entry) => entry !== candidate
+      );
+    });
+    const accepted = mountView();
+    await accepted
+      .get('[data-test="research-question"]')
+      .setValue("Analyze the reads");
+    await accepted.get('[data-test="research-submit"]').trigger("click");
+    await Promise.resolve();
+    await accepted.vm.$nextTick();
+
+    expect(accepted.find('[data-testid="attachment-chip"]').exists()).toBe(
+      false
+    );
+    accepted.unmount();
+
+    mocks.chatState.fileList = [{ ...item, localId: "research-rejected" }];
+    mocks.submit.mockRejectedValueOnce(new Error("submit failed"));
+    const rejected = mountView();
+    await rejected
+      .get('[data-test="research-question"]')
+      .setValue("Keep the research draft");
+    await rejected.get('[data-test="research-submit"]').trigger("click");
+    await Promise.resolve();
+    await rejected.vm.$nextTick();
+
+    expect(
+      rejected.get('[data-test="research-question"]').element
+    ).toHaveProperty("value", "Keep the research draft");
+    expect(rejected.find('[data-testid="attachment-chip"]').exists()).toBe(
+      true
+    );
+    rejected.unmount();
   });
 
   it("keeps loading and dark-product Back actions reachable", async () => {
