@@ -154,14 +154,23 @@ compact disclosure containment, and each history title-only/loading/empty/error
 state. Use `Needs Verification` for unsupported browser modalities; never claim
 authenticated or production acceptance from synthetic captures.
 
-## Resumable upload-state matrix
+## Unified attachment visual matrix
 
-The upload-state harness uses the production `AttachmentChipStrip` component with
-synthetic, non-uploading `ResumableUploadItem` records. It covers `queued`,
-`uploading`, `paused`, `failed`, and `completed` at the eight agreed CSS
-viewports (`320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560`) in
-both light and dark themes: exactly 80 PNGs, 80 geometry records, and 80
-upload-style assertion records.
+The attachment harness uses the production `AttachmentChipStrip` component with
+sanitized, non-uploading `ResumableUploadItem` records. It captures these five
+states: `empty` (no attachment), `uploading-detail-open`,
+`mixed-ready-failed-expired`, `ten-files-overflow`, and
+`incompatible-agent-blocked`. Each state is captured at exactly these CSS
+viewport widths in both light and dark themes:
+
+```text
+320 390 480 768 1024 1366 1920 2560 CSS px
+```
+
+The `2560x1440` case is the agreed 4K physical display represented at 150%
+browser scaling in CSS pixels; do not substitute a `3840x2160` CSS viewport.
+The matrix therefore produces exactly 80 PNGs and matching automated geometry
+and attachment-style records.
 
 Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
 
@@ -170,13 +179,17 @@ Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
 ```
 
 The script writes only to the ignored
-`.codex/evidence/frontend-v2/resumable-upload/` directory. Every screenshot is
-captured only after `measure-geometry.js`, `assert-geometry.js`, and
-`assert-upload-styles.js` pass. Inspect each PNG individually before adding a
-human review row. On the narrowest viewports the normal Composer surface can
-continue below the scroll owner; the geometry contract therefore checks that
-the shared attachment presentation remains fully visible and bounded. The synthetic matrix
-is not evidence of a live Bot upload or 10 GiB behavior.
+`.codex/evidence/frontend-v2/unified-attachments/` directory. Before every
+screenshot, `assert-upload-styles.js` checks page overflow, the non-wrapping
+chip strip, visible editor, detail/editor separation, bounded controls, focus
+ring semantics, real (non-fake) progress, and the incompatible-Agent blocked
+send state. Stable selectors are the shared
+`attachment-chip-strip` / `attachment-chip` / `attachment-chip-detail`
+test IDs plus the Composer editor surface (`.chat-composer-body` or its
+textarea/contenteditable child). The script returns automated evidence only; it
+does not claim visual approval. Inspect each PNG individually before adding a
+human review row. The synthetic matrix is not evidence of a live Bot upload or
+10 GiB behavior.
 
 ## Agent lifecycle acceptance matrix
 

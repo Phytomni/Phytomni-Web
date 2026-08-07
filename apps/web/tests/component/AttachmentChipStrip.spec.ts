@@ -393,6 +393,12 @@ describe("AttachmentChipStrip", () => {
     expect(STRIP_SOURCE).not.toMatch(/<svg\b/i);
   });
 
+  it("clamps the detail surface to its containing strip and viewport", () => {
+    const boundedWidth = "min(34rem, calc(100vw - var(--phy-space-24)), 100%)";
+    expect(STRIP_SOURCE).toContain(`inline-size: ${boundedWidth}`);
+    expect(STRIP_SOURCE).toContain(`max-inline-size: ${boundedWidth}`);
+  });
+
   it("keeps direct chips, overflow, hidden items, and detail actions in logical tab order", async () => {
     const wrapper = mountStrip(
       Array.from({ length: 5 }, (_, index) => makeItem(index + 1))

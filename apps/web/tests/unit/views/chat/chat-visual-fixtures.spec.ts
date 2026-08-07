@@ -75,6 +75,10 @@ const UPLOAD_ASSERT_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "assert-upload-styles.js"),
   "utf8"
 );
+const UPLOAD_CAPTURE_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "capture-upload-matrix.sh"),
+  "utf8"
+);
 
 type GeometryResult = {
   pass: boolean;
@@ -1059,14 +1063,46 @@ describe("Chat visual fixture script contracts", () => {
   });
 
   it("locks upload-state style assertions to shared attachment semantics", () => {
-    expect(UPLOAD_ASSERT_SOURCE).toContain("upload fixture status");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("attachment fixture key");
     expect(UPLOAD_ASSERT_SOURCE).not.toContain("ChatUploadCard");
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      '[data-testid="attachment-chip-strip"]'
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      '[data-testid="attachment-chip-detail"]'
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-composer-body");
     expect(UPLOAD_ASSERT_SOURCE).toContain("aria-valuenow");
     expect(UPLOAD_ASSERT_SOURCE).toContain("uploading");
     expect(UPLOAD_ASSERT_SOURCE).toContain("completed");
-    expect(UPLOAD_ASSERT_SOURCE).toContain("viewport horizontally");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("document overflow");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("wrapped attachment strip");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("editor is hidden");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("detail surface overlaps editor");
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      "attachment control escapes viewport"
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain("focus ring");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("fake progress");
     expect(UPLOAD_ASSERT_SOURCE).toContain("pass: true");
     expect(UPLOAD_ASSERT_SOURCE).not.toContain("location.href");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("visual pass");
+  });
+
+  it("locks the unified attachment capture matrix and evidence boundary", () => {
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      'EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/unified-attachments"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      '"320 568"\n    "390 844"\n    "480 800"\n    "768 1024"\n    "1024 768"\n    "1366 768"\n    "1920 1080"\n    "2560 1440"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      '"empty"\n    "uploading-detail-open"\n    "mixed-ready-failed-expired"\n    "ten-files-overflow"\n    "incompatible-agent-blocked"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain('themes=("light" "dark")');
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("EXPECTED_COUNT=80");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("capture only creates evidence");
+    expect(UPLOAD_CAPTURE_SOURCE).not.toContain("resumable-upload");
   });
 });
 

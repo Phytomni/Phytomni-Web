@@ -642,8 +642,8 @@ const overflowLabel = computed(() => {
   box-sizing: border-box;
   display: grid;
   gap: var(--phy-space-8);
-  inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
-  max-inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
+  inline-size: min(34rem, calc(100vw - var(--phy-space-24)), 100%);
+  max-inline-size: min(34rem, calc(100vw - var(--phy-space-24)), 100%);
   max-block-size: var(--attachment-chip-detail-max-block-size);
   padding: var(--phy-space-12);
   overflow-y: auto;
