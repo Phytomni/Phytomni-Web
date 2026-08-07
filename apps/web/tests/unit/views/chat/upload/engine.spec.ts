@@ -216,7 +216,12 @@ describe("resumable upload engine", () => {
       purpose: "dataset",
     });
     expect(deps.control.create).toHaveBeenCalledWith(
-      expect.objectContaining({ purpose: "dataset" }),
+      {
+        filename: "sample.bin",
+        size_bytes: 6,
+        content_type_hint: "application/octet-stream",
+        last_modified_ms: 1,
+      },
       expect.any(String)
     );
   });

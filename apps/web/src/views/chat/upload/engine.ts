@@ -159,7 +159,6 @@ function metadataForItem(item: ResumableUploadItem): UploadCreateMetadata {
     size_bytes: item.size,
     content_type_hint: item.type,
     last_modified_ms: item.lastModified,
-    purpose: item.purpose,
   };
 }
 

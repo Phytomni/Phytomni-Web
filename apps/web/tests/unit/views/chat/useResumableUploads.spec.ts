@@ -358,12 +358,22 @@ describe("useResumableUploads", () => {
     ]);
     expect(mocks.createUpload).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ purpose: "document" }),
+      {
+        filename: "reference.pdf",
+        size_bytes: 3,
+        content_type_hint: "application/octet-stream",
+        last_modified_ms: expect.any(Number),
+      },
       expect.any(String)
     );
     expect(mocks.createUpload).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ purpose: "dataset" }),
+      {
+        filename: "reads.fastq.gz",
+        size_bytes: 3,
+        content_type_hint: "application/octet-stream",
+        last_modified_ms: expect.any(Number),
+      },
       expect.any(String)
     );
     await queue.dispose();
