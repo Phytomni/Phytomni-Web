@@ -15,7 +15,9 @@
       :data-state="item.status"
       :disabled="disabled"
       :aria-label="chipAccessibleName(item)"
-      @click="emit('select', item.localId)"
+      @click="openDetails(item, $event)"
+      @keydown.enter.prevent="openDetails(item, $event)"
+      @keydown.space.prevent="openDetails(item, $event)"
     >
       <el-icon
         class="attachment-chip__icon"
@@ -61,21 +63,137 @@
       data-testid="attachment-chip-overflow"
       :disabled="disabled"
       :aria-label="overflowLabel"
-      @click="emit('select', hiddenItems[0].localId)"
+      @click="openOverflowDetails($event)"
+      @keydown.enter.prevent="openOverflowDetails($event)"
+      @keydown.space.prevent="openOverflowDetails($event)"
     >
       <el-icon class="attachment-chip__icon" aria-hidden="true">
         <MoreFilled />
       </el-icon>
       <span>{{ overflowLabel }}</span>
     </button>
+
+    <section
+      v-if="activeItem"
+      ref="detailSurface"
+      class="attachment-chip-detail"
+      data-testid="attachment-chip-detail"
+      tabindex="-1"
+      role="region"
+      :aria-label="chipAccessibleName(activeItem)"
+      @keydown.esc.prevent.stop="closeDetails"
+    >
+      <div class="attachment-chip-detail__heading">
+        <span class="attachment-chip-detail__name">{{ activeItem.name }}</span>
+        <span class="attachment-chip-detail__status">
+          {{ statusLabel(activeItem) }}
+        </span>
+      </div>
+      <div class="attachment-chip-detail__metrics">
+        <span data-testid="attachment-chip-detail-progress">
+          {{ detailProgressText(activeItem) }}
+        </span>
+        <span data-testid="attachment-chip-detail-speed">
+          {{ speedText(activeItem) }}
+        </span>
+        <span
+          v-if="etaText(activeItem)"
+          data-testid="attachment-chip-detail-eta"
+        >
+          {{ etaText(activeItem) }}
+        </span>
+      </div>
+      <div class="attachment-chip-detail__actions">
+        <button
+          v-if="canPause(activeItem)"
+          type="button"
+          class="attachment-chip-detail__action"
+          data-testid="attachment-chip-detail-pause"
+          :aria-label="
+            t('chat.upload.actions.pause', { file: activeItem.name })
+          "
+          @click="emit('pause', activeItem.localId)"
+        >
+          {{ t("chat.upload.pause") }}
+        </button>
+        <button
+          v-if="activeItem.status === 'paused'"
+          type="button"
+          class="attachment-chip-detail__action"
+          data-testid="attachment-chip-detail-resume"
+          :aria-label="
+            t('chat.upload.actions.resume', { file: activeItem.name })
+          "
+          @click="emit('resume', activeItem.localId)"
+        >
+          {{ t("chat.upload.resume") }}
+        </button>
+        <button
+          v-if="canRetry(activeItem)"
+          type="button"
+          class="attachment-chip-detail__action"
+          data-testid="attachment-chip-detail-retry"
+          :aria-label="
+            t('chat.upload.actions.retry', { file: activeItem.name })
+          "
+          @click="emit('retry', activeItem.localId)"
+        >
+          {{ t("chat.upload.retry") }}
+        </button>
+        <button
+          v-if="needsReselect(activeItem)"
+          type="button"
+          class="attachment-chip-detail__action"
+          data-testid="attachment-chip-detail-reselect"
+          :aria-label="
+            t('chat.upload.actions.reselect', { file: activeItem.name })
+          "
+          @click="requestReselect(activeItem.localId)"
+        >
+          {{ t("chat.upload.reselect") }}
+        </button>
+        <button
+          v-if="canCancel(activeItem)"
+          type="button"
+          class="attachment-chip-detail__action attachment-chip-detail__action--quiet"
+          data-testid="attachment-chip-detail-cancel"
+          :aria-label="
+            t('chat.upload.actions.cancel', { file: activeItem.name })
+          "
+          @click="emit('cancel', activeItem.localId)"
+        >
+          {{ t("chat.upload.cancel") }}
+        </button>
+        <button
+          type="button"
+          class="attachment-chip-detail__action attachment-chip-detail__action--quiet"
+          data-testid="attachment-chip-detail-remove"
+          :aria-label="
+            t('chat.upload.actions.remove', { file: activeItem.name })
+          "
+          @click="emit('remove', activeItem.localId)"
+        >
+          {{ t("chat.upload.remove") }}
+        </button>
+      </div>
+    </section>
+
+    <input
+      ref="fileInput"
+      class="attachment-chip-detail__file-input"
+      data-testid="attachment-chip-reselect-input"
+      type="file"
+      tabindex="-1"
+      @change="handleFileChange"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { Document, MoreFilled } from "@element-plus/icons-vue";
 import { useI18n } from "vue-i18n";
-import { formatBytes } from "@/utils/transfer-progress";
+import { formatBytes, formatEta } from "@/utils/transfer-progress";
 import type { ResumableUploadItem } from "../upload/types";
 
 const props = withDefaults(
@@ -99,10 +217,17 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const activeLocalId = ref<string | null>(null);
+const detailSurface = ref<HTMLElement | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const originControl = ref<HTMLButtonElement | null>(null);
 
 const directItems = computed(() => props.items.slice(0, 3));
 const hiddenItems = computed(() =>
   props.items.length > 3 ? props.items.slice(3) : []
+);
+const activeItem = computed(
+  () => props.items.find((item) => item.localId === activeLocalId.value) ?? null
 );
 
 const progressStatuses = new Set([
@@ -132,6 +257,74 @@ const metricLabel = (item: ResumableUploadItem): string => {
     percent: progressPercent(item),
   });
 };
+
+const detailProgressText = (item: ResumableUploadItem): string =>
+  t("chat.upload.progress", {
+    loaded: formatBytes(item.loadedBytes),
+    total: formatBytes(item.size),
+    percent: progressPercent(item),
+  });
+
+const speedText = (item: ResumableUploadItem): string =>
+  t("chat.upload.speed", {
+    rate: `${formatBytes(item.speedBytesPerSecond)}/s`,
+  });
+
+const etaText = (item: ResumableUploadItem): string => {
+  const seconds = formatEta(item.etaSeconds);
+  return seconds === null ? "" : t("chat.upload.eta", { seconds });
+};
+
+const canPause = (item: ResumableUploadItem): boolean =>
+  item.status === "creating" || item.status === "uploading";
+
+const canRetry = (item: ResumableUploadItem): boolean =>
+  item.status === "failed" || item.status === "expired";
+
+const canCancel = (item: ResumableUploadItem): boolean =>
+  !["completed", "aborted"].includes(item.status);
+
+const needsReselect = (item: ResumableUploadItem): boolean =>
+  item.file === null && !["completed", "aborted"].includes(item.status);
+
+const openDetails = (
+  item: ResumableUploadItem,
+  event: MouseEvent | KeyboardEvent
+) => {
+  emit("select", item.localId);
+  activeLocalId.value = item.localId;
+  originControl.value =
+    event.currentTarget instanceof HTMLButtonElement
+      ? event.currentTarget
+      : null;
+  nextTick(() => detailSurface.value?.focus());
+};
+
+const openOverflowDetails = (event: MouseEvent | KeyboardEvent) => {
+  const item = hiddenItems.value[0];
+  if (item) openDetails(item, event);
+};
+
+const closeDetails = () => {
+  activeLocalId.value = null;
+  nextTick(() => originControl.value?.focus());
+};
+
+const requestReselect = (localId: string) => {
+  activeLocalId.value = localId;
+  fileInput.value?.click();
+};
+
+const handleFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file && activeLocalId.value) emit("reselect", activeLocalId.value, file);
+};
+
+watch(activeItem, (item) => {
+  if (activeLocalId.value && !item) closeDetails();
+});
 
 const chipAccessibleName = (item: ResumableUploadItem): string =>
   t("chat.upload.chipLabel", {
@@ -174,6 +367,7 @@ const overflowLabel = computed(() => {
 
 <style scoped>
 .attachment-chip-strip {
+  position: relative;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -261,5 +455,106 @@ const overflowLabel = computed(() => {
   color: var(--phy-color-action-text);
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.attachment-chip-detail {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: calc(100% + var(--phy-space-8));
+  inset-inline-start: 0;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--phy-space-8);
+  inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
+  max-inline-size: min(34rem, calc(100vw - var(--phy-space-24)));
+  max-block-size: min(20rem, calc(100dvh - var(--phy-space-40)));
+  padding: var(--phy-space-12);
+  overflow-y: auto;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  box-shadow: var(--phy-shadow-soft);
+}
+
+.attachment-chip-detail:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+.attachment-chip-detail__heading,
+.attachment-chip-detail__metrics,
+.attachment-chip-detail__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--phy-space-8);
+  min-inline-size: 0;
+}
+
+.attachment-chip-detail__heading {
+  justify-content: space-between;
+}
+
+.attachment-chip-detail__name {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--phy-color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip-detail__status {
+  flex: none;
+  color: var(--phy-color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.attachment-chip-detail__metrics {
+  flex-wrap: wrap;
+  color: var(--phy-color-text-muted);
+  font-size: 0.75rem;
+}
+
+.attachment-chip-detail__actions {
+  flex-wrap: wrap;
+}
+
+.attachment-chip-detail__action {
+  min-block-size: var(--phy-control-height-compact);
+  padding-inline: var(--phy-space-8);
+  border: 1px solid transparent;
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-brand-blue-soft);
+  color: var(--phy-color-action-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.attachment-chip-detail__action:hover {
+  background: var(--phy-color-accent-soft);
+  color: var(--phy-color-accent-text);
+}
+
+.attachment-chip-detail__action:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+.attachment-chip-detail__action--quiet {
+  background: transparent;
+  color: var(--phy-color-text-secondary);
+}
+
+.attachment-chip-detail__file-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 </style>

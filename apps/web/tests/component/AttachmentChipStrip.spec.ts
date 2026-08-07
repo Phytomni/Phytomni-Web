@@ -152,6 +152,146 @@ describe("AttachmentChipStrip", () => {
     expect(wrapper.emitted("select")?.[1]).toEqual(["upload-4"]);
   });
 
+  it("opens bounded details from direct, overflow, Enter, and Space controls", async () => {
+    const wrapper = mountStrip(
+      Array.from({ length: 4 }, (_, index) => makeItem(index + 1))
+    );
+    const direct = wrapper.get('[data-testid="attachment-chip"]');
+    const overflow = wrapper.get('[data-testid="attachment-chip-overflow"]');
+
+    await direct.trigger("click");
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail"]').text()
+    ).toContain("sample-1.fastq.gz");
+
+    await wrapper
+      .get('[data-testid="attachment-chip-detail"]')
+      .trigger("keydown", {
+        key: "Escape",
+      });
+    expect(
+      wrapper.find('[data-testid="attachment-chip-detail"]').exists()
+    ).toBe(false);
+
+    await overflow.trigger("keydown", { key: "Enter" });
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail"]').text()
+    ).toContain("sample-4.fastq.gz");
+
+    await wrapper
+      .get('[data-testid="attachment-chip-detail"]')
+      .trigger("keydown", {
+        key: "Escape",
+      });
+    await direct.trigger("keydown", { key: " " });
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail"]').text()
+    ).toContain("sample-1.fastq.gz");
+  });
+
+  it("shows transfer facts and state-specific actions with exact local IDs", async () => {
+    const item = makeItem(1);
+    const wrapper = mountStrip([item]);
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail-progress"]').text()
+    ).toContain("2.0 KB / 4.0 KB (50%)");
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail-speed"]').text()
+    ).toContain("512 B/s");
+    expect(
+      wrapper.get('[data-testid="attachment-chip-detail-eta"]').text()
+    ).toContain("About 4s left");
+
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-pause"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-cancel"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-remove"]')
+      .trigger("click");
+
+    expect(wrapper.emitted("pause")).toEqual([[item.localId]]);
+    expect(wrapper.emitted("cancel")).toEqual([[item.localId]]);
+    expect(wrapper.emitted("remove")).toEqual([[item.localId]]);
+  });
+
+  it("emits resume, retry, reselect, and remove from their appropriate detail states", async () => {
+    const paused = makeItem(1, { status: "paused" });
+    const failed = makeItem(2, { status: "failed", file: null });
+    const wrapper = mountStrip([paused, failed]);
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-resume"]')
+      .trigger("click");
+    expect(wrapper.emitted("resume")).toEqual([[paused.localId]]);
+
+    await wrapper
+      .get('[data-testid="attachment-chip-detail"]')
+      .trigger("keydown", {
+        key: "Escape",
+      });
+    await wrapper
+      .findAll('[data-testid="attachment-chip"]')[1]
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-retry"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-reselect"]')
+      .trigger("click");
+
+    const input = wrapper.get('[data-testid="attachment-chip-reselect-input"]');
+    expect(input.attributes("accept")).toBeUndefined();
+    const replacement = new File(["replacement"], "replacement.fastq.gz", {
+      type: "application/gzip",
+    });
+    Object.defineProperty(input.element, "files", {
+      configurable: true,
+      value: [replacement],
+    });
+    await input.trigger("change");
+
+    expect(wrapper.emitted("retry")).toEqual([[failed.localId]]);
+    expect(wrapper.emitted("reselect")).toEqual([
+      [failed.localId, replacement],
+    ]);
+    expect((input.element as HTMLInputElement).value).toBe("");
+  });
+
+  it("restores origin focus after Escape and keeps details above the editor", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const wrapper = mountWithApp(AttachmentChipStrip, {
+      attachTo: host,
+      props: { items: [makeItem(1)] },
+    });
+    const chip = wrapper.get('[data-testid="attachment-chip"]');
+    (chip.element as HTMLButtonElement).focus();
+
+    await chip.trigger("click");
+    const detail = wrapper.get('[data-testid="attachment-chip-detail"]');
+    expect(document.activeElement).toBe(detail.element);
+
+    await detail.trigger("keydown", { key: "Escape" });
+    expect(
+      wrapper.find('[data-testid="attachment-chip-detail"]').exists()
+    ).toBe(false);
+    expect(document.activeElement).toBe(chip.element);
+    expect(STRIP_SOURCE).toContain("inset-block-end");
+    expect(STRIP_SOURCE).toContain("max-block-size");
+    expect(STRIP_SOURCE).toContain("overflow-y: auto");
+    expect(STRIP_SOURCE).not.toContain("inset-block-start");
+
+    wrapper.unmount();
+    host.remove();
+  });
+
   it("uses one non-wrapping scroll row, semantic tokens, and installed icons", () => {
     expect(STRIP_SOURCE).toContain("flex-wrap: nowrap");
     expect(STRIP_SOURCE).toContain("overflow-x: auto");
