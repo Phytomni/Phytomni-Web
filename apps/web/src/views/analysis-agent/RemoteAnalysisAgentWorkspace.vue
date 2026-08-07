@@ -325,6 +325,7 @@ type Props = {
 };
 
 const MAX_QUERY_LENGTH = 4000;
+const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
 
 const props = defineProps<Props>();
@@ -394,7 +395,9 @@ const uploadQueue = useResumableUploads({
   uploadCapability: capabilities.upload,
   username: uploadUsername,
   onValidationError: (error) => {
-    fileError.value = attachmentErrorMessage(error);
+    const message = attachmentErrorMessage(error);
+    fileError.value = message;
+    announceAttachment(message);
   },
   onDuplicate: (localId, fileName) => {
     onAttachmentDuplicate(localId, fileName).catch(() => undefined);
@@ -408,7 +411,7 @@ const attachmentTargetBlocked = computed(
 
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
-    file: error.fileName ?? "",
+    file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
     maxFiles: capabilities.upload.value.max_attachments,
     maxFileMb: Math.ceil(
       capabilities.upload.value.max_file_bytes / 1024 / 1024
@@ -419,17 +422,41 @@ function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   });
 }
 
+function boundedAttachmentAnnouncementFileName(fileName: string): string {
+  const normalized = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return t("chat.upload.fileSuffixFallback");
+  const codePoints = Array.from(normalized);
+  if (codePoints.length <= MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH) {
+    return normalized;
+  }
+  return `${codePoints
+    .slice(0, MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH - 1)
+    .join("")}…`;
+}
+
+function announceAttachment(message: string): void {
+  attachmentAnnouncementNonce.value += 1;
+  attachmentAnnouncement.value = "";
+  void nextTick(() => {
+    attachmentAnnouncement.value = message;
+  });
+}
+
 async function onAttachmentDuplicate(
   localId: string,
   fileName: string
 ): Promise<void> {
   focusedUploadLocalId.value = localId;
-  attachmentAnnouncementNonce.value += 1;
-  attachmentAnnouncement.value = "";
-  await nextTick();
-  attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
-    file: fileName,
-  });
+  announceAttachment(
+    t("chat.upload.alreadyAttached", {
+      file: boundedAttachmentAnnouncementFileName(fileName),
+    })
+  );
   await focusAttachmentChip(localId);
 }
 
@@ -596,6 +623,7 @@ async function submit(): Promise<void> {
       query,
       attachments: [...uploadQueue.completedAssetIds.value],
     });
+    await clearUploads();
   } catch {
     formError.value = t(`${props.localePrefix}.submitFailed`);
   } finally {

@@ -63,6 +63,7 @@ const mocks = vi.hoisted(() => {
     },
     uploadOptions: null as {
       onDuplicate?: (localId: string, fileName: string) => void;
+      onValidationError?: (error: { code: string; fileName?: string }) => void;
     } | null,
   };
 });
@@ -104,6 +105,7 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 vi.mock("@/views/chat/composables/useResumableUploads", () => ({
   useResumableUploads: (options: {
     onDuplicate?: (localId: string, fileName: string) => void;
+    onValidationError?: (error: { code: string; fileName?: string }) => void;
   }) => {
     mocks.uploadOptions = options;
     return mocks.uploadQueue;
@@ -245,6 +247,52 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     wrapper.unmount();
   });
 
+  it("keeps resume, retry, and reselect wired through the shared strip", async () => {
+    const item = completedUpload("upload-paused", "reads.fastq.gz");
+    mocks.chatState.fileList = [{ ...item, status: "paused" }];
+    let wrapper = mountWorkspace();
+
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-resume"]')
+      .trigger("click");
+    expect(mocks.uploadQueue.resumeUpload).toHaveBeenCalledWith(
+      "upload-paused"
+    );
+    wrapper.unmount();
+
+    mocks.chatState.fileList = [
+      { ...item, localId: "upload-failed", status: "failed", file: null },
+    ];
+    wrapper = mountWorkspace();
+    await wrapper.get('[data-testid="attachment-chip"]').trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-retry"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="attachment-chip-detail-reselect"]')
+      .trigger("click");
+
+    const replacement = new File(["replacement"], "replacement.fastq.gz", {
+      type: "application/gzip",
+    });
+    const input = wrapper.get<HTMLInputElement>(
+      '[data-testid="attachment-chip-reselect-input"]'
+    );
+    Object.defineProperty(input.element, "files", {
+      configurable: true,
+      value: [replacement],
+    });
+    await input.trigger("change");
+
+    expect(mocks.uploadQueue.retryUpload).toHaveBeenCalledWith("upload-failed");
+    expect(mocks.uploadQueue.reselectUpload).toHaveBeenCalledWith(
+      "upload-failed",
+      replacement
+    );
+    wrapper.unmount();
+  });
+
   it("announces a duplicate and focuses the retained workspace item", async () => {
     const wrapper = mountWorkspace();
 
@@ -261,6 +309,70 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       wrapper.get('[data-testid="attachment-chip"]').element
     );
     wrapper.unmount();
+  });
+
+  it("bounds duplicate and rejection filenames before the live region", async () => {
+    const wrapper = mountWorkspace();
+    const craftedName = `<${"gene".repeat(40)}>`;
+
+    mocks.uploadOptions?.onDuplicate?.("upload-existing", craftedName);
+    await flushPromises();
+    const duplicateAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(duplicateAnnouncement.text()).not.toContain("<");
+    expect(duplicateAnnouncement.text()).not.toContain(">");
+    expect(duplicateAnnouncement.text()).toContain("…");
+    expect(duplicateAnnouncement.text()).not.toContain("gene".repeat(30));
+
+    mocks.uploadOptions?.onValidationError?.({
+      code: "unsupported_type",
+      fileName: craftedName,
+    });
+    await flushPromises();
+    const rejectionAnnouncement = wrapper.get(
+      '[data-testid="attachment-chip-live-region"]'
+    );
+    expect(rejectionAnnouncement.text()).not.toContain("<");
+    expect(rejectionAnnouncement.text()).not.toContain(">");
+    expect(rejectionAnnouncement.text()).toContain("gene");
+    expect(rejectionAnnouncement.text()).not.toContain("gene".repeat(30));
+    wrapper.unmount();
+  });
+
+  it("clears chips only after a successful submission", async () => {
+    const wrapper = mountWorkspace();
+    await wrapper.get('[data-testid="analyst-query"]').setValue("Run it");
+    await wrapper.get('[data-testid="analyst-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadQueue.removeUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ localId: "upload-existing" })
+    );
+    wrapper.unmount();
+
+    mocks.chatState.fileList = [
+      completedUpload("upload-failed-submit", "counts.csv"),
+    ];
+    mocks.submit.mockRejectedValueOnce(new Error("submit failed"));
+    const rejected = mountWorkspace();
+    await rejected
+      .get('[data-testid="analyst-query"]')
+      .setValue("Keep this draft");
+    await rejected.get('[data-testid="analyst-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(
+      rejected.get('[data-testid="analyst-query"]').element
+    ).toHaveProperty("value", "Keep this draft");
+    expect(rejected.find('[data-testid="attachment-chip"]').exists()).toBe(
+      true
+    );
+    expect(mocks.uploadQueue.removeUpload).not.toHaveBeenCalledWith(
+      expect.objectContaining({ localId: "upload-failed-submit" })
+    );
+    rejected.unmount();
   });
 
   it("keeps the query editable but blocks attachment submission when the Agent has zero channels", async () => {
