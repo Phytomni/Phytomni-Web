@@ -956,23 +956,29 @@ const {
   chatMode,
   selectedAgent,
   fileList,
+  focusedUploadLocalId,
+  attachmentAnnouncement,
   uploadTransfer,
   copyVisible,
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
 
-const focusedUploadLocalId = ref("");
-const attachmentAnnouncement = ref("");
-
 async function onAttachmentDuplicate(
   localId: string,
   fileName: string
 ): Promise<void> {
+  const ownerDialogueId = currentChatId.value;
+  if (!ownerDialogueId) return;
   focusedUploadLocalId.value = localId;
   attachmentAnnouncement.value = "";
   composerRef.value?.openHeader();
   await nextTick();
+  const ownerState = getChatState(ownerDialogueId);
+  ownerState.attachmentAnnouncement = t("chat.upload.alreadyAttached", {
+    file: fileName,
+  });
+  if (currentChatId.value !== ownerDialogueId) return;
   const itemIndex = fileList.value.findIndex(
     (item) => item.localId === localId
   );
@@ -986,9 +992,6 @@ async function onAttachmentDuplicate(
     ? card
     : card?.querySelector<HTMLElement>("button:not(:disabled)");
   focusTarget?.focus();
-  attachmentAnnouncement.value = t("chat.upload.alreadyAttached", {
-    file: fileName,
-  });
 }
 
 const botCapabilities = useBotCapabilities("chat");

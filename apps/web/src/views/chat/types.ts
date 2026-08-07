@@ -225,6 +225,10 @@ export interface ChatUIState {
   isSending: boolean;
   messageInput: string;
   fileList: ResumableUploadItem[];
+  /** Runtime-only duplicate attachment focus target for this dialogue. */
+  focusedUploadLocalId?: string;
+  /** Localized duplicate attachment announcement for this dialogue. */
+  attachmentAnnouncement?: string;
   datasetDescription: string;
   historyQuestion: readonly ChatMessage[] | null;
   /** Lifecycle of this dialogue's persisted-history reconstruction. */

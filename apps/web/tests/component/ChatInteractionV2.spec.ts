@@ -611,6 +611,29 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(document.activeElement).toBe(
       wrapper.get('[data-testid="chat-upload-card"]').element
     );
+
+    states.currentChatId.value = "duplicate-chat-b";
+    await nextTick();
+
+    expect(
+      wrapper.find('[data-testid="chat-attachment-announcement"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper
+        .get('[data-testid="chat-root"]')
+        .attributes("data-focused-upload-id")
+    ).toBeUndefined();
+
+    states.currentChatId.value = dialogueId;
+    await nextTick();
+    expect(
+      wrapper.get('[data-testid="chat-attachment-announcement"]').text()
+    ).toBe("Already attached: paper.pdf");
+    expect(
+      wrapper
+        .get('[data-testid="chat-root"]')
+        .attributes("data-focused-upload-id")
+    ).toBe("upload-existing");
     wrapper.unmount();
   });
 

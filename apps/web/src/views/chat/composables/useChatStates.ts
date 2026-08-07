@@ -148,6 +148,28 @@ export function useChatStates() {
     },
   });
 
+  const focusedUploadLocalId = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).focusedUploadLocalId ?? "";
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).focusedUploadLocalId = value;
+    },
+  });
+
+  const attachmentAnnouncement = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).attachmentAnnouncement ?? "";
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).attachmentAnnouncement = value;
+    },
+  });
+
   const datasetDescription = computed({
     get: () => {
       if (!currentChatId.value) return "";
@@ -317,6 +339,8 @@ export function useChatStates() {
     chatMode,
     selectedAgent,
     fileList,
+    focusedUploadLocalId,
+    attachmentAnnouncement,
     datasetDescription,
     uploadTransfer,
     copyVisible,
