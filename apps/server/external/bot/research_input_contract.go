@@ -66,7 +66,19 @@ func ValidateResearchInputContract(response *AgentsListResponse) (ResearchInputC
 	if !ok || capability.Attachments.Datasets == nil {
 		return ResearchInputContract{}, fmt.Errorf("missing Research dataset capability")
 	}
-	formats, err := normalizeResearchDatasetFormats(capability.Attachments.Datasets.Formats)
+	dataset := capability.Attachments.Datasets
+	if dataset.MaxFiles < 1 || dataset.MaxFiles > HardMaxAssetAttachmentRefs {
+		return ResearchInputContract{}, fmt.Errorf("invalid Research dataset file limit")
+	}
+	if dataset.MaxFileBytes < 1 || dataset.MaxFileBytes > maxResumableUploadFileBytes {
+		return ResearchInputContract{}, fmt.Errorf("invalid Research dataset file-byte limit")
+	}
+	if dataset.MaxTotalBytes < dataset.MaxFileBytes ||
+		exceedsPositiveProduct(dataset.MaxTotalBytes, maxResumableUploadFileBytes, HardMaxAssetAttachmentRefs) ||
+		exceedsPositiveProduct(dataset.MaxTotalBytes, dataset.MaxFileBytes, dataset.MaxFiles) {
+		return ResearchInputContract{}, fmt.Errorf("invalid Research dataset total-byte limit")
+	}
+	formats, err := normalizeResearchDatasetFormats(dataset.Formats)
 	if err != nil {
 		return ResearchInputContract{}, err
 	}
@@ -78,6 +90,11 @@ func ValidateResearchInputContract(response *AgentsListResponse) (ResearchInputC
 		MaxReferences:     descriptor.MaxReferences,
 		DatasetFormats:    formats,
 	}, nil
+}
+
+func exceedsPositiveProduct(value, factor int64, count int) bool {
+	quotient := value / factor
+	return quotient > int64(count) || quotient == int64(count) && value%factor > 0
 }
 
 func normalizeResearchDatasetFormats(formats []string) ([]string, error) {

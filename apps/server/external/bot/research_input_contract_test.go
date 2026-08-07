@@ -101,6 +101,32 @@ func TestValidateResearchInputContractRejectsInvalidCatalog(t *testing.T) {
 		{name: "wrong Research tool", mutate: func(r *AgentsListResponse) { r.Data[0].Tool = "AnalystAgent" }},
 		{name: "duplicate Research descriptor", mutate: func(r *AgentsListResponse) { r.Data = append(r.Data, r.Data[0]) }},
 		{name: "missing dataset capability", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets = nil }},
+		{name: "zero dataset max files", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxFiles = 0 }},
+		{name: "negative dataset max files", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxFiles = -1 }},
+		{name: "dataset max files above hard limit", mutate: func(r *AgentsListResponse) {
+			r.Data[0].Capabilities.Attachments.Datasets.MaxFiles = HardMaxAssetAttachmentRefs + 1
+		}},
+		{name: "zero dataset max file bytes", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxFileBytes = 0 }},
+		{name: "negative dataset max file bytes", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxFileBytes = -1 }},
+		{name: "dataset max file bytes above hard limit", mutate: func(r *AgentsListResponse) {
+			r.Data[0].Capabilities.Attachments.Datasets.MaxFileBytes = maxResumableUploadFileBytes + 1
+		}},
+		{name: "zero dataset max total bytes", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxTotalBytes = 0 }},
+		{name: "negative dataset max total bytes", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.MaxTotalBytes = -1 }},
+		{name: "dataset max total below max file", mutate: func(r *AgentsListResponse) {
+			r.Data[0].Capabilities.Attachments.Datasets.MaxTotalBytes = maxResumableUploadFileBytes - 1
+		}},
+		{name: "dataset max total above file times count", mutate: func(r *AgentsListResponse) {
+			dataset := r.Data[0].Capabilities.Attachments.Datasets
+			dataset.MaxFiles = 2
+			dataset.MaxTotalBytes = dataset.MaxFileBytes*int64(dataset.MaxFiles) + 1
+		}},
+		{name: "dataset max total above absolute limit", mutate: func(r *AgentsListResponse) {
+			dataset := r.Data[0].Capabilities.Attachments.Datasets
+			dataset.MaxFiles = HardMaxAssetAttachmentRefs
+			dataset.MaxFileBytes = maxResumableUploadFileBytes
+			dataset.MaxTotalBytes = maxResumableUploadFileBytes*int64(HardMaxAssetAttachmentRefs) + 1
+		}},
 		{name: "missing formats", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats = nil }},
 		{name: "blank format", mutate: func(r *AgentsListResponse) { r.Data[0].Capabilities.Attachments.Datasets.Formats[0] = " " }},
 		{name: "normalized duplicate format", mutate: func(r *AgentsListResponse) {
