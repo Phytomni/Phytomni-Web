@@ -318,7 +318,94 @@ describe("resumable upload engine", () => {
       expect.objectContaining({ filename: "sample.bin", size_bytes: 6 }),
       initialInput.idempotencyKey
     );
+    expect(firstData.abort).not.toHaveBeenCalled();
     expect(resumedEngine.snapshot.status).toBe("completed");
+  });
+
+  it.each([
+    {
+      status: 409,
+      expectedStatus: "failed",
+      errorCode: "upload_state_conflict",
+    },
+    {
+      status: 410,
+      expectedStatus: "expired",
+      errorCode: "upload_session_expired",
+    },
+  ] as const)(
+    "allocates one new idempotency key when explicit retry follows create $status",
+    async ({ status, expectedStatus, errorCode }) => {
+      const store = new MemoryStore();
+      const data = makeData(async () =>
+        headState({ partCount: 1, partSizeBytes: 6 })
+      );
+      const resumedSession = {
+        ...sessionBase,
+        part_size_bytes: 6,
+        part_count: 1,
+        max_parallel_parts: 1,
+      };
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(new UploadTransportError("", { status }))
+        .mockResolvedValueOnce({ session: resumedSession, data });
+      const initialInput = input(file);
+      const engine = createResumableUploadEngine(
+        initialInput,
+        makeDeps(store, data, { create }, resumedSession)
+      );
+
+      await engine.start();
+
+      expect(engine.snapshot).toMatchObject({
+        status: expectedStatus,
+        errorCode,
+      });
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0]?.[1]).toBe(initialInput.idempotencyKey);
+      await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+        idempotencyKey: initialInput.idempotencyKey,
+      });
+
+      await engine.retry();
+
+      const retriedKey = create.mock.calls[1]?.[1];
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(retriedKey).not.toBe(initialInput.idempotencyKey);
+      expect(new Set(create.mock.calls.map((call) => call[1])).size).toBe(2);
+      expect(engine.snapshot.status).toBe("completed");
+      await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+        idempotencyKey: retriedKey,
+      });
+    }
+  );
+
+  it("keeps a create 413 permanent without automatic retry or key replacement", async () => {
+    const store = new MemoryStore();
+    const data = makeData(async () => headState());
+    const create = vi.fn(async () => {
+      throw new UploadTransportError("", { status: 413 });
+    });
+    const initialInput = input(file);
+    const engine = createResumableUploadEngine(
+      initialInput,
+      makeDeps(store, data, { create })
+    );
+
+    await engine.start();
+
+    expect(engine.snapshot).toMatchObject({
+      status: "failed",
+      errorCode: "upload_limit_exceeded",
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[1]).toBe(initialInput.idempotencyKey);
+    expect(data.abort).not.toHaveBeenCalled();
+    await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+      idempotencyKey: initialInput.idempotencyKey,
+      status: "failed",
+    });
   });
 
   it("limits simultaneous part transfers to the server maximum", async () => {
@@ -504,6 +591,10 @@ describe("resumable upload engine", () => {
     engine.pause();
     await running;
     expect(engine.snapshot.status).toBe("paused");
+    expect(data.abort).not.toHaveBeenCalled();
+    await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+      idempotencyKey: input(file).idempotencyKey,
+    });
 
     (data.putPart as ReturnType<typeof vi.fn>).mockImplementationOnce(
       async (

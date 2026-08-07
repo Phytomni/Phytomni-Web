@@ -433,7 +433,15 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
   const dispose = async (): Promise<void> => {
     for (const engines of enginesByDialogue.values()) {
       for (const engine of engines.values()) {
-        if (engine.snapshot.status !== "completed") await engine.cancel();
+        const status = engine.snapshot.status;
+        if (
+          status === "queued" ||
+          status === "creating" ||
+          status === "uploading" ||
+          status === "completing"
+        ) {
+          engine.pause();
+        }
       }
     }
     enginesByDialogue.clear();

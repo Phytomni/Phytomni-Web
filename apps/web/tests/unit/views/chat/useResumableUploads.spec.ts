@@ -498,6 +498,112 @@ describe("useResumableUploads", () => {
     await queue.dispose();
   });
 
+  it("pauses an in-flight upload on disposal without aborting its recovery", async () => {
+    const store = fakeStore();
+    const { queue, getChatState } = setup(store);
+    const data = fakeDataPlane();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    data.putPart = vi.fn(async (_part, _body, _digest, options) => {
+      markStarted();
+      await new Promise<void>((_resolve, reject) => {
+        if (options?.signal?.aborted) {
+          reject(new DOMException("Upload paused", "AbortError"));
+          return;
+        }
+        options?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Upload paused", "AbortError"));
+        });
+      });
+    });
+    mocks.createUploadDataPlane.mockReturnValue(data);
+
+    await queue.queueFiles([fixtureFile("recover-after-disposal.fastq")]);
+    await started;
+    const localId = getChatState("A").fileList[0]?.localId;
+    const originalKey = mocks.createUpload.mock.calls[0]?.[1];
+
+    await queue.dispose();
+
+    expect(getChatState("A").fileList[0]?.status).toBe("paused");
+    expect(data.abort).not.toHaveBeenCalled();
+    expect(store.remove).not.toHaveBeenCalled();
+    expect(store.close).toHaveBeenCalledTimes(1);
+    expect(store.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localId,
+        idempotencyKey: originalKey,
+      })
+    );
+  });
+
+  it.each(["cancel", "remove"] as const)(
+    "keeps explicit %s terminal and clears upload recovery",
+    async (action) => {
+      const store = fakeStore();
+      const { queue, getChatState } = setup(store);
+      const data = fakeDataPlane();
+      let markStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      data.putPart = vi.fn(async (_part, _body, _digest, options) => {
+        markStarted();
+        await new Promise<void>((_resolve, reject) => {
+          if (options?.signal?.aborted) {
+            reject(new DOMException("Upload cancelled", "AbortError"));
+            return;
+          }
+          options?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Upload cancelled", "AbortError"));
+          });
+        });
+      });
+      mocks.createUploadDataPlane.mockReturnValue(data);
+
+      await queue.queueFiles([fixtureFile(`${action}-upload.fastq`)]);
+      await started;
+      const item = getChatState("A").fileList[0];
+      expect(item).toBeTruthy();
+
+      if (action === "cancel") {
+        await queue.cancelUpload(item?.localId ?? "");
+      } else if (item) {
+        await queue.removeUpload(item);
+      }
+
+      expect(data.abort).toHaveBeenCalledTimes(1);
+      expect(store.remove).toHaveBeenCalledTimes(1);
+      const [accountScope, localId] = (store.remove as ReturnType<typeof vi.fn>)
+        .mock.calls[0] ?? ["", ""];
+      expect(localId).toBe(item?.localId);
+      await expect(store.list(accountScope)).resolves.toEqual([]);
+      if (action === "remove") {
+        expect(getChatState("A").fileList).toEqual([]);
+      } else {
+        expect(getChatState("A").fileList[0]?.status).toBe("aborted");
+      }
+      await queue.dispose();
+    }
+  );
+
+  it("does not install page lifecycle handlers that can abort uploads", async () => {
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const { queue } = setup();
+
+    const registeredEvents = addEventListener.mock.calls.map(
+      ([event]) => event
+    );
+    expect(registeredEvents).not.toContain("beforeunload");
+    expect(registeredEvents).not.toContain("pagehide");
+    expect(registeredEvents).not.toContain("visibilitychange");
+
+    addEventListener.mockRestore();
+    await queue.dispose();
+  });
+
   it("does not pause a completed sibling when another attachment fails", async () => {
     const { queue, getChatState } = setup();
     let planeCount = 0;
@@ -526,19 +632,45 @@ describe("useResumableUploads", () => {
   });
 
   it("cancels all incomplete items for one dialogue without touching another", async () => {
-    const { queue, getChatState, currentChatId } = setup();
+    const { queue, getChatState, currentChatId, store } = setup();
+    const activeData = fakeDataPlane();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    activeData.putPart = vi.fn(async (_part, _body, _digest, options) => {
+      markStarted();
+      await new Promise<void>((_resolve, reject) => {
+        if (options?.signal?.aborted) {
+          reject(new DOMException("Upload cancelled", "AbortError"));
+          return;
+        }
+        options?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Upload cancelled", "AbortError"));
+        });
+      });
+    });
+    const completedData = fakeDataPlane();
+    mocks.createUploadDataPlane
+      .mockReturnValueOnce(activeData)
+      .mockReturnValueOnce(completedData);
+
     await queue.queueFiles([fixtureFile("a.fastq")]);
+    await started;
     currentChatId.value = "B";
     await queue.queueFiles([fixtureFile("b.fastq")]);
     await vi.waitFor(() => {
-      expect(getChatState("A").fileList[0]).toBeTruthy();
       expect(getChatState("B").fileList[0]?.status).toBe("completed");
     });
 
     await queue.cancelDialogue("A");
 
+    expect(getChatState("A").fileList[0]?.status).toBe("aborted");
     expect(getChatState("A").uploadTransfer).toBeNull();
     expect(getChatState("B").fileList[0]?.status).toBe("completed");
+    expect(activeData.abort).toHaveBeenCalledTimes(1);
+    expect(completedData.abort).not.toHaveBeenCalled();
+    expect(store.remove).toHaveBeenCalledTimes(1);
     await queue.dispose();
   });
 
