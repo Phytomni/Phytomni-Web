@@ -14,6 +14,10 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "upload-paused",
   "upload-failed",
   "upload-completed",
+  "uploading-detail-open",
+  "mixed-ready-failed-expired",
+  "ten-files-overflow",
+  "incompatible-agent-blocked",
   "sending",
   "picker-open",
   "picker-search",
@@ -139,6 +143,14 @@ export const routingFixtures: readonly ChatRoutingFixture[] = [
     permissionsLoading: false,
     allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
   },
+  {
+    id: "incompatible-agent-blocked",
+    mode: "expert",
+    selectedAgent: "DeepGenomeAgent",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DeepGenomeAgent"],
+  },
 ];
 
 export type ChatVisualFixtureDefinition = {
@@ -155,6 +167,11 @@ export type ChatVisualFixtureDefinition = {
   hasAttachment: boolean;
   /** Optional resumable-upload lifecycle state rendered by AttachmentChipStrip. */
   uploadStatus?: import("@/views/chat/upload/types").UploadStatus;
+  /** Open the production chip detail surface after the fixture is mounted. */
+  attachmentDetailOpen?: boolean;
+  /** Sanitized capability snapshot for the attachment target. */
+  attachmentTargetAvailable?: boolean;
+  attachmentTargetBlocked?: boolean;
   selectedAgent: string;
   pickerOpen: boolean;
   pickerSearchQuery: string;
@@ -170,7 +187,8 @@ export type ChatVisualFixtureDefinition = {
 
 const uploadFixture = (
   key: ChatVisualFixtureKey,
-  uploadStatus: import("@/views/chat/upload/types").UploadStatus
+  uploadStatus: import("@/views/chat/upload/types").UploadStatus,
+  options: Pick<ChatVisualFixtureDefinition, "attachmentDetailOpen"> = {}
 ): ChatVisualFixtureDefinition => ({
   key,
   chatState: "empty",
@@ -181,10 +199,35 @@ const uploadFixture = (
   isSending: false,
   hasAttachment: true,
   uploadStatus,
+  ...options,
   selectedAgent: "",
   pickerOpen: false,
   pickerSearchQuery: "",
   messageCount: 0,
+});
+
+const multiAttachmentFixture = (
+  key: ChatVisualFixtureKey,
+  options: Partial<
+    Pick<
+      ChatVisualFixtureDefinition,
+      "selectedAgent" | "attachmentTargetAvailable" | "attachmentTargetBlocked"
+    >
+  > = {}
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "empty",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: true,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 0,
+  ...options,
 });
 
 const agentLifecycleFixture = (
@@ -322,6 +365,21 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
   "upload-paused": uploadFixture("upload-paused", "paused"),
   "upload-failed": uploadFixture("upload-failed", "failed"),
   "upload-completed": uploadFixture("upload-completed", "completed"),
+  "uploading-detail-open": uploadFixture("uploading-detail-open", "uploading", {
+    attachmentDetailOpen: true,
+  }),
+  "mixed-ready-failed-expired": multiAttachmentFixture(
+    "mixed-ready-failed-expired"
+  ),
+  "ten-files-overflow": multiAttachmentFixture("ten-files-overflow"),
+  "incompatible-agent-blocked": multiAttachmentFixture(
+    "incompatible-agent-blocked",
+    {
+      selectedAgent: "DeepGenomeAgent",
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: true,
+    }
+  ),
   sending: {
     key: "sending",
     chatState: "populated",

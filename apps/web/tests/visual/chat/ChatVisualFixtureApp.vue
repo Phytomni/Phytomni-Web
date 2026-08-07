@@ -28,6 +28,7 @@
       :data-phase3c-kind="phase3cKindAttr"
       :data-agent-lifecycle-state="agentLifecycleStateAttr"
       :data-upload-status="fixture.uploadStatus"
+      :data-attachment-fixture="fixture.key"
       :data-active-sidebar-item="activeSidebarItem"
       :data-chat-mode="fixtureChatMode"
       class="chat-visual-fixture-root"
@@ -379,6 +380,8 @@
                   :show-mode-selector="fixture.chatState === 'empty'"
                   :file-list="fileList"
                   :has-blocking-uploads="hasBlockingUploads"
+                  :attachment-target-available="attachmentTargetAvailable"
+                  :attachment-target-blocked="attachmentTargetBlocked"
                   :roles-loading="routingPermissionsLoading"
                   :has-messages="fixture.chatState === 'populated'"
                   :selected-agent="fixture.selectedAgent"
@@ -391,7 +394,14 @@
                   @search="onFixtureAction('composer-search')"
                   @command="onFixtureAction('composer-command')"
                   @file-change="onFixtureAction('composer-file-change')"
+                  @paste-files="onFixtureAction('composer-paste-files')"
                   @remove-file="onFixtureAction('composer-remove-file')"
+                  @pause-upload="onFixtureAction('composer-pause-upload')"
+                  @resume-upload="onFixtureAction('composer-resume-upload')"
+                  @retry-upload="onFixtureAction('composer-retry-upload')"
+                  @reselect-upload="onFixtureAction('composer-reselect-upload')"
+                  @cancel-upload="onFixtureAction('composer-cancel-upload')"
+                  @remove-upload="onFixtureAction('composer-remove-upload')"
                   @clear-agent="onFixtureAction('composer-clear-agent')"
                   @toggle-agent="onFixtureAction('composer-toggle-agent')"
                 />
@@ -693,6 +703,12 @@ const fileList = computed(() =>
 const hasBlockingUploads = computed(() =>
   fileList.value.some((item) => !["completed", "aborted"].includes(item.status))
 );
+const attachmentTargetAvailable = computed(
+  () => fixture.value.attachmentTargetAvailable ?? true
+);
+const attachmentTargetBlocked = computed(
+  () => fixture.value.attachmentTargetBlocked ?? false
+);
 const routingFixture = computed(() =>
   getChatRoutingFixture(props.fixture?.key)
 );
@@ -781,6 +797,16 @@ async function openAgentPreviewFixture() {
   trigger.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
 }
 
+async function openAttachmentDetailsFixture() {
+  if (!props.fixture?.attachmentDetailOpen) return;
+  await nextTick();
+  const chip = fixtureRootRef.value?.querySelector<HTMLElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  chip?.click();
+  await nextTick();
+}
+
 async function markFixtureReady() {
   if (typeof document !== "undefined" && document.fonts?.ready) {
     await document.fonts.ready;
@@ -792,12 +818,13 @@ const updateViewportWidth = () => {
   viewportWidth.value = window.innerWidth;
 };
 
-onMounted(() => {
+onMounted(async () => {
   updateViewportWidth();
   window.addEventListener("resize", updateViewportWidth);
-  void applyPickerFixtureState();
-  void openAgentPreviewFixture();
-  void markFixtureReady();
+  await applyPickerFixtureState();
+  await openAgentPreviewFixture();
+  await openAttachmentDetailsFixture();
+  await markFixtureReady();
 });
 
 onUnmounted(() => {

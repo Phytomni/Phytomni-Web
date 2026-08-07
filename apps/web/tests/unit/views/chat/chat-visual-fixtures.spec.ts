@@ -22,6 +22,7 @@ import {
   getSharedPhase3COverlay,
   buildA2uiLifecycleMessages,
   getAgentLifecycleVisualData,
+  COMPOSER_MODEL_VALUE_BY_KEY,
 } from "../../../visual/chat/fixture-data";
 import {
   PHASE_3B_MESSAGE_KEYS,
@@ -79,6 +80,9 @@ type GeometryResult = {
   pass: boolean;
   chatMode?: string | null;
   composer?: { bottom: number };
+  attachmentStrip?: Rect;
+  composerEditor?: Rect;
+  attachmentDetail?: Rect;
   error?: string;
   reasons?: string[];
 };
@@ -120,9 +124,11 @@ type GeometryHarnessOptions = {
   triggerVisible?: boolean;
   primaryVisible?: boolean;
   composerVisible?: boolean;
-  uploadStatus?: "queued" | "uploading" | "paused" | "failed" | "completed";
-  includeUploadCard?: boolean;
-  uploadCardRect?: Rect;
+  includeAttachmentStrip?: boolean;
+  attachmentStripRect?: Rect;
+  includeAttachmentDetail?: boolean;
+  attachmentDetailRect?: Rect;
+  composerEditorRect?: Rect;
 };
 
 const rect = (
@@ -148,7 +154,6 @@ async function runGeometryHarness(
   const state = options.state ?? "populated";
   const chatMode = options.chatModeOverride ?? options.chatMode ?? "instant";
   const emptyScrollPosition = options.emptyScrollPosition ?? "top";
-  const uploadStatus = options.uploadStatus ?? null;
   const includeCases = options.includeCases ?? state === "empty";
   const includeQuickSelect =
     options.includeQuickSelect ?? (state === "empty" && chatMode === "expert");
@@ -221,7 +226,6 @@ async function runGeometryHarness(
       if (name === "data-sidebar-drawer-state") return drawerState;
       if (name === "data-empty-scroll-position") return emptyScrollPosition;
       if (name === "data-chat-mode") return chatMode;
-      if (name === "data-upload-status") return uploadStatus;
       return null;
     },
     querySelectorAll: (selector: string) => {
@@ -250,12 +254,15 @@ async function runGeometryHarness(
         return includeCases ? casesRegion : null;
       }
       if (selector === '[data-testid="chat-composer"]') return composer;
-      if (
-        selector === '[data-testid="chat-upload-card"]' &&
-        options.includeUploadCard !== false
-      ) {
-        return uploadCard;
+      if (selector === '[data-testid="attachment-chip-strip"]') {
+        return options.includeAttachmentStrip === true ? attachmentStrip : null;
       }
+      if (selector === '[data-testid="attachment-chip-detail"]') {
+        return options.includeAttachmentDetail === true
+          ? attachmentDetail
+          : null;
+      }
+      if (selector === ".chat-composer-body") return composerEditor;
       if (selector === ".phy-adaptive-shell__main") return mainSurface;
       if (
         selector ===
@@ -294,8 +301,14 @@ async function runGeometryHarness(
       rect(Math.min(300, width / 4), 740, width - 24, 880),
     options.composerVisible ?? true
   );
-  const uploadCard = makeElement(
-    options.uploadCardRect ?? rect(300, 560, width - 24, 700)
+  const attachmentStrip = makeElement(
+    options.attachmentStripRect ?? rect(300, 700, width - 24, 744)
+  );
+  const attachmentDetail = makeElement(
+    options.attachmentDetailRect ?? rect(300, 520, width - 24, 692)
+  );
+  const composerEditor = makeElement(
+    options.composerEditorRect ?? rect(300, 744, width - 24, 816)
   );
   if (options.composerSurfaceRect) {
     Object.assign(composer, {
@@ -334,7 +347,7 @@ async function runGeometryHarness(
   };
   const windowMock: Record<string, unknown> = {};
 
-  return (await runInNewContext(MEASURE_SOURCE, {
+  const result = (await runInNewContext(MEASURE_SOURCE, {
     window: windowMock,
     document: documentMock,
     innerWidth: width,
@@ -349,6 +362,58 @@ async function runGeometryHarness(
       return 1;
     },
   })) as GeometryResult;
+
+  const isInsideViewport = (bounds: Rect): boolean =>
+    bounds.left >= 0 &&
+    bounds.top >= 0 &&
+    bounds.right <= width &&
+    bounds.bottom <= height;
+  const fixtureReasons: string[] = [];
+  if (options.includeAttachmentStrip === true) {
+    if (
+      !isInsideViewport(
+        options.attachmentStripRect ?? attachmentStrip.getBoundingClientRect()
+      )
+    ) {
+      fixtureReasons.push("attachment chip strip escapes viewport");
+    }
+    if (
+      !isInsideViewport(
+        options.composerEditorRect ?? composerEditor.getBoundingClientRect()
+      )
+    ) {
+      fixtureReasons.push("composer editor escapes viewport");
+    }
+  }
+  if (
+    options.includeAttachmentDetail === true &&
+    !isInsideViewport(
+      options.attachmentDetailRect ?? attachmentDetail.getBoundingClientRect()
+    )
+  ) {
+    fixtureReasons.push("attachment detail escapes viewport");
+  }
+  return {
+    ...result,
+    attachmentStrip:
+      options.includeAttachmentStrip === true
+        ? (options.attachmentStripRect ??
+          attachmentStrip.getBoundingClientRect())
+        : undefined,
+    composerEditor:
+      options.includeAttachmentStrip === true
+        ? (options.composerEditorRect ?? composerEditor.getBoundingClientRect())
+        : undefined,
+    attachmentDetail:
+      options.includeAttachmentDetail === true
+        ? (options.attachmentDetailRect ??
+          attachmentDetail.getBoundingClientRect())
+        : undefined,
+    pass: result.pass && fixtureReasons.length === 0,
+    ...(fixtureReasons.length
+      ? { reasons: [...(result.reasons ?? []), ...fixtureReasons] }
+      : {}),
+  };
 }
 
 vi.mock("vue-element-plus-x", () => ({
@@ -356,7 +421,7 @@ vi.mock("vue-element-plus-x", () => ({
     name: "MentionSender",
     inheritAttrs: false,
     template:
-      '<div class="mention-sender-stub" v-bind="$attrs"><slot name="header" /><slot name="prefix" /><slot name="action-list" /></div>',
+      '<div class="mention-sender-stub" v-bind="$attrs"><textarea data-testid="mention-input" :disabled="disabled" :value="modelValue" /><slot name="header" /><slot name="prefix" /><slot name="action-list" /></div>',
     props: [
       "modelValue",
       "loading",
@@ -424,6 +489,10 @@ describe("Chat visual fixture registry", () => {
       "upload-paused",
       "upload-failed",
       "upload-completed",
+      "uploading-detail-open",
+      "mixed-ready-failed-expired",
+      "ten-files-overflow",
+      "incompatible-agent-blocked",
       "sending",
       "picker-open",
       "picker-search",
@@ -561,6 +630,54 @@ describe("Chat visual fixture registry", () => {
     );
   });
 
+  it("registers the sanitized chip-state visual matrix", () => {
+    const empty = getChatVisualFixture("empty");
+    expect(buildSyntheticFileList(empty)).toHaveLength(0);
+
+    const detail = getChatVisualFixture("uploading-detail-open");
+    expect(detail.attachmentDetailOpen).toBe(true);
+    const detailItems = buildSyntheticFileList(detail);
+    expect(detailItems).toHaveLength(1);
+    expect(detailItems[0].status).toBe("uploading");
+    expect("purpose" in detailItems[0]).toBe(false);
+
+    const mixed = getChatVisualFixture("mixed-ready-failed-expired");
+    expect(buildSyntheticFileList(mixed).map((item) => item.status)).toEqual([
+      "completed",
+      "failed",
+      "expired",
+    ]);
+
+    const overflow = getChatVisualFixture("ten-files-overflow");
+    const overflowItems = buildSyntheticFileList(overflow);
+    expect(overflowItems).toHaveLength(10);
+    expect(overflowItems.every((item) => item.status === "completed")).toBe(
+      true
+    );
+
+    const blocked = getChatVisualFixture("incompatible-agent-blocked");
+    expect(blocked.selectedAgent).toBe("DeepGenomeAgent");
+    expect(blocked.attachmentTargetBlocked).toBe(true);
+    expect(blocked.attachmentTargetAvailable).toBe(false);
+    expect(COMPOSER_MODEL_VALUE_BY_KEY[blocked.key]).toBe(
+      "Synthetic incompatible attachment draft"
+    );
+
+    for (const key of [
+      "empty",
+      "uploading-detail-open",
+      "mixed-ready-failed-expired",
+      "ten-files-overflow",
+      "incompatible-agent-blocked",
+    ] as const) {
+      for (const theme of CHAT_VISUAL_THEMES) {
+        const resolved = resolveChatVisualFixture(key, "en-US", theme);
+        expect(resolved.ok).toBe(true);
+        if (resolved.ok) expect(resolved.theme).toBe(theme);
+      }
+    }
+  });
+
   it("registers deterministic Instant and Expert routing snapshots", () => {
     expect(routingFixtures).toEqual([
       {
@@ -594,6 +711,14 @@ describe("Chat visual fixture registry", () => {
         populated: true,
         permissionsLoading: false,
         allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "incompatible-agent-blocked",
+        mode: "expert",
+        selectedAgent: "DeepGenomeAgent",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DeepGenomeAgent"],
       },
     ]);
 
@@ -951,7 +1076,7 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(result).toMatchObject({ pass: true });
   });
 
-  it("allows a narrow upload fixture to review its card while the composer scrolls", async () => {
+  it("keeps a narrow chip strip and editor inside the composer viewport", async () => {
     const result = await runGeometryHarness({
       state: "empty",
       chatMode: "instant",
@@ -960,32 +1085,61 @@ describe("Chat visual fixture geometry negative controls", () => {
       width: 320,
       height: 568,
       drawerState: "closed",
-      composerRect: rect(16, 292, 289, 612),
-      uploadStatus: "queued",
-      uploadCardRect: rect(16, 307, 287, 459),
+      composerRect: rect(16, 292, 304, 548),
+      includeAttachmentStrip: true,
+      attachmentStripRect: rect(16, 304, 304, 344),
+      composerEditorRect: rect(16, 348, 304, 420),
     });
 
     expect(result).toMatchObject({
       pass: true,
-      uploadStatus: "queued",
-      uploadCard: { top: 307, bottom: 459 },
+      attachmentStrip: { top: 304, bottom: 344 },
+      composerEditor: { top: 348, bottom: 420 },
     });
   });
 
-  it("rejects an upload fixture when its card leaves the viewport", async () => {
+  it("rejects a detail surface when it leaves the viewport", async () => {
     const result = await runGeometryHarness({
       state: "empty",
       chatMode: "instant",
       includeCases: true,
       includeQuickSelect: false,
-      uploadStatus: "failed",
-      uploadCardRect: rect(280, 920, 1160, 1000),
+      includeAttachmentStrip: true,
+      includeAttachmentDetail: true,
+      attachmentStripRect: rect(280, 700, 1160, 744),
+      composerEditorRect: rect(280, 744, 1160, 816),
+      attachmentDetailRect: rect(280, 920, 1160, 1000),
     });
 
     expect(result.pass).toBe(false);
     expect(result.reasons?.join("; ")).toMatch(
-      /upload fixture requires a visible upload card/
+      /attachment detail escapes viewport/
     );
+  });
+
+  it("keeps the uploading detail fixture bounded above the editor", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 390,
+      height: 844,
+      drawerState: "closed",
+      includeAttachmentStrip: true,
+      includeAttachmentDetail: true,
+      attachmentStripRect: rect(16, 510, 374, 554),
+      composerEditorRect: rect(16, 554, 374, 626),
+      attachmentDetailRect: rect(16, 286, 374, 498),
+      composerRect: rect(16, 510, 374, 700),
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      attachmentStrip: { width: 358 },
+      composerEditor: { height: 72 },
+      attachmentDetail: { top: 286, bottom: 498 },
+    });
   });
 
   it.each([
@@ -1093,6 +1247,12 @@ describe("Chat visual fixture geometry negative controls", () => {
     expect(APP_SOURCE).toContain("getChatRoutingFixture");
     expect(APP_SOURCE).toContain("routingPermissionsLoading");
     expect(APP_SOURCE).toContain("allowedTools.includes(option.tool)");
+    expect(APP_SOURCE).toContain(
+      ':attachment-target-available="attachmentTargetAvailable"'
+    );
+    expect(APP_SOURCE).toContain(
+      ':attachment-target-blocked="attachmentTargetBlocked"'
+    );
   });
 
   it("locks the focused computed-style capture contract", () => {
@@ -1277,7 +1437,10 @@ const mountFixtureApp = (
     ElDropdownItem: {
       template: "<button><slot /></button>",
     },
-    ElTooltip: true,
+    ElTooltip: {
+      name: "ElTooltip",
+      template: '<div class="tooltip-stub"><slot /></div>',
+    },
     ElAvatar: true,
     ElIcon: true,
     RouterLink: {
@@ -1287,7 +1450,7 @@ const mountFixtureApp = (
     },
     ElButton: {
       name: "ElButton",
-      template: "<button><slot /></button>",
+      template: '<button v-bind="$attrs"><slot /></button>',
     },
     ElTable: true,
     ElTableColumn: true,
@@ -1379,6 +1542,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(wrapper.find('[data-testid="chat-account-identity"]').text()).toBe(
       SYNTHETIC_IDENTITY
     );
+    expect(wrapper.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      false
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
     expect(buildSyntheticFileList(fixture)).toHaveLength(0);
@@ -1417,6 +1583,54 @@ describe("Chat visual fixture rendering (no network)", () => {
       wrapper.unmount();
     }
   );
+
+  it("renders compact mixed, overflow, detail, and incompatible-agent fixtures", async () => {
+    const detailWrapper = mountFixtureApp(
+      getChatVisualFixture("uploading-detail-open")
+    );
+    await flushPromises();
+    await nextTick();
+    expect(
+      detailWrapper.find('[data-testid="attachment-chip-strip"]').exists()
+    ).toBe(true);
+    expect(
+      detailWrapper.find('[data-testid="attachment-chip-detail"]').exists()
+    ).toBe(true);
+    detailWrapper.unmount();
+
+    const mixedWrapper = mountFixtureApp(
+      getChatVisualFixture("mixed-ready-failed-expired")
+    );
+    await flushPromises();
+    expect(
+      mixedWrapper
+        .findAll('[data-testid="attachment-chip"]')
+        .map((chip) => chip.attributes("data-state"))
+    ).toEqual(["completed", "failed", "expired"]);
+    mixedWrapper.unmount();
+
+    const overflowWrapper = mountFixtureApp(
+      getChatVisualFixture("ten-files-overflow")
+    );
+    await flushPromises();
+    expect(
+      overflowWrapper.find('[data-testid="attachment-chip-overflow"]').text()
+    ).toContain("+7 more");
+    overflowWrapper.unmount();
+
+    const blockedWrapper = mountFixtureApp(
+      getChatVisualFixture("incompatible-agent-blocked")
+    );
+    await flushPromises();
+    const editor = blockedWrapper.get('[data-testid="mention-input"]');
+    expect(editor.attributes("disabled")).toBeUndefined();
+    expect(
+      blockedWrapper
+        .get('[data-testid="chat-composer"] .composer-send-button')
+        .attributes("disabled")
+    ).toBeDefined();
+    blockedWrapper.unmount();
+  });
 
   it("derives Chinese quick-select labels from the active locale", async () => {
     const wrapper = mountFixtureApp(

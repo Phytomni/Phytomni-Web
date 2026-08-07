@@ -504,39 +504,96 @@ export function buildSyntheticFileList(
   }
   const status: UploadStatus = fixture.uploadStatus ?? "completed";
   const size = 1024 * 1024;
-  const loadedBytes =
-    status === "completed"
-      ? size
-      : status === "uploading"
-        ? 256 * 1024
-        : status === "paused" || status === "failed"
-          ? 512 * 1024
-          : 0;
-  const blob = new File(
-    ["synthetic fixture attachment contents"],
-    SYNTHETIC_FILE_NAME,
-    { type: "text/plain" }
-  );
-  return [
-    {
-      localId: "fixture-upload-local",
+
+  const buildItem = (
+    localId: string,
+    name: string,
+    itemStatus: UploadStatus,
+    type = "text/plain"
+  ): ResumableUploadItem => {
+    const loadedBytes =
+      itemStatus === "completed"
+        ? size
+        : itemStatus === "uploading"
+          ? 256 * 1024
+          : itemStatus === "paused" ||
+              itemStatus === "failed" ||
+              itemStatus === "expired"
+            ? 512 * 1024
+            : 0;
+    const blob = new File(["synthetic fixture attachment contents"], name, {
+      type,
+    });
+    return {
+      localId,
       file: blob,
-      assetId: status === "completed" ? "file_fixture_attachment" : null,
-      name: SYNTHETIC_FILE_NAME,
+      assetId: itemStatus === "completed" ? `asset-${localId}` : null,
+      name,
       size,
-      type: "text/plain",
+      type,
       lastModified: 1_700_000_000_000,
-      status,
+      status: itemStatus,
       partSize: size,
       partCount: 1,
-      receivedParts: status === "completed" ? [1] : [],
+      receivedParts: itemStatus === "completed" ? [1] : [],
       loadedBytes,
-      speedBytesPerSecond: status === "uploading" ? 256 * 1024 : 0,
-      etaSeconds: status === "uploading" ? 3 : null,
-      retryCount: status === "failed" ? 1 : 0,
-      errorCode: status === "failed" ? "upload_failed" : null,
-    },
-  ];
+      speedBytesPerSecond: itemStatus === "uploading" ? 256 * 1024 : 0,
+      etaSeconds: itemStatus === "uploading" ? 3 : null,
+      retryCount: itemStatus === "failed" || itemStatus === "expired" ? 1 : 0,
+      errorCode:
+        itemStatus === "failed"
+          ? "upload_failed"
+          : itemStatus === "expired"
+            ? "upload_session_expired"
+            : null,
+    };
+  };
+
+  if (fixture.key === "uploading-detail-open") {
+    return [
+      buildItem(
+        "fixture-upload-detail",
+        "fixture-reads.fastq.gz",
+        "uploading",
+        "application/gzip"
+      ),
+    ];
+  }
+
+  if (fixture.key === "mixed-ready-failed-expired") {
+    return [
+      buildItem(
+        "fixture-upload-ready",
+        "fixture-report.pdf",
+        "completed",
+        "application/pdf"
+      ),
+      buildItem(
+        "fixture-upload-failed",
+        "fixture-counts.tsv",
+        "failed",
+        "text/tab-separated-values"
+      ),
+      buildItem(
+        "fixture-upload-expired",
+        "fixture-archive.fastq.gz",
+        "expired",
+        "application/gzip"
+      ),
+    ];
+  }
+
+  if (fixture.key === "ten-files-overflow") {
+    return Array.from({ length: 10 }, (_value, index) =>
+      buildItem(
+        `fixture-upload-${index + 1}`,
+        `fixture-file-${String(index + 1).padStart(2, "0")}.txt`,
+        "completed"
+      )
+    );
+  }
+
+  return [buildItem("fixture-upload-local", SYNTHETIC_FILE_NAME, status)];
 }
 
 /** Deterministic picker options — no roles API / network. */
@@ -726,6 +783,10 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   empty: "",
   populated: "",
   attachment: "",
+  "uploading-detail-open": "",
+  "mixed-ready-failed-expired": "",
+  "ten-files-overflow": "",
+  "incompatible-agent-blocked": "Synthetic incompatible attachment draft",
   sending: "Synthetic sending draft",
   "picker-open": "",
   "picker-search": "",
