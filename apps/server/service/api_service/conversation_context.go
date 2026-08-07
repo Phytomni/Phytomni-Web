@@ -26,8 +26,8 @@ const (
 	maxPersistedSettlementStateBytes  = 32
 	maxPersistedModeLockStateBytes    = 16
 	maxPersistedLedgerHashBytes       = 128
-	maxPersistedConversationBytes     = 64 << 10
-	maxPersistedReplacementQueryBytes = 32 << 10
+	maxPersistedReplacementQueryBytes = rxBot.HardMaxUserQueryChars * utf8.UTFMax
+	maxPersistedConversationBytes     = maxPersistedReplacementQueryBytes + 1<<20
 	maxPersistedReplacementFileBytes  = 4 << 10
 	maxPersistedReplacementPathBytes  = 8 << 10
 )
@@ -243,14 +243,14 @@ func (value persistedConversationContext) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	if len(encoded) > maxPersistedConversationBytes {
-		return nil, persistedContextError("serialized context exceeds 64 KiB")
+		return nil, persistedContextError("serialized context exceeds bounds")
 	}
 	return encoded, nil
 }
 
 func (value *persistedConversationContext) UnmarshalJSON(data []byte) error {
 	if len(data) > maxPersistedConversationBytes {
-		return persistedContextError("serialized context exceeds 64 KiB")
+		return persistedContextError("serialized context exceeds bounds")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()

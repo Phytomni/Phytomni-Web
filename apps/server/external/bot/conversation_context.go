@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	maxConversationCurrentMessageChars = 32_768
-	maxConversationRequestIDChars      = 128
-	maxConversationAllowedAgents       = 10
-	maxConversationHistoryEntries      = 200
-	maxConversationArtifactRefs        = 50
-	maxConversationSummaryChars        = 4 * 1024
-	maxConversationMetadataChars       = 512
-	maxContextRouteReasonCodeChars     = 64
+	maxConversationHistoryEntryChars = 32_768
+	maxConversationRequestIDChars    = 128
+	maxConversationAllowedAgents     = 10
+	maxConversationHistoryEntries    = 200
+	maxConversationArtifactRefs      = 50
+	maxConversationSummaryChars      = 4 * 1024
+	maxConversationMetadataChars     = 512
+	maxContextRouteReasonCodeChars   = 64
 )
 
 var (
@@ -141,7 +141,11 @@ func validCanonicalAgent(value string) bool {
 }
 
 func validateCurrentMessage(value CurrentMessageV1) error {
-	if stringLength(value.Content) < 1 || stringLength(value.Content) > maxConversationCurrentMessageChars {
+	limit := ConfiguredMaxUserQueryChars()
+	if limit == 0 {
+		limit = DefaultMaxUserQueryChars
+	}
+	if stringLength(value.Content) < 1 || stringLength(value.Content) > limit {
 		return fmt.Errorf("current message content exceeds bounds")
 	}
 	if value.Locale != "en-US" && value.Locale != "zh-CN" {
@@ -160,7 +164,7 @@ func validateLedgerEntry(value LedgerEntryV1) error {
 	if value.Content == "" && value.Summary == "" {
 		return fmt.Errorf("ledger entry requires content or summary")
 	}
-	if stringLength(value.Content) > maxConversationCurrentMessageChars || stringLength(value.Summary) > maxConversationSummaryChars {
+	if stringLength(value.Content) > maxConversationHistoryEntryChars || stringLength(value.Summary) > maxConversationSummaryChars {
 		return fmt.Errorf("ledger entry text exceeds bounds")
 	}
 	return nil

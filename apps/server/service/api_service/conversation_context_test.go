@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -351,5 +352,23 @@ func TestPersistedConversationContextBoundsRebuildAndReplacementState(t *testing
 	value.Replacement.Query = strings.Repeat("x", maxPersistedReplacementQueryBytes+1)
 	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
 		t.Fatalf("oversized replacement query error = %v", err)
+	}
+}
+
+func TestPersistedReplacementAllowsExtendedQueryAndRejectsHardByteOverflow(t *testing.T) {
+	value := validPersistedConversationContext()
+	value.Replacement = &persistedConversationReplacement{
+		ClientTurnID: "refresh-turn-extended",
+		Query:        strings.Repeat("🧬", 131_072),
+		ToolName:     "ChatAgent",
+		Mode:         "instant",
+	}
+	if _, err := json.Marshal(value); err != nil {
+		t.Fatalf("extended replacement rejected: %v", err)
+	}
+
+	value.Replacement.Query = strings.Repeat("x", rxBot.HardMaxUserQueryChars*utf8.UTFMax+1)
+	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
+		t.Fatalf("over-hard replacement query error = %v", err)
 	}
 }

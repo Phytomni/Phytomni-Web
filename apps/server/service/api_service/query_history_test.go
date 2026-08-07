@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -218,6 +219,47 @@ func TestContextRebuildUsesAcceptedOwnerScopedSummariesOnly(t *testing.T) {
 	}
 	if _, err := BuildConversationLedger(context.Background(), "bob", dialogueID); !errors.Is(err, ErrConversationLedgerNotFound) {
 		t.Fatalf("cross-owner rebuild error = %v", err)
+	}
+}
+
+func TestConversationLedgerPreservesExtendedCurrentAndBoundsPriorHistory(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "44444444-4444-4444-8444-444444444444"
+	priorQuery := strings.Repeat("稻", 131_072)
+	currentQuery := strings.Repeat("🧬", 131_072)
+	prior := model.QuestionAgentLog{
+		Id: 1, DialogueId: dialogueID, UserName: "alice",
+		Query: priorQuery, Status: statusSucceeded, Mode: "instant",
+		ToolName: "ChatAgent", BotReportRevision: -1,
+	}
+	if err := gdb.Create(&prior).Error; err != nil {
+		t.Fatalf("persist prior row: %v", err)
+	}
+	submission, err := NewService().allocateV1Submission(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: currentQuery, Mode: "instant", ClientTurnID: "extended-current-2",
+		},
+		v1SubmissionTarget{
+			dialogueID: dialogueID, parentID: prior.Id, mode: "instant", operation: "append",
+		},
+		AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}},
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := submission.envelope.HistoryDelta
+	if len(history) != 1 || utf8.RuneCountInString(history[0].Content) != 32_768 {
+		t.Fatalf("bounded history = %#v", history)
+	}
+	var stored model.QuestionAgentLog
+	if err := gdb.First(&stored, submission.row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Query != currentQuery || utf8.RuneCountInString(stored.Query) != 131_072 {
+		t.Fatalf("stored current query runes = %d, want 131072", utf8.RuneCountInString(stored.Query))
 	}
 }
 

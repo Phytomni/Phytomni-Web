@@ -83,7 +83,7 @@ func TestConversationEnvelopeV1RejectsUnsafeValues(t *testing.T) {
 			value.LedgerVersion = "not-a-hash"
 		}},
 		{name: "oversized current message", mutate: func(value *ConversationEnvelopeV1) {
-			value.CurrentMessage.Content = strings.Repeat("x", maxConversationCurrentMessageChars+1)
+			value.CurrentMessage.Content = strings.Repeat("x", ConfiguredMaxUserQueryChars()+1)
 		}},
 		{name: "path-bearing artifact label", mutate: func(value *ConversationEnvelopeV1) {
 			value.ArtifactRefs[0].DisplayName = "../private.csv"
@@ -97,6 +97,18 @@ func TestConversationEnvelopeV1RejectsUnsafeValues(t *testing.T) {
 				t.Fatal("unsafe envelope value was accepted")
 			}
 		})
+	}
+}
+
+func TestConversationEnvelopeAllowsExtendedCurrentButBoundsHistory(t *testing.T) {
+	envelope := validConversationEnvelope()
+	envelope.CurrentMessage.Content = strings.Repeat("稻", 131_072)
+	if err := envelope.Validate(); err != nil {
+		t.Fatalf("current rejected: %v", err)
+	}
+	envelope.HistoryDelta[0].Content = strings.Repeat("稻", 32_769)
+	if err := envelope.Validate(); err == nil {
+		t.Fatal("oversized history accepted")
 	}
 }
 
