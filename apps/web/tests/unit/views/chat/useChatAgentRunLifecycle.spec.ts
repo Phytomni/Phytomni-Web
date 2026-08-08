@@ -8,6 +8,20 @@ import {
 import { deferred } from "../../../helpers/mockFactories";
 import { useChatAgentRunLifecycle } from "@/views/chat/composables/useChatAgentRunLifecycle";
 
+const SAFE_RESEARCH_PATH_LINES = [
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363198_Nip_RPM.txt.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_matrix.mtx.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_matrix.mtx.gz",
+  "/fixtures/rice-root/Orthologues/Orthologues_A_thaliana_pep/A_thaliana_pep__v__NIP_genome_pep.tsv",
+  "/fixtures/rice-root/Orthologues/Orthologues_NIP_genome_pep/NIP_genome_pep__v__A_thaliana_pep.tsv",
+  "/fixtures/rice-root/org.Osativa.eg.db.tar.gz",
+] as const;
+
 function lifecycle(
   id: number,
   overrides: Partial<AgentTaskLifecycle> = {}
@@ -46,6 +60,13 @@ describe("useChatAgentRunLifecycle", () => {
 
   it("keeps the live Research stage sequence owner-scoped until one terminal hydration", async () => {
     vi.useFakeTimers();
+    const rawQuery = [
+      "Synthetic paper excerpt:",
+      "The fixture compares two rice-root sample groups.",
+      "",
+      "data:",
+      ...SAFE_RESEARCH_PATH_LINES,
+    ].join("\n");
     const phases = [
       "PREPARING",
       "RESOLVING_INPUTS",
@@ -59,6 +80,10 @@ describe("useChatAgentRunLifecycle", () => {
       renderedChat: {
         dialogue_id: "research",
         messages: [
+          buildChatMessage({
+            role: "user",
+            content: rawQuery,
+          }),
           buildChatMessage({
             id: "151",
             tool_name: "InSilicoResearchAgent",
@@ -82,8 +107,8 @@ describe("useChatAgentRunLifecycle", () => {
     }
     const reloadChat = vi.fn(async () => {
       if (state.renderedChat) {
-        state.renderedChat.messages[0] = {
-          ...state.renderedChat.messages[0],
+        state.renderedChat.messages[1] = {
+          ...state.renderedChat.messages[1],
           status: "SUCCEEDED",
           content: "Final Research report",
         };
@@ -105,11 +130,15 @@ describe("useChatAgentRunLifecycle", () => {
       expect(fetchLifecycle).toHaveBeenCalledTimes(index + 1);
       if (phase !== "SUCCEEDED") {
         expect(reloadChat).not.toHaveBeenCalled();
-        expect(state.renderedChat?.messages[0]).toMatchObject({
+        expect(state.renderedChat?.messages[1]).toMatchObject({
           status: "RUNNING",
           content: "",
         });
       }
+      expect(state.renderedChat?.messages[0]?.content).toBe(rawQuery);
+      expect(
+        state.renderedChat?.messages[0]?.content.split("\n").slice(-11)
+      ).toEqual(SAFE_RESEARCH_PATH_LINES);
     }
 
     expect(reloadChat).toHaveBeenCalledOnce();
@@ -117,7 +146,7 @@ describe("useChatAgentRunLifecycle", () => {
       phase: "SUCCEEDED",
       terminal: true,
     });
-    expect(state.renderedChat?.messages[0]).toMatchObject({
+    expect(state.renderedChat?.messages[1]).toMatchObject({
       status: "SUCCEEDED",
       content: "Final Research report",
     });

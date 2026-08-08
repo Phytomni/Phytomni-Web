@@ -11,6 +11,20 @@ import {
   type UnifiedAttachmentSurface,
 } from "../helpers/unifiedAttachmentBehavior";
 
+const SAFE_RESEARCH_PATH_LINES = [
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363198_Nip_RPM.txt.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_matrix.mtx.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_matrix.mtx.gz",
+  "/fixtures/rice-root/Orthologues/Orthologues_A_thaliana_pep/A_thaliana_pep__v__NIP_genome_pep.tsv",
+  "/fixtures/rice-root/Orthologues/Orthologues_NIP_genome_pep/NIP_genome_pep__v__A_thaliana_pep.tsv",
+  "/fixtures/rice-root/org.Osativa.eg.db.tar.gz",
+] as const;
+
 vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
@@ -422,6 +436,9 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
     mocks.submit.mockResolvedValue(null);
+    mocks.uploadQueue.completedAssetIds.value = [
+      { asset_id: "file_dataset_1234567890" },
+    ];
     mocks.chatState.fileList = [
       completedUpload("upload-existing", "counts.csv"),
     ];
@@ -485,6 +502,43 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       query: rawQuery,
       attachments: [{ asset_id: "file_dataset_1234567890" }],
     });
+    wrapper.unmount();
+  });
+
+  it("submits a PDF asset and pasted data block without client path parsing", async () => {
+    const wrapper = mountWorkspace("InSilicoResearchAgent");
+    const rawQuery = [
+      "Reproduce the synthetic analysis using the attached paper.",
+      "",
+      "data:",
+      ...SAFE_RESEARCH_PATH_LINES,
+    ].join("\n");
+    mocks.uploadQueue.completedAssetIds.value = [
+      { asset_id: "file_pdf_fixture_19" },
+    ];
+    mocks.chatState.fileList = [
+      {
+        ...completedUpload("upload-paper", "synthetic-paper.pdf"),
+        assetId: "file_pdf_fixture_19",
+        type: "application/pdf",
+      },
+    ];
+
+    await wrapper.get('[data-testid="research-query"]').setValue(rawQuery);
+    await wrapper.get('[data-testid="research-submit"]').trigger("click");
+
+    const request = mocks.submit.mock.calls[0][0];
+    expect(request).toEqual({
+      query: rawQuery,
+      attachments: [{ asset_id: "file_pdf_fixture_19" }],
+    });
+    expect(Object.keys(request).sort()).toEqual(["attachments", "query"]);
+    expect(request).not.toHaveProperty("data_list");
+    expect(request).not.toHaveProperty("obs_file_list");
+    expect(request).not.toHaveProperty("dataset_description");
+    expect(request.query.split("\n").slice(-11)).toEqual(
+      SAFE_RESEARCH_PATH_LINES
+    );
     wrapper.unmount();
   });
 

@@ -19,6 +19,20 @@ import {
 } from "../../../helpers/chatBuilders";
 import { invalidInput } from "../../../helpers/invalidInput";
 
+const SAFE_RESEARCH_PATH_LINES = [
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363198_Nip_RPM.txt.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_matrix.mtx.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_matrix.mtx.gz",
+  "/fixtures/rice-root/Orthologues/Orthologues_A_thaliana_pep/A_thaliana_pep__v__NIP_genome_pep.tsv",
+  "/fixtures/rice-root/Orthologues/Orthologues_NIP_genome_pep/NIP_genome_pep__v__A_thaliana_pep.tsv",
+  "/fixtures/rice-root/org.Osativa.eg.db.tar.gz",
+] as const;
+
 type StreamResult = {
   dialogueId?: string;
   messageId?: string;
@@ -1348,6 +1362,89 @@ describe("useSendMessage", () => {
       ])
     );
   });
+
+  it.each([
+    {
+      name: "short query with PDF and dataset assets",
+      query: "Compare the synthetic paper and matrix inputs.",
+      uploads: [
+        ["synthetic-paper.pdf", "file_pdf_fixture_19"],
+        ["synthetic-counts.mtx.gz", "file_dataset_fixture_19"],
+      ],
+      attachments: [
+        { asset_id: "file_pdf_fixture_19" },
+        { asset_id: "file_dataset_fixture_19" },
+      ],
+      hasPaths: false,
+    },
+    {
+      name: "query with PDF asset and pasted data block",
+      query: [
+        "Reproduce the synthetic analysis using the attached paper.",
+        "",
+        "data:",
+        ...SAFE_RESEARCH_PATH_LINES,
+      ].join("\n"),
+      uploads: [["synthetic-paper.pdf", "file_pdf_fixture_19"]],
+      attachments: [{ asset_id: "file_pdf_fixture_19" }],
+      hasPaths: true,
+    },
+    {
+      name: "query with pasted paper text and pasted data block",
+      query: [
+        "Synthetic paper excerpt:",
+        "The fixture compares two rice-root sample groups.",
+        "",
+        "data:",
+        ...SAFE_RESEARCH_PATH_LINES,
+      ].join("\n"),
+      uploads: [],
+      attachments: [],
+      hasPaths: true,
+    },
+  ] as const)(
+    "sends $name as raw query plus opaque references",
+    async (form) => {
+      const state = stateFor("A");
+      state.messageInput = form.query;
+      state.mode = "expert";
+      state.selectedAgent = "InSilicoResearchAgent";
+      state.fileList = form.uploads.map(([name, assetId]) =>
+        completedUpload(name, assetId)
+      );
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            id: "research-form-19",
+            tool_name: "InSilicoResearchAgent",
+            answer: "",
+            status: "RUNNING",
+            bot_run_id: "run-research-form-19",
+            follow_up_questions: [],
+          },
+        })
+      );
+
+      await makeComposable().sendMessage();
+
+      const formData = queryCallAt(0, form.name)[0] as FormData;
+      expect(formData.get("query")).toBe(form.query);
+      expect(formData.get("attachments")).toBe(
+        JSON.stringify(form.attachments)
+      );
+      expect([...formData.keys()].sort()).toEqual(
+        ["attachments", "client_turn_id", "id", "mode", "query", "tool"].sort()
+      );
+      expect(formData.has("data_list")).toBe(false);
+      expect(formData.has("obs_file_list")).toBe(false);
+      expect(formData.has("dataset_description")).toBe(false);
+      if (form.hasPaths) {
+        expect(String(formData.get("query")).split("\n").slice(-11)).toEqual(
+          SAFE_RESEARCH_PATH_LINES
+        );
+      }
+    }
+  );
 
   it("omits a dataset description for document-only submissions", async () => {
     stateFor("A").messageInput = "Summarize the paper";

@@ -582,34 +582,41 @@ describe("ResearchAgentView", () => {
     wrapper.unmount();
   });
 
-  it("submits a research question and preserves uploaded paper names", async () => {
+  it("submits a short query with PDF and dataset assets as references only", async () => {
     const wrapper = mountView();
     const paper = new File(["paper"], "paper.pdf", { type: "application/pdf" });
+    const dataset = new File(["counts"], "counts.mtx.gz", {
+      type: "application/gzip",
+    });
+    const rawQuery = "Compare the synthetic paper and matrix inputs.";
 
-    await wrapper
-      .get('[data-test="research-question"]')
-      .setValue("Summarize the paper");
+    await wrapper.get('[data-test="research-question"]').setValue(rawQuery);
     const fileInput = wrapper.get('[data-test="research-files"]');
     Object.defineProperty(fileInput.element, "files", {
       configurable: true,
-      value: [paper],
+      value: [paper, dataset],
     });
     await fileInput.trigger("change");
 
-    mocks.uploadQueue.completedAssetIds.value = [{ asset_id: "file_paper" }];
-    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([paper]);
+    mocks.uploadQueue.completedAssetIds.value = [
+      { asset_id: "file_pdf_fixture_19" },
+      { asset_id: "file_dataset_fixture_19" },
+    ];
+    expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([paper, dataset]);
     await wrapper.get('[data-test="research-submit"]').trigger("click");
 
-    expect(mocks.submit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: "Summarize the paper",
-        attachments: [{ asset_id: "file_paper" }],
-      })
-    );
-    expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty("dataList");
-    expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty(
-      "datasetDescription"
-    );
+    const request = mocks.submit.mock.calls[0][0];
+    expect(request).toEqual({
+      query: rawQuery,
+      attachments: [
+        { asset_id: "file_pdf_fixture_19" },
+        { asset_id: "file_dataset_fixture_19" },
+      ],
+    });
+    expect(Object.keys(request).sort()).toEqual(["attachments", "query"]);
+    expect(request).not.toHaveProperty("data_list");
+    expect(request).not.toHaveProperty("obs_file_list");
+    expect(request).not.toHaveProperty("dataset_description");
     wrapper.unmount();
   });
 

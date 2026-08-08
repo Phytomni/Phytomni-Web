@@ -71,6 +71,20 @@ import {
   type UnifiedAttachmentSurface,
 } from "../helpers/unifiedAttachmentBehavior";
 
+const SAFE_RESEARCH_PATH_LINES = [
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
+  "/fixtures/rice-root/GSE146033_RAW/GSM4363198_Nip_RPM.txt.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363200_9311/GSM4363200_9311_matrix.mtx.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_barcodes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_genes.tsv.gz",
+  "/fixtures/rice-root/GSM4363201_Nip/GSM4363201_Nip_matrix.mtx.gz",
+  "/fixtures/rice-root/Orthologues/Orthologues_A_thaliana_pep/A_thaliana_pep__v__NIP_genome_pep.tsv",
+  "/fixtures/rice-root/Orthologues/Orthologues_NIP_genome_pep/NIP_genome_pep__v__A_thaliana_pep.tsv",
+  "/fixtures/rice-root/org.Osativa.eg.db.tar.gz",
+] as const;
+
 const mount: TestAppContext["mount"] = ((component, mountOptions) =>
   createTestAppContext().mount(
     component,
@@ -827,6 +841,37 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(wrapper.findAllComponents({ name: "ElUpload" })).toHaveLength(1);
     expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(64);
     expect(wrapper.findAll("input")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("keeps pasted paper text and data paths in the one existing query control", () => {
+    const rawQuery = [
+      "Synthetic paper excerpt:",
+      "The fixture compares two rice-root sample groups.",
+      "",
+      "data:",
+      ...SAFE_RESEARCH_PATH_LINES,
+    ].join("\n");
+    const wrapper = mountChatComposerBehavior({
+      modelValue: rawQuery,
+      selectedAgent: "InSilicoResearchAgent",
+    });
+    const sender = wrapper.getComponent({ name: "MentionSender" });
+
+    expect(sender.props("modelValue")).toBe(rawQuery);
+    expect(String(sender.props("modelValue")).split("\n").slice(-11)).toEqual(
+      SAFE_RESEARCH_PATH_LINES
+    );
+    expect(wrapper.findAllComponents({ name: "MentionSender" })).toHaveLength(
+      1
+    );
+    expect(wrapper.findAllComponents({ name: "ElUpload" })).toHaveLength(1);
+    expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-testid="research-path-input"]').exists()).toBe(
+      false
+    );
     wrapper.unmount();
   });
 
