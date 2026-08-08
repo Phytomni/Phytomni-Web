@@ -104,6 +104,16 @@ const mocks = vi.hoisted(() => {
         max_attachments: 10,
       },
     },
+    researchInput: {
+      value: {
+        enabled: true,
+        protocol: "research_input_resolution_v1",
+        max_user_query_chars: 1_048_576,
+        max_attachments_per_request: 10,
+        max_research_dataset_paths: 10,
+        max_research_input_references: 10,
+      },
+    },
   };
   const chatState = {
     fileList: [] as unknown[],

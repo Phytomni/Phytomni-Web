@@ -919,6 +919,14 @@ describe("useBotRemoteAgentRun", () => {
         max_file_bytes: 10 * 1024 * 1024 * 1024,
         max_attachments: 10,
       }),
+      researchInput: ref({
+        enabled: true,
+        protocol: "research_input_resolution_v1",
+        max_user_query_chars: 1_048_576,
+        max_attachments_per_request: 10,
+        max_research_dataset_paths: 10,
+        max_research_input_references: 10,
+      }),
       load: mockLoadCapabilities.mockResolvedValue([]),
     }));
     mockGetAnswerCheck.mockResolvedValue({ code: 200, data: [] });
