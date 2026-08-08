@@ -484,6 +484,77 @@ describe("useRemoteAgentLifecycle", () => {
     controller.dispose();
   });
 
+  it("hydrates the captured row when an earlier history row shares its run", async () => {
+    const state = ref(runState());
+    const hydrate = vi.fn();
+    mocks.getTaskLifecycle.mockResolvedValueOnce({
+      data: lifecycle({ phase: "SUCCEEDED", terminal: true }),
+    });
+    mocks.getAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: [
+        historyRow({
+          id: 20,
+          status: "SUCCEEDED",
+          answer: JSON.stringify({ final_report: "Wrong row report" }),
+        }),
+        historyRow({
+          status: "SUCCEEDED",
+          answer: JSON.stringify({ final_report: "Captured row report" }),
+        }),
+      ],
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(hydrate).toHaveBeenCalledOnce();
+    expect(hydrate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "SUCCEEDED",
+        finalReport: "Captured row report",
+      }),
+      { dialogueId: "dialogue-42", messageId: "19" }
+    );
+    controller.dispose();
+  });
+
+  it("retries terminal history when only a different row shares its run", async () => {
+    const state = ref(runState());
+    const hydrate = vi.fn();
+    mocks.getTaskLifecycle.mockResolvedValueOnce({
+      data: lifecycle({ phase: "FAILED", terminal: true }),
+    });
+    mocks.getAnswerCheck.mockResolvedValue({
+      code: 200,
+      data: [historyRow({ id: 20, status: "FAILED" })],
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+
+    await flushAsync();
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(hydrate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(3);
+    expect(hydrate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    controller.dispose();
+  });
+
   it("ignores an older nonterminal history response after terminal hydration", async () => {
     const pendingNonterminalHistory = deferred<unknown>();
     const state = ref(runState());

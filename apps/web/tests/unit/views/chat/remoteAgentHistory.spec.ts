@@ -29,7 +29,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
           },
         ],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toEqual({
       rowId: "19",
@@ -61,14 +63,18 @@ describe("findRemoteAgentHistorySnapshot", () => {
       findRemoteAgentHistorySnapshot(
         [{ ...finalRow, tool_name: "DigitalDesignAgent" }],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toBeNull();
     expect(
       findRemoteAgentHistorySnapshot(
         [{ ...finalRow, bot_run_id: "run-foreign" }],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toBeNull();
     expect(
@@ -84,14 +90,18 @@ describe("findRemoteAgentHistorySnapshot", () => {
           },
         ],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toBeNull();
     expect(
       findRemoteAgentHistorySnapshot(
         [finalRow],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )?.projection
     ).toEqual(
       expect.objectContaining({
@@ -99,6 +109,39 @@ describe("findRemoteAgentHistorySnapshot", () => {
         finalReport: "Final report",
       })
     );
+  });
+
+  it("continues past an explicit dialogue mismatch and accepts legacy null dialogue", () => {
+    const wrongDialogue = {
+      ...baseRow,
+      dialogue_id: "dialogue-foreign",
+      status: "SUCCEEDED",
+      answer: JSON.stringify({ final_report: "Foreign dialogue report" }),
+    };
+    const exactDialogue = {
+      ...baseRow,
+      status: "SUCCEEDED",
+      answer: JSON.stringify({ final_report: "Exact dialogue report" }),
+    };
+
+    expect(
+      findRemoteAgentHistorySnapshot(
+        [wrongDialogue, exactDialogue],
+        "InSilicoResearchAgent",
+        "run-research",
+        "19",
+        "dialogue-42"
+      )?.projection.finalReport
+    ).toBe("Exact dialogue report");
+    expect(
+      findRemoteAgentHistorySnapshot(
+        [{ ...exactDialogue, dialogue_id: null }],
+        "InSilicoResearchAgent",
+        "run-research",
+        "19",
+        "dialogue-42"
+      )?.dialogueId
+    ).toBeNull();
   });
 
   it("hydrates v1 delivery and opaque artifact links without legacy OBS paths", () => {
@@ -129,7 +172,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
         },
       ],
       "InSilicoResearchAgent",
-      "run-research"
+      "run-research",
+      "19",
+      "dialogue-42"
     );
 
     expect(snapshot?.delivery?.name).toBe("research-results.zip");
@@ -145,7 +190,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
       findRemoteAgentHistorySnapshot(
         [{ ...baseRow, answer: { report_revision: "not-an-integer" } }],
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toBeNull();
     for (const id of [0, -1, Number.MAX_SAFE_INTEGER + 1, "01", "unsafe"]) {
@@ -153,7 +200,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
         findRemoteAgentHistorySnapshot(
           [{ ...baseRow, id }],
           "InSilicoResearchAgent",
-          "run-research"
+          "run-research",
+          "19",
+          "dialogue-42"
         )
       ).toBeNull();
     }
@@ -171,7 +220,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
       findRemoteAgentHistorySnapshot(
         rows,
         "InSilicoResearchAgent",
-        "run-research"
+        "run-research",
+        "19",
+        "dialogue-42"
       )
     ).toBeNull();
   });
@@ -192,7 +243,9 @@ describe("findRemoteAgentHistorySnapshot", () => {
         },
       ],
       "InSilicoResearchAgent",
-      "run-research"
+      "run-research",
+      "19",
+      "dialogue-42"
     );
 
     expect(snapshot?.projection.artifacts).toHaveLength(64);

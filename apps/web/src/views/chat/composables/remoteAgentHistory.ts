@@ -165,11 +165,21 @@ function snapshotFromHistoryRow(
 export function findRemoteAgentHistorySnapshot(
   rows: readonly unknown[],
   tool: RemoteAgentTool,
-  expectedRunId: string
+  expectedRunId: string,
+  expectedRowId: string,
+  expectedDialogueId: string
 ): RemoteAgentHistorySnapshot | null {
   for (const row of rows.slice(0, MAX_HISTORY_ROWS)) {
     const snapshot = snapshotFromHistoryRow(row, tool, expectedRunId);
-    if (snapshot) return snapshot;
+    if (
+      !snapshot ||
+      snapshot.rowId !== expectedRowId ||
+      (snapshot.dialogueId !== null &&
+        snapshot.dialogueId !== expectedDialogueId)
+    ) {
+      continue;
+    }
+    return snapshot;
   }
   return null;
 }

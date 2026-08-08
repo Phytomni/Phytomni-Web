@@ -127,14 +127,14 @@ export function useRemoteAgentLifecycle(options: {
     const snapshot = findRemoteAgentHistorySnapshot(
       response.data,
       options.tool,
-      identity.runId
+      identity.runId,
+      identity.rowId,
+      identity.dialogueId
     );
     if (!snapshot || !ownsHistoryWork(identity)) return false;
-    const snapshotDialogueId = snapshot.dialogueId ?? identity.dialogueId;
-    if (snapshotDialogueId !== identity.dialogueId) return false;
     const runIdentity: Partial<RemoteAgentRunIdentity> = {
-      dialogueId: snapshotDialogueId,
-      messageId: snapshot.rowId,
+      dialogueId: identity.dialogueId,
+      messageId: identity.rowId,
     };
     if (snapshot.artifactLinks !== undefined) {
       runIdentity.artifactLinks = snapshot.artifactLinks;
