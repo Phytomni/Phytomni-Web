@@ -33,7 +33,11 @@
       surface="artifact"
       data-test="bot-report-content"
     />
-    <p v-else class="bot-report-state__empty" data-test="bot-report-empty">
+    <p
+      v-else-if="state.status !== 'TIMED_OUT'"
+      class="bot-report-state__empty"
+      data-test="bot-report-empty"
+    >
       {{ emptyReportLabel }}
     </p>
 

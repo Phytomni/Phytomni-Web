@@ -133,10 +133,19 @@ describe("BotReportState", () => {
   });
 
   it("keeps timeout as a distinct label with failed visual treatment", () => {
-    const wrapper = mountReport(lifecycle({ status: "TIMED_OUT" }));
+    const wrapper = mountReport(
+      lifecycle({
+        status: "TIMED_OUT",
+        failures: ["analysis task timed out"],
+      })
+    );
 
     expect(wrapper.attributes("data-report-status")).toBe("failed");
     expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      enUS.chat.lifecycle.timed_out
+    );
+    expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="bot-report-failure"]').text()).toBe(
       enUS.chat.lifecycle.timed_out
     );
     expect(wrapper.text()).not.toContain(enUS.common.failed);

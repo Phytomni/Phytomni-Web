@@ -215,7 +215,7 @@
         >
           <template #content>
             <BotReportState
-              :state="displayedState"
+              :state="reportComponentState"
               :progress="reportProgress"
               :updated-at="reportUpdatedAt"
               :ns="`${agentKey}-agent`"
@@ -589,6 +589,12 @@ const isResearchTimeout = computed(() => {
   }
   if (state.projection?.status === "TIMED_OUT") return true;
   return remoteLifecycle.snapshot.value?.phase === "TIMED_OUT";
+});
+const reportComponentState = computed<BotRemoteAgentRunState>(() => {
+  const state = displayedState.value;
+  return isResearchTimeout.value && state.status !== "TIMED_OUT"
+    ? { ...state, status: "TIMED_OUT" }
+    : state;
 });
 const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
   () => {

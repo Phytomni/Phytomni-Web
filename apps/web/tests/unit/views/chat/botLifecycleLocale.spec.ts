@@ -32,7 +32,10 @@ const REQUIRED_RESEARCH_LIFECYCLE_LABELS = [
   ["chat.lifecycle.resolving_inputs", "Resolving inputs", "解析输入中"],
   ["chat.lifecycle.planning", "Planning tasks", "任务规划中"],
   ["chat.lifecycle.finalizing", "Finalizing", "最终整理中"],
-  ["chat.lifecycle.timed_out", "Timed out", "已超时"],
+] as const;
+const RESEARCH_TIMEOUT_LIFECYCLE_LABEL = [
+  "chat.lifecycle.timed_out",
+  "Timed out",
 ] as const;
 
 const CHAT_SOURCE = readFileSync(
@@ -176,6 +179,19 @@ describe("Bot lifecycle locale contract", () => {
       expect(valueAt(zhCN, key)).toBe(chinese);
     }
   );
+
+  it("defines exact English and translated Research timeout copy", () => {
+    const [key, english] = RESEARCH_TIMEOUT_LIFECYCLE_LABEL;
+    expect(valueAt(enUS, key)).toBe(english);
+
+    const translated = valueAt(zhCN, key);
+    expect(translated).toEqual(expect.any(String));
+    const normalized = String(translated).trim();
+    expect(normalized).not.toBe("");
+    expect(normalized).not.toBe(english);
+    expect(normalized).not.toBe(key);
+    expect(normalized).not.toMatch(/[{}]/u);
+  });
 
   it("wires Bot-owned artifact states to the stable render-time keys", () => {
     for (const key of REQUIRED_BOT_LIFECYCLE_KEYS) {

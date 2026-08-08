@@ -903,6 +903,10 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       });
 
       await expectResearchStatusSurfaces(wrapper, "Timed out");
+      expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.text()).not.toContain("not available yet");
       expect(wrapper.text()).not.toContain("Finalizing");
       expect(wrapper.text()).not.toContain("Failed");
       expect(wrapper.text()).not.toContain("Report ready");
