@@ -10,7 +10,11 @@ export function resolveHistoryQuestion(
   row: Record<string, unknown>,
   conversationTitle: string
 ): string {
-  for (const candidate of [row.query, row.title_query, conversationTitle]) {
+  if (typeof row.query === "string" && row.query.trim()) {
+    return row.query;
+  }
+
+  for (const candidate of [row.title_query, conversationTitle]) {
     if (typeof candidate === "string" && candidate.trim()) {
       return candidate.trim();
     }

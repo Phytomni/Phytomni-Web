@@ -27,11 +27,32 @@ describe("chat history normalization", () => {
     expect(resolveHistoryQuestion({}, "  Sidebar title  ")).toBe(
       "Sidebar title"
     );
+  });
+
+  it("preserves a non-empty persisted query byte-for-byte", () => {
+    const rawQuery =
+      '\n  Reproduce the rice root atlas.\n\ndata: {\n  "/obs/safe/\u7a3b-root/matrix.mtx.gz": "counts"\n}\n  ';
+
     expect(
       resolveHistoryQuestion(
-        { query: "  canonical question ", title_query: "legacy question" },
+        { query: rawQuery, title_query: "legacy question" },
         "sidebar title"
       )
-    ).toBe("canonical question");
+    ).toBe(rawQuery);
+  });
+
+  it("uses trimmed legacy fallbacks when the persisted query is blank", () => {
+    expect(
+      resolveHistoryQuestion(
+        { query: " \n\t ", title_query: "  Legacy question  " },
+        "sidebar title"
+      )
+    ).toBe("Legacy question");
+    expect(
+      resolveHistoryQuestion(
+        { query: " \n\t ", title_query: " \n " },
+        "  Sidebar title  "
+      )
+    ).toBe("Sidebar title");
   });
 });

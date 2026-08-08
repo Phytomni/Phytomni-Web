@@ -211,6 +211,34 @@ describe("useSelectChat", () => {
     ).toEqual(user.attachments);
   });
 
+  it("hydrates the persisted Research query exactly into display and next-turn history", async () => {
+    const rawQuery =
+      '\n  Reproduce the rice root atlas.\n\nPaper text: root cell atlas.\n\ndata: {\n  "/obs/safe/\u7a3b-root/matrix.mtx.gz": "counts"\n}\n  ';
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "research-history",
+          query: rawQuery,
+          answer: "",
+          status: "RUNNING",
+          tool_name: "InSilicoResearchAgent",
+          attachments: [],
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(messageAt("d1", 0, "Research raw user query").content).toBe(
+      rawQuery
+    );
+    expect(historyAt("d1", 0, "Research raw next-turn history")).toEqual({
+      role: "user",
+      content: rawQuery,
+      attachments: [],
+    });
+  });
+
   it("drops legacy storage fields while preserving v1 delivery and opaque artifacts", async () => {
     const delivery = {
       schema_version: 1,
