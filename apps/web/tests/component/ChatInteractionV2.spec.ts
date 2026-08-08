@@ -262,6 +262,67 @@ function researchLifecycle(
   };
 }
 
+type ArtifactPreview = {
+  title: string;
+  kind: string;
+  summary: string;
+  openLabel: string;
+};
+
+const CHAT_MESSAGE_CONTENT_STUBS = {
+  CitedAnswer: {
+    template:
+      '<div data-testid="research-reference-viewer">No references available.</div>',
+  },
+  MarkdownViewer: {
+    props: ["content"],
+    template: '<div data-testid="research-result-viewer">{{ content }}</div>',
+  },
+  ResearchArtifactPreview: {
+    template:
+      '<div data-testid="research-artifact-preview">No references available.</div>',
+  },
+  DeepGenomeResultViewer: {
+    template: '<div data-testid="deep-genome-result-viewer" />',
+  },
+  StreamMessage: {
+    template: '<div data-testid="stream-message" />',
+  },
+  ElIcon: true,
+  ElTable: {
+    template: '<div data-testid="table-result"><slot /></div>',
+  },
+  ElTableColumn: true,
+};
+
+function mountChatMessageContent(options: {
+  message?: Partial<ChatMessage>;
+  lifecycle?: AgentTaskLifecycle;
+  artifactPreview?: ArtifactPreview;
+}) {
+  return mount(ChatMessageContent, {
+    props: {
+      message: {
+        id: "research-message",
+        role: "assistant",
+        content: "No references available.",
+        ...options.message,
+      } as ChatMessage,
+      index: 0,
+      isLastMessage: true,
+      geneNetworkImages: EMPTY_IMAGES,
+      geneNetworkImagesLoading: EMPTY_LOADING,
+      digitalDesignImages: EMPTY_IMAGES,
+      digitalDesignImagesLoading: EMPTY_LOADING,
+      ...(options.lifecycle ? { lifecycle: options.lifecycle } : {}),
+      ...(options.artifactPreview
+        ? { artifactPreview: options.artifactPreview }
+        : {}),
+    },
+    global: { stubs: CHAT_MESSAGE_CONTENT_STUBS },
+  });
+}
+
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
 
@@ -789,12 +850,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     (phase, label) => {
       const rendererCases: Array<
         Partial<ChatMessage> & {
-          artifactPreview?: {
-            title: string;
-            kind: string;
-            summary: string;
-            openLabel: string;
-          };
+          artifactPreview?: ArtifactPreview;
         }
       > = [
         {
@@ -814,45 +870,13 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       ];
 
       for (const { artifactPreview, ...message } of rendererCases) {
-        const wrapper = mount(ChatMessageContent, {
-          props: {
-            message: {
-              id: "research-message",
-              role: "assistant",
-              tool_name: "InSilicoResearchAgent",
-              ...message,
-            } as ChatMessage,
-            index: 0,
-            isLastMessage: true,
-            artifactPreview,
-            geneNetworkImages: EMPTY_IMAGES,
-            geneNetworkImagesLoading: EMPTY_LOADING,
-            digitalDesignImages: EMPTY_IMAGES,
-            digitalDesignImagesLoading: EMPTY_LOADING,
-            lifecycle: researchLifecycle(phase),
+        const wrapper = mountChatMessageContent({
+          message: {
+            tool_name: "InSilicoResearchAgent",
+            ...message,
           },
-          global: {
-            stubs: {
-              CitedAnswer: {
-                template:
-                  '<div data-testid="research-reference-viewer">No references available.</div>',
-              },
-              MarkdownViewer: {
-                props: ["content"],
-                template:
-                  '<div data-testid="research-result-viewer">{{ content }}</div>',
-              },
-              ResearchArtifactPreview: {
-                template:
-                  '<div data-testid="research-artifact-preview">No references available.</div>',
-              },
-              DeepGenomeResultViewer: true,
-              StreamMessage: true,
-              ElIcon: true,
-              ElTable: true,
-              ElTableColumn: true,
-            },
-          },
+          lifecycle: researchLifecycle(phase),
+          artifactPreview,
         });
 
         expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
@@ -869,6 +893,123 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         expect(wrapper.text()).not.toContain("No references available.");
         wrapper.unmount();
       }
+    }
+  );
+
+  it.each([
+    ["streaming", { streaming: true }],
+    ["content blocks", { blocks: FIXTURE_ACTIVITY_BLOCKS }],
+  ] as const)(
+    "keeps nonterminal Research status visible over %s",
+    (_name, message) => {
+      const wrapper = mountChatMessageContent({
+        message: { tool_name: "InSilicoResearchAgent", ...message },
+        lifecycle: researchLifecycle("RUNNING"),
+      });
+
+      expect(wrapper.get(".agent-lifecycle").text()).toBe("Running");
+      expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
+        false
+      );
+      expect(
+        wrapper.find('[data-testid="research-result-viewer"]').exists()
+      ).toBe(false);
+      wrapper.unmount();
+    }
+  );
+
+  it.each([
+    [
+      "PREPARING",
+      "Preparing",
+      { tableHeaders: [{ prop: "value", label: "Value" }] },
+    ],
+    ["RESOLVING_INPUTS", "Resolving inputs", { steps: ["Resolved input"] }],
+    [
+      "PLANNING",
+      "Planning tasks",
+      { tableHeaders: [{ prop: "value", label: "Value" }] },
+    ],
+    ["RUNNING", "Running", { steps: ["Executed work"] }],
+    [
+      "FINALIZING",
+      "Finalizing",
+      { tableHeaders: [{ prop: "value", label: "Value" }] },
+    ],
+  ] as const)(
+    "keeps %s Research progress ahead of table and step structures",
+    (phase, label, message) => {
+      const wrapper = mountChatMessageContent({
+        message: { tool_name: "InSilicoResearchAgent", ...message },
+        lifecycle: researchLifecycle(phase),
+      });
+
+      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+      expect(wrapper.find('[data-testid="table-result"]').exists()).toBe(false);
+      expect(wrapper.find(".ai-response").exists()).toBe(false);
+      expect(
+        wrapper.find('[data-testid="research-result-viewer"]').exists()
+      ).toBe(false);
+      wrapper.unmount();
+    }
+  );
+
+  it.each([
+    ["RESOLVING_INPUTS", "Resolving inputs"],
+    ["PLANNING", "Planning tasks"],
+    ["FINALIZING", "Finalizing"],
+  ] as const)(
+    "uses Research message status %s as lifecycle fallback",
+    (status, label) => {
+      const wrapper = mountChatMessageContent({
+        message: { tool_name: "InSilicoResearchAgent", status },
+      });
+
+      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+      expect(
+        wrapper.find('[data-testid="research-result-viewer"]').exists()
+      ).toBe(false);
+      wrapper.unmount();
+    }
+  );
+
+  it.each([
+    [
+      "generic",
+      "RESOLVING_INPUTS",
+      { tool_name: "AnalystAgent" },
+      "research-result-viewer",
+    ],
+    [
+      "cited",
+      "PLANNING",
+      {
+        tool_name: "KnowledgeAgent",
+        doc_list: [{ title: "Synthetic reference" }],
+      },
+      "research-reference-viewer",
+    ],
+    [
+      "DeepGenome",
+      "FINALIZING",
+      {
+        tool_name: "DeepGenomeAgent",
+        content: "### Synthetic genomic report",
+      },
+      "deep-genome-result-viewer",
+    ],
+  ] as const)(
+    "does not apply Research-only status fallback to %s messages",
+    (_name, status, message, expectedRenderer) => {
+      const wrapper = mountChatMessageContent({
+        message: { ...message, status },
+      });
+
+      expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
+      expect(wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()).toBe(
+        true
+      );
+      wrapper.unmount();
     }
   );
 

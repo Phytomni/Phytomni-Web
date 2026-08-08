@@ -11,6 +11,7 @@
     v-if="
       message.role === 'user' ||
       isDeepGenomeMessage ||
+      isResearchNonterminal ||
       (!message.steps && !message.tableHeaders)
     "
     :class="[
@@ -326,11 +327,16 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   if (status === "TIMEOUT" || status === "TIMED_OUT") return "FAILED";
   if (status === "CANCELED") return "CANCELLED";
   if (
+    isResearchMessage.value &&
+    (status === "RESOLVING_INPUTS" ||
+      status === "PLANNING" ||
+      status === "FINALIZING")
+  ) {
+    return status;
+  }
+  if (
     status === "PREPARING" ||
-    status === "RESOLVING_INPUTS" ||
-    status === "PLANNING" ||
     status === "RUNNING" ||
-    status === "FINALIZING" ||
     status === "SUCCEEDED" ||
     status === "FAILED" ||
     status === "CANCELLED"
@@ -389,8 +395,9 @@ const showLeadingLifecycleStatus = computed(
   () =>
     props.message.role === "assistant" &&
     lifecycleLabel.value !== "" &&
-    !props.message.streaming &&
-    !(props.message.blocks && props.message.blocks.length) &&
+    (isResearchNonterminal.value ||
+      (!props.message.streaming &&
+        !(props.message.blocks && props.message.blocks.length))) &&
     !isSpecializedImageAgent.value
 );
 const isTerminalLifecycle = computed(
