@@ -147,8 +147,10 @@ function isHistoryMessage(value: unknown): value is ChatMessage {
 }
 
 function historyText(message: ChatMessage): string {
-  const content = chatContentToText(message.content).trim();
-  if (content) return content;
+  const content = chatContentToText(message.content);
+  if (content.trim()) {
+    return message.role === "user" ? content : content.trim();
+  }
   return (message.blocks ?? [])
     .filter((block) => block.type === "markdown" && block.text)
     .map((block) => block.text?.trim() ?? "")

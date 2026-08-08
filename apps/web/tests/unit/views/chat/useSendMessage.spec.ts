@@ -766,6 +766,68 @@ describe("useSendMessage", () => {
     ]);
   });
 
+  it("keeps hydrated and newly committed user queries byte-exact across a third request", async () => {
+    const hydratedResearchQuery =
+      '\n  Reproduce the rice root atlas.\n\ndata: {\n  "/fixtures/rice-root/\u7a3b/matrix.mtx.gz": "counts"\n}\n  ';
+    const secondTurnQuery = "\n  Compare the two cultivars.\n  ";
+    const thirdTurnQuery = "\n  Summarize the comparison.\n  ";
+    const state = stateFor("A");
+    state.messageInput = secondTurnQuery;
+    state.historyQuestion = [
+      { role: "user", content: " \n\t " },
+      { role: "assistant", content: " \n\t " },
+      { role: "user", content: hydratedResearchQuery, attachments: [] },
+      { role: "assistant", content: "  Persisted Research answer  " },
+    ];
+    mockGetQueryAbortable
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "  Second-turn answer  ",
+            id: "raw-history-2",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "ChatAgent",
+            answer: "  Third-turn answer  ",
+            id: "raw-history-3",
+          },
+        })
+      );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(state.historyQuestion).toEqual([
+      { role: "user", content: hydratedResearchQuery },
+      { role: "assistant", content: "Persisted Research answer" },
+      { role: "user", content: secondTurnQuery },
+      { role: "assistant", content: "Second-turn answer" },
+    ]);
+
+    state.messageInput = thirdTurnQuery;
+    await sendMessage();
+
+    const [thirdFormArg] = queryCallAt(1, "third conversation turn");
+    const thirdTurnHistory = JSON.parse(
+      String((thirdFormArg as FormData).get("history"))
+    ) as ChatMessage[];
+    expect(thirdTurnHistory[0]?.content).toBe(hydratedResearchQuery);
+    expect(thirdTurnHistory[2]?.content).toBe(secondTurnQuery);
+    expect(state.historyQuestion).toEqual([
+      { role: "user", content: hydratedResearchQuery },
+      { role: "assistant", content: "Persisted Research answer" },
+      { role: "user", content: secondTurnQuery },
+      { role: "assistant", content: "Second-turn answer" },
+      { role: "user", content: thirdTurnQuery },
+      { role: "assistant", content: "Third-turn answer" },
+    ]);
+  });
+
   it("keeps the answer while exposing only a bounded degraded context notice", async () => {
     stateFor("A").messageInput = "context-safe answer";
     mockGetQueryAbortable.mockResolvedValueOnce(
