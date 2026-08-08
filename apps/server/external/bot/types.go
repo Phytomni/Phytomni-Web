@@ -169,6 +169,7 @@ type RunRecord struct {
 	Origin     string          `json:"origin"`
 	UserID     string          `json:"user_id"`
 	Status     string          `json:"status"`
+	Stage      string          `json:"stage"`
 	Result     json.RawMessage `json:"result"`
 	Error      string          `json:"error"`
 	CreatedAt  string          `json:"created_at"`

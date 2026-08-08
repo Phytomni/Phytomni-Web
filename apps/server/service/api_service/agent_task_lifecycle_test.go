@@ -139,8 +139,8 @@ func lifecycleDeliveryRunRecord(t *testing.T, runID, scientificStatus, deliveryS
 	}
 }
 
-// Mutation coverage: mapping a zero-child running umbrella run to RUNNING
-// would make this test fail. It must remain PREPARING until child work exists.
+// Mutation coverage: mapping a legacy zero-child running umbrella run to a
+// terminal or preparing phase would hide its truthful generic running state.
 func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -150,7 +150,7 @@ func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
 		wantTerminal      bool
 		wantChildAccepted bool
 	}{
-		{name: "running without children prepares", botStatus: "running", wantPhase: "PREPARING"},
+		{name: "running without stage stays generic", botStatus: "running", wantPhase: "RUNNING"},
 		{name: "running with children accepts work", botStatus: "running", childIDs: []string{"child-1", "child-2"}, wantPhase: "RUNNING", wantChildAccepted: true},
 		{name: "succeeded is terminal", botStatus: "succeeded", wantPhase: "SUCCEEDED", wantTerminal: true},
 		{name: "failed is terminal", botStatus: "failed", wantPhase: "FAILED", wantTerminal: true},
@@ -426,7 +426,7 @@ func TestAgentTaskLifecycleUsesCachedStateWithoutPolling(t *testing.T) {
 		{
 			name:      "legacy row without run id",
 			row:       lifecycleSeed{id: 4, username: "alice", status: "RUNNING", reportRevision: -1},
-			wantPhase: "PREPARING",
+			wantPhase: "RUNNING",
 		},
 	}
 
@@ -466,7 +466,7 @@ func TestAgentTaskLifecycleDegradesToCachedStateForUnsafeRunResponses(t *testing
 			if err != nil {
 				t.Fatalf("AgentTaskLifecycle: %v", err)
 			}
-			if got.Phase != "PREPARING" || got.Reconciliation != "DEGRADED" || got.ErrorCode == nil || got.TrackingDegraded || tt.fake.calls != 1 {
+			if got.Phase != "RUNNING" || got.Reconciliation != "DEGRADED" || got.ErrorCode == nil || got.TrackingDegraded || tt.fake.calls != 1 {
 				t.Fatalf("lifecycle=%+v calls=%d, want safe degraded cached state", got, tt.fake.calls)
 			}
 			if tt.name == "transport failure" && *got.ErrorCode != "bot_transport_failed" {
@@ -476,6 +476,50 @@ func TestAgentTaskLifecycleDegradesToCachedStateForUnsafeRunResponses(t *testing
 				t.Fatalf("contract error code=%q", *got.ErrorCode)
 			}
 		})
+	}
+}
+
+func TestLifecyclePhaseMapsResearchWorkStages(t *testing.T) {
+	cases := map[string]string{
+		"input_resolution": "RESOLVING_INPUTS",
+		"planning":         "PLANNING",
+		"execution":        "RUNNING",
+		"report_assembly":  "FINALIZING",
+	}
+	for stage, want := range cases {
+		got, terminal := lifecyclePhase("RUNNING", stage, 0)
+		if got != want || terminal {
+			t.Fatalf("%s => %s/%v, want %s/false", stage, got, terminal, want)
+		}
+	}
+}
+
+func TestLifecyclePhaseKeepsLegacyRunningGeneric(t *testing.T) {
+	for _, stage := range []string{"", "unknown", strings.Repeat("x", 65)} {
+		got, terminal := lifecyclePhase("RUNNING", stage, 0)
+		if got != "RUNNING" || terminal {
+			t.Fatalf("stage=%q => %s/%v, want RUNNING/false", stage, got, terminal)
+		}
+	}
+}
+
+func TestLifecyclePhaseTerminalAuthority(t *testing.T) {
+	tests := []struct {
+		status   string
+		want     string
+		terminal bool
+	}{
+		{status: "PENDING", want: "PREPARING"},
+		{status: "RUNNING", want: "RUNNING"},
+		{status: "SUCCEEDED", want: "SUCCEEDED", terminal: true},
+		{status: "FAILED", want: "FAILED", terminal: true},
+		{status: "CANCELLED", want: "CANCELLED", terminal: true},
+	}
+	for _, tt := range tests {
+		got, terminal := lifecyclePhase(tt.status, "", 0)
+		if got != tt.want || terminal != tt.terminal {
+			t.Fatalf("status=%q => %s/%v, want %s/%v", tt.status, got, terminal, tt.want, tt.terminal)
+		}
 	}
 }
 

@@ -8,11 +8,41 @@ import {
   MAX_BOT_FAILURES,
   MAX_BOT_FAILURE_LENGTH,
   MAX_BOT_REPORT_LENGTH,
+  MAX_BOT_WORK_STAGE_LENGTH,
   parseBotProjection,
   visibleBotReport,
 } from "@/views/chat/botProjection";
 
 describe("parseBotProjection", () => {
+  it.each([
+    "input_resolution",
+    "planning",
+    "execution",
+    "report_assembly",
+  ] as const)("accepts the finite work stage %s", (workStage) => {
+    expect(
+      parseBotProjection({ status: "RUNNING", work_stage: workStage }).workStage
+    ).toBe(workStage);
+  });
+
+  it("rejects unknown and overlong work stages", () => {
+    expect(() =>
+      parseBotProjection({ status: "RUNNING", work_stage: "unknown" })
+    ).toThrow(/work_stage/);
+    expect(() =>
+      parseBotProjection({
+        status: "RUNNING",
+        work_stage: "x".repeat(MAX_BOT_WORK_STAGE_LENGTH + 1),
+      })
+    ).toThrow(/work_stage/);
+  });
+
+  it("keeps a legacy RUNNING projection generic when work stage is absent", () => {
+    const projection = parseBotProjection({ status: "RUNNING" });
+    expect(projection.status).toBe("RUNNING");
+    expect(projection.workStage).toBeNull();
+  });
+
   it("prefers final report and keeps revision metadata", () => {
     const projection = parseBotProjection(intermediateFixture);
 

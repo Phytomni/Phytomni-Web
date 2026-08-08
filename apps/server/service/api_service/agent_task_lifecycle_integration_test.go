@@ -81,7 +81,7 @@ func TestAnalystRunLifecycleProgressesFromSubmissionToCachedTerminal(t *testing.
 		}
 	}
 
-	assertLifecycle("PREPARING", 0, 0, false)
+	assertLifecycle("RUNNING", 0, 0, false)
 	assertLifecycle("RUNNING", 1, 0, false)
 
 	pending, err := service.AnalystAgentGetLog(context.Background(), int(row.Id), "owner-b5")

@@ -20,6 +20,7 @@ function projection(
     runId: "run-1",
     agent: "DeepGenomeAgent",
     status: "RUNNING",
+    workStage: null,
     reportStage: "intermediate",
     reportCompleteness: "partial",
     reportRevision: 1,
@@ -49,6 +50,37 @@ function artifact(outputDir: string, paths: string[] = []): BotArtifact {
 }
 
 describe("bot lifecycle reducer", () => {
+  it("preserves a newer work stage against a stale projection", () => {
+    const state = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ reportRevision: 3, workStage: "planning" })
+    );
+    const next = reduceBotProjection(
+      state,
+      projection({ reportRevision: 2, workStage: "input_resolution" })
+    );
+
+    expect(next.workStage).toBe("planning");
+  });
+
+  it("accepts equal and newer finite work stages", () => {
+    const state = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ reportRevision: 1, workStage: "input_resolution" })
+    );
+    const equal = reduceBotProjection(
+      state,
+      projection({ reportRevision: 1, workStage: "planning" })
+    );
+    const newer = reduceBotProjection(
+      equal,
+      projection({ reportRevision: 2, workStage: "report_assembly" })
+    );
+
+    expect(equal.workStage).toBe("planning");
+    expect(newer.workStage).toBe("report_assembly");
+  });
+
   it("retains only public context booleans from context-staged events", () => {
     const notice = reduceContextStagedNotice(
       {},

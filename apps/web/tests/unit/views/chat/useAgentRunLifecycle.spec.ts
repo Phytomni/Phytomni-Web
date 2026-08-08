@@ -1,4 +1,8 @@
-import type { AgentTaskLifecycle, ApiEnvelope } from "@/api/types";
+import {
+  decodeAgentTaskLifecycle,
+  type AgentTaskLifecycle,
+  type ApiEnvelope,
+} from "@/api/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/utils/request", () => ({
@@ -110,6 +114,28 @@ afterEach(() => {
 });
 
 describe("useAgentRunLifecycle", () => {
+  it.each([
+    "PREPARING",
+    "RESOLVING_INPUTS",
+    "PLANNING",
+    "RUNNING",
+    "FINALIZING",
+  ] as const)("decodes %s as a nonterminal lifecycle phase", (phase) => {
+    const decoded = decodeAgentTaskLifecycle(lifecycle({ phase }));
+    expect(decoded.phase).toBe(phase);
+    expect(decoded.terminal).toBe(false);
+  });
+
+  it.each([
+    ["SUCCEEDED", true],
+    ["FAILED", true],
+    ["CANCELLED", true],
+  ] as const)("decodes %s as terminal=%s", (phase, terminal) => {
+    const decoded = decodeAgentTaskLifecycle(lifecycle({ phase, terminal }));
+    expect(decoded.phase).toBe(phase);
+    expect(decoded.terminal).toBe(true);
+  });
+
   it("schedules unchanged nonterminal rows with capped exponential delays", async () => {
     vi.useFakeTimers();
     const delays: number[] = [];

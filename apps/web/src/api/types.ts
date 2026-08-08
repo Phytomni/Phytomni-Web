@@ -272,7 +272,14 @@ export interface AsyncTaskListResponse {
 }
 
 export type AgentRunPhase =
-  "PREPARING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  | "PREPARING"
+  | "RESOLVING_INPUTS"
+  | "PLANNING"
+  | "RUNNING"
+  | "FINALIZING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED";
 
 export type AgentReconciliation = "FRESH" | "CACHED" | "DEGRADED";
 
@@ -465,7 +472,10 @@ const utf8Length = (value: string): number =>
 
 const AGENT_RUN_PHASES = new Set<AgentRunPhase>([
   "PREPARING",
+  "RESOLVING_INPUTS",
+  "PLANNING",
   "RUNNING",
+  "FINALIZING",
   "SUCCEEDED",
   "FAILED",
   "CANCELLED",

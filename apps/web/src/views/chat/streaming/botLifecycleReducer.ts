@@ -8,6 +8,7 @@ import type {
   BotInteropProvenance,
   BotRunProjection,
   BotRunStatus,
+  BotWorkStage,
 } from "../botProjection";
 import type {
   AgentResultDelivery,
@@ -21,6 +22,7 @@ export type BotLifecycleStatus =
 export interface BotLifecycleState {
   runId: string | null;
   status: BotLifecycleStatus;
+  workStage?: BotWorkStage | null;
   reportRevision: number;
   visibleReport: string;
   intermediateReport: string;
@@ -361,6 +363,7 @@ export function initBotLifecycleState(): BotLifecycleState {
   return {
     runId: null,
     status: "RUNNING",
+    workStage: null,
     reportRevision: -1,
     visibleReport: "",
     intermediateReport: "",
@@ -406,6 +409,8 @@ export function reduceBotProjection(
       );
   const incomingStatus = mapStatus(incoming.status);
   const nextStatus = mergeStatus(state.status, incomingStatus, stale);
+  const nextWorkStage =
+    stale || incoming.workStage === null ? state.workStage : incoming.workStage;
   const nextRunId = state.runId ?? incoming.runId ?? null;
   const nextRevision = Math.max(currentRevision, incomingRevision);
   const interopEnabled = INTEROP_AGENT_NAMES.has(incoming.agent);
@@ -418,6 +423,7 @@ export function reduceBotProjection(
   return {
     runId: nextRunId,
     status: nextStatus,
+    workStage: nextWorkStage,
     reportRevision: nextRevision,
     intermediateReport: nextIntermediate,
     finalReport: nextFinal,

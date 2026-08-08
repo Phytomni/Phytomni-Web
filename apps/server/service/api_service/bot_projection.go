@@ -16,6 +16,7 @@ const (
 	maxProjectionRunID          = 128
 	maxProjectionAgent          = 64
 	maxProjectionStatus         = 32
+	maxProjectionWorkStage      = 64
 	maxProjectionChildTasks     = 256
 	maxProjectionReportStage    = 64
 	maxProjectionCompleteness   = 32
@@ -89,6 +90,7 @@ type BotRunProjection struct {
 	RunID              string
 	Agent              string
 	Status             string
+	WorkStage          string
 	ChildTaskCount     int
 	ReportStage        string
 	ReportCompleteness string
@@ -205,6 +207,7 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 		return BotRunProjection{}, err
 	}
 	projection.ChildTaskCount = len(record.TaskIDs)
+	projection.WorkStage = sanitizeRunWorkStage(record.Stage)
 	return normalizeCompletedReviewProjection(projection), nil
 }
 
@@ -821,6 +824,29 @@ func normalizeProjectionStatus(value string) (string, error) {
 			return "", projectionDecodeError("status", "malformed status")
 		}
 		return "", projectionDecodeError("status", "unsupported status")
+	}
+}
+
+func sanitizeRunWorkStage(value string) string {
+	normalized, err := normalizeProjectionWorkStage(value)
+	if err != nil {
+		return ""
+	}
+	return normalized
+}
+
+func normalizeProjectionWorkStage(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if len([]rune(value)) > maxProjectionWorkStage {
+		return "", projectionDecodeError("stage", "malformed stage")
+	}
+	switch value {
+	case "input_resolution", "planning", "execution", "report_assembly":
+		return value, nil
+	default:
+		return "", projectionDecodeError("stage", "unsupported stage")
 	}
 }
 

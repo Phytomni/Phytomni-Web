@@ -203,6 +203,36 @@ func TestDecodeRunProjectionStoresOnlyBoundedChildCount(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionAcceptsFiniteWorkStages(t *testing.T) {
+	for _, stage := range []string{"input_resolution", "planning", "execution", "report_assembly"} {
+		t.Run(stage, func(t *testing.T) {
+			projection, err := DecodeRunProjection(rxBot.RunRecord{
+				RunID: "run-stage", Agent: "research", Status: "running", Stage: stage,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if projection.WorkStage != stage {
+				t.Fatalf("work stage=%q want %q", projection.WorkStage, stage)
+			}
+		})
+	}
+}
+
+func TestDecodeRunProjectionDropsInvalidWorkStageWithoutChangingRunningStatus(t *testing.T) {
+	for _, stage := range []string{"unknown", strings.Repeat("x", 65)} {
+		projection, err := DecodeRunProjection(rxBot.RunRecord{
+			RunID: "run-legacy-stage", Agent: "research", Status: "running", Stage: stage,
+		})
+		if err != nil {
+			t.Fatalf("stage %q rejected otherwise valid legacy run: %v", stage, err)
+		}
+		if projection.WorkStage != "" || projection.Status != "RUNNING" {
+			t.Fatalf("projection=%#v, want sanitized generic RUNNING", projection)
+		}
+	}
+}
+
 func TestDecodeRunProjectionRejectsExcessChildCount(t *testing.T) {
 	_, err := DecodeRunProjection(rxBot.RunRecord{
 		RunID: "run-too-many-children", Agent: "analyst", Status: "running",

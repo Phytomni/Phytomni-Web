@@ -62,6 +62,50 @@ func TestMergeBotRunProjectionRejectsOlderBlankReport(t *testing.T) {
 	}
 }
 
+func TestMergeBotRunProjectionPreservesNewerWorkStageFromStaleSnapshot(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-stage", Status: "RUNNING", WorkStage: "planning", ReportRevision: 4,
+	}
+	incoming := BotRunProjection{
+		RunID: "run-stage", Status: "RUNNING", WorkStage: "input_resolution", ReportRevision: 3,
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil || changed || merged.WorkStage != "planning" {
+		t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+	}
+}
+
+func TestMergeBotRunProjectionRejectsInvalidWorkStage(t *testing.T) {
+	for _, stage := range []string{"unknown", strings.Repeat("x", 65)} {
+		merged, changed, err := MergeBotRunProjection(
+			BotRunProjection{RunID: "run-invalid-stage", Status: "RUNNING", ReportRevision: 1},
+			BotRunProjection{RunID: "run-invalid-stage", Status: "RUNNING", WorkStage: stage, ReportRevision: 2},
+		)
+		if err == nil || changed || merged.RunID != "" {
+			t.Fatalf("stage=%q merged=%#v changed=%v err=%v, want rejection", stage, merged, changed, err)
+		}
+	}
+}
+
+func TestPersistedProjectionStoresOnlyFiniteWorkStage(t *testing.T) {
+	encoded, err := marshalPersistedProjection(BotRunProjection{
+		RunID: "run-stage", Status: "RUNNING", WorkStage: "report_assembly", ReportRevision: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(encoded, `"work_stage":"report_assembly"`) {
+		t.Fatalf("persisted projection missing finite work stage: %s", encoded)
+	}
+
+	if _, err := marshalPersistedProjection(BotRunProjection{WorkStage: "unknown"}); err == nil {
+		t.Fatal("invalid work stage persisted")
+	}
+	if _, _, err := unmarshalPersistedProjectionWithContext(`{"status":"RUNNING","work_stage":"unknown","report_revision":1}`); err == nil {
+		t.Fatal("invalid persisted work stage restored")
+	}
+}
+
 func TestMergeBotRunProjectionRejectsEqualBlankReport(t *testing.T) {
 	current := BotRunProjection{RunID: "run-1", ReportRevision: 4, FinalReport: "visible", Status: "RUNNING"}
 	incoming := BotRunProjection{RunID: "run-1", ReportRevision: 4, Status: "SUCCEEDED"}

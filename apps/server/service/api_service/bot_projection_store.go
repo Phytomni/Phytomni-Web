@@ -31,6 +31,7 @@ type persistedProjection struct {
 	RunID               string                        `json:"run_id,omitempty"`
 	Agent               string                        `json:"agent,omitempty"`
 	Status              string                        `json:"status,omitempty"`
+	WorkStage           string                        `json:"work_stage,omitempty"`
 	ChildTaskCount      int                           `json:"child_task_count,omitempty"`
 	ReportStage         string                        `json:"report_stage,omitempty"`
 	ReportCompleteness  string                        `json:"report_completeness,omitempty"`
@@ -91,6 +92,16 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 	if current.RunID != "" && incoming.RunID != "" && current.RunID != incoming.RunID {
 		return BotRunProjection{}, false, errors.New("bot projection run id mismatch")
 	}
+	currentWorkStage, err := normalizeProjectionWorkStage(current.WorkStage)
+	if err != nil {
+		return BotRunProjection{}, false, err
+	}
+	incomingWorkStage, err := normalizeProjectionWorkStage(incoming.WorkStage)
+	if err != nil {
+		return BotRunProjection{}, false, err
+	}
+	current.WorkStage = currentWorkStage
+	incoming.WorkStage = incomingWorkStage
 	if current.InterOp != nil {
 		normalized, err := normalizeInteropProvenance(current.InterOp)
 		if err != nil {
@@ -339,6 +350,9 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 		dst.Agent = incoming.Agent
 	}
 	dst.Status = mergeProjectionStatus(dst.Status, incoming.Status)
+	if incoming.WorkStage != "" {
+		dst.WorkStage = incoming.WorkStage
+	}
 	if incoming.ChildTaskCount > dst.ChildTaskCount {
 		dst.ChildTaskCount = incoming.ChildTaskCount
 	}
@@ -463,6 +477,10 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 
 func marshalPersistedProjectionWithContext(projection BotRunProjection, privateContext *persistedConversationContext) (string, error) {
 	projection = normalizeCompletedReviewProjection(projection)
+	workStage, err := normalizeProjectionWorkStage(projection.WorkStage)
+	if err != nil {
+		return "", err
+	}
 	interop, err := normalizeInteropProvenance(projection.InterOp)
 	if err != nil {
 		return "", err
@@ -471,6 +489,7 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 		RunID:              projection.RunID,
 		Agent:              projection.Agent,
 		Status:             projection.Status,
+		WorkStage:          workStage,
 		ChildTaskCount:     projection.ChildTaskCount,
 		ReportStage:        projection.ReportStage,
 		ReportCompleteness: projection.ReportCompleteness,
@@ -518,10 +537,15 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 	if err != nil {
 		return BotRunProjection{}, nil, err
 	}
+	workStage, err := normalizeProjectionWorkStage(stored.WorkStage)
+	if err != nil {
+		return BotRunProjection{}, nil, err
+	}
 	projection := BotRunProjection{
 		RunID:              stored.RunID,
 		Agent:              stored.Agent,
 		Status:             stored.Status,
+		WorkStage:          workStage,
 		ChildTaskCount:     stored.ChildTaskCount,
 		ReportStage:        stored.ReportStage,
 		ReportCompleteness: stored.ReportCompleteness,

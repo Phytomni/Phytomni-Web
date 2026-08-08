@@ -15,6 +15,7 @@ import {
 export const MAX_BOT_RUN_ID_LENGTH = 128;
 export const MAX_BOT_AGENT_LENGTH = 64;
 export const MAX_BOT_STATUS_LENGTH = 32;
+export const MAX_BOT_WORK_STAGE_LENGTH = 64;
 export const MAX_BOT_REPORT_LENGTH = 1 << 20;
 export const MAX_BOT_DEGRADED_REASON_LENGTH = 256;
 export const MAX_BOT_FAILURES = 32;
@@ -40,6 +41,9 @@ export type BotRunStatus =
   | "QUEUED"
   | "CANCELLED"
   | "TIMED_OUT";
+
+export type BotWorkStage =
+  "input_resolution" | "planning" | "execution" | "report_assembly";
 
 export type BotInteropMode = "off" | "auto" | "required";
 export type BotInteropStatus = "local" | "delegated" | "degraded" | "failed";
@@ -97,6 +101,7 @@ export interface BotRunProjection {
   runId: string | null;
   agent: string;
   status: BotRunStatus;
+  workStage: BotWorkStage | null;
   reportPresentation: boolean;
   reportStage: BotReportStage;
   reportCompleteness: BotReportCompleteness;
@@ -151,6 +156,13 @@ const REPORT_STAGES = new Set<Exclude<BotReportStage, null>>([
   "waiting_for_brief_gene",
   "intermediate",
   "final",
+]);
+
+const WORK_STAGES = new Set<BotWorkStage>([
+  "input_resolution",
+  "planning",
+  "execution",
+  "report_assembly",
 ]);
 
 const REPORT_COMPLETENESS = new Set<Exclude<BotReportCompleteness, null>>([
@@ -763,6 +775,11 @@ export function parseBotProjection(input: unknown): BotRunProjection {
     runId,
     agent: agentValue ?? "",
     status,
+    workStage: parseEnum(
+      readField(sources, ["work_stage", "workStage"]),
+      "work_stage",
+      WORK_STAGES
+    ),
     reportPresentation,
     reportStage: parseEnum(
       readField(sources, ["report_stage", "reportStage"]),
