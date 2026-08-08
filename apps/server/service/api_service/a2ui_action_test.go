@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
@@ -259,11 +260,56 @@ func setupA2uiActionTest(t *testing.T) {
 		INSERT INTO question_agent_logs
 			(dialogue_id, user_name, bot_run_id, query, answer, tool_name, status, created_at)
 		VALUES
-			('dlg-1', 'alice@x.com', 'run-1', 'q', 'a', 'chat', 'SUCCEEDED', datetime('now'))
+			('dlg-1', 'alice@x.com', 'run-1', 'q', 'a', 'chat', 'INPUT_REQUIRED', datetime('now'))
 	`).Error; err != nil {
 		t.Fatalf("seed question_agent_logs: %v", err)
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+func TestA2uiAction_PrivateReplacementRunIsAuthorizedAndOldPublicRunIsRetired(t *testing.T) {
+	setupA2uiActionTest(t)
+	gdb := model.Default()
+	raw := `{"run_id":"run-1","agent":"review","status":"SUCCEEDED","report_revision":0,"conversation_context":{"client_turn_id":"a2ui-base-key","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","replacement":{"client_turn_id":"a2ui-replacement-key","request_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","query":"replacement review","tool_name":"ReviewAgent","mode":"expert","active_status":"INPUT_REQUIRED","active_bot_run_id":"run-private-a2ui","active_a2ui":{"catalog_version":"v1.0","surface_id":"surface-private","widget":"confirm","props":{"title":"Approve replacement"}}}}}`
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("dialogue_id = ? AND user_name = ?", "dlg-1", "alice@x.com").
+		Updates(map[string]interface{}{
+			"status": "SUCCEEDED", "bot_projection_json": raw,
+			"bot_report_revision": 0,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"surface accepted"}`))
+	}))
+	t.Cleanup(server.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, A2uiActionsEnabled: true,
+		UserAPIKey: "test-user-key", TimeoutSeconds: 2,
+	}
+
+	privateBody := []byte(`{"surface_id":"surface-private","widget":"confirm","action_id":"submit","run_id":"run-private-a2ui","payload":{"accepted":true}}`)
+	outcome, err := NewService().A2uiAction(context.Background(), "alice@x.com", "dlg-1", privateBody)
+	if err != nil || outcome == nil || outcome.Status != http.StatusConflict {
+		t.Fatalf("private replacement A2UI outcome=%+v error=%v", outcome, err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("private replacement A2UI Bot hits=%d, want 1", hits.Load())
+	}
+	oldBody := []byte(`{"surface_id":"surface-private","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`)
+	if outcome, err := NewService().A2uiAction(context.Background(), "alice@x.com", "dlg-1", oldBody); outcome != nil || !errors.Is(err, ErrA2uiActionNotFound) {
+		t.Fatalf("old public run during private replacement outcome=%+v error=%v, want not found", outcome, err)
+	}
+	if outcome, err := NewService().A2uiAction(context.Background(), "mallory@x.com", "dlg-1", privateBody); outcome != nil || !errors.Is(err, ErrA2uiActionNotFound) {
+		t.Fatalf("cross-owner private replacement outcome=%+v error=%v, want not found", outcome, err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("retired/cross-owner A2UI called Bot: hits=%d", hits.Load())
+	}
 }
 
 func TestA2uiAction_OwnershipMiss404(t *testing.T) {

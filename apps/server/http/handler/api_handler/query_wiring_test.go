@@ -13,6 +13,7 @@ import (
 
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 	api_service "phytomni-server/service/api_service"
 
 	"github.com/gin-gonic/gin"
@@ -464,11 +465,28 @@ func newNegotiatedResearchRequest(
 	surface api_service.QuerySurface,
 	query string,
 ) (*gin.Context, *httptest.ResponseRecorder) {
+	return newNegotiatedResearchRequestWithClientTurn(
+		t,
+		surface,
+		query,
+		"negotiated-research-turn",
+	)
+}
+
+func newNegotiatedResearchRequestWithClientTurn(
+	t *testing.T,
+	surface api_service.QuerySurface,
+	query string,
+	clientTurnID string,
+) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if err := writer.WriteField("query", query); err != nil {
 		t.Fatalf("write query: %v", err)
+	}
+	if err := writer.WriteField("client_turn_id", clientTurnID); err != nil {
+		t.Fatalf("write client turn id: %v", err)
 	}
 	path := "/api/v1/agent-products/InSilicoResearchAgent/runs"
 	if surface == api_service.QuerySurfaceChat {
@@ -479,8 +497,6 @@ func newNegotiatedResearchRequest(
 		if err := writer.WriteField("tool", "InSilicoResearchAgent"); err != nil {
 			t.Fatalf("write tool: %v", err)
 		}
-	} else if err := writer.WriteField("client_turn_id", "negotiated-research-turn"); err != nil {
-		t.Fatalf("write client turn id: %v", err)
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close Research request: %v", err)
@@ -491,6 +507,7 @@ func newNegotiatedResearchRequest(
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = httptest.NewRequest(http.MethodPost, path, &body)
 	ctx.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	ctx.Request.Header.Set("X-Phyto-Client-Turn-Id", clientTurnID)
 	if surface == api_service.QuerySurfaceChat {
 		ctx.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
 		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
@@ -567,6 +584,313 @@ func TestResearchHandlerUsesMinimumNegotiatedQueryLimit(t *testing.T) {
 	}
 }
 
+func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	var (
+		catalogCalls int
+		runCalls     int
+		capabilityOK = true
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents":
+			catalogCalls++
+			if !capabilityOK {
+				_, _ = w.Write([]byte(`{}`))
+				return
+			}
+			serveHandlerResearchCatalog(t, w, r)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/research/runs":
+			runCalls++
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-handler-research-retry","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+		ResearchEnabled: true, MultiturnV1Enabled: false,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+	handler := NewHandler()
+
+	firstCtx, firstRecorder := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceAgentProduct, "stable handler Research query",
+	)
+	handler.AgentProductRun(firstCtx)
+	if firstRecorder.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s, want 200", firstRecorder.Code, firstRecorder.Body.String())
+	}
+	var first struct {
+		Code int                   `json:"code"`
+		Data api_service.QueryData `json:"data"`
+	}
+	if err := json.Unmarshal(firstRecorder.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	if first.Data.BotRunID != "run-handler-research-retry" || first.Data.Id == 0 {
+		t.Fatalf("first identity=%+v", first.Data)
+	}
+	if catalogCalls != 1 || runCalls != 1 {
+		t.Fatalf("first catalog/run calls=%d/%d, want 1/1", catalogCalls, runCalls)
+	}
+
+	capabilityOK = false
+	retryCtx, retryRecorder := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceAgentProduct, "stable handler Research query",
+	)
+	handler.AgentProductRun(retryCtx)
+	if retryRecorder.Code != http.StatusOK {
+		t.Fatalf("retry status=%d body=%s, want 200", retryRecorder.Code, retryRecorder.Body.String())
+	}
+	var retry struct {
+		Code int                   `json:"code"`
+		Data api_service.QueryData `json:"data"`
+	}
+	if err := json.Unmarshal(retryRecorder.Body.Bytes(), &retry); err != nil {
+		t.Fatalf("decode retry response: %v", err)
+	}
+	if retry.Data.Id != first.Data.Id || retry.Data.BotRunID != first.Data.BotRunID {
+		t.Fatalf("retry identity changed: first=%+v retry=%+v", first.Data, retry.Data)
+	}
+	if catalogCalls != 1 || runCalls != 1 {
+		t.Fatalf("retry catalog/run calls=%d/%d, want 1/1", catalogCalls, runCalls)
+	}
+}
+
+func TestResearchClientTurnHeaderMustMatchParsedBody(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	var catalogCalls, runCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents":
+			catalogCalls++
+			serveHandlerResearchCatalog(t, w, r)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/research/runs":
+			runCalls++
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-header-match","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+	handler := NewHandler()
+
+	firstCtx, firstRecorder := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceAgentProduct, "accepted header identity",
+	)
+	handler.AgentProductRun(firstCtx)
+	if firstRecorder.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s", firstRecorder.Code, firstRecorder.Body.String())
+	}
+	mismatchCtx, mismatchRecorder := newNegotiatedResearchRequestWithClientTurn(
+		t,
+		api_service.QuerySurfaceAgentProduct,
+		"mismatched header identity",
+		"different-body-turn",
+	)
+	mismatchCtx.Request.Header.Set("X-Phyto-Client-Turn-Id", "negotiated-research-turn")
+	handler.AgentProductRun(mismatchCtx)
+
+	if mismatchRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("mismatch status=%d body=%s, want 400", mismatchRecorder.Code, mismatchRecorder.Body.String())
+	}
+	if catalogCalls != 1 || runCalls != 1 {
+		t.Fatalf("mismatch catalog/run calls=%d/%d, want no calls after accepted turn", catalogCalls, runCalls)
+	}
+}
+
+func TestResearchClientTurnHeaderLookupIsOwnerScoped(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	if err := model.Default().Exec(
+		`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`,
+		"other-research@example.com", "research-role", 5,
+	).Error; err != nil {
+		t.Fatalf("seed second Research owner: %v", err)
+	}
+	var (
+		catalogCalls int
+		runCalls     int
+		capabilityOK = true
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents":
+			catalogCalls++
+			if capabilityOK {
+				serveHandlerResearchCatalog(t, w, r)
+			} else {
+				_, _ = w.Write([]byte(`{}`))
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/research/runs":
+			runCalls++
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-owner-header","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+	handler := NewHandler()
+
+	firstCtx, firstRecorder := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceAgentProduct, "owner-scoped accepted turn",
+	)
+	handler.AgentProductRun(firstCtx)
+	if firstRecorder.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s", firstRecorder.Code, firstRecorder.Body.String())
+	}
+	capabilityOK = false
+	foreignCtx, foreignRecorder := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceAgentProduct, "owner-scoped accepted turn",
+	)
+	foreignCtx.Set("username", "other-research@example.com")
+	tracked := &trackingReadCloser{reader: foreignCtx.Request.Body}
+	foreignCtx.Request.Body = tracked
+	handler.AgentProductRun(foreignCtx)
+
+	if foreignRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("foreign status=%d body=%s, want 503", foreignRecorder.Code, foreignRecorder.Body.String())
+	}
+	if tracked.reads != 0 || tracked.bytes != 0 || catalogCalls != 2 || runCalls != 1 {
+		t.Fatalf("foreign key bypassed owner gate: reads=%d bytes=%d catalog/run=%d/%d", tracked.reads, tracked.bytes, catalogCalls, runCalls)
+	}
+}
+
+func TestResearchClientTurnHeaderDoesNotReuseUnrelatedChatIdentity(t *testing.T) {
+	seedResearchHandlerPermission(t)
+	raw, err := json.Marshal(map[string]interface{}{
+		"report_revision": -1,
+		"conversation_context": map[string]interface{}{
+			"client_turn_id":      "unrelated-chat-turn",
+			"request_fingerprint": strings.Repeat("a", 64),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.Default().Create(&model.QuestionAgentLog{
+		DialogueId:        "unrelated-chat-dialogue",
+		UserName:          "research@example.com",
+		Query:             "ordinary chat turn",
+		Answer:            "ordinary chat answer",
+		ToolName:          "ChatAgent",
+		Mode:              "instant",
+		Status:            "SUCCEEDED",
+		BotProjectionJSON: string(raw),
+		BotReportRevision: -1,
+	}).Error; err != nil {
+		t.Fatalf("seed unrelated Chat identity: %v", err)
+	}
+
+	var catalogCalls, runCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/agents" {
+			catalogCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		runCalls++
+		http.Error(w, "must not dispatch", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+		ResearchEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	ctx, recorder := newNegotiatedResearchRequestWithClientTurn(
+		t,
+		api_service.QuerySurfaceAgentProduct,
+		"new Research request must pass live admission",
+		"unrelated-chat-turn",
+	)
+	tracked := &trackingReadCloser{reader: ctx.Request.Body}
+	ctx.Request.Body = tracked
+	NewHandler().AgentProductRun(ctx)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want incompatible Research 503", recorder.Code, recorder.Body.String())
+	}
+	if tracked.reads != 0 || tracked.bytes != 0 || catalogCalls != 1 || runCalls != 0 {
+		t.Fatalf(
+			"unrelated Chat identity bypassed Research admission: reads=%d bytes=%d catalog/run=%d/%d",
+			tracked.reads,
+			tracked.bytes,
+			catalogCalls,
+			runCalls,
+		)
+	}
+}
+
+func TestResearchClientTurnHeaderRejectsMalformedValuesBeforeBody(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		values []string
+	}{
+		{name: "non ASCII", values: []string{"turn-研究"}},
+		{name: "too long", values: []string{"a" + strings.Repeat("b", 128)}},
+		{name: "multiple", values: []string{"turn-one", "turn-two"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			seedResearchHandlerPermission(t)
+			previousConfig := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true}
+			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+			previousQuota := viper.Get("chatlimit.enforce")
+			viper.Set("chatlimit.enforce", false)
+			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+			ctx, recorder := newNegotiatedResearchRequest(
+				t, api_service.QuerySurfaceAgentProduct, "malformed header",
+			)
+			ctx.Request.Header.Del("X-Phyto-Client-Turn-Id")
+			for _, value := range test.values {
+				ctx.Request.Header.Add("X-Phyto-Client-Turn-Id", value)
+			}
+			tracked := &trackingReadCloser{reader: ctx.Request.Body}
+			ctx.Request.Body = tracked
+
+			NewHandler().AgentProductRun(ctx)
+
+			if recorder.Code != http.StatusBadRequest || tracked.reads != 0 || tracked.bytes != 0 {
+				t.Fatalf("malformed header status=%d reads=%d bytes=%d body=%s", recorder.Code, tracked.reads, tracked.bytes, recorder.Body.String())
+			}
+		})
+	}
+}
+
 func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -595,7 +919,14 @@ func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testin
 			viper.Set("chatlimit.enforce", false)
 			t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-			c, w, tracked := newAttachmentTrackingRequest(t, "InSilicoResearchAgent")
+			c, w := newNegotiatedResearchRequest(
+				t, api_service.QuerySurfaceAgentProduct, "bounded Research query",
+			)
+			if tt.language == "zh-CN" {
+				c.Request.Header.Del("X-Phyto-Client-Turn-Id")
+			}
+			tracked := &trackingReadCloser{reader: c.Request.Body}
+			c.Request.Body = tracked
 			c.Request.Header.Set("Accept-Language", tt.language)
 			i18n.Localize()(c)
 			c.Set("username", "research@example.com")
@@ -616,7 +947,7 @@ func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testin
 				t.Fatalf("response=%#v, want localized compatibility 503", body)
 			}
 			if tracked.reads != 0 || tracked.bytes != 0 {
-				t.Fatalf("compatibility gate read body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+				t.Fatalf("compatibility gate read the request body: reads=%d bytes=%d", tracked.reads, tracked.bytes)
 			}
 			if catalogCalls != 1 {
 				t.Fatalf("catalog calls=%d, want 1", catalogCalls)
@@ -646,17 +977,11 @@ func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
 	viper.Set("chatlimit.enforce", false)
 	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
 
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	tracked := &trackingReadCloser{reader: strings.NewReader("must not be read")}
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c, w := newNegotiatedResearchRequest(
+		t, api_service.QuerySurfaceChat, "bounded explicit Research query",
+	)
+	tracked := &trackingReadCloser{reader: c.Request.Body}
 	c.Request.Body = tracked
-	c.Request.Header.Set("Content-Type", "multipart/form-data; boundary=unread")
-	c.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
-	c.Params = gin.Params{{Key: "id", Value: "0"}}
-	c.Set("username", "research@example.com")
-	i18n.Localize()(c)
 
 	NewHandler().Query(c)
 
@@ -664,7 +989,7 @@ func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
 		t.Fatalf("status=%d body=%s, want 503", w.Code, w.Body.String())
 	}
 	if tracked.reads != 0 || tracked.bytes != 0 {
-		t.Fatalf("explicit Research compatibility gate read body %d time(s), %d byte(s)", tracked.reads, tracked.bytes)
+		t.Fatalf("explicit Research compatibility gate read the request body: reads=%d bytes=%d", tracked.reads, tracked.bytes)
 	}
 	if catalogCalls != 1 {
 		t.Fatalf("explicit Research catalog calls=%d, want 1", catalogCalls)
@@ -753,9 +1078,10 @@ func TestQueryResearchIntentMismatchFailsClosedBeforeDispatch(t *testing.T) {
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
 			for key, value := range map[string]string{
-				"query": "research question",
-				"mode":  tc.mode,
-				"tool":  tc.tool,
+				"query":          "research question",
+				"mode":           tc.mode,
+				"tool":           tc.tool,
+				"client_turn_id": "research-intent-mismatch-turn",
 			} {
 				if err := writer.WriteField(key, value); err != nil {
 					t.Fatalf("write %s: %v", key, err)

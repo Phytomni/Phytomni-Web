@@ -46,20 +46,24 @@ type FormIdPayload = { id: string | number };
 
 const EXPLICIT_RESEARCH_INTENT_HEADER = "X-Phyto-Research-Intent";
 const EXPLICIT_RESEARCH_INTENT_VALUE = "expert-research-v1";
+const CLIENT_TURN_ID_HEADER = "X-Phyto-Client-Turn-Id";
 
-function explicitResearchIntentHeaders(
+function queryIdentityHeaders(
   data: QueryRequest | FormData
 ): Record<string, string> | undefined {
+  if (!(data instanceof FormData)) return undefined;
+  const headers: Record<string, string> = {};
+  const clientTurnId = data.get("client_turn_id");
+  if (typeof clientTurnId === "string" && clientTurnId !== "") {
+    headers[CLIENT_TURN_ID_HEADER] = clientTurnId;
+  }
   if (
-    data instanceof FormData &&
     data.get("mode") === "expert" &&
     data.get("tool") === "InSilicoResearchAgent"
   ) {
-    return {
-      [EXPLICIT_RESEARCH_INTENT_HEADER]: EXPLICIT_RESEARCH_INTENT_VALUE,
-    };
+    headers[EXPLICIT_RESEARCH_INTENT_HEADER] = EXPLICIT_RESEARCH_INTENT_VALUE;
   }
-  return undefined;
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
 function getId(data: FormIdPayload | FormData, label: string): string | number {
@@ -106,7 +110,7 @@ export const getQuery = (
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id =
     data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
-  const headers = explicitResearchIntentHeaders(data);
+  const headers = queryIdentityHeaders(data);
   return requestApi(
     {
       url: `/api/v1/conversations/${id}/messages`,
@@ -127,7 +131,7 @@ export const getQueryAbortable = (
 ): Promise<ApiEnvelope<DecodedQueryData>> => {
   const id =
     data instanceof FormData ? (data.get("id") ?? "0") : (data.id ?? 0);
-  const headers = explicitResearchIntentHeaders(data);
+  const headers = queryIdentityHeaders(data);
   return requestAbortableApi(
     {
       url: `/api/v1/conversations/${id}/messages`,
@@ -147,6 +151,7 @@ export function runAgentProductAbortable(
   requestId?: string,
   opts?: QueryProgressOpts
 ): Promise<ApiEnvelope<DecodedQueryData>> {
+  const headers = queryIdentityHeaders(data);
   return requestAbortableApi(
     {
       url: `/api/v1/agent-products/${encodeURIComponent(tool)}/runs`,
@@ -154,6 +159,7 @@ export function runAgentProductAbortable(
       data,
       requestId,
       onUploadProgress: opts?.onUploadProgress,
+      ...(headers ? { headers } : {}),
     },
     decodeQueryData
   );

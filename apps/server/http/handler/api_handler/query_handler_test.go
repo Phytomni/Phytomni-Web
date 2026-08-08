@@ -35,10 +35,16 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 		value     string
 		surface   api_service.QuerySurface
 		routeTool string
+		mode      string
+		formTool  string
 		wantErr   bool
 	}{
 		{name: "v0 chat missing", enabled: false, surface: api_service.QuerySurfaceChat},
 		{name: "v0 chat malformed remains compatible", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceChat},
+		{name: "v0 forced Research chat missing", enabled: false, surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "v0 forced Research chat malformed", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "v0 forced Research chat valid", enabled: false, value: "turn-research-chat", surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent"},
+		{name: "v0 forced non-Research chat remains compatible", enabled: false, surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "AnalystAgent"},
 		{name: "v1 chat missing", enabled: true, surface: api_service.QuerySurfaceChat, wantErr: true},
 		{name: "v1 chat malformed", enabled: true, value: "bad turn", surface: api_service.QuerySurfaceChat, wantErr: true},
 		{name: "v1 chat oversized", enabled: true, value: strings.Repeat("a", 129), surface: api_service.QuerySurfaceChat, wantErr: true},
@@ -61,6 +67,8 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 			form := url.Values{
 				"query":          {"hello"},
 				"client_turn_id": {tc.value},
+				"mode":           {tc.mode},
+				"tool":           {tc.formTool},
 			}
 			request := httptest.NewRequest(
 				http.MethodPost,

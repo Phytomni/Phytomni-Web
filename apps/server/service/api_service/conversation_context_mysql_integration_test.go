@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -41,15 +42,17 @@ func TestMySQLClientTurnLookupIsParameterized(t *testing.T) {
 	if strings.Contains(sql, clientTurnID) {
 		t.Fatalf("client turn ID was interpolated into SQL: %s", sql)
 	}
-	if len(result.Statement.Vars) != 4 || result.Statement.Vars[0] != "synthetic-owner" ||
+	if len(result.Statement.Vars) != 5 || result.Statement.Vars[0] != "synthetic-owner" ||
 		result.Statement.Vars[1] != clientTurnID || result.Statement.Vars[2] != clientTurnID ||
-		result.Statement.Vars[3] != 2 {
+		result.Statement.Vars[3] != clientTurnID || result.Statement.Vars[4] != 2 {
 		t.Fatalf("unexpected SQL bind variables: %#v", result.Statement.Vars)
 	}
 	for _, fragment := range []string{
 		"JSON_UNQUOTE(JSON_EXTRACT",
 		"conversation_context.client_turn_id",
 		"conversation_context.replacement.client_turn_id",
+		"conversation_context.retired_identities",
+		"JSON_CONTAINS",
 		"LIMIT ?",
 	} {
 		if !strings.Contains(sql, fragment) {
@@ -191,23 +194,35 @@ func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 	wait.Wait()
 	close(results)
 
-	var rowID int64
-	var turnID string
+	var winner, loser *v1Submission
+	var nonpending, pending int
 	for result := range results {
 		if result.err != nil {
 			t.Fatalf("concurrent allocation: %v", result.err)
 		}
-		if result.submission == nil || result.submission.envelope == nil {
-			t.Fatal("concurrent allocation returned no envelope")
+		if result.submission == nil {
+			t.Fatal("concurrent allocation returned no submission")
 		}
-		if rowID == 0 {
-			rowID = result.submission.row.Id
-			turnID = result.submission.envelope.TurnID
+		if result.submission.pending {
+			if result.submission.duplicate == nil || result.submission.duplicate.Status != "SUBMITTING" {
+				t.Fatalf("pending allocation lost durable duplicate identity: %+v", result.submission)
+			}
+			pending++
+			loser = result.submission
 			continue
 		}
-		if result.submission.row.Id != rowID || result.submission.envelope.TurnID != turnID {
-			t.Fatalf("concurrent identity changed: first=%d/%s current=%d/%s", rowID, turnID, result.submission.row.Id, result.submission.envelope.TurnID)
+		if result.submission.envelope == nil {
+			t.Fatal("nonpending allocation returned no envelope")
 		}
+		nonpending++
+		winner = result.submission
+	}
+	if nonpending != 1 || pending != 1 || winner == nil || loser == nil ||
+		winner.row.Id == 0 || loser.row.Id != winner.row.Id ||
+		loser.duplicate == nil || loser.duplicate.Id != winner.row.Id ||
+		loser.duplicate.DialogueId != winner.row.DialogueId ||
+		winner.envelope.TurnID != strconv.FormatInt(loser.row.Id, 10) {
+		t.Fatalf("concurrent allocation outcomes nonpending/pending=%d/%d winner=%+v loser=%+v", nonpending, pending, winner, loser)
 	}
 	var rowCount int64
 	if err := firstDB.Model(&model.QuestionAgentLog{}).

@@ -132,6 +132,11 @@ describe("useStreamMessage", () => {
     expect((init?.body as FormData).get("client_turn_id")).toBe(
       "turn-direct-identity"
     );
+    expect(init?.headers).toEqual(
+      expect.objectContaining({
+        "X-Phyto-Client-Turn-Id": "turn-direct-identity",
+      })
+    );
   });
 
   it("keeps one bounded stream identity for Chat, Knowledge, and BriefGene", async () => {

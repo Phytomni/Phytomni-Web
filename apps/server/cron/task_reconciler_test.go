@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -211,5 +212,58 @@ func TestReconciler_TombstoneFailureDoesNotStopBatch(t *testing.T) {
 	}
 	if secondStatus != "CONTEXT_DELETE_ACKED" {
 		t.Fatalf("second tombstone status=%q, want ACKED", secondStatus)
+	}
+}
+
+func TestReconciler_DiscoversPrivateActiveReplacementWithoutPollingSubmitting(t *testing.T) {
+	gdb := setupReconcilerDB(t)
+	privateProjection := `{"run_id":"run-public-accepted","agent":"analyst","status":"SUCCEEDED","report_revision":0,"final_report":"accepted public report","conversation_context":{"client_turn_id":"cron-base-key","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","replacement":{"client_turn_id":"cron-replacement-key","request_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","query":"cron replacement query","tool_name":"InSilicoResearchAgent","mode":"expert","interop_mode":"off","active_status":"RUNNING","active_bot_run_id":"run-cron-private-replacement","active_report_revision":-1}}}`
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id,
+		 bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(90, 'cron-private-dialogue', 'alice', 'accepted public query', 'accepted public answer',
+		 'AnalystAgent', 'run-public-accepted', ?, 0, 'SUCCEEDED', CURRENT_TIMESTAMP),
+		(91, 'cron-submitting-dialogue', 'alice', 'ambiguous query', '',
+		 'InSilicoResearchAgent', '', '{"report_revision":-1,"conversation_context":{"client_turn_id":"cron-submitting-key"}}', -1, 'SUBMITTING', ?)`,
+		privateProjection,
+		time.Now(),
+	).Error; err != nil {
+		t.Fatalf("seed private replacement and submitting row: %v", err)
+	}
+	var calls atomic.Int64
+	var requestPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		requestPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"run-cron-private-replacement","agent":"research","status":"failed","result":{"report_revision":1,"final_report":"private failure"}}`))
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 2}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	(&TaskReconciler{}).Run()
+
+	if calls.Load() != 1 || !strings.HasSuffix(requestPath, "/v1/runs/run-cron-private-replacement") {
+		t.Fatalf("cron private polls=%d path=%q, want one active replacement poll", calls.Load(), requestPath)
+	}
+	var query, answer, tool, runID, status, raw string
+	if err := gdb.Raw(`SELECT COALESCE(query,''), COALESCE(answer,''), COALESCE(tool_name,''),
+		COALESCE(bot_run_id,''), COALESCE(status,''), COALESCE(bot_projection_json,'')
+		FROM question_agent_logs WHERE id=90`).Row().Scan(&query, &answer, &tool, &runID, &status, &raw); err != nil {
+		t.Fatalf("read private replacement after cron: %v", err)
+	}
+	if query != "accepted public query" || answer != "accepted public answer" ||
+		tool != "AnalystAgent" || runID != "run-public-accepted" || status != "SUCCEEDED" ||
+		!strings.Contains(raw, `"terminal_result"`) || !strings.Contains(raw, `"status":"FAILED"`) {
+		t.Fatalf("cron failed replacement changed base or lost terminal result: query=%q answer=%q tool=%q run=%q status=%q raw=%s", query, answer, tool, runID, status, raw)
+	}
+	var submittingStatus string
+	if err := gdb.Raw(`SELECT status FROM question_agent_logs WHERE id=91`).Scan(&submittingStatus).Error; err != nil {
+		t.Fatal(err)
+	}
+	if submittingStatus != "SUBMITTING" {
+		t.Fatalf("cron polled or settled SUBMITTING row as %q", submittingStatus)
 	}
 }

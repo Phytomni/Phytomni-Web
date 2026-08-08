@@ -48,6 +48,14 @@ func setupChatGateDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("ddl user_tool_names: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_name TEXT,
+		bot_projection_json TEXT,
+		delete_at DATETIME
+	)`).Error; err != nil {
+		t.Fatalf("ddl question_agent_logs: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -428,6 +436,7 @@ func TestDirectExplicitResearchWithoutAdmissionFetchesAndFailsClosed(t *testing.
 
 	_, err := service.Query(context.Background(), "research@example.com", QueryInput{
 		Query: "research question", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+		ClientTurnID: "direct-research-incompatible-turn",
 	})
 
 	if !errors.Is(err, ErrResearchInputIncompatible) {
@@ -455,7 +464,8 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 			name: "explicit Expert Research",
 			input: QueryInput{
 				Query: "research question", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
-				Attachments: distinctQueryAttachmentRefs(65),
+				ClientTurnID: "admitted-expert-research-turn",
+				Attachments:  distinctQueryAttachmentRefs(65),
 			},
 		},
 	} {
@@ -518,6 +528,7 @@ func TestDirectResearchEnforcesNegotiatedLimitsWithOneCatalogFetch(t *testing.T)
 			name: "explicit Expert Research",
 			input: QueryInput{
 				Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+				ClientTurnID: "negotiated-limits-expert-research-turn",
 			},
 		},
 	}
@@ -602,6 +613,7 @@ func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
 			name: "explicit Expert Research",
 			input: QueryInput{
 				Query: "valid", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+				ClientTurnID: "attachment-advertisement-expert-research-turn",
 			},
 		},
 	}
@@ -640,18 +652,14 @@ func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
 				service := &Service{catalogReader: reader}
 
 				allowed := surface.input
-				if allowed.Surface == QuerySurfaceAgentProduct {
-					allowed.ClientTurnID += "-allowed"
-				}
+				allowed.ClientTurnID += "-allowed"
 				allowed.Attachments = distinctQueryAttachmentRefs(64)
 				if _, err := service.Query(context.Background(), "research-drift@example.com", allowed); err != nil {
 					t.Fatalf("Query at lower advertised limit: %v", err)
 				}
 
 				rejected := surface.input
-				if rejected.Surface == QuerySurfaceAgentProduct {
-					rejected.ClientTurnID += "-rejected"
-				}
+				rejected.ClientTurnID += "-rejected"
 				rejected.Attachments = distinctQueryAttachmentRefs(65)
 				if _, err := service.Query(context.Background(), "research-drift@example.com", rejected); !errors.Is(err, ErrInvalidQueryAttachments) {
 					t.Fatalf("Query above lower advertised limit=%v, want ErrInvalidQueryAttachments", err)

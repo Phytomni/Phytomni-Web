@@ -31,7 +31,7 @@ func forcedDispatchServer(t *testing.T, hitPath *string, chatBody *rxBot.ChatCom
 			_, _ = w.Write([]byte(`{"id":"c1","run_id":"run-chat","object":"chat.completion","status":"succeeded","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}],"formatted":{"answer":"hi"}}`))
 		case strings.HasPrefix(r.URL.Path, "/v1/agents/") && strings.HasSuffix(r.URL.Path, "/runs"):
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"id":"run-agent","object":"agent.run","agent":"x","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
+			_, _ = w.Write([]byte(`{"id":"run-agent","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

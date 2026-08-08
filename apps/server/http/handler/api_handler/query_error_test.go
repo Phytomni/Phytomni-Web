@@ -114,6 +114,12 @@ func TestQueryErrorStatus(t *testing.T) {
 			wantMsg:    "request timed out, please narrow your query or try again later",
 		},
 		{
+			name:       "ambiguous client turn remains pending -> 409",
+			err:        fmt.Errorf("retry: %w", api_service.ErrClientTurnSubmissionPending),
+			wantStatus: http.StatusConflict,
+			wantMsg:    "client turn submission is pending",
+		},
+		{
 			name:       "plain error -> opaque 500",
 			err:        errors.New("context deadline exceeded"),
 			wantStatus: http.StatusInternalServerError,

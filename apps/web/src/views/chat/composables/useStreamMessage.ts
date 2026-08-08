@@ -131,6 +131,7 @@ export function useStreamMessage(opts: {
       formData.append("client_turn_id", clientTurnId);
     }
     assertReferenceOnlyFormData(formData);
+    const clientTurnHeader = formData.get("client_turn_id");
     const chatState = getChatState(dialogueId);
     // The send route still accepts the captured parent row id. It is not a
     // canonical conversation identity and must never address A2UI actions.
@@ -181,6 +182,9 @@ export function useStreamMessage(opts: {
             platform: "bcemis",
             Authorization: "Bearer " + getToken(),
             satoken: getToken() ?? "",
+            ...(typeof clientTurnHeader === "string" && clientTurnHeader !== ""
+              ? { "X-Phyto-Client-Turn-Id": clientTurnHeader }
+              : {}),
           },
         }
       );

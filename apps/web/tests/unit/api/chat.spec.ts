@@ -24,6 +24,7 @@ import {
   getQueryAbortable,
   getReactionType,
   retryConversationResultArchive,
+  runAgentProductAbortable,
   getUserTool,
   type QueryData,
 } from "@/api/chat";
@@ -51,6 +52,7 @@ describe("query routing intent transport", () => {
       data.set("query", "research question");
       data.set("mode", "expert");
       data.set("tool", "InSilicoResearchAgent");
+      data.set("client_turn_id", "research-client-turn");
 
       await send(data);
 
@@ -58,11 +60,59 @@ describe("query routing intent transport", () => {
         expect.objectContaining({
           headers: {
             "X-Phyto-Research-Intent": "expert-research-v1",
+            "X-Phyto-Client-Turn-Id": "research-client-turn",
           },
         })
       );
     }
   );
+
+  it.each([
+    ["blocking", getQuery, mockRequest],
+    ["abortable", getQueryAbortable, mockCreateAbortableRequest],
+  ] as const)(
+    "emits the client-turn header for keyed %s requests",
+    async (_name, send, transport) => {
+      transport.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
+      const data = new FormData();
+      data.set("query", "ordinary keyed question");
+      data.set("client_turn_id", "ordinary-client-turn");
+
+      await send(data);
+
+      expect(transport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: {
+            "X-Phyto-Client-Turn-Id": "ordinary-client-turn",
+          },
+        })
+      );
+    }
+  );
+
+  it("emits the client-turn header for dedicated product requests", async () => {
+    mockCreateAbortableRequest.mockResolvedValueOnce({
+      code: 200,
+      data: { id: 1 },
+    });
+    const data = new FormData();
+    data.set("query", "dedicated Research question");
+    data.set("client_turn_id", "dedicated-client-turn");
+
+    await runAgentProductAbortable(
+      "InSilicoResearchAgent",
+      data,
+      "dedicated-request"
+    );
+
+    expect(mockCreateAbortableRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: {
+          "X-Phyto-Client-Turn-Id": "dedicated-client-turn",
+        },
+      })
+    );
+  });
 
   it.each([
     ["autonomous Expert", "expert", ""],

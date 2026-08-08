@@ -179,6 +179,38 @@ func TestPersistedConversationContextRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestPersistedReplacementTerminalResultIsBoundedAndFingerprintOnly(t *testing.T) {
+	value := validPersistedConversationContext()
+	value.RequestFingerprint = strings.Repeat("a", 64)
+	value.Replacement = &persistedConversationReplacement{
+		ClientTurnID:       "terminal-replacement",
+		RequestFingerprint: strings.Repeat("b", 64),
+		ToolName:           "InSilicoResearchAgent",
+		Mode:               "expert",
+		TerminalResult: &persistedReplacementTerminalResult{
+			ToolName: "InSilicoResearchAgent", Status: "FAILED",
+			Answer: "safe failure", FollowUpQuestions: `["retry safely"]`,
+			ReportRevision: -1,
+		},
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal bounded terminal result: %v", err)
+	}
+	if strings.Contains(string(encoded), `"query"`) || strings.Contains(string(encoded), "raw prompt") {
+		t.Fatalf("terminal replacement persisted raw prompt fields: %s", encoded)
+	}
+	value.Replacement.TerminalResult.Answer = strings.Repeat("x", maxPersistedReplacementAnswerBytes+1)
+	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
+		t.Fatalf("overlong terminal answer error=%v, want invalid context", err)
+	}
+	value.Replacement.TerminalResult.Answer = "safe failure"
+	value.Replacement.RequestFingerprint = "not-a-digest"
+	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
+		t.Fatalf("invalid replacement fingerprint error=%v, want invalid context", err)
+	}
+}
+
 func TestSaveAndLoadBotConversationContextIsOwnerScoped(t *testing.T) {
 	gdb := setupTestDB(t)
 	if err := setupProjectionRow(31, "alice@example.com", 5, `{"run_id":"run-31","status":"SUCCEEDED"}`); err != nil {
@@ -299,6 +331,7 @@ func TestConversationSettlementStateIsIdempotentWithoutLedgerMutation(t *testing
 			AssistantSummary:     "answer",
 			SettlementLedgerHash: stagedLedgerVersion,
 		},
+		"",
 	)
 	if err != nil {
 		t.Fatal(err)

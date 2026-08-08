@@ -820,15 +820,24 @@ func TestQueryContextRebuildRecoversPendingAcknowledgment(t *testing.T) {
 func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	dialogueID := "33333333-3333-4333-8333-333333333333"
+	oldInput := QueryInput{
+		Query: "old question", Mode: "instant",
+		ClientTurnID: "old-turn", Surface: QuerySurfaceChat,
+	}
+	oldTarget := v1SubmissionTarget{
+		dialogueID: dialogueID, mode: "instant", operation: "append",
+	}
 	oldStage := validContextStageMetadata()
 	oldStage.TurnID = "10"
 	oldStage.BaseBusinessContextVersion = 0
 	oldStage.ProposedBusinessContextVersion = 1
 	oldStage.LastAppliedLedgerCursor = 10
 	oldPrivate := persistedConversationContext{
-		ClientTurnID: "old-turn", Stage: oldStage,
-		SettlementState:  conversationSettlementAcked,
-		AssistantSummary: "old summary",
+		ClientTurnID:       oldInput.ClientTurnID,
+		RequestFingerprint: submissionRequestFingerprint(oldInput, oldTarget, true),
+		Stage:              oldStage,
+		SettlementState:    conversationSettlementAcked,
+		AssistantSummary:   "old summary",
 	}
 	oldRaw, err := marshalPersistedProjectionWithContext(
 		BotRunProjection{ReportRevision: -1}, &oldPrivate,
@@ -838,7 +847,7 @@ func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
 	}
 	root := model.QuestionAgentLog{
 		Id: 10, DialogueId: dialogueID, UserName: "alice",
-		Query: "old question", Answer: "old answer", ToolName: "ChatAgent",
+		Query: oldInput.Query, Answer: "old answer", ToolName: "ChatAgent",
 		Status: statusSucceeded, Mode: "instant", BotProjectionJSON: oldRaw,
 		BotReportRevision: -1,
 	}
@@ -981,16 +990,26 @@ func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
 func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	dialogueID := "44444444-4444-4444-8444-444444444444"
+	acceptedInput := QueryInput{
+		Query: "accepted question", Mode: "instant",
+		ClientTurnID: "accepted-turn", Surface: QuerySurfaceChat,
+		Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_accepted"}},
+	}
+	acceptedTarget := v1SubmissionTarget{
+		dialogueID: dialogueID, mode: "instant", operation: "append",
+	}
 	oldStage := validContextStageMetadata()
 	oldStage.TurnID = "20"
 	oldStage.BaseBusinessContextVersion = 0
 	oldStage.ProposedBusinessContextVersion = 1
 	oldStage.LastAppliedLedgerCursor = 20
 	oldPrivate := persistedConversationContext{
-		ClientTurnID: "accepted-turn", Stage: oldStage,
-		SettlementState:  conversationSettlementAcked,
-		AssistantSummary: "accepted summary",
-		InputAttachments: []rxBot.AssetAttachmentRef{{AssetID: "file_accepted"}},
+		ClientTurnID:       acceptedInput.ClientTurnID,
+		RequestFingerprint: submissionRequestFingerprint(acceptedInput, acceptedTarget, true),
+		Stage:              oldStage,
+		SettlementState:    conversationSettlementAcked,
+		AssistantSummary:   "accepted summary",
+		InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), acceptedInput.Attachments...),
 	}
 	raw, err := marshalPersistedProjectionWithContext(
 		BotRunProjection{ReportRevision: -1}, &oldPrivate,
@@ -1000,7 +1019,7 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	}
 	row := model.QuestionAgentLog{
 		Id: 20, DialogueId: dialogueID, UserName: "alice",
-		Query: "accepted question", Answer: "accepted answer",
+		Query: acceptedInput.Query, Answer: "accepted answer",
 		ToolName: "ChatAgent", Status: statusSucceeded, Mode: "instant",
 		BotProjectionJSON: raw, BotReportRevision: -1,
 	}
@@ -1047,11 +1066,181 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stored.Answer != "accepted answer" || stored.Query != "accepted question" ||
-		stored.Status != statusSucceeded || private.Replacement != nil ||
+		stored.Status != statusSucceeded || private.Replacement == nil ||
+		private.Replacement.TerminalResult == nil ||
+		private.Replacement.TerminalResult.Status != "FAILED" ||
 		private.SettlementState != conversationSettlementAcked ||
 		private.Stage == nil || len(private.InputAttachments) != 1 || private.InputAttachments[0].AssetID != "file_accepted" ||
 		private.Stage.ProposedBusinessContextVersion != 1 {
 		t.Fatalf("failed refresh changed accepted state: row=%#v private=%#v", stored, private)
+	}
+}
+
+func TestQueryReplacementPostDispatchDefiniteFailureIsIdempotent(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{
+			name:       "Bot 4xx",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"code":"invalid_request","message":"private upstream detail","retryable":false}}`,
+		},
+		{
+			name:       "malformed 2xx",
+			statusCode: http.StatusOK,
+			body:       `{"id":"run-malformed-replacement","agent":`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			seed := seedResearchReplacementTarget(t, gdb)
+			botCalls := 0
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/agents/research/runs" {
+					http.NotFound(w, r)
+					return
+				}
+				botCalls++
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.statusCode)
+				_, _ = w.Write([]byte(tc.body))
+			})
+			rxBot.BotConfig.ResearchEnabled = true
+			rxBot.BotConfig.AnalystEnabled = true
+			rxBot.BotConfig.MultiturnV1Enabled = false
+			service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
+			input := QueryInput{
+				Query: "replacement with deterministic dispatch failure", Mode: "expert",
+				Tool:         "InSilicoResearchAgent",
+				ClientTurnID: "deterministic-replacement-" + strings.ReplaceAll(tc.name, " ", "-"),
+				RefreshId:    seed.Id, Surface: QuerySurfaceChat,
+			}
+
+			if out, err := service.Query(context.Background(), "alice", input); out != nil || err == nil {
+				t.Fatalf("first deterministic failure=%+v error=%v", out, err)
+			}
+			var stored model.QuestionAgentLog
+			if err := gdb.First(&stored, seed.Id).Error; err != nil {
+				t.Fatal(err)
+			}
+			private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Query != seed.Query || stored.Answer != seed.Answer || stored.Status != seed.Status ||
+				stored.BotRunId != seed.BotRunId || private.Replacement == nil ||
+				private.Replacement.ClientTurnID != input.ClientTurnID ||
+				private.Replacement.TerminalResult == nil ||
+				private.Replacement.TerminalResult.Status != "FAILED" ||
+				private.Replacement.TerminalResult.Answer != "" {
+				t.Fatalf("deterministic failure lost idempotency or changed public state: public=%+v private=%+v", stored, private)
+			}
+			retry, err := service.Query(context.Background(), "alice", input)
+			if err != nil || retry == nil || retry.Id != seed.Id || retry.Status != "FAILED" {
+				t.Fatalf("deterministic failure retry=%+v error=%v", retry, err)
+			}
+			if botCalls != 1 {
+				t.Fatalf("Bot calls=%d, want one", botCalls)
+			}
+		})
+	}
+}
+
+func TestQueryDirectAgentResponseRejectsMissingOrMismatchedAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		agent  string
+		status string
+	}{
+		{name: "running mismatch", agent: "analyst", status: "running"},
+		{name: "succeeded mismatch", agent: "analyst", status: "succeeded"},
+		{name: "missing agent", agent: "", status: "running"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			seed := seedResearchReplacementTarget(t, gdb)
+			botCalls := 0
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/agents/research/runs" {
+					http.NotFound(w, r)
+					return
+				}
+				botCalls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(
+					`{"id":"run-direct-agent-identity","object":"agent.run","agent":"` + tc.agent +
+						`","status":"` + tc.status +
+						`","task_ids":[],"result":{"formatted":{"answer":"must not persist"}}}`,
+				))
+			})
+			rxBot.BotConfig.ResearchEnabled = true
+			rxBot.BotConfig.AnalystEnabled = true
+			rxBot.BotConfig.MultiturnV1Enabled = false
+			service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
+			input := QueryInput{
+				Query: "strict direct agent identity", Mode: "expert",
+				Tool:         "InSilicoResearchAgent",
+				ClientTurnID: "direct-agent-" + strings.ReplaceAll(tc.name, " ", "-"),
+				RefreshId:    seed.Id, Surface: QuerySurfaceChat,
+			}
+
+			if out, err := service.Query(context.Background(), "alice", input); out != nil || err == nil {
+				t.Fatalf("direct identity mismatch=%+v error=%v", out, err)
+			}
+			var stored model.QuestionAgentLog
+			if err := gdb.First(&stored, seed.Id).Error; err != nil {
+				t.Fatal(err)
+			}
+			private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Query != seed.Query || stored.Answer != seed.Answer ||
+				stored.Status != seed.Status || stored.BotRunId != seed.BotRunId ||
+				private.Replacement == nil || private.Replacement.TerminalResult == nil ||
+				private.Replacement.TerminalResult.Status != "FAILED" ||
+				private.Replacement.TerminalResult.Answer != "" {
+				t.Fatalf("direct identity failure changed public or lost terminal key: row=%+v private=%+v", stored, private)
+			}
+			retry, err := service.Query(context.Background(), "alice", input)
+			if err != nil || retry == nil || retry.Status != "FAILED" ||
+				retry.ToolName != "InSilicoResearchAgent" || botCalls != 1 {
+				t.Fatalf("direct identity retry=%+v error=%v calls=%d", retry, err, botCalls)
+			}
+		})
+	}
+}
+
+func TestQueryDirectAgentResponseAcceptsCanonicalAgent(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seed := seedResearchReplacementTarget(t, gdb)
+	botCalls := 0
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agents/research/runs" {
+			http.NotFound(w, r)
+			return
+		}
+		botCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-direct-agent-match","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	rxBot.BotConfig.AnalystEnabled = true
+	rxBot.BotConfig.MultiturnV1Enabled = false
+	service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
+	input := QueryInput{
+		Query: "matching direct Research response", Mode: "expert",
+		Tool: "InSilicoResearchAgent", ClientTurnID: "direct-agent-match",
+		RefreshId: seed.Id, Surface: QuerySurfaceChat,
+	}
+
+	out, err := service.Query(context.Background(), "alice", input)
+	if err != nil || out == nil || out.Status != "RUNNING" ||
+		out.ToolName != "InSilicoResearchAgent" || out.BotRunID != "run-direct-agent-match" ||
+		botCalls != 1 {
+		t.Fatalf("matching direct response=%+v error=%v calls=%d", out, err, botCalls)
 	}
 }
 

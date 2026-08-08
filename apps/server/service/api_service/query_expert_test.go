@@ -579,10 +579,16 @@ func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 				tc.configure()
 			}
 			observeQueryPermissionEffects(t, gdb)
+			clientTurnID := ""
+			conversationID := int64(77)
+			if tc.mode == "expert" && tc.tool == "InSilicoResearchAgent" {
+				clientTurnID = "permission-research-turn"
+			}
 
 			_, err := NewService().Query(context.Background(), tc.username, QueryInput{
-				Query: "permission check", Id: 77, Mode: tc.mode, Tool: tc.tool,
-				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
+				Query: "permission check", Id: conversationID, Mode: tc.mode, Tool: tc.tool,
+				ClientTurnID: clientTurnID,
+				Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
 			})
 			tc.assertErr(t, err)
 			effects.assertNone(t)
@@ -1236,5 +1242,155 @@ func TestQueryExpertContextAsyncKeepsRunningLifecycleWithoutSettlement(t *testin
 	}
 	if row.Status != "RUNNING" || row.BotRunId != "run-async-context" {
 		t.Fatalf("async row=%#v", row)
+	}
+}
+
+func TestQueryExpertReplacementPinsAutonomousResolvedTool(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seed := seedResearchReplacementTarget(t, gdb)
+	var routeCalls, pollCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/query/route":
+			routeCalls++
+			_, _ = w.Write([]byte(`{"id":"run-autonomous-replacement","run_id":"run-autonomous-replacement","object":"agent.run","agent":"research","status":"running","task_ids":["task-autonomous-replacement"],"result":{}}`))
+		case "/v1/runs/run-autonomous-replacement":
+			pollCalls++
+			_, _ = w.Write([]byte(`{"run_id":"run-autonomous-replacement","agent":"research","status":"succeeded","task_ids":["task-autonomous-replacement"],"result":{"report_revision":1,"final_report":"# autonomous replacement"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+		TimeoutSeconds: 2, ResearchEnabled: true, AnalystEnabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "autonomously replace the prior result", Mode: "expert",
+		ClientTurnID: "autonomous-replacement-key", RefreshId: seed.Id,
+		Surface: QuerySurfaceChat,
+	})
+	if err != nil {
+		t.Fatalf("autonomous replacement: %v", err)
+	}
+	private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Status != "RUNNING" || out.ToolName != "InSilicoResearchAgent" ||
+		private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
+		t.Fatalf("autonomous resolved tool was not pinned: out=%+v private=%+v", out, private.Replacement)
+	}
+
+	SyncBotRuns([]model.QuestionAgentLog{{Id: seed.Id, UserName: "alice"}})
+	var promoted model.QuestionAgentLog
+	if err := gdb.First(&promoted, seed.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted.Status != statusSucceeded || promoted.ToolName != "InSilicoResearchAgent" ||
+		promoted.BotRunId != "run-autonomous-replacement" || private.Replacement != nil ||
+		routeCalls != 1 || pollCalls != 1 {
+		t.Fatalf("autonomous replacement did not promote canonically: row=%+v private=%+v calls=%d/%d", promoted, private, routeCalls, pollCalls)
+	}
+}
+
+func TestQueryExpertAutonomousReplacementRetainsUnresolvedTerminalIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{
+			name:       "Bot 4xx before selection",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"code":"invalid_request","message":"private upstream detail","retryable":false}}`,
+		},
+		{
+			name:       "malformed 2xx before selection",
+			statusCode: http.StatusOK,
+			body:       `{"id":"run-unresolved","agent":`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			seed := seedResearchReplacementTarget(t, gdb)
+			botCalls := 0
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/query/route" {
+					http.NotFound(w, r)
+					return
+				}
+				botCalls++
+				w.Header().Set("Content-Type", "application/json")
+				if botCalls == 1 {
+					w.WriteHeader(tc.statusCode)
+					_, _ = w.Write([]byte(tc.body))
+					return
+				}
+				_, _ = w.Write([]byte(`{"id":"run-next-autonomous","run_id":"run-next-autonomous","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+			})
+			rxBot.BotConfig.MultiturnV1Enabled = false
+			rxBot.BotConfig.ResearchEnabled = true
+			rxBot.BotConfig.AnalystEnabled = true
+			service := NewService()
+			key := "autonomous-unresolved-" + strings.ReplaceAll(tc.name, " ", "-")
+			input := QueryInput{
+				Query: "replace before autonomous agent selection", Mode: "expert",
+				ClientTurnID: key, RefreshId: seed.Id, Surface: QuerySurfaceChat,
+			}
+
+			if out, err := service.Query(context.Background(), "alice", input); out != nil || err == nil {
+				t.Fatalf("first unresolved failure=%+v error=%v", out, err)
+			}
+			private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if private.Replacement == nil || private.Replacement.ClientTurnID != key ||
+				private.Replacement.ToolName != "" || private.Replacement.TerminalResult == nil ||
+				private.Replacement.TerminalResult.ToolName != "" ||
+				private.Replacement.TerminalResult.Status != "FAILED" {
+				t.Fatalf("unresolved terminal identity=%+v", private.Replacement)
+			}
+			retry, err := service.Query(context.Background(), "alice", input)
+			if err != nil || retry == nil || retry.Status != "FAILED" || retry.ToolName != "" {
+				t.Fatalf("unresolved retry=%+v error=%v", retry, err)
+			}
+			if botCalls != 1 {
+				t.Fatalf("unresolved retry Bot calls=%d, want 1", botCalls)
+			}
+
+			nextInput := input
+			nextInput.ClientTurnID = key + "-next"
+			nextInput.Query = "replace again after terminal failure"
+			next, err := service.Query(context.Background(), "alice", nextInput)
+			if err != nil || next == nil || next.Status != "RUNNING" ||
+				next.ToolName != "InSilicoResearchAgent" {
+				t.Fatalf("new replacement after unresolved terminal=%+v error=%v", next, err)
+			}
+			private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			retired := false
+			for _, identity := range private.RetiredIdentities {
+				if identity.ClientTurnID == key {
+					retired = true
+				}
+			}
+			if !retired || private.Replacement == nil ||
+				private.Replacement.ClientTurnID != nextInput.ClientTurnID || botCalls != 2 {
+				t.Fatalf("terminal retirement/private=%+v calls=%d", private, botCalls)
+			}
+		})
 	}
 }

@@ -2,16 +2,20 @@ package api_handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+	"phytomni-server/service/api_service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -67,10 +71,19 @@ func newStreamTestRequestWithTurn(
 	mode string,
 	clientTurnID string,
 ) *http.Request {
+	return newStreamTestRequestWithQueryAndTurn(t, "hello", mode, clientTurnID)
+}
+
+func newStreamTestRequestWithQueryAndTurn(
+	t *testing.T,
+	query string,
+	mode string,
+	clientTurnID string,
+) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	_ = mw.WriteField("query", "hello")
+	_ = mw.WriteField("query", query)
 	if mode != "" {
 		_ = mw.WriteField("mode", mode)
 	}
@@ -213,6 +226,375 @@ func TestQuery_StreamExposesDurableIdentityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "TextMessageContent") {
 		t.Fatalf("stream body missing content frame: %q", w.Body.String())
+	}
+}
+
+func TestQuery_SettledKeyedStreamRetryReplaysTerminalSnapshot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	var botCalls atomic.Int64
+	const streamBody = "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-handler-replay\"}\n\n" +
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"stored answer\"}\n\n" +
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.follow_up\",\"value\":[\"next question\"]}\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-handler-replay\"}\n\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		botCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(streamBody))
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	run := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		ctx.Set("username", "headers@example.com")
+		ctx.Request = newStreamTestRequestWithTurn(t, "instant", "handler-replay-key")
+		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+		NewHandler().Query(ctx)
+		return w
+	}
+	first := run()
+	second := run()
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("stream statuses=%d/%d, retry body=%q", first.Code, second.Code, second.Body.String())
+	}
+	if contentType := second.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Fatalf("retry Content-Type=%q, want text/event-stream", contentType)
+	}
+	if first.Header().Get("X-Phyto-Message-Id") == "" ||
+		first.Header().Get("X-Phyto-Message-Id") != second.Header().Get("X-Phyto-Message-Id") ||
+		first.Header().Get("X-Phyto-Dialogue-Id") != second.Header().Get("X-Phyto-Dialogue-Id") {
+		t.Fatalf("retry identity changed: first=%v second=%v", first.Header(), second.Header())
+	}
+	for _, marker := range []string{"TextMessageContent", "phyto.follow_up", "RunFinished"} {
+		if !strings.Contains(second.Body.String(), marker) {
+			t.Fatalf("retry body missing %q: %q", marker, second.Body.String())
+		}
+	}
+	if botCalls.Load() != 1 {
+		t.Fatalf("Bot stream calls=%d, want 1", botCalls.Load())
+	}
+	var rows int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil || rows != 1 {
+		t.Fatalf("persisted rows=%d error=%v, want 1", rows, err)
+	}
+}
+
+func TestQuery_SettledKeyedStreamRetryReplaysLargeStructuredAnswerForBrowser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	answer := `{"payload":"` + strings.Repeat("界", 100000) + `","kind":"structured"}`
+	content, err := json.Marshal(map[string]interface{}{
+		"type": "TextMessageContent", "delta": answer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamBody := "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-handler-large\"}\n\n" +
+		"event: TextMessageContent\ndata: " + string(content) + "\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-handler-large\"}\n\n"
+	var botCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		botCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(streamBody))
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	run := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		ctx.Set("username", "headers@example.com")
+		ctx.Request = newStreamTestRequestWithTurn(t, "instant", "handler-large-replay-key")
+		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+		NewHandler().Query(ctx)
+		return w
+	}
+	first := run()
+	second := run()
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("large replay statuses=%d/%d body=%q", first.Code, second.Code, second.Body.String())
+	}
+	if contentType := second.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Fatalf("large retry Content-Type=%q, want text/event-stream", contentType)
+	}
+	if first.Header().Get("X-Phyto-Message-Id") == "" ||
+		first.Header().Get("X-Phyto-Message-Id") != second.Header().Get("X-Phyto-Message-Id") ||
+		first.Header().Get("X-Phyto-Dialogue-Id") != second.Header().Get("X-Phyto-Dialogue-Id") {
+		t.Fatalf("large retry identity changed: first=%v second=%v", first.Header(), second.Header())
+	}
+	var replayed strings.Builder
+	contentFrames := 0
+	var eventTypes []string
+	for _, frame := range strings.Split(second.Body.String(), "\n\n") {
+		event, ok := rxBot.ParseAGUIFrame([]byte(frame))
+		if !ok {
+			if strings.TrimSpace(frame) == "" {
+				continue
+			}
+			t.Fatalf("browser received invalid AG-UI frame: %q", frame)
+		}
+		eventTypes = append(eventTypes, event.Type)
+		if event.Type != "TextMessageContent" {
+			continue
+		}
+		contentFrames++
+		var delta string
+		if err := json.Unmarshal(event.Data["delta"], &delta); err != nil {
+			t.Fatalf("decode browser delta: %v", err)
+		}
+		replayed.WriteString(delta)
+	}
+	if contentFrames < 2 || replayed.String() != answer {
+		t.Fatalf("browser replay frames=%d bytes=%d, want multi-frame exact %d bytes", contentFrames, replayed.Len(), len(answer))
+	}
+	if len(eventTypes) == 0 || eventTypes[len(eventTypes)-1] != "RunFinished" {
+		t.Fatalf("browser replay event sequence=%v, want terminal RunFinished", eventTypes)
+	}
+	if botCalls.Load() != 1 {
+		t.Fatalf("large replay Bot calls=%d, want 1", botCalls.Load())
+	}
+	var rows int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil || rows != 1 {
+		t.Fatalf("large replay rows=%d error=%v, want 1", rows, err)
+	}
+}
+
+func TestQuery_NonterminalKeyedStreamRetryIsJSONConflictBeforeHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	row := model.QuestionAgentLog{
+		DialogueId: "pending-dialogue", UserName: "headers@example.com",
+		Query: "hello", ToolName: "ChatAgent", Mode: "instant",
+		Status: "RUNNING", BotRunId: "run-pending",
+		BotProjectionJSON: `{"run_id":"run-pending","status":"RUNNING","report_revision":-1,"conversation_context":{"client_turn_id":"handler-pending-key"}}`,
+		BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatalf("seed pending row: %v", err)
+	}
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 2}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Set("username", "headers@example.com")
+	ctx.Request = newStreamTestRequestWithTurn(t, "instant", "handler-pending-key")
+	ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+	NewHandler().Query(ctx)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("pending retry status=%d body=%q, want 409", w.Code, w.Body.String())
+	}
+	if contentType := w.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("pending retry Content-Type=%q, want JSON", contentType)
+	}
+	if strings.Contains(w.Body.String(), "event:") || w.Header().Get("X-Phyto-Message-Id") != "" {
+		t.Fatalf("pending retry exposed SSE headers/body: headers=%v body=%q", w.Header(), w.Body.String())
+	}
+}
+
+func TestQuery_SubmittingKeyedBlockingRetryPreservesIdentityHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	var botCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		botCalls.Add(1)
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("test server does not support connection hijacking")
+			return
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("hijack ambiguous response: %v", err)
+			return
+		}
+		_ = conn.Close()
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: false,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	if out, err := api_service.NewService().Query(
+		context.Background(),
+		"headers@example.com",
+		api_service.QueryInput{
+			Query: "hello", Mode: "instant",
+			ClientTurnID: "handler-blocking-submitting-key",
+			Surface:      api_service.QuerySurfaceChat,
+		},
+	); out != nil || err == nil {
+		t.Fatalf("ambiguous seed result=%+v error=%v, want transport error", out, err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("user_name = ?", "headers@example.com").First(&row).Error; err != nil {
+		t.Fatalf("read submitting row: %v", err)
+	}
+
+	run := func(query string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		ctx.Set("username", "headers@example.com")
+		ctx.Request = newStreamTestRequestWithQueryAndTurn(
+			t, query, "instant", "handler-blocking-submitting-key",
+		)
+		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+		NewHandler().Query(ctx)
+		return w
+	}
+	exact := run("hello")
+	if exact.Code != http.StatusConflict ||
+		exact.Header().Get("X-Phyto-Dialogue-Id") != row.DialogueId ||
+		exact.Header().Get("X-Phyto-Message-Id") != strconv.FormatInt(row.Id, 10) {
+		t.Fatalf("exact pending response status/headers=%d/%v body=%q", exact.Code, exact.Header(), exact.Body.String())
+	}
+	if contentType := exact.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("exact pending Content-Type=%q, want JSON", contentType)
+	}
+	conflict := run("changed payload")
+	if conflict.Code != http.StatusConflict ||
+		conflict.Header().Get("X-Phyto-Dialogue-Id") != "" ||
+		conflict.Header().Get("X-Phyto-Message-Id") != "" {
+		t.Fatalf("conflicting retry leaked identity: status=%d headers=%v body=%q", conflict.Code, conflict.Header(), conflict.Body.String())
+	}
+	if botCalls.Load() != 1 {
+		t.Fatalf("blocking retries dispatched Bot %d times, want only the ambiguous seed", botCalls.Load())
+	}
+}
+
+func TestQuery_SubmittingKeyedStreamRetryPreservesIdentityHeadersBeforeJSONConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	var botCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		botCalls.Add(1)
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("test server does not support connection hijacking")
+			return
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("hijack ambiguous response: %v", err)
+			return
+		}
+		_ = conn.Close()
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	if out, err := api_service.NewService().Query(
+		context.Background(),
+		"headers@example.com",
+		api_service.QueryInput{
+			Query: "hello", Mode: "instant",
+			ClientTurnID: "handler-stream-submitting-key",
+			Surface:      api_service.QuerySurfaceChat,
+		},
+	); out != nil || err == nil {
+		t.Fatalf("ambiguous seed result=%+v error=%v, want transport error", out, err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("user_name = ?", "headers@example.com").First(&row).Error; err != nil {
+		t.Fatalf("read submitting row: %v", err)
+	}
+
+	run := func(query string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		ctx.Set("username", "headers@example.com")
+		ctx.Request = newStreamTestRequestWithQueryAndTurn(
+			t, query, "instant", "handler-stream-submitting-key",
+		)
+		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+		NewHandler().Query(ctx)
+		return w
+	}
+	exact := run("hello")
+	if exact.Code != http.StatusConflict ||
+		exact.Header().Get("X-Phyto-Dialogue-Id") != row.DialogueId ||
+		exact.Header().Get("X-Phyto-Message-Id") != strconv.FormatInt(row.Id, 10) {
+		t.Fatalf("exact stream pending status/headers=%d/%v body=%q", exact.Code, exact.Header(), exact.Body.String())
+	}
+	if contentType := exact.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("exact stream pending Content-Type=%q, want JSON", contentType)
+	}
+	if strings.Contains(exact.Body.String(), "event:") {
+		t.Fatalf("exact stream pending emitted SSE: %q", exact.Body.String())
+	}
+	conflict := run("changed payload")
+	if conflict.Code != http.StatusConflict ||
+		conflict.Header().Get("X-Phyto-Dialogue-Id") != "" ||
+		conflict.Header().Get("X-Phyto-Message-Id") != "" {
+		t.Fatalf("conflicting stream retry leaked identity: status=%d headers=%v body=%q", conflict.Code, conflict.Header(), conflict.Body.String())
+	}
+	if botCalls.Load() != 1 {
+		t.Fatalf("stream retries dispatched Bot %d times, want only the ambiguous seed", botCalls.Load())
+	}
+}
+
+func TestQuery_RejectsMalformedNegativeAndOverflowConversationIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupStreamHandlerTestDB(t)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false, StreamEnabled: false}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	for _, tc := range []struct {
+		name      string
+		pathID    string
+		refreshID string
+	}{
+		{name: "malformed path", pathID: "not-a-number"},
+		{name: "negative path", pathID: "-1"},
+		{name: "overflow path", pathID: "9223372036854775808"},
+		{name: "signed path", pathID: "+1"},
+		{name: "malformed refresh", pathID: "0", refreshID: "not-a-number"},
+		{name: "negative refresh", pathID: "0", refreshID: "-1"},
+		{name: "overflow refresh", pathID: "0", refreshID: "9223372036854775808"},
+		{name: "spaced refresh", pathID: "0", refreshID: " 1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			_ = writer.WriteField("query", "hello")
+			if tc.refreshID != "" {
+				_ = writer.WriteField("refresh_id", tc.refreshID)
+			}
+			_ = writer.Close()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/"+tc.pathID+"/messages", &body)
+			request.Header.Set("Content-Type", writer.FormDataContentType())
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Set("username", "headers@example.com")
+			ctx.Request = request
+			ctx.Params = gin.Params{{Key: "id", Value: tc.pathID}}
+			NewHandler().Query(ctx)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%q, want 400", w.Code, w.Body.String())
+			}
+		})
 	}
 }
 

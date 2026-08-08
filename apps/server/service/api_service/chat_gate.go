@@ -196,9 +196,10 @@ func (ps *Service) CheckChatAllowed(ctx context.Context, email string) error {
 	return ErrChatQuotaExhausted
 }
 
-// checkRemoteProductAllowed enforces the complete server-owned product gate
-// and returns detached admission data for downstream Research validation.
-func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
+// checkRemoteProductAccess enforces only the local feature and owner permission
+// boundary. Research's live Bot contract is deliberately resolved later, after
+// an accepted owner-scoped retry has had a chance to reuse its durable row.
+func (ps *Service) checkRemoteProductAccess(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
 	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	if !ok {
 		return remoteProductAdmission{}, ErrRemoteProductForbidden
@@ -216,8 +217,16 @@ func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool st
 	if !containsAgentTool(resolution.AllowedTools, requirement.tool) {
 		return remoteProductAdmission{}, ErrRemoteProductDisabled
 	}
-	admission := remoteProductAdmission{email: email, tool: requirement.tool}
-	if requirement.tool == "InSilicoResearchAgent" {
+	return remoteProductAdmission{email: email, tool: requirement.tool}, nil
+}
+
+func (ps *Service) completeRemoteProductAdmission(
+	ctx context.Context,
+	admission remoteProductAdmission,
+) (remoteProductAdmission, error) {
+	if admission.tool == "InSilicoResearchAgent" &&
+		(admission.researchInput.MaxUserQueryChars < 1 ||
+			admission.researchInput.MaxAttachments < 1) {
 		contract, err := ps.validatedResearchInputContract(ctx, nil)
 		if err != nil {
 			return remoteProductAdmission{}, ErrResearchInputIncompatible
@@ -225,6 +234,16 @@ func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool st
 		admission.researchInput = contract
 	}
 	return admission, nil
+}
+
+// checkRemoteProductAllowed enforces the complete server-owned product gate
+// for callers that need a live capability decision immediately.
+func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
+	admission, err := ps.checkRemoteProductAccess(ctx, email, tool)
+	if err != nil {
+		return remoteProductAdmission{}, err
+	}
+	return ps.completeRemoteProductAdmission(ctx, admission)
 }
 
 // CheckRemoteProductAllowed is the server-side authorization boundary for
@@ -239,17 +258,56 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 	return err
 }
 
-// AdmitRemoteProduct performs the complete server-owned product gate and, on
-// success, returns a request-scoped context that lets Query reuse that exact
-// admission. The private context key cannot be supplied by a browser or by a
-// Gin string value; direct service callers without this context still run the
-// full check below.
+// AdmitRemoteProduct performs the local server-owned feature and permission
+// gate before the handler parses a body. Query completes Research's live Bot
+// contract only for a new key; an accepted retry therefore cannot be revoked by
+// later catalog drift. The private context key cannot be supplied by a browser.
 func (ps *Service) AdmitRemoteProduct(ctx context.Context, email, tool string) (context.Context, error) {
-	admission, err := ps.checkRemoteProductAllowed(ctx, email, tool)
+	admission, err := ps.checkRemoteProductAccess(ctx, email, tool)
 	if err != nil {
 		return ctx, err
 	}
 	return context.WithValue(ctx, remoteProductAdmissionContextKey{}, admission), nil
+}
+
+// RemoteProductInputLimits is the live product contract a handler may enforce
+// before parsing its bounded request body. Products without a negotiated input
+// contract leave both fields zero.
+type RemoteProductInputLimits struct {
+	MaxQueryChars  int
+	MaxAttachments int
+}
+
+// CompleteRemoteProductAdmission resolves the live product contract after the
+// local feature and owner permission gate. The completed admission is retained
+// in the returned context so Query does not repeat the catalog request.
+func (ps *Service) CompleteRemoteProductAdmission(
+	ctx context.Context,
+	email string,
+	tool string,
+) (context.Context, RemoteProductInputLimits, error) {
+	admission, ok := remoteProductAdmissionFromContext(ctx, email, tool)
+	if !ok {
+		var err error
+		admission, err = ps.checkRemoteProductAccess(ctx, email, tool)
+		if err != nil {
+			return ctx, RemoteProductInputLimits{}, err
+		}
+	}
+	completed, err := ps.completeRemoteProductAdmission(ctx, admission)
+	if err != nil {
+		return ctx, RemoteProductInputLimits{}, err
+	}
+	limits := RemoteProductInputLimits{}
+	if completed.tool == "InSilicoResearchAgent" {
+		maxQueryChars, maxAttachments, ok := researchInputLimits(completed)
+		if !ok {
+			return ctx, RemoteProductInputLimits{}, ErrResearchInputIncompatible
+		}
+		limits.MaxQueryChars = maxQueryChars
+		limits.MaxAttachments = maxAttachments
+	}
+	return context.WithValue(ctx, remoteProductAdmissionContextKey{}, completed), limits, nil
 }
 
 func remoteProductAdmissionFromContext(ctx context.Context, email, tool string) (remoteProductAdmission, bool) {
@@ -274,22 +332,11 @@ func researchInputLimits(admission remoteProductAdmission) (maxQueryChars, maxAt
 	return maxQueryChars, admission.researchInput.MaxAttachments, true
 }
 
-// ResearchInputLimitsFromAdmission returns only limits from a server-created
-// Research admission. Its private context key prevents browser-supplied values
-// from becoming authoritative at the HTTP boundary.
-func ResearchInputLimitsFromAdmission(ctx context.Context) (maxQueryChars, maxAttachments int, ok bool) {
-	admission, ok := ctx.Value(remoteProductAdmissionContextKey{}).(remoteProductAdmission)
-	if !ok {
-		return 0, 0, false
-	}
-	return researchInputLimits(admission)
-}
-
-func (ps *Service) ensureRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
+func (ps *Service) ensureRemoteProductAccess(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
 	if admission, ok := remoteProductAdmissionFromContext(ctx, email, tool); ok {
 		return admission, nil
 	}
-	return ps.checkRemoteProductAllowed(ctx, email, tool)
+	return ps.checkRemoteProductAccess(ctx, email, tool)
 }
 
 func containsAgentTool(tools []string, target string) bool {

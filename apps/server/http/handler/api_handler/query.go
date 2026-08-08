@@ -25,6 +25,7 @@ import (
 const (
 	explicitResearchIntentHeader = "X-Phyto-Research-Intent"
 	explicitResearchIntentValue  = "expert-research-v1"
+	clientTurnIDHeader           = "X-Phyto-Client-Turn-Id"
 )
 
 // queryErrorStatus maps a /query service error to the HTTP status and message
@@ -35,6 +36,8 @@ func queryErrorStatus(err error) (int, string) {
 	switch {
 	case errors.Is(err, api_service.ErrGatewayDisabled):
 		return http.StatusServiceUnavailable, "service temporarily unavailable"
+	case errors.Is(err, api_service.ErrQueryLimitExceeded):
+		return http.StatusRequestEntityTooLarge, "query exceeds the accepted limit"
 	case errors.Is(err, api_service.ErrInvalidChatRouting):
 		return http.StatusBadRequest, "invalid chat routing"
 	case errors.Is(err, api_service.ErrInvalidClientTurnID):
@@ -51,6 +54,8 @@ func queryErrorStatus(err error) (int, string) {
 		return http.StatusNotFound, "conversation not found"
 	case errors.Is(err, api_service.ErrDuplicateClientTurn):
 		return http.StatusConflict, "client turn id conflicts with an existing turn"
+	case errors.Is(err, api_service.ErrClientTurnSubmissionPending):
+		return http.StatusConflict, "client turn submission is pending"
 	case errors.Is(err, api_service.ErrAgentToolForbidden):
 		return http.StatusNotFound, "agent tool not found"
 	case errors.Is(err, api_service.ErrNoExecutableAgentTools):
@@ -164,6 +169,22 @@ func parseArtifactIDs(raw string) ([]string, bool) {
 	return artifactIDs, true
 }
 
+func parseNonnegativeInt64(raw string) (int64, bool) {
+	if raw == "" {
+		return 0, false
+	}
+	for index := range len(raw) {
+		if raw[index] < '0' || raw[index] > '9' {
+			return 0, false
+		}
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 0 {
+		return 0, false
+	}
+	return value, true
+}
+
 // parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
 // future authority fields out of the Chat/Agent request contract.
@@ -264,6 +285,10 @@ func validateQueryClientTurn(in api_service.QueryInput) error {
 	requiresClientTurn := in.Surface == api_service.QuerySurfaceAgentProduct &&
 		api_service.IsDedicatedAgentProductTool(in.Tool) &&
 		api_service.IsResearchAgentProductTool(in.Tool)
+	if in.Surface == api_service.QuerySurfaceChat &&
+		in.Mode == "expert" && in.Tool == "InSilicoResearchAgent" {
+		requiresClientTurn = true
+	}
 	if rxBot.BotConfig != nil && rxBot.BotConfig.MultiturnV1Enabled &&
 		in.Surface == api_service.QuerySurfaceChat {
 		requiresClientTurn = true
@@ -343,6 +368,17 @@ func explicitResearchIntent(ctx *gin.Context) (bool, error) {
 	return true, nil
 }
 
+func clientTurnIDFromHeader(ctx *gin.Context) (string, bool, error) {
+	values := ctx.Request.Header.Values(clientTurnIDHeader)
+	if len(values) == 0 {
+		return "", false, nil
+	}
+	if len(values) != 1 || api_service.ValidateClientTurnID(values[0]) != nil {
+		return "", false, api_service.ErrInvalidClientTurnID
+	}
+	return values[0], true, nil
+}
+
 func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySurface, routeTool string) {
 	name, _ := ctx.Get("username")
 	email, _ := name.(string)
@@ -362,6 +398,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	// owned by the route, so reject disabled or ungranted products before any
 	// multipart/body operation. Chat uses the finite Research routing intent
 	// below to run the same gate before parsing, then cross-checks the form.
+	researchAdmission := false
 	if surface == api_service.QuerySurfaceAgentProduct {
 		var err error
 		serviceCtx, err = ph.service.AdmitRemoteProduct(ctx, email, routeTool)
@@ -370,6 +407,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			writeQueryError(ctx, status, message)
 			return
 		}
+		researchAdmission = api_service.IsResearchAgentProductTool(routeTool)
 	}
 	researchIntent := false
 	if surface == api_service.QuerySurfaceChat {
@@ -389,6 +427,41 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 				writeQueryError(ctx, status, message)
 				return
 			}
+			researchAdmission = true
+		}
+	}
+	clientTurnID, hasClientTurnID, err := clientTurnIDFromHeader(ctx)
+	if err != nil {
+		status, message := queryErrorStatus(err)
+		writeQueryError(ctx, status, message)
+		return
+	}
+	productLimits := api_service.RemoteProductInputLimits{}
+	if researchAdmission {
+		knownCurrentTurn := false
+		if hasClientTurnID {
+			knownCurrentTurn, err = ph.service.HasCurrentClientTurn(
+				serviceCtx,
+				email,
+				clientTurnID,
+			)
+			if err != nil {
+				status, message := queryErrorStatus(err)
+				writeQueryError(ctx, status, message)
+				return
+			}
+		}
+		if !knownCurrentTurn {
+			serviceCtx, productLimits, err = ph.service.CompleteRemoteProductAdmission(
+				serviceCtx,
+				email,
+				"InSilicoResearchAgent",
+			)
+			if err != nil {
+				status, message := localizedQueryErrorStatus(ctx, err)
+				writeQueryError(ctx, status, message)
+				return
+			}
 		}
 	}
 
@@ -396,16 +469,8 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	if maxQueryChars == 0 {
 		maxQueryChars = rxBot.DefaultMaxUserQueryChars
 	}
-	researchAdmission := researchIntent ||
-		(surface == api_service.QuerySurfaceAgentProduct && api_service.IsResearchAgentProductTool(routeTool))
-	if researchAdmission {
-		admittedMaxQueryChars, _, ok := api_service.ResearchInputLimitsFromAdmission(serviceCtx)
-		if !ok {
-			status, message := localizedQueryErrorStatus(ctx, api_service.ErrResearchInputIncompatible)
-			writeQueryError(ctx, status, message)
-			return
-		}
-		maxQueryChars = admittedMaxQueryChars
+	if productLimits.MaxQueryChars > 0 {
+		maxQueryChars = productLimits.MaxQueryChars
 	}
 	ctx.Request.Body = http.MaxBytesReader(
 		ctx.Writer,
@@ -426,6 +491,11 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 	in := queryInputForSurface(ctx, surface, routeTool)
+	if hasClientTurnID && in.ClientTurnID != clientTurnID {
+		status, message := queryErrorStatus(api_service.ErrInvalidClientTurnID)
+		writeQueryError(ctx, status, message)
+		return
+	}
 	if err := api_service.ValidateCurrentQuery(in.Query, maxQueryChars); err != nil {
 		if errors.Is(err, api_service.ErrQueryLimitExceeded) {
 			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": i18n.T(ctx, "query.upload_too_large")})
@@ -504,8 +574,20 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	// RESTful: conversation id from path /conversations/:id/messages (id=0 means a
 	// new conversation, preserving the old DefaultPostForm("id","0") semantics).
 	// refresh_id still travels in the multipart body.
-	in.Id, _ = strconv.ParseInt(ctx.Param("id"), 10, 64)
-	in.RefreshId, _ = strconv.ParseInt(ctx.DefaultPostForm("refresh_id", "0"), 10, 64)
+	pathID := ctx.Param("id")
+	if surface == api_service.QuerySurfaceAgentProduct && pathID == "" {
+		pathID = "0"
+	}
+	in.Id, ok = parseNonnegativeInt64(pathID)
+	if !ok {
+		writeQueryError(ctx, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+	in.RefreshId, ok = parseNonnegativeInt64(ctx.DefaultPostForm("refresh_id", "0"))
+	if !ok {
+		writeQueryError(ctx, http.StatusBadRequest, "invalid refresh id")
+		return
+	}
 
 	if form != nil {
 		for _, files := range form.File {
@@ -594,6 +676,11 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 
 	data, err := ph.service.Query(serviceCtx, email, in)
 	if err != nil {
+		if errors.Is(err, api_service.ErrClientTurnSubmissionPending) && data != nil &&
+			data.Id > 0 && strings.TrimSpace(data.DialogueId) != "" {
+			ctx.Header("X-Phyto-Dialogue-Id", data.DialogueId)
+			ctx.Header("X-Phyto-Message-Id", strconv.FormatInt(data.Id, 10))
+		}
 		status, msg := localizedQueryErrorStatus(ctx, err)
 		if status >= http.StatusInternalServerError {
 			rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)

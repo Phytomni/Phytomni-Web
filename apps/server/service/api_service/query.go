@@ -58,13 +58,14 @@ var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
 var ErrStreamUnsupported = errors.New("streaming not supported for this request")
 
 var (
-	ErrInvalidClientTurnID      = errors.New("invalid client turn id")
-	ErrConversationModeConflict = errors.New("conversation mode conflict")
-	ErrDuplicateClientTurn      = errors.New("duplicate client turn conflict")
-	ErrInvalidQueryAttachments  = errors.New("invalid query attachments")
-	ErrInvalidAgentResolver     = errors.New("invalid agent resolver")
-	ErrQueryAuthentication      = errors.New("query authentication required")
-	ErrInvalidConversationStage = errors.New("invalid conversation context stage")
+	ErrInvalidClientTurnID         = errors.New("invalid client turn id")
+	ErrConversationModeConflict    = errors.New("conversation mode conflict")
+	ErrDuplicateClientTurn         = errors.New("duplicate client turn conflict")
+	ErrClientTurnSubmissionPending = errors.New("client turn submission is pending")
+	ErrInvalidQueryAttachments     = errors.New("invalid query attachments")
+	ErrInvalidAgentResolver        = errors.New("invalid agent resolver")
+	ErrQueryAuthentication         = errors.New("query authentication required")
+	ErrInvalidConversationStage    = errors.New("invalid conversation context stage")
 )
 
 var serviceClientTurnIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
@@ -125,9 +126,12 @@ type v1SubmissionTarget struct {
 }
 
 type v1Submission struct {
-	row       model.QuestionAgentLog
-	envelope  *rxBot.ConversationEnvelopeV1
-	duplicate *QueryData
+	row                model.QuestionAgentLog
+	envelope           *rxBot.ConversationEnvelopeV1
+	duplicate          *QueryData
+	pending            bool
+	requestFingerprint string
+	replacement        bool
 }
 
 func multiturnV1Enabled(in QueryInput) bool {
@@ -143,7 +147,16 @@ func conversationV1Enabled(in QueryInput) bool {
 }
 
 func ownerAllocatedSubmissionEnabled(in QueryInput) bool {
-	return multiturnV1Enabled(in) || dedicatedResearchProductSubmission(in)
+	return conversationV1Enabled(in) || researchOwnerAllocatedSubmission(in) ||
+		in.Surface == QuerySurfaceChat &&
+			serviceClientTurnIDPattern.MatchString(strings.TrimSpace(in.ClientTurnID))
+}
+
+func researchOwnerAllocatedSubmission(in QueryInput) bool {
+	return dedicatedResearchProductSubmission(in) ||
+		in.Surface == QuerySurfaceChat &&
+			in.Mode == "expert" &&
+			in.Tool == "InSilicoResearchAgent"
 }
 
 func dedicatedResearchProductSubmission(in QueryInput) bool {
@@ -176,7 +189,13 @@ func normalizeV1ChatRouting(in *QueryInput) error {
 }
 
 func validateV1ClientTurnID(value string) error {
-	if !serviceClientTurnIDPattern.MatchString(strings.TrimSpace(value)) {
+	return ValidateClientTurnID(strings.TrimSpace(value))
+}
+
+// ValidateClientTurnID applies the bounded ASCII identity grammar shared by
+// the multipart field and its pre-body transport header.
+func ValidateClientTurnID(value string) error {
+	if !serviceClientTurnIDPattern.MatchString(value) {
 		return ErrInvalidClientTurnID
 	}
 	return nil
@@ -192,6 +211,9 @@ func validateV1CurrentMessage(value string) error {
 
 func validateCurrentMessageWithin(value string, limit int) error {
 	if err := ValidateCurrentQuery(value, limit); err != nil {
+		if errors.Is(err, ErrQueryLimitExceeded) {
+			return fmt.Errorf("%w: %w", ErrInvalidChatRouting, ErrQueryLimitExceeded)
+		}
 		return ErrInvalidChatRouting
 	}
 	return nil
@@ -240,6 +262,7 @@ func (ps *Service) resolveV1SubmissionTarget(
 	ctx context.Context,
 	username string,
 	in QueryInput,
+	enforceModeLock bool,
 ) (v1SubmissionTarget, error) {
 	if strings.TrimSpace(username) == "" {
 		return v1SubmissionTarget{}, ErrQueryAuthentication
@@ -264,17 +287,20 @@ func (ps *Service) resolveV1SubmissionTarget(
 	if err != nil {
 		return v1SubmissionTarget{}, err
 	}
-	lockedMode := strings.ToLower(strings.TrimSpace(ledger.Mode))
-	if lockedMode == "" {
-		lockedMode = "instant"
-	}
-	modeIsProvisionalFailure := ledger.ModeLockState == "provisional" && ledger.RootStatus == "FAILED"
-	if !modeIsProvisionalFailure && lockedMode != in.Mode {
-		return v1SubmissionTarget{}, ErrConversationModeConflict
-	}
-	effectiveMode := lockedMode
-	if modeIsProvisionalFailure {
-		effectiveMode = in.Mode
+	effectiveMode := in.Mode
+	if enforceModeLock {
+		lockedMode := strings.ToLower(strings.TrimSpace(ledger.Mode))
+		if lockedMode == "" {
+			lockedMode = "instant"
+		}
+		modeIsProvisionalFailure := ledger.ModeLockState == "provisional" && ledger.RootStatus == "FAILED"
+		if !modeIsProvisionalFailure && lockedMode != in.Mode {
+			return v1SubmissionTarget{}, ErrConversationModeConflict
+		}
+		effectiveMode = lockedMode
+		if modeIsProvisionalFailure {
+			effectiveMode = in.Mode
+		}
 	}
 	artifacts, err := ledger.AuthorizeArtifactIDs(in.ArtifactIDs)
 	if err != nil {
@@ -379,24 +405,121 @@ func mysqlTurnWaitSeconds(timeout time.Duration) int {
 	return seconds
 }
 
-func storedSubmissionOperation(
-	row model.QuestionAgentLog,
-	private *persistedConversationContext,
-) string {
-	if private != nil && private.Replacement != nil {
-		return "replace"
-	}
-	return "append"
+type clientTurnIdentity uint8
+
+const (
+	clientTurnIdentityNone clientTurnIdentity = iota
+	clientTurnIdentityBase
+	clientTurnIdentityReplacement
+	clientTurnIdentityRetired
+)
+
+type clientTurnLookup struct {
+	row      model.QuestionAgentLog
+	private  *persistedConversationContext
+	identity clientTurnIdentity
 }
 
-func persistedClientTurnID(private *persistedConversationContext) string {
+type submissionFingerprintArtifact struct {
+	ArtifactID  string `json:"artifact_id"`
+	DisplayName string `json:"display_name"`
+}
+
+type submissionFingerprintPayload struct {
+	Version             int                             `json:"version"`
+	Operation           string                          `json:"operation"`
+	ParentID            int64                           `json:"parent_id"`
+	ResolvedParentID    int64                           `json:"resolved_parent_id"`
+	RefreshID           int64                           `json:"refresh_id"`
+	Surface             QuerySurface                    `json:"surface"`
+	Mode                string                          `json:"mode"`
+	RequestedTool       string                          `json:"requested_tool"`
+	Query               string                          `json:"query"`
+	Attachments         []string                        `json:"attachments"`
+	InteropMode         string                          `json:"interop_mode"`
+	InteropTargets      []string                        `json:"interop_targets"`
+	ConversationV1      bool                            `json:"conversation_v1"`
+	History             []rxBot.ChatMessage             `json:"history,omitempty"`
+	ArtifactIDs         []string                        `json:"artifact_ids,omitempty"`
+	AuthorizedArtifacts []submissionFingerprintArtifact `json:"authorized_artifacts,omitempty"`
+	GeneID              string                          `json:"gene_id,omitempty"`
+	ToID                string                          `json:"to_id,omitempty"`
+	SpeciesCode         string                          `json:"species_code,omitempty"`
+}
+
+func submissionRequestFingerprint(in QueryInput, target v1SubmissionTarget, conversationV1 bool) string {
+	interopMode := in.InteropMode
+	interopTargets := append([]string{}, in.InteropTargets...)
+	if normalizedMode, normalizedTargets, err := rxBot.ValidateInteropControls(interopMode, interopTargets); err == nil {
+		interopMode = normalizedMode
+		interopTargets = normalizedTargets
+	}
+	attachments := make([]string, len(in.Attachments))
+	for index := range in.Attachments {
+		attachments[index] = in.Attachments[index].AssetID
+	}
+	requestedTool := in.Tool
+	if in.Surface == QuerySurfaceChat && in.Mode == "instant" {
+		requestedTool = "ChatAgent"
+	}
+	payload := submissionFingerprintPayload{
+		Version:          1,
+		Operation:        target.operation,
+		ParentID:         in.Id,
+		ResolvedParentID: target.parentID,
+		RefreshID:        in.RefreshId,
+		Surface:          in.Surface,
+		Mode:             target.mode,
+		RequestedTool:    requestedTool,
+		Query:            in.Query,
+		Attachments:      attachments,
+		InteropMode:      interopMode,
+		InteropTargets:   interopTargets,
+		ConversationV1:   conversationV1,
+		GeneID:           in.GeneID,
+		ToID:             in.ToID,
+		SpeciesCode:      in.SpeciesCode,
+	}
+	if conversationV1 {
+		payload.ArtifactIDs = append([]string(nil), in.ArtifactIDs...)
+		payload.AuthorizedArtifacts = make([]submissionFingerprintArtifact, len(target.artifacts))
+		for index := range target.artifacts {
+			payload.AuthorizedArtifacts[index] = submissionFingerprintArtifact{
+				ArtifactID:  target.artifacts[index].ArtifactID,
+				DisplayName: target.artifacts[index].DisplayName,
+			}
+		}
+	} else if in.Surface == QuerySurfaceChat && fingerprintHistorySentToBot(in) {
+		payload.History = parseHistory(in.History)
+	}
+	encoded, _ := json.Marshal(payload)
+	return sha256Hex(encoded)
+}
+
+func fingerprintHistorySentToBot(in QueryInput) bool {
+	if in.Mode == "instant" || in.Tool == "" {
+		return true
+	}
+	slug, ok := rxBot.SlugFor(in.Tool)
+	if !ok {
+		return false
+	}
+	_, ok = rxBot.ChatModelFor(slug)
+	return ok
+}
+
+func clearConversationV1Lifecycle(private *persistedConversationContext) {
 	if private == nil {
-		return ""
+		return
 	}
-	if private.Replacement != nil {
-		return private.Replacement.ClientTurnID
-	}
-	return private.ClientTurnID
+	private.ModeLockState = ""
+	private.Stage = nil
+	private.SettlementState = ""
+	private.SettlementLedgerHash = ""
+	private.RebuildLedgerVersion = ""
+	private.RebuildLedgerCursor = 0
+	private.AssistantSummary = ""
+	private.ArtifactRefs = nil
 }
 
 func applyClientTurnLookup(
@@ -409,12 +532,17 @@ func applyClientTurnLookup(
 		const projectionJSON = "CASE WHEN JSON_VALID(bot_projection_json) THEN bot_projection_json ELSE '{}' END"
 		return query.Where(
 			"JSON_UNQUOTE(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.client_turn_id')) = ? OR "+
-				"JSON_UNQUOTE(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.replacement.client_turn_id')) = ?",
+				"JSON_UNQUOTE(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.replacement.client_turn_id')) = ? OR "+
+				"JSON_CONTAINS(JSON_EXTRACT("+projectionJSON+", '$.conversation_context.retired_identities'), JSON_OBJECT('client_turn_id', ?))",
+			clientTurnID,
 			clientTurnID,
 			clientTurnID,
 		).Order("id DESC").Limit(2)
 	}
-	return query.Order("id DESC").Limit(recentClientTurnLookupLimit)
+	// SQLite is used only by tests and local development. Scan the complete
+	// owner scope so its retired-key semantics match MySQL even after many rows;
+	// production MySQL applies the parameterized JSON predicate above.
+	return query.Order("id DESC")
 }
 
 func findRecentClientTurnWithDB(
@@ -422,62 +550,135 @@ func findRecentClientTurnWithDB(
 	gdb *gorm.DB,
 	username string,
 	clientTurnID string,
-) (*model.QuestionAgentLog, *persistedConversationContext, error) {
+) (*clientTurnLookup, error) {
 	var rows []model.QuestionAgentLog
 	if err := applyClientTurnLookup(gdb.WithContext(ctx), username, clientTurnID).
 		Find(&rows).Error; err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var match *model.QuestionAgentLog
-	var matchPrivate *persistedConversationContext
+	var match *clientTurnLookup
 	for index := range rows {
 		_, private, err := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if persistedClientTurnID(private) == clientTurnID {
-			if match != nil {
-				return nil, nil, ErrDuplicateClientTurn
+		if private == nil {
+			continue
+		}
+		identities := []clientTurnIdentity(nil)
+		if private.ClientTurnID == clientTurnID {
+			identities = append(identities, clientTurnIdentityBase)
+		}
+		if private.Replacement != nil && private.Replacement.ClientTurnID == clientTurnID {
+			identities = append(identities, clientTurnIdentityReplacement)
+		}
+		for _, retired := range private.RetiredIdentities {
+			if retired.ClientTurnID == clientTurnID {
+				identities = append(identities, clientTurnIdentityRetired)
 			}
-			match = &rows[index]
-			matchPrivate = private
+		}
+		for _, identity := range identities {
+			if match != nil {
+				return nil, ErrDuplicateClientTurn
+			}
+			match = &clientTurnLookup{row: rows[index], private: private, identity: identity}
 		}
 	}
-	return match, matchPrivate, nil
+	return match, nil
+}
+
+// HasCurrentClientTurn reports whether the owner currently holds clientTurnID
+// as a canonical Research base or active Research replacement identity.
+// Unrelated Chat identities and retired aliases deliberately do not bypass a
+// new Research request's live product admission.
+func (ps *Service) HasCurrentClientTurn(
+	ctx context.Context,
+	username string,
+	clientTurnID string,
+) (bool, error) {
+	if username == "" || ValidateClientTurnID(clientTurnID) != nil {
+		return false, ErrInvalidClientTurnID
+	}
+	match, err := findRecentClientTurnWithDB(
+		ctx,
+		model.DB(ctx),
+		username,
+		clientTurnID,
+	)
+	if err != nil {
+		return false, err
+	}
+	if match == nil {
+		return false, nil
+	}
+	switch match.identity {
+	case clientTurnIdentityBase:
+		return isResearchProductTool(match.row.ToolName), nil
+	case clientTurnIdentityReplacement:
+		return match.private != nil && match.private.Replacement != nil &&
+			isResearchProductTool(match.private.Replacement.ToolName), nil
+	default:
+		return false, nil
+	}
 }
 
 func validateDuplicateSubmission(
 	row model.QuestionAgentLog,
 	private *persistedConversationContext,
+	identity clientTurnIdentity,
 	in QueryInput,
 	target v1SubmissionTarget,
+	conversationV1 bool,
 ) error {
+	if identity == clientTurnIdentityRetired {
+		return ErrDuplicateClientTurn
+	}
 	if in.Id != 0 || in.RefreshId != 0 {
 		if row.DialogueId != target.dialogueID {
 			return ErrDuplicateClientTurn
 		}
 	}
+	requestFingerprint := submissionRequestFingerprint(in, target, conversationV1)
+	storedFingerprint := ""
 	storedMode := normalizedConversationLedgerMode(row.Mode)
 	storedQuery := row.Query
+	storedTool := row.ToolName
 	storedAttachments := []rxBot.AssetAttachmentRef(nil)
 	storedInteropMode := ""
 	storedInteropTargets := []string(nil)
 	if private != nil {
+		storedFingerprint = private.RequestFingerprint
 		storedAttachments = private.InputAttachments
 		storedInteropMode = private.InteropMode
 		storedInteropTargets = private.InteropTargets
 	}
-	if private != nil && private.Replacement != nil {
+	storedOperation := "append"
+	if identity == clientTurnIdentityReplacement && private != nil && private.Replacement != nil {
+		storedFingerprint = private.Replacement.RequestFingerprint
 		storedMode = private.Replacement.Mode
 		storedQuery = private.Replacement.Query
+		storedTool = private.Replacement.ToolName
 		storedAttachments = private.Replacement.InputAttachments
 		storedInteropMode = private.Replacement.InteropMode
 		storedInteropTargets = private.Replacement.InteropTargets
-	}
-	storedOperation := storedSubmissionOperation(row, private)
-	if target.operation == "replace" && row.Id == in.RefreshId &&
-		private != nil && private.ClientTurnID == in.ClientTurnID {
 		storedOperation = "replace"
+	}
+	if storedFingerprint != "" {
+		if storedFingerprint != requestFingerprint {
+			return ErrDuplicateClientTurn
+		}
+		return nil
+	}
+	// A digestless row predates the complete request fingerprint. Reuse it only
+	// for the one reconstructable legacy shape: a simple V0 Chat submission with
+	// no history, artifact authorization, resolver arguments, or operation
+	// reinterpretation. Every ambiguous dimension fails closed.
+	if in.Surface != QuerySurfaceChat || conversationV1 || len(in.History) != 0 ||
+		len(in.ArtifactIDs) != 0 || len(target.artifacts) != 0 ||
+		in.GeneID != "" || in.ToID != "" || in.SpeciesCode != "" ||
+		(identity == clientTurnIdentityBase && target.operation != "append") ||
+		(identity == clientTurnIdentityReplacement && target.operation != "replace") {
+		return ErrDuplicateClientTurn
 	}
 	if storedMode != target.mode ||
 		sha256Hex([]byte(storedQuery)) != sha256Hex([]byte(in.Query)) ||
@@ -486,13 +687,17 @@ func validateDuplicateSubmission(
 		!sameInteropControls(storedInteropMode, storedInteropTargets, in.InteropMode, in.InteropTargets) {
 		return ErrDuplicateClientTurn
 	}
-	if in.Surface == QuerySurfaceAgentProduct && row.ToolName != in.Tool {
+	requestedTool := in.Tool
+	if in.Surface == QuerySurfaceChat && in.Mode == "instant" {
+		requestedTool = "ChatAgent"
+	}
+	if storedTool != requestedTool {
 		return ErrDuplicateClientTurn
 	}
 	if target.operation == "replace" && row.Id != in.RefreshId {
 		return ErrDuplicateClientTurn
 	}
-	if target.operation == "append" && in.Id != 0 && row.FId != in.Id {
+	if target.operation == "append" && row.FId != in.Id {
 		return ErrDuplicateClientTurn
 	}
 	return nil
@@ -557,6 +762,266 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 		}
 	}
 	return out, nil
+}
+
+func queryDataFromReplacementTerminal(
+	row model.QuestionAgentLog,
+	replacement *persistedConversationReplacement,
+) *QueryData {
+	if replacement == nil || replacement.TerminalResult == nil {
+		return nil
+	}
+	terminal := replacement.TerminalResult
+	out := &QueryData{
+		Id:                row.Id,
+		ToolName:          terminal.ToolName,
+		Answer:            terminal.Answer,
+		FollowUpQuestions: terminal.FollowUpQuestions,
+		Status:            terminal.Status,
+		ReactionType:      "0",
+		DialogueId:        row.DialogueId,
+		BotRunID:          terminal.BotRunID,
+		TaskId:            terminal.TaskID,
+		TrackingDegraded:  terminal.TrackingDegraded,
+		ReportRevision:    terminal.ReportRevision,
+		DegradedInterop:   terminal.DegradedInterop,
+		Attachments:       append([]rxBot.AssetAttachmentRef(nil), replacement.InputAttachments...),
+	}
+	if terminal.Interop != nil {
+		interop := *terminal.Interop
+		out.InterOp = &interop
+	}
+	return out
+}
+
+func queryDataFromReplacementCandidate(
+	row model.QuestionAgentLog,
+	replacement *persistedConversationReplacement,
+) *QueryData {
+	if replacement == nil {
+		return nil
+	}
+	status := replacement.ActiveStatus
+	if status == "" {
+		status = "SUBMITTING"
+	}
+	out := &QueryData{
+		Id:               row.Id,
+		ToolName:         replacement.ToolName,
+		Status:           status,
+		ReactionType:     "0",
+		DialogueId:       row.DialogueId,
+		BotRunID:         replacement.ActiveBotRunID,
+		TaskId:           replacement.ActiveTaskID,
+		TrackingDegraded: replacement.ActiveTrackingDegraded,
+		ReportRevision:   replacement.ActiveReportRevision,
+		DegradedInterop:  replacement.ActiveDegradedInterop,
+		Attachments:      append([]rxBot.AssetAttachmentRef(nil), replacement.InputAttachments...),
+	}
+	if replacement.ActiveInterop != nil {
+		interop := *replacement.ActiveInterop
+		out.InterOp = &interop
+	}
+	if len(replacement.ActiveA2UI) > 0 {
+		out.A2UI, _ = DecodeA2uiSurface(replacement.ActiveA2UI)
+	}
+	return out
+}
+
+func canonicalImmediateTerminalStatus(status string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "FAILED":
+		return "FAILED", true
+	case "CANCELLED", "CANCELED":
+		return "CANCELLED", true
+	case "TIMED_OUT", "TIMEOUT":
+		return "TIMED_OUT", true
+	default:
+		return "", false
+	}
+}
+
+func boundedReplacementTerminalText(value string, limit int) string {
+	if !utf8.ValidString(value) || len(value) > limit {
+		return ""
+	}
+	return value
+}
+
+func boundedReplacementFollowUp(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxPersistedReplacementFollowUpBytes {
+		return ""
+	}
+	var questions []string
+	if json.Unmarshal([]byte(value), &questions) != nil || questions == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(questions)
+	if err != nil || len(encoded) > maxPersistedReplacementFollowUpBytes {
+		return ""
+	}
+	return string(encoded)
+}
+
+func replacementTerminalResult(out *QueryData) *persistedReplacementTerminalResult {
+	if out == nil {
+		return nil
+	}
+	terminal := &persistedReplacementTerminalResult{
+		ToolName:          out.ToolName,
+		Answer:            boundedReplacementTerminalText(out.Answer, maxPersistedReplacementAnswerBytes),
+		FollowUpQuestions: boundedReplacementFollowUp(out.FollowUpQuestions),
+		Status:            out.Status,
+		BotRunID:          out.BotRunID,
+		TaskID:            out.TaskId,
+		TrackingDegraded:  out.TrackingDegraded,
+		ReportRevision:    out.ReportRevision,
+		DegradedInterop:   out.DegradedInterop,
+	}
+	if out.InterOp != nil {
+		interop := *out.InterOp
+		terminal.Interop = &interop
+	}
+	return terminal
+}
+
+func persistReplacementTerminalResult(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	out *QueryData,
+) (*QueryData, error) {
+	if submission == nil || submission.row.Id == 0 {
+		return nil, ErrDuplicateClientTurn
+	}
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		_, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
+			ctx,
+			username,
+			submission.row.Id,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if private == nil || private.Replacement == nil ||
+			private.Replacement.RequestFingerprint != submission.requestFingerprint {
+			return nil, ErrDuplicateClientTurn
+		}
+		projection, _, err := unmarshalPersistedProjectionWithContext(currentRaw)
+		if err != nil {
+			return nil, err
+		}
+		next := private.clone()
+		replacement := next.Replacement
+		replacement.ActiveStatus = ""
+		replacement.ActiveBotRunID = ""
+		replacement.ActiveTaskID = ""
+		replacement.ActiveTrackingDegraded = false
+		replacement.ActiveReportRevision = 0
+		replacement.ActiveDegradedInterop = false
+		replacement.ActiveInterop = nil
+		replacement.ActiveA2UI = nil
+		replacement.ActiveDelivery = nil
+		terminal := replacementTerminalResult(out)
+		if terminal != nil && terminal.ToolName == "" {
+			terminal.ToolName = replacement.ToolName
+			terminal.ToolUnresolved = terminal.ToolName == ""
+		}
+		replacement.TerminalResult = terminal
+		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return nil, err
+		}
+		result := model.DB(ctx).WithContext(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, submission.row.Id, username, revision, currentRaw).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		if result.RowsAffected == 1 {
+			return queryDataFromReplacementTerminal(submission.row, next.Replacement), nil
+		}
+	}
+	return nil, ErrDuplicateClientTurn
+}
+
+func persistReplacementActiveResult(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	out *QueryData,
+) (*QueryData, error) {
+	if submission == nil || submission.row.Id == 0 || out == nil ||
+		(out.Status != "RUNNING" && out.Status != "INPUT_REQUIRED") {
+		return nil, ErrDuplicateClientTurn
+	}
+	var activeA2UI json.RawMessage
+	if out.A2UI != nil {
+		encoded, err := json.Marshal(out.A2UI)
+		if err != nil || len(encoded) > maxPersistedActiveA2UIBytes {
+			return nil, ErrInvalidA2uiSurface
+		}
+		if _, err := DecodeA2uiSurface(encoded); err != nil {
+			return nil, ErrInvalidA2uiSurface
+		}
+		activeA2UI = encoded
+	}
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
+			ctx,
+			username,
+			submission.row.Id,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if private == nil || private.Replacement == nil ||
+			private.Replacement.RequestFingerprint != submission.requestFingerprint {
+			return nil, ErrDuplicateClientTurn
+		}
+		next := private.clone()
+		replacement := next.Replacement
+		resolvedSlug, ok := rxBot.SlugFor(strings.TrimSpace(out.ToolName))
+		if !ok {
+			return nil, ErrBotProjectionConflict
+		}
+		if replacement.ToolName == "" {
+			replacement.ToolName = out.ToolName
+		} else if requestedSlug, requested := rxBot.SlugFor(strings.TrimSpace(replacement.ToolName)); !requested || requestedSlug != resolvedSlug {
+			return nil, ErrBotProjectionConflict
+		}
+		replacement.ActiveStatus = out.Status
+		replacement.ActiveBotRunID = out.BotRunID
+		replacement.ActiveTaskID = out.TaskId
+		replacement.ActiveTrackingDegraded = out.TrackingDegraded
+		replacement.ActiveReportRevision = out.ReportRevision
+		replacement.ActiveDegradedInterop = out.DegradedInterop
+		replacement.ActiveA2UI = append(json.RawMessage(nil), activeA2UI...)
+		replacement.TerminalResult = nil
+		if out.InterOp != nil {
+			interop := *out.InterOp
+			replacement.ActiveInterop = &interop
+		} else {
+			replacement.ActiveInterop = nil
+		}
+		encoded, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return nil, err
+		}
+		result := model.DB(ctx).WithContext(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, submission.row.Id, username, revision, currentRaw).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		if result.RowsAffected == 1 {
+			out.Id = submission.row.Id
+			out.DialogueId = submission.row.DialogueId
+			return out, nil
+		}
+	}
+	return nil, ErrDuplicateClientTurn
 }
 
 func requestedAgentForV1(in QueryInput) *string {
@@ -817,6 +1282,124 @@ func (ps *Service) allocateV1Submission(
 	)
 }
 
+func (ps *Service) allocateOwnerSubmission(
+	ctx context.Context,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+	permissions AgentPermissionResolution,
+	conversationV1 bool,
+) (*v1Submission, error) {
+	return ps.allocateOwnerSubmissionWithDB(
+		ctx,
+		model.DB(ctx),
+		username,
+		in,
+		target,
+		permissions,
+		conversationV1,
+		conversationV1,
+	)
+}
+
+func (ps *Service) resolveExistingV1SubmissionWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+	conversationV1 bool,
+) (*v1Submission, error) {
+	match, err := findRecentClientTurnWithDB(ctx, gdb, username, in.ClientTurnID)
+	if err != nil {
+		return nil, err
+	}
+	if match == nil {
+		return nil, nil
+	}
+	if err := validateDuplicateSubmission(
+		match.row,
+		match.private,
+		match.identity,
+		in,
+		target,
+		conversationV1,
+	); err != nil {
+		return nil, err
+	}
+
+	submission := &v1Submission{
+		row:                match.row,
+		requestFingerprint: submissionRequestFingerprint(in, target, conversationV1),
+		replacement:        match.identity == clientTurnIdentityReplacement,
+	}
+	if match.identity == clientTurnIdentityReplacement {
+		if match.private == nil || match.private.Replacement == nil {
+			return nil, ErrDuplicateClientTurn
+		}
+		if match.private.Replacement.TerminalResult != nil {
+			submission.duplicate = queryDataFromReplacementTerminal(
+				match.row,
+				match.private.Replacement,
+			)
+			return submission, nil
+		}
+		submission.duplicate = queryDataFromReplacementCandidate(
+			match.row,
+			match.private.Replacement,
+		)
+		if match.private.Replacement.ActiveStatus == "" {
+			submission.pending = true
+		}
+		return submission, nil
+	}
+	if match.row.Status == "SUBMITTING" {
+		submission.duplicate, err = ps.queryDataFromStoredRowWithDB(ctx, gdb, username, match.row)
+		submission.pending = true
+		return submission, err
+	}
+	submission.duplicate, err = ps.queryDataFromStoredRowWithDB(ctx, gdb, username, match.row)
+	return submission, err
+}
+
+func (ps *Service) findExistingResearchSubmission(
+	ctx context.Context,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+) (*QueryData, error) {
+	gdb := model.DB(ctx)
+	var existing *v1Submission
+	err := withTurnAllocationLockDB(ctx, gdb, username, in.ClientTurnID, func() error {
+		var err error
+		existing, err = ps.resolveExistingV1SubmissionWithDB(
+			ctx,
+			gdb,
+			username,
+			in,
+			target,
+			conversationV1Enabled(in),
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, nil
+	}
+	if existing.pending {
+		return existing.duplicate, ErrClientTurnSubmissionPending
+	}
+	if existing.duplicate == nil {
+		return nil, ErrClientTurnSubmissionPending
+	}
+	return existing.duplicate, nil
+}
+
 func (ps *Service) allocateV1SubmissionWithDB(
 	ctx context.Context,
 	gdb *gorm.DB,
@@ -826,37 +1409,63 @@ func (ps *Service) allocateV1SubmissionWithDB(
 	permissions AgentPermissionResolution,
 	finalizePending bool,
 ) (*v1Submission, error) {
+	return ps.allocateOwnerSubmissionWithDB(
+		ctx,
+		gdb,
+		username,
+		in,
+		target,
+		permissions,
+		true,
+		finalizePending,
+	)
+}
+
+func (ps *Service) allocateOwnerSubmissionWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	in QueryInput,
+	target v1SubmissionTarget,
+	permissions AgentPermissionResolution,
+	buildEnvelope bool,
+	finalizePending bool,
+) (*v1Submission, error) {
 	var allocated model.QuestionAgentLog
 	var duplicate *QueryData
+	var pending bool
+	var allocatedReplacement bool
 	err := withTurnAllocationLockDB(ctx, gdb, username, in.ClientTurnID, func() error {
-		existing, private, err := findRecentClientTurnWithDB(ctx, gdb, username, in.ClientTurnID)
+		existing, err := ps.resolveExistingV1SubmissionWithDB(
+			ctx,
+			gdb,
+			username,
+			in,
+			target,
+			buildEnvelope,
+		)
 		if err != nil {
 			return err
 		}
 		if existing != nil {
-			if err := validateDuplicateSubmission(*existing, private, in, target); err != nil {
-				return err
-			}
-			allocated = *existing
-			if dedicatedResearchProductSubmission(in) && !conversationV1Enabled(in) ||
-				existing.Status != "SUBMITTING" ||
-				(!existing.UpdatedAt.IsZero() &&
-					time.Since(existing.UpdatedAt) < turnSubmissionLease) {
-				duplicate, err = ps.queryDataFromStoredRowWithDB(ctx, gdb, username, *existing)
-				if err != nil {
-					return err
-				}
-			}
+			allocated = existing.row
+			duplicate = existing.duplicate
+			pending = existing.pending
+			allocatedReplacement = existing.replacement
 			return nil
 		}
 
+		requestFingerprint := submissionRequestFingerprint(in, target, buildEnvelope)
 		privateContext := &persistedConversationContext{
-			ClientTurnID:     in.ClientTurnID,
-			ModeLockState:    "provisional",
-			SettlementState:  "submission_append",
-			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-			InteropMode:      in.InteropMode,
-			InteropTargets:   append([]string(nil), in.InteropTargets...),
+			ClientTurnID:       in.ClientTurnID,
+			RequestFingerprint: requestFingerprint,
+			InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			InteropMode:        in.InteropMode,
+			InteropTargets:     append([]string(nil), in.InteropTargets...),
+		}
+		if buildEnvelope {
+			privateContext.ModeLockState = "provisional"
+			privateContext.SettlementState = "submission_append"
 		}
 
 		toolName := in.Tool
@@ -888,18 +1497,42 @@ func (ps *Service) allocateV1SubmissionWithDB(
 			if currentPrivate == nil {
 				currentPrivate = &persistedConversationContext{}
 			}
-			if currentPrivate.Replacement != nil {
+			if currentPrivate.ClientTurnID != "" && currentPrivate.RequestFingerprint == "" {
+				// A legacy base key without a complete digest cannot be retired
+				// safely after promotion, so replacement fails closed.
 				return ErrDuplicateClientTurn
 			}
 			nextPrivate := currentPrivate.clone()
+			if prior := nextPrivate.Replacement; prior != nil {
+				if prior.TerminalResult == nil || prior.RequestFingerprint == "" ||
+					len(nextPrivate.RetiredIdentities) >= maxPersistedRetiredClientTurns {
+					return ErrDuplicateClientTurn
+				}
+				nextPrivate.RetiredIdentities = append(
+					nextPrivate.RetiredIdentities,
+					persistedClientTurnIdentity{
+						ClientTurnID:       prior.ClientTurnID,
+						RequestFingerprint: prior.RequestFingerprint,
+					},
+				)
+				nextPrivate.Replacement = nil
+			}
+			// Reserve one remaining slot for the accepted public base identity,
+			// which must become retired if this new candidate later succeeds.
+			if len(nextPrivate.RetiredIdentities) >= maxPersistedRetiredClientTurns {
+				return ErrDuplicateClientTurn
+			}
 			nextPrivate.Replacement = &persistedConversationReplacement{
-				ClientTurnID:     in.ClientTurnID,
-				Query:            in.Query,
-				ToolName:         toolName,
-				Mode:             target.mode,
-				InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
-				InteropMode:      in.InteropMode,
-				InteropTargets:   append([]string(nil), in.InteropTargets...),
+				ClientTurnID:       in.ClientTurnID,
+				RequestFingerprint: requestFingerprint,
+				Query:              in.Query,
+				ToolName:           toolName,
+				Mode:               target.mode,
+				InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+				ArtifactRefs:       append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+				InteropMode:        in.InteropMode,
+				InteropTargets:     append([]string(nil), in.InteropTargets...),
+				ConversationV1:     buildEnvelope,
 			}
 			raw, err := marshalPersistedProjectionWithContext(projection, &nextPrivate)
 			if err != nil {
@@ -918,10 +1551,11 @@ func (ps *Service) allocateV1SubmissionWithDB(
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
-				return gorm.ErrRecordNotFound
+				return ErrDuplicateClientTurn
 			}
 			allocated = current
 			allocated.BotProjectionJSON = raw
+			allocatedReplacement = true
 			return nil
 		}
 
@@ -951,8 +1585,15 @@ func (ps *Service) allocateV1SubmissionWithDB(
 	if err != nil {
 		return nil, err
 	}
-	if duplicate != nil {
-		return &v1Submission{row: allocated, duplicate: duplicate}, nil
+	submission := &v1Submission{
+		row:                allocated,
+		duplicate:          duplicate,
+		pending:            pending,
+		requestFingerprint: submissionRequestFingerprint(in, target, buildEnvelope),
+		replacement:        allocatedReplacement,
+	}
+	if duplicate != nil || pending || !buildEnvelope {
+		return submission, nil
 	}
 
 	ledger, err := buildConversationLedgerWithDB(ctx, gdb, username, allocated.DialogueId)
@@ -1025,7 +1666,7 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		}
 		return nil, err
 	}
-	submission := &v1Submission{row: allocated, envelope: envelope}
+	submission.envelope = envelope
 	if rebuildRequired {
 		if err := applyConversationRebuildEnvelope(
 			ctx,
@@ -1133,6 +1774,21 @@ func v1SubmissionError(
 	err error,
 ) error {
 	if submission == nil || !isV1DefiniteFailure(err) {
+		return err
+	}
+	if submission.replacement {
+		if _, settleErr := persistReplacementTerminalResult(
+			context.WithoutCancel(ctx),
+			username,
+			submission,
+			&QueryData{
+				Id:         submission.row.Id,
+				DialogueId: submission.row.DialogueId,
+				Status:     "FAILED",
+			},
+		); settleErr != nil {
+			return fmt.Errorf("%v; settle replacement: %w", err, settleErr)
+		}
 		return err
 	}
 	if settleErr := failV1Submission(context.WithoutCancel(ctx), username, submission.row.Id); settleErr != nil {
@@ -1489,6 +2145,17 @@ func validateExpertSubmissionAgent(resolvedSlug, submissionAgent string) error {
 	return nil
 }
 
+func validateDirectSubmissionAgent(expectedSlug, responseAgent string) error {
+	canonicalAgent, err := normalizeProjectionAgent(responseAgent)
+	if err != nil {
+		return err
+	}
+	if canonicalAgent != expectedSlug {
+		return fmt.Errorf("%w: direct agent mismatch", ErrBotProjectionConflict)
+	}
+	return nil
+}
+
 func isExpertEnvelopeDecodeError(err error) bool {
 	if err == nil {
 		return false
@@ -1592,7 +2259,6 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
 	conversationV1 := conversationV1Enabled(in)
-	v1 := ownerAllocatedSubmissionEnabled(in)
 	researchCandidate := isResearchProductTool(in.Tool) &&
 		(in.Surface == QuerySurfaceAgentProduct ||
 			in.Surface == QuerySurfaceChat && strings.EqualFold(strings.TrimSpace(in.Mode), "expert"))
@@ -1607,14 +2273,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	in.Attachments = attachments
 	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
 	// tool. The only non-Chat surface is the route-owned dedicated product run.
-	if v1 {
-		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
-			return nil, err
-		}
-		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
-	}
 	if in.Surface == QuerySurfaceChat {
-		if v1 {
+		if conversationV1 {
 			if err := normalizeV1ChatRouting(&in); err != nil {
 				return nil, err
 			}
@@ -1631,11 +2291,23 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	researchRequest := isResearchProductTool(in.Tool) &&
 		(in.Surface == QuerySurfaceAgentProduct || in.Mode == "expert")
-	if !researchRequest {
-		if v1 {
-			if err := validateV1CurrentMessage(in.Query); err != nil {
-				return nil, err
-			}
+	if conversationV1 || researchRequest {
+		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
+			return nil, err
+		}
+		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+	} else if serviceClientTurnIDPattern.MatchString(strings.TrimSpace(in.ClientTurnID)) {
+		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+	}
+	ownerAllocated := ownerAllocatedSubmissionEnabled(in)
+	if !researchRequest && conversationV1 {
+		if err := validateV1CurrentMessage(in.Query); err != nil {
+			return nil, err
+		}
+	}
+	if researchRequest {
+		if err := validateCurrentMessageWithin(in.Query, rxBot.HardMaxUserQueryChars); err != nil {
+			return nil, err
 		}
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
@@ -1644,15 +2316,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
 	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
 		return nil, ErrExpertDisabled
-	}
-	var target v1SubmissionTarget
-	if v1 {
-		var err error
-		target, err = ps.resolveV1SubmissionTarget(ctx, username, in)
-		if err != nil {
-			return nil, err
-		}
-		in.Mode = target.mode
 	}
 	var permissions AgentPermissionResolution
 	var admission remoteProductAdmission
@@ -1666,7 +2329,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// effective capability set from the resolution above, including forced Expert
 	// selections, rather than treating a browser hint as a product route.
 	if in.Surface == QuerySurfaceAgentProduct {
-		if admission, err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+		if admission, err = ps.ensureRemoteProductAccess(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}
 	}
@@ -1681,25 +2344,86 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			if in.Tool != "" && !containsAgentTool(permissions.AllowedTools, in.Tool) {
 				return nil, permissionFailure(permissions, in.Tool)
 			}
-			// A direct service caller has no handler-created admission context,
-			// so explicit Research still validates the live Bot catalog here.
 			if in.Tool == "InSilicoResearchAgent" {
-				if admission, err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+				if admission, err = ps.ensureRemoteProductAccess(ctx, username, in.Tool); err != nil {
 					return nil, err
 				}
 			}
 		}
 	}
+	requestedInteropMode := in.InteropMode
+	requestedInteropTargets := append([]string(nil), in.InteropTargets...)
+	researchSubmission := researchOwnerAllocatedSubmission(in)
+	requestedSubmissionInput := in
+	if ownerAllocated {
+		normalizedMode, normalizedTargets, normalizeErr := rxBot.ValidateInteropControls(
+			requestedInteropMode,
+			requestedInteropTargets,
+		)
+		if normalizeErr != nil {
+			return nil, fmt.Errorf("%w: invalid interop controls", ErrInteropTargetForbidden)
+		}
+		requestedSubmissionInput.InteropMode = normalizedMode
+		requestedSubmissionInput.InteropTargets = normalizedTargets
+	}
+	var target v1SubmissionTarget
+	if ownerAllocated {
+		target, err = ps.resolveV1SubmissionTarget(ctx, username, in, conversationV1)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = target.mode
+		requestedSubmissionInput.Mode = target.mode
+	}
+	findResearchRetry := func() (*QueryData, error) {
+		if !researchSubmission {
+			return nil, nil
+		}
+		return ps.findExistingResearchSubmission(
+			ctx,
+			username,
+			requestedSubmissionInput,
+			target,
+		)
+	}
+	if researchSubmission {
+		existing, lookupErr := findResearchRetry()
+		if lookupErr != nil {
+			return existing, lookupErr
+		}
+		if existing != nil {
+			return existing, nil
+		}
+	}
 	if researchRequest {
+		admission, err = ps.completeRemoteProductAdmission(ctx, admission)
+		if err != nil {
+			if existing, lookupErr := findResearchRetry(); lookupErr != nil {
+				return existing, lookupErr
+			} else if existing != nil {
+				return existing, nil
+			}
+			return nil, err
+		}
 		maxQueryChars, maxAttachments, ok := researchInputLimits(admission)
 		if !ok {
 			return nil, ErrResearchInputIncompatible
 		}
 		if err := validateCurrentMessageWithin(in.Query, maxQueryChars); err != nil {
+			if existing, lookupErr := findResearchRetry(); lookupErr != nil {
+				return existing, lookupErr
+			} else if existing != nil {
+				return existing, nil
+			}
 			return nil, err
 		}
 		attachments, err = validateQueryAttachmentsWithin(in.Attachments, maxAttachments)
 		if err != nil {
+			if existing, lookupErr := findResearchRetry(); lookupErr != nil {
+				return existing, lookupErr
+			} else if existing != nil {
+				return existing, nil
+			}
 			return nil, err
 		}
 		in.Attachments = attachments
@@ -1717,8 +2441,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 		}
 	}
-	requestedInteropMode := in.InteropMode
-	requestedInteropTargets := append([]string(nil), in.InteropTargets...)
 	interop := localInteropDecision("off")
 	// A forced Expert selection dispatches directly (like instant), so it must
 	// pass the same server-owned interop authorization: prepareInterop authorizes
@@ -1728,6 +2450,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Mode != "expert" || in.Tool != "" {
 		interop, err = ps.prepareInterop(ctx, username, slug, in.InteropMode, in.InteropTargets)
 		if err != nil {
+			if existing, lookupErr := findResearchRetry(); lookupErr != nil {
+				return existing, lookupErr
+			} else if existing != nil {
+				return existing, nil
+			}
 			failed := &QueryData{
 				Status:          "FAILED",
 				DegradedInterop: interop.Degraded,
@@ -1739,23 +2466,25 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		in.InteropTargets = append([]string(nil), interop.Targets...)
 	}
 	submissionInput := in
-	if dedicatedResearchProductSubmission(in) {
-		normalizedMode, normalizedTargets, normalizeErr := rxBot.ValidateInteropControls(
-			requestedInteropMode,
-			requestedInteropTargets,
-		)
-		if normalizeErr != nil {
-			return nil, normalizeErr
-		}
-		submissionInput.InteropMode = normalizedMode
-		submissionInput.InteropTargets = normalizedTargets
+	if ownerAllocated {
+		submissionInput = requestedSubmissionInput
 	}
 
 	var submission *v1Submission
-	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, submissionInput, target, permissions, true)
+	if ownerAllocated {
+		submission, err = ps.allocateOwnerSubmission(
+			ctx,
+			username,
+			submissionInput,
+			target,
+			permissions,
+			conversationV1,
+		)
 		if err != nil {
 			return nil, err
+		}
+		if submission.pending {
+			return submission.duplicate, ErrClientTurnSubmissionPending
 		}
 		if submission.duplicate != nil {
 			return submission.duplicate, nil
@@ -1768,7 +2497,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	//    another user's conversation (real-user isolation lives in Web Go).
 	var dialogueID string
 	var fID int64
-	if v1 {
+	if ownerAllocated {
 		dialogueID = submission.row.DialogueId
 		fID = submission.row.FId
 	} else {
@@ -1786,7 +2515,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	)
 	_, forcedChatFamily := rxBot.ChatModelFor(slug)
 	useExpertContextRoute := in.Mode == "expert" &&
-		(in.Tool == "" || (v1 && forcedChatFamily))
+		(in.Tool == "" || (conversationV1 && forcedChatFamily))
 
 	// 3. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    and opaque asset references to Bot's resolver.
@@ -1819,10 +2548,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				permissions.AllowedTools...,
 			),
 		}
-		if !v1 {
+		if !conversationV1 {
 			routeRequest.History = parseHistory(in.History)
 		}
-		if v1 {
+		if conversationV1 {
 			routeRequest.Conversation = submission.envelope
 		}
 		var resp *rxBot.RouteQueryResponse
@@ -1833,19 +2562,21 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			if err == nil {
 				break
 			}
-			retry, retryErr := prepareV1ConversationRebuildRetry(
-				ctx,
-				username,
-				submission,
-				target,
-				err,
-			)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				routeRequest.Conversation = submission.envelope
-				continue
+			if conversationV1 {
+				retry, retryErr := prepareV1ConversationRebuildRetry(
+					ctx,
+					username,
+					submission,
+					target,
+					err,
+				)
+				if retryErr != nil {
+					return nil, retryErr
+				}
+				if retry {
+					routeRequest.Conversation = submission.envelope
+					continue
+				}
 			}
 			if isExpertEnvelopeDecodeError(err) {
 				return nil, v1SubmissionError(
@@ -1908,12 +2639,12 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
-		} else if botSubmission.Status == "FAILED" {
+		} else if terminalStatus, terminal := canonicalImmediateTerminalStatus(botSubmission.Status); terminal {
 			// A required interop failure may arrive as status=running with
 			// formatted.metadata.status=FAILED and no task ids. The projection
 			// decoder has already normalized that nested outcome; keep the row
 			// terminal and never invent a pollable task.
-			out.Status = "FAILED"
+			out.Status = terminalStatus
 			if resp.Result.Formatted != nil {
 				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
@@ -1932,7 +2663,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
 		messages := chatMessagesForRequest(in.History, in.Query)
-		if v1 {
+		if conversationV1 {
 			messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		}
 		req := rxBot.ChatCompletionRequest{
@@ -1942,7 +2673,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 		}
-		if v1 {
+		if conversationV1 {
 			req.Conversation = submission.envelope
 		}
 		if slug == "brief_gene" {
@@ -1959,19 +2690,21 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			if err == nil {
 				break
 			}
-			retry, retryErr := prepareV1ConversationRebuildRetry(
-				ctx,
-				username,
-				submission,
-				target,
-				err,
-			)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				req.Conversation = submission.envelope
-				continue
+			if conversationV1 {
+				retry, retryErr := prepareV1ConversationRebuildRetry(
+					ctx,
+					username,
+					submission,
+					target,
+					err,
+				)
+				if retryErr != nil {
+					return nil, retryErr
+				}
+				if retry {
+					req.Conversation = submission.envelope
+					continue
+				}
 			}
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
@@ -1985,7 +2718,16 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			reviewAnswer = resp.Result.Formatted.Answer
 		}
 		reviewAnswerCompleted := reviewAnswerCompletesPause(slug, resp.Status, reviewAnswer)
-		if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") && !reviewAnswerCompleted {
+		if terminalStatus, terminal := canonicalImmediateTerminalStatus(resp.Status); terminal {
+			out.Status = terminalStatus
+			if resp.Result.Formatted != nil {
+				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
+			} else {
+				out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
+				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
+			}
+		} else if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") && !reviewAnswerCompleted {
 			// Review's native pause is returned from the chat endpoint as an
 			// agent.run envelope. Decode only interrupt.draft.a2ui and never
 			// assume choices[0] exists for this shape.
@@ -2068,6 +2810,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
+		if err := validateDirectSubmissionAgent(slug, resp.Agent); err != nil {
+			return nil, v1SubmissionError(ctx, username, submission, err)
+		}
 		if conversationV1 {
 			contextStage = resp.ConversationContext
 		}
@@ -2107,10 +2852,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 			// out.Status stays "SUCCEEDED".
-		} else if responseStatus == "FAILED" {
+		} else if terminalStatus, terminal := canonicalImmediateTerminalStatus(responseStatus); terminal {
 			// Bot's bounded interop metadata is authoritative for a terminal
 			// required failure even when the umbrella response still says running.
-			out.Status = "FAILED"
+			out.Status = terminalStatus
 			if resp.Result.Formatted != nil {
 				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
@@ -2144,6 +2889,23 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	out.TaskId = taskID
 	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), in.Attachments...)
+	if submission != nil && submission.replacement && out.Status != statusSucceeded {
+		if _, terminal := canonicalImmediateTerminalStatus(out.Status); terminal {
+			terminalOut, err := persistReplacementTerminalResult(
+				ctx,
+				username,
+				submission,
+				out,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return terminalOut, nil
+		}
+		if out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED" {
+			return persistReplacementActiveResult(ctx, username, submission, out)
+		}
+	}
 
 	if conversationV1 && out.Status == statusSucceeded {
 		settlementState := conversationSettlementRebuildRequired
@@ -2160,12 +2922,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			}
 		}
 		private := persistedConversationContext{
-			ClientTurnID:     in.ClientTurnID,
-			Stage:            contextStage,
-			SettlementState:  settlementState,
-			AssistantSummary: v1AssistantSummary(contextStage),
-			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
-			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			ClientTurnID:       in.ClientTurnID,
+			RequestFingerprint: submission.requestFingerprint,
+			Stage:              contextStage,
+			SettlementState:    settlementState,
+			AssistantSummary:   v1AssistantSummary(contextStage),
+			ArtifactRefs:       append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+			InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		}
 		if submission.envelope.Operation == "rebuild" {
 			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
@@ -2183,6 +2946,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			in.Mode,
 			expertProjection,
 			private,
+			in.Query,
 		)
 		if err != nil {
 			return nil, err
@@ -2238,20 +3002,27 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		ReactionType:      "0",
 		CollectType:       "0",
 	}
-	if v1 {
+	if ownerAllocated {
 		row.BotProjectionJSON = ""
 	}
 
-	persistID := in.RefreshId
-	if v1 {
-		persistID = submission.row.Id
+	var id int64
+	if ownerAllocated {
+		id, err = ps.persistOwnerAllocatedQuestionLog(
+			ctx,
+			username,
+			submission,
+			&row,
+			conversationV1,
+		)
+	} else {
+		id, err = ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
 	}
-	id, err := ps.persistQuestionLog(ctx, username, persistID, &row)
 	if err != nil {
 		return nil, err
 	}
 	out.Id = id
-	if v1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
+	if conversationV1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
 		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		err := lockConversationRootMode(lockCtx, username, dialogueID)
 		cancel()
@@ -2364,6 +3135,300 @@ func chatMessagesForRequest(history, query string) []rxBot.ChatMessage {
 
 const botProjectionApplyAttempts = 3
 
+func replacementTaskID(replacement *persistedConversationReplacement, rec *rxBot.RunRecord) string {
+	if rec != nil && len(rec.TaskIDs) > 0 && strings.TrimSpace(rec.TaskIDs[0]) != "" {
+		return strings.TrimSpace(rec.TaskIDs[0])
+	}
+	if replacement == nil {
+		return ""
+	}
+	return replacement.ActiveTaskID
+}
+
+func privatePendingReplacementDelivery(projection BotRunProjection) *persistedReplacementActiveDelivery {
+	if !projectionHasPendingRequiredDelivery(projection) {
+		return nil
+	}
+	return &persistedReplacementActiveDelivery{
+		SchemaVersion:   projection.Delivery.SchemaVersion,
+		Required:        projection.Delivery.Required,
+		Status:          projection.Delivery.Status,
+		Revision:        projection.Delivery.Revision,
+		InventoryDigest: projection.Delivery.InventoryDigest,
+	}
+}
+
+func privateActiveReplacementProjection(
+	replacement *persistedConversationReplacement,
+	agent string,
+) BotRunProjection {
+	projection := BotRunProjection{
+		RunID:            replacement.ActiveBotRunID,
+		Agent:            agent,
+		Status:           replacement.ActiveStatus,
+		ReportRevision:   replacement.ActiveReportRevision,
+		TrackingDegraded: replacement.ActiveTrackingDegraded,
+		DegradedInterop:  replacement.ActiveDegradedInterop,
+		InterOp:          replacement.ActiveInterop,
+		ResultArchiveV1:  replacement.ActiveDelivery != nil,
+	}
+	if replacement.ActiveDelivery != nil {
+		projection.Delivery = &ProjectionDelivery{
+			SchemaVersion:   replacement.ActiveDelivery.SchemaVersion,
+			Required:        replacement.ActiveDelivery.Required,
+			Status:          replacement.ActiveDelivery.Status,
+			Revision:        replacement.ActiveDelivery.Revision,
+			InventoryDigest: replacement.ActiveDelivery.InventoryDigest,
+		}
+	}
+	return projection
+}
+
+func projectionHasFailedRequiredDelivery(projection BotRunProjection) bool {
+	return projection.ResultArchiveV1 && projection.Delivery != nil &&
+		projection.Delivery.Required && projection.Delivery.Status == "failed"
+}
+
+func replacementTerminalResultFromProjection(
+	replacement *persistedConversationReplacement,
+	projection BotRunProjection,
+	rec *rxBot.RunRecord,
+) *persistedReplacementTerminalResult {
+	answer := ""
+	followUp := ""
+	formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
+	if visible := strings.TrimSpace(projection.VisibleReport()); visible != "" {
+		if hasFormatted {
+			answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
+			followUp = string(formatted.FollowUpQuestions)
+		} else {
+			answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil)
+		}
+	}
+	terminal := &persistedReplacementTerminalResult{
+		ToolName:          replacement.ToolName,
+		Answer:            boundedReplacementTerminalText(answer, maxPersistedReplacementAnswerBytes),
+		FollowUpQuestions: boundedReplacementFollowUp(followUp),
+		Status:            projection.Status,
+		BotRunID:          projection.RunID,
+		TaskID:            replacementTaskID(replacement, rec),
+		TrackingDegraded:  projection.TrackingDegraded,
+		ReportRevision:    projection.ReportRevision,
+		DegradedInterop:   projection.DegradedInterop,
+	}
+	if projection.InterOp != nil {
+		interop := *projection.InterOp
+		terminal.Interop = &interop
+	}
+	return terminal
+}
+
+func promotedReplacementContext(
+	private *persistedConversationContext,
+	replacement *persistedConversationReplacement,
+) (persistedConversationContext, error) {
+	if private == nil || replacement == nil || replacement.ClientTurnID == "" ||
+		replacement.RequestFingerprint == "" {
+		return persistedConversationContext{}, ErrDuplicateClientTurn
+	}
+	retired := append([]persistedClientTurnIdentity(nil), private.RetiredIdentities...)
+	if private.ClientTurnID != "" {
+		if private.RequestFingerprint == "" || len(retired) >= maxPersistedRetiredClientTurns {
+			return persistedConversationContext{}, ErrDuplicateClientTurn
+		}
+		retired = append(retired, persistedClientTurnIdentity{
+			ClientTurnID:       private.ClientTurnID,
+			RequestFingerprint: private.RequestFingerprint,
+		})
+	}
+	next := persistedConversationContext{
+		ClientTurnID:       replacement.ClientTurnID,
+		RequestFingerprint: replacement.RequestFingerprint,
+		InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), replacement.InputAttachments...),
+		InteropMode:        replacement.InteropMode,
+		InteropTargets:     append([]string(nil), replacement.InteropTargets...),
+		RetiredIdentities:  retired,
+	}
+	if replacement.ConversationV1 {
+		next.ModeLockState = "locked"
+		next.SettlementState = conversationSettlementRebuildRequired
+		next.ArtifactRefs = append([]rxBot.ArtifactRefV1(nil), replacement.ArtifactRefs...)
+	}
+	return next, nil
+}
+
+// applyPrivateReplacementRunProjection reconciles an accepted replacement
+// without exposing its candidate over the prior public row. Only a successful
+// run promotes the complete bounded public projection; nonterminal and failed
+// states remain in the private candidate envelope.
+func (ps *Service) applyPrivateReplacementRunProjection(
+	ctx context.Context,
+	rowID int64,
+	username string,
+	expectedRunID string,
+	rec *rxBot.RunRecord,
+	meta rxBot.ResponseMeta,
+) error {
+	if rowID <= 0 || username == "" || rec == nil || expectedRunID == "" {
+		return ErrBotProjectionConflict
+	}
+	projection, err := DecodeRunProjection(rec)
+	if err != nil {
+		return err
+	}
+	if projection.RunID != expectedRunID {
+		return ErrBotProjectionConflict
+	}
+	projection.RequestID = strings.TrimSpace(meta.BotRequestID)
+	logBotResponseMeta(ctx, meta)
+
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		var stored model.QuestionAgentLog
+		if err := model.DB(ctx).WithContext(ctx).
+			Where("id = ? AND user_name = ? AND delete_at IS NULL", rowID, username).
+			First(&stored).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrBotProjectionNotFound
+			}
+			return err
+		}
+		publicProjection, private, err := unmarshalPersistedProjectionWithContext(stored.BotProjectionJSON)
+		if err != nil {
+			return err
+		}
+		if private == nil || private.Replacement == nil ||
+			private.Replacement.ActiveBotRunID != expectedRunID ||
+			private.Replacement.ActiveStatus == "" {
+			return ErrBotProjectionConflict
+		}
+		replacement := private.Replacement
+		expectedAgent, ok := rxBot.SlugFor(strings.TrimSpace(replacement.ToolName))
+		if !ok || projection.Agent != expectedAgent {
+			return ErrBotProjectionConflict
+		}
+		projection, _, err = MergeBotRunProjection(
+			privateActiveReplacementProjection(replacement, expectedAgent),
+			projection,
+		)
+		if err != nil {
+			return fmt.Errorf("%w: private replacement projection transition", ErrBotProjectionConflict)
+		}
+		next := private.clone()
+		nextReplacement := next.Replacement
+		pendingDelivery := projectionHasPendingRequiredDelivery(projection)
+		if projectionHasFailedRequiredDelivery(projection) {
+			// Delivery failure is terminal for the candidate, but the generated
+			// report and output paths do not become private replacement state.
+			projection.Status = "FAILED"
+			projection.IntermediateReport = ""
+			projection.FinalReport = ""
+			projection.Artifacts = ProjectionArtifacts{}
+		}
+
+		if projection.Status == statusSucceeded && !pendingDelivery {
+			promotedPrivate, err := promotedReplacementContext(private, replacement)
+			if err != nil {
+				return err
+			}
+			encoded, err := marshalPersistedProjectionWithContext(projection, &promotedPrivate)
+			if err != nil {
+				return err
+			}
+			updates := map[string]interface{}{
+				"answer":              "",
+				"bot_projection_json": encoded,
+				"bot_report_revision": projection.ReportRevision,
+				"bot_run_id":          projection.RunID,
+				"compute_resource":    "",
+				"download_path":       "",
+				"file_name":           "",
+				"follow_up_questions": "",
+				"image_paths":         "",
+				"log_status":          "",
+				"mode":                replacement.Mode,
+				"query":               replacement.Query,
+				"server_file_path":    "",
+				"server_id":           "",
+				"status":              statusSucceeded,
+				"task_id":             replacementTaskID(replacement, rec),
+				"task_log":            "",
+				"tool_name":           replacement.ToolName,
+				"upload_path":         "",
+			}
+			for key, value := range botProjectionLegacyUpdates(projection, projection, rec, true) {
+				updates[key] = value
+			}
+			err = model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				result := tx.Model(&model.QuestionAgentLog{}).
+					Where(botProjectionCASPredicate, stored.Id, username, stored.BotReportRevision, stored.BotProjectionJSON).
+					Updates(updates)
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected != 1 {
+					return ErrBotProjectionConflict
+				}
+				return invalidateConversationContextsAfter(ctx, tx, username, stored.DialogueId, stored.Id)
+			})
+			if errors.Is(err, ErrBotProjectionConflict) {
+				continue
+			}
+			return err
+		}
+
+		if terminalStatus, terminal := canonicalImmediateTerminalStatus(projection.Status); terminal {
+			projection.Status = terminalStatus
+			nextReplacement.ActiveStatus = ""
+			nextReplacement.ActiveBotRunID = ""
+			nextReplacement.ActiveTaskID = ""
+			nextReplacement.ActiveTrackingDegraded = false
+			nextReplacement.ActiveReportRevision = 0
+			nextReplacement.ActiveDegradedInterop = false
+			nextReplacement.ActiveA2UI = nil
+			nextReplacement.ActiveInterop = nil
+			nextReplacement.ActiveDelivery = nil
+			nextReplacement.TerminalResult = replacementTerminalResultFromProjection(
+				replacement,
+				projection,
+				rec,
+			)
+		} else {
+			nextStatus := "RUNNING"
+			if projection.Status == "INPUT_REQUIRED" && !pendingDelivery {
+				nextStatus = "INPUT_REQUIRED"
+			}
+			nextReplacement.ActiveStatus = nextStatus
+			nextReplacement.ActiveBotRunID = projection.RunID
+			nextReplacement.ActiveTaskID = replacementTaskID(replacement, rec)
+			nextReplacement.ActiveTrackingDegraded = projection.TrackingDegraded
+			nextReplacement.ActiveReportRevision = projection.ReportRevision
+			nextReplacement.ActiveDegradedInterop = projection.DegradedInterop
+			nextReplacement.ActiveDelivery = privatePendingReplacementDelivery(projection)
+			if projection.InterOp != nil {
+				interop := *projection.InterOp
+				nextReplacement.ActiveInterop = &interop
+			}
+			if nextStatus != "INPUT_REQUIRED" {
+				nextReplacement.ActiveA2UI = nil
+			}
+		}
+		encoded, err := marshalPersistedProjectionWithContext(publicProjection, &next)
+		if err != nil {
+			return err
+		}
+		result := model.DB(ctx).WithContext(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate, stored.Id, username, stored.BotReportRevision, stored.BotProjectionJSON).
+			UpdateColumn("bot_projection_json", encoded)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	return ErrBotProjectionConflict
+}
+
 // applyBotRunProjection is the single Bot-run reconciliation path used by the
 // cron poller and the legacy update-log endpoint. It decodes the bounded run
 // projection once, merges it through the owner-scoped revision CAS, and only
@@ -2399,7 +3464,7 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 	logBotResponseMeta(ctx, meta)
 
 	for attempt := 0; attempt < botProjectionApplyAttempts; attempt++ {
-		if err := SaveBotRunProjection(ctx, row.UserName, row.Id, projection); err != nil {
+		if err := saveBotRunProjectionForRun(ctx, row.UserName, row.Id, row.BotRunId, projection); err != nil {
 			return err
 		}
 		// SaveBotRunProjection may have merged an equal/older snapshot into a
@@ -2416,7 +3481,7 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 			return nil
 		}
 		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ? AND bot_report_revision = ?", row.Id, row.UserName, storedProjection.ReportRevision).
+			Where("id = ? AND user_name = ? AND bot_report_revision = ? AND bot_run_id = ?", row.Id, row.UserName, storedProjection.ReportRevision, row.BotRunId).
 			Updates(updates)
 		if result.Error != nil {
 			return result.Error
@@ -2606,6 +3671,139 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil), nil
 }
 
+// persistOwnerAllocatedQuestionLog settles a preallocated owner row without
+// replacing its private key envelope. A staged replacement is promoted to the
+// public row and resets the stale Bot lifecycle projection atomically.
+func (ps *Service) persistOwnerAllocatedQuestionLog(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	row *model.QuestionAgentLog,
+	conversationV1 bool,
+) (int64, error) {
+	if submission == nil || submission.row.Id == 0 {
+		return 0, ErrDuplicateClientTurn
+	}
+	id := submission.row.Id
+	err := model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var stored model.QuestionAgentLog
+		if err := tx.Where(
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL",
+			id,
+			username,
+			submission.row.DialogueId,
+		).First(&stored).Error; err != nil {
+			return err
+		}
+		projection, private, err := unmarshalPersistedProjectionWithContext(
+			stored.BotProjectionJSON,
+		)
+		if err != nil {
+			return err
+		}
+		if private == nil {
+			return ErrDuplicateClientTurn
+		}
+		replacement := private.Replacement
+		next := private.clone()
+		if replacement != nil {
+			projection = BotRunProjection{ReportRevision: -1}
+			retired := append([]persistedClientTurnIdentity(nil), private.RetiredIdentities...)
+			if private.ClientTurnID != "" {
+				if private.RequestFingerprint == "" || len(retired) >= maxPersistedRetiredClientTurns {
+					return ErrDuplicateClientTurn
+				}
+				retired = append(retired, persistedClientTurnIdentity{
+					ClientTurnID:       private.ClientTurnID,
+					RequestFingerprint: private.RequestFingerprint,
+				})
+			}
+			next = persistedConversationContext{
+				ClientTurnID:       replacement.ClientTurnID,
+				RequestFingerprint: replacement.RequestFingerprint,
+				InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), replacement.InputAttachments...),
+				InteropMode:        replacement.InteropMode,
+				InteropTargets:     append([]string(nil), replacement.InteropTargets...),
+				RetiredIdentities:  retired,
+			}
+			if conversationV1 {
+				next.ModeLockState = "locked"
+				next.SettlementState = "submission_append"
+			}
+		} else {
+			if conversationV1 {
+				next.ModeLockState = "locked"
+			} else {
+				clearConversationV1Lifecycle(&next)
+			}
+		}
+		raw, err := marshalPersistedProjectionWithContext(projection, &next)
+		if err != nil {
+			return err
+		}
+		updates := map[string]interface{}{
+			"answer":              row.Answer,
+			"bot_projection_json": raw,
+			"bot_report_revision": projection.ReportRevision,
+			"bot_run_id":          row.BotRunId,
+			"collect_type":        row.CollectType,
+			"compute_resource":    row.ComputeResource,
+			"dialogue_id":         row.DialogueId,
+			"download_path":       row.DownloadPath,
+			"f_id":                row.FId,
+			"follow_up_questions": row.FollowUpQuestions,
+			"log_status":          row.LogStatus,
+			"mode":                row.Mode,
+			"query":               row.Query,
+			"reaction_type":       row.ReactionType,
+			"server_file_path":    row.ServerFilePath,
+			"server_id":           row.ServerId,
+			"status":              row.Status,
+			"task_id":             row.TaskId,
+			"task_log":            row.TaskLog,
+			"title_query":         row.TitleQuery,
+			"tool_name":           row.ToolName,
+		}
+		if row.FileName != "" {
+			updates["file_name"] = row.FileName
+		}
+		if row.UploadPath != "" {
+			updates["upload_path"] = row.UploadPath
+		}
+		if replacement != nil {
+			if replacement.FileName != "" {
+				updates["file_name"] = replacement.FileName
+			}
+			if replacement.UploadPath != "" {
+				updates["upload_path"] = replacement.UploadPath
+			}
+		}
+		if replacement != nil && row.TitleQuery == "" {
+			delete(updates, "title_query")
+		}
+		result := tx.Model(&model.QuestionAgentLog{}).
+			Where(
+				"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_projection_json = ?",
+				id,
+				username,
+				submission.row.DialogueId,
+				stored.BotProjectionJSON,
+			).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrDuplicateClientTurn
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // persistQuestionLog writes one QuestionAgentLog row, shared by the blocking
 // Query and streaming QueryStream paths: a plain INSERT on a fresh turn, or a
 // two-step UPDATE on refresh (struct Updates for the row, then an explicit map
@@ -2639,8 +3837,114 @@ func (ps *Service) persistQuestionLog(ctx context.Context, username string, refr
 	return row.Id, nil
 }
 
-// QueryStream is the SSE variant of Query for chat-family slugs. V1 allocates a
-// SUBMITTING row before opening Bot; V0 retains its RUNNING-row flow. Both
+func nonterminalStreamRetryStatus(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "SUBMITTING", "PENDING", "QUEUED", "PREPARING", "RESOLVING_INPUTS", "PLANNING", "RUNNING", "INPUT_REQUIRED", "FINALIZING":
+		return true
+	default:
+		return false
+	}
+}
+
+func forwardStoredAGUIEvent(
+	forward func([]byte) error,
+	eventType string,
+	payload map[string]interface{},
+) error {
+	payload["type"] = eventType
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	frame := make([]byte, 0, len(eventType)+len(encoded)+16)
+	frame = append(frame, "event: "...)
+	frame = append(frame, eventType...)
+	frame = append(frame, '\n')
+	frame = append(frame, "data: "...)
+	frame = append(frame, encoded...)
+	frame = append(frame, '\n', '\n')
+	if forward == nil {
+		return nil
+	}
+	return forward(frame)
+}
+
+const storedStreamReplayChunkBytes = 64 << 10
+
+func forEachStoredUTF8Chunk(value string, emit func(string) error) error {
+	if value == "" || !utf8.ValidString(value) {
+		return nil
+	}
+	for len(value) > 0 {
+		end := len(value)
+		if end > storedStreamReplayChunkBytes {
+			end = storedStreamReplayChunkBytes
+			for end > 0 && !utf8.ValidString(value[:end]) {
+				end--
+			}
+		}
+		if end == 0 {
+			return nil
+		}
+		if err := emit(value[:end]); err != nil {
+			return err
+		}
+		value = value[end:]
+	}
+	return nil
+}
+
+func replayStoredStreamSnapshot(out *QueryData, forward func([]byte) error) error {
+	if out == nil {
+		return ErrDuplicateClientTurn
+	}
+	runID := strings.TrimSpace(out.BotRunID)
+	if err := validatePersistedASCII("stream replay run id", runID, maxProjectionRunID); err != nil {
+		runID = ""
+	}
+	if runID != "" {
+		if err := forwardStoredAGUIEvent(forward, "RunStarted", map[string]interface{}{
+			"run_id":      runID,
+			"dialogue_id": out.DialogueId,
+		}); err != nil {
+			return err
+		}
+	}
+	if err := forEachStoredUTF8Chunk(out.Answer, func(chunk string) error {
+		return forwardStoredAGUIEvent(forward, "TextMessageContent", map[string]interface{}{
+			"delta": chunk,
+		})
+	}); err != nil {
+		return err
+	}
+	if followUp := strings.TrimSpace(out.FollowUpQuestions); followUp != "" && len(followUp) <= maxPersistedReplacementFollowUpBytes {
+		var questions []string
+		if json.Unmarshal([]byte(followUp), &questions) == nil && questions != nil {
+			if err := forwardStoredAGUIEvent(forward, "Custom", map[string]interface{}{
+				"name":  "phyto.follow_up",
+				"value": questions,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(out.Status), statusSucceeded) {
+		payload := map[string]interface{}{}
+		if runID != "" {
+			payload["run_id"] = runID
+		}
+		return forwardStoredAGUIEvent(forward, "RunFinished", payload)
+	}
+	return forwardStoredAGUIEvent(forward, "RunError", map[string]interface{}{
+		"code": "stored_run_terminal",
+	})
+}
+
+// QueryStream is the SSE variant of Query for chat-family slugs. V1 and keyed
+// V0 allocate an owner row before opening Bot. Fresh keyed V0 submissions then
+// promote that row to RUNNING, while a keyed replacement keeps the prior public
+// result visible and stages its active run privately until RunFinished. Keyless
+// legacy V0 still creates or refreshes its RUNNING row before onReady. All paths
 // publish the durable identity through onReady, then forward each raw frame
 // while teeing it into an accumulator. RunStarted is persisted before it is
 // forwarded, so the A2UI dialogue + user + run authorization boundary is live
@@ -2653,13 +3957,13 @@ func (ps *Service) QueryStream(
 	onReady func(StreamIdentity),
 	forward func(frame []byte) error,
 ) (*QueryData, error) {
-	v1 := multiturnV1Enabled(in)
+	conversationV1 := multiturnV1Enabled(in)
 	attachments, err := validateQueryAttachments(in.Attachments)
 	if err != nil {
 		return nil, err
 	}
 	in.Attachments = attachments
-	if v1 {
+	if conversationV1 {
 		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
 			return nil, err
 		}
@@ -2678,6 +3982,10 @@ func (ps *Service) QueryStream(
 		in.Mode = decision.Mode
 		in.Tool = decision.ForcedTool
 	}
+	if !conversationV1 && serviceClientTurnIDPattern.MatchString(strings.TrimSpace(in.ClientTurnID)) {
+		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+	}
+	ownerAllocated := ownerAllocatedSubmissionEnabled(in)
 	if in.Mode == "expert" {
 		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
 		// primitive). Reject it at this direct service boundary before any
@@ -2690,15 +3998,6 @@ func (ps *Service) QueryStream(
 	if !rxBot.BotConfig.StreamEnabled {
 		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
 	}
-	var target v1SubmissionTarget
-	if v1 {
-		var err error
-		target, err = ps.resolveV1SubmissionTarget(ctx, username, in)
-		if err != nil {
-			return nil, err
-		}
-		in.Mode = target.mode
-	}
 	// SSE is an Instant Chat surface, so it must enforce the same effective
 	// ChatAgent permission before any upload, dialogue lookup, or Bot stream.
 	permissions, err := ps.ResolveAgentPermissions(ctx, username)
@@ -2707,6 +4006,14 @@ func (ps *Service) QueryStream(
 	}
 	if !containsAgentTool(permissions.AllowedTools, "ChatAgent") {
 		return nil, permissionFailure(permissions, "ChatAgent")
+	}
+	var target v1SubmissionTarget
+	if ownerAllocated {
+		target, err = ps.resolveV1SubmissionTarget(ctx, username, in, conversationV1)
+		if err != nil {
+			return nil, err
+		}
+		in.Mode = target.mode
 	}
 	slug, ok := rxBot.SlugFor(in.Tool)
 	if !ok {
@@ -2722,26 +4029,49 @@ func (ps *Service) QueryStream(
 	}
 
 	var submission *v1Submission
-	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, true)
+	if ownerAllocated {
+		submission, err = ps.allocateOwnerSubmission(
+			ctx,
+			username,
+			in,
+			target,
+			permissions,
+			conversationV1,
+		)
 		if err != nil {
 			return nil, err
 		}
-		if submission.duplicate != nil {
+		if submission.pending {
 			if onReady != nil {
 				onReady(StreamIdentity{
 					DialogueID: submission.row.DialogueId,
 					MessageID:  submission.row.Id,
 				})
 			}
+			return submission.duplicate, ErrClientTurnSubmissionPending
+		}
+		if submission.duplicate != nil {
+			if nonterminalStreamRetryStatus(submission.duplicate.Status) {
+				return nil, ErrClientTurnSubmissionPending
+			}
+			if onReady != nil {
+				onReady(StreamIdentity{
+					DialogueID: submission.row.DialogueId,
+					MessageID:  submission.row.Id,
+				})
+			}
+			if err := replayStoredStreamSnapshot(submission.duplicate, forward); err != nil {
+				return nil, err
+			}
 			return submission.duplicate, nil
 		}
 	}
+	streamReplacement := submission != nil && submission.replacement
 	contextClient := rxBot.NewClient()
 
 	var dialogueID string
 	var fID int64
-	if v1 {
+	if ownerAllocated {
 		dialogueID = submission.row.DialogueId
 		fID = submission.row.FId
 	} else {
@@ -2765,7 +4095,7 @@ func (ps *Service) QueryStream(
 		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 	}
-	if v1 {
+	if conversationV1 {
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		req.Conversation = submission.envelope
 	}
@@ -2777,19 +4107,21 @@ func (ps *Service) QueryStream(
 		if err == nil {
 			break
 		}
-		retry, retryErr := prepareV1ConversationRebuildRetry(
-			ctx,
-			username,
-			submission,
-			target,
-			err,
-		)
-		if retryErr != nil {
-			return nil, retryErr
-		}
-		if retry {
-			req.Conversation = submission.envelope
-			continue
+		if conversationV1 {
+			retry, retryErr := prepareV1ConversationRebuildRetry(
+				ctx,
+				username,
+				submission,
+				target,
+				err,
+			)
+			if retryErr != nil {
+				return nil, retryErr
+			}
+			if retry {
+				req.Conversation = submission.envelope
+				continue
+			}
 		}
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
 		// error so the handler can still return a non-SSE status.
@@ -2801,7 +4133,7 @@ func (ps *Service) QueryStream(
 	// response identity authoritative, this closes the former A2UI window where
 	// a widget was visible while its authorization tuple did not exist yet.
 	var id int64
-	if v1 {
+	if conversationV1 || streamReplacement {
 		id = submission.row.Id
 	} else {
 		titleQuery := ""
@@ -2822,11 +4154,20 @@ func (ps *Service) QueryStream(
 			ReactionType:      "0",
 			CollectType:       "0",
 		}
-		row.BotProjectionJSON, err = attachmentProjectionJSON(in.Attachments)
-		if err != nil {
-			return nil, err
+		if ownerAllocated {
+			id, err = ps.persistOwnerAllocatedQuestionLog(
+				ctx,
+				username,
+				submission,
+				&row,
+				false,
+			)
+		} else {
+			row.BotProjectionJSON, err = attachmentProjectionJSON(in.Attachments)
+			if err == nil {
+				id, err = ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
+			}
 		}
-		id, err = ps.beginQuestionStream(ctx, username, in.RefreshId, &row)
 		if err != nil {
 			return nil, err
 		}
@@ -2840,7 +4181,7 @@ func (ps *Service) QueryStream(
 	// split token includes its original separator so the bytes reaching Web are
 	// exactly the bytes Bot sent; only the accumulator parses a copy.
 	expectedTurnID := ""
-	if v1 {
+	if conversationV1 {
 		expectedTurnID = submission.envelope.TurnID
 	}
 	acc := rxBot.NewAGUIAccumulator(expectedTurnID)
@@ -2866,11 +4207,30 @@ func (ps *Service) QueryStream(
 				break
 			}
 			if ev.Type == "RunStarted" && acc.RunID() != persistedRunID {
-				// Persist the cross-service join key before the browser can receive
-				// RunStarted (and therefore before any later interactive frame).
-				if err := ps.setQuestionStreamRunID(ctx, username, identity, acc.RunID()); err != nil {
-					streamErr = err
-					break
+				if streamReplacement {
+					// Keep a replacement run inside the bounded private candidate;
+					// the previously accepted public projection remains visible until
+					// this stream proves RunFinished.
+					_, err := persistReplacementActiveResult(ctx, username, submission, &QueryData{
+						Id:           id,
+						ToolName:     slugToToolName[slug],
+						ReactionType: "0",
+						DialogueId:   dialogueID,
+						Status:       "RUNNING",
+						BotRunID:     acc.RunID(),
+						Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+					})
+					if err != nil {
+						streamErr = err
+						break
+					}
+				} else {
+					// Persist the cross-service join key before the browser can receive
+					// RunStarted (and therefore before any later interactive frame).
+					if err := ps.setQuestionStreamRunID(ctx, username, identity, acc.RunID()); err != nil {
+						streamErr = err
+						break
+					}
 				}
 				persistedRunID = acc.RunID()
 			}
@@ -2900,7 +4260,14 @@ func (ps *Service) QueryStream(
 	} else if streamErr != nil || acc.Err() != nil {
 		status = "FAILED"
 	}
-	if v1 && status == statusSucceeded {
+	if streamReplacement && status == statusSucceeded && !acc.Finished() {
+		status = "FAILED"
+		streamErr = fmt.Errorf(
+			"%w: missing RunFinished",
+			ErrInvalidConversationStage,
+		)
+	}
+	if conversationV1 && status == statusSucceeded {
 		switch {
 		case !acc.Finished():
 			status = "FAILED"
@@ -2937,7 +4304,7 @@ func (ps *Service) QueryStream(
 	if acc.Err() != nil {
 		streamErr = nil
 	}
-	retainSubmitting := v1 && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
+	retainSubmitting := conversationV1 && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
 	// values while ensuring request cancellation cannot interrupt a terminal
@@ -2951,7 +4318,7 @@ func (ps *Service) QueryStream(
 		BotRunID:     acc.RunID(),
 		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 	}
-	if !v1 || status == statusSucceeded {
+	if !conversationV1 || status == statusSucceeded {
 		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
 		out.FollowUpQuestions = acc.FollowUpJSON()
 	}
@@ -2961,7 +4328,22 @@ func (ps *Service) QueryStream(
 	}
 	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancelFinalize()
-	if v1 {
+	if streamReplacement && status != statusSucceeded {
+		if acc.Err() != nil {
+			return persistReplacementTerminalResult(
+				finalizeCtx,
+				username,
+				submission,
+				out,
+			)
+		}
+		// A read or protocol failure after RunStarted is ambiguous. Leave the
+		// private active identity durable so an exact retry fails closed rather
+		// than promoting a partial answer or dispatching a second Bot run.
+		out.Status = "RUNNING"
+		return out, streamErr
+	}
+	if conversationV1 {
 		if status != statusSucceeded {
 			if err := failV1Submission(finalizeCtx, username, id); err != nil {
 				return nil, err
@@ -2974,12 +4356,13 @@ func (ps *Service) QueryStream(
 			settlementState = conversationSettlementRebuildRequired
 		}
 		private := persistedConversationContext{
-			ClientTurnID:     in.ClientTurnID,
-			Stage:            stage,
-			SettlementState:  settlementState,
-			AssistantSummary: v1AssistantSummary(stage),
-			ArtifactRefs:     append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
-			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			ClientTurnID:       in.ClientTurnID,
+			RequestFingerprint: submission.requestFingerprint,
+			Stage:              stage,
+			SettlementState:    settlementState,
+			AssistantSummary:   v1AssistantSummary(stage),
+			ArtifactRefs:       append([]rxBot.ArtifactRefV1(nil), target.artifacts...),
+			InputAttachments:   append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		}
 		if submission.envelope.Operation == "rebuild" {
 			private.RebuildLedgerVersion = submission.envelope.LedgerVersion
@@ -2995,6 +4378,7 @@ func (ps *Service) QueryStream(
 			in.Mode,
 			nil,
 			private,
+			in.Query,
 		)
 		if err != nil {
 			return nil, err
@@ -3011,6 +4395,32 @@ func (ps *Service) QueryStream(
 			)
 		}
 		if err := ps.decorateConversationQueryData(finalizeCtx, username, out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if streamReplacement {
+		row := model.QuestionAgentLog{
+			DialogueId:        dialogueID,
+			FId:               fID,
+			BotRunId:          acc.RunID(),
+			UserName:          username,
+			Query:             in.Query,
+			Answer:            out.Answer,
+			FollowUpQuestions: out.FollowUpQuestions,
+			ToolName:          out.ToolName,
+			Status:            out.Status,
+			Mode:              in.Mode,
+			ReactionType:      "0",
+			CollectType:       "0",
+		}
+		if _, err := ps.persistOwnerAllocatedQuestionLog(
+			finalizeCtx,
+			username,
+			submission,
+			&row,
+			false,
+		); err != nil {
 			return nil, err
 		}
 		return out, nil

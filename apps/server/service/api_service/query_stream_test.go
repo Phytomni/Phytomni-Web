@@ -1,6 +1,7 @@
 package api_service
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gorm.io/gorm"
@@ -64,6 +66,25 @@ func v1ContextStream(stage rxBot.ContextStageMetadata, answer string) string {
 		`event: RunFinished` + "\n" +
 			`data: {"type":"RunFinished","run_id":"run-context"}` + "\n",
 	}, "\n")
+}
+
+func assertValidAGUIReplay(t *testing.T, raw string) []string {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Split(splitSSEFrames)
+	var eventTypes []string
+	for scanner.Scan() {
+		event, ok := rxBot.ParseAGUIFrame(scanner.Bytes())
+		if !ok {
+			t.Fatalf("invalid replay frame: %q", scanner.Bytes())
+		}
+		eventTypes = append(eventTypes, event.Type)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan replay frames: %v", err)
+	}
+	return eventTypes
 }
 
 func contextStageForStream(request rxBot.ChatCompletionRequest) rxBot.ContextStageMetadata {
@@ -618,6 +639,533 @@ func TestQueryStream_PersistsAndForwards(t *testing.T) {
 	}
 }
 
+func TestQueryStream_SettledKeyedV0RetryReplaysTerminalSnapshot(t *testing.T) {
+	setupStreamTestDB(t)
+	const streamBody = "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-keyed-replay\"}\n\n" +
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"settled answer\"}\n\n" +
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.follow_up\",\"value\":[\"next question\"]}\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-keyed-replay\"}\n\n"
+	var botCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		botCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(streamBody))
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	input := QueryInput{
+		Query: "keyed stream replay", Mode: "instant",
+		ClientTurnID: "keyed-stream-replay", Surface: QuerySurfaceChat,
+	}
+	service := NewService()
+	first, err := service.QueryStream(context.Background(), "alice", input, nil, nil)
+	if err != nil {
+		t.Fatalf("initial QueryStream: %v", err)
+	}
+	var identity StreamIdentity
+	var forwarded strings.Builder
+	retry, err := service.QueryStream(
+		context.Background(),
+		"alice",
+		input,
+		func(value StreamIdentity) { identity = value },
+		func(frame []byte) error {
+			_, _ = forwarded.Write(frame)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("settled retry: %v", err)
+	}
+	if retry == nil || retry.Id != first.Id || identity.MessageID != first.Id || identity.DialogueID != first.DialogueId {
+		t.Fatalf("settled retry=%+v identity=%+v, want row %d/%s", retry, identity, first.Id, first.DialogueId)
+	}
+	frames := forwarded.String()
+	eventTypes := assertValidAGUIReplay(t, frames)
+	for _, required := range []string{"event: RunStarted", "event: TextMessageContent", `"settled answer"`, `"phyto.follow_up"`, "event: RunFinished"} {
+		if !strings.Contains(frames, required) {
+			t.Fatalf("replayed frames %q do not contain %q", frames, required)
+		}
+	}
+	if len(eventTypes) == 0 || eventTypes[len(eventTypes)-1] != "RunFinished" {
+		t.Fatalf("replayed event types=%v, want terminal RunFinished", eventTypes)
+	}
+	if botCalls.Load() != 1 {
+		t.Fatalf("Bot calls=%d, want 1", botCalls.Load())
+	}
+}
+
+func TestQueryStream_SettledRetryReplaysLargeStructuredAnswerByteExactly(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	answer := `{"payload":"` + strings.Repeat("界", 100000) + `","kind":"structured"}`
+	input := QueryInput{
+		Query: "large settled replay", Mode: "instant",
+		ClientTurnID: "large-settled-replay", Surface: QuerySurfaceChat,
+	}
+	target := v1SubmissionTarget{
+		dialogueID: "64646464-6464-4646-8646-646464646464",
+		mode:       "instant",
+		operation:  "append",
+	}
+	raw, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{
+			RunID: "run-large-settled-replay", Status: statusSucceeded,
+			ReportRevision: -1,
+		},
+		&persistedConversationContext{
+			ClientTurnID:       input.ClientTurnID,
+			RequestFingerprint: submissionRequestFingerprint(input, target, false),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: target.dialogueID, UserName: "alice",
+		Query: input.Query, Answer: answer, ToolName: "ChatAgent", Mode: "instant",
+		Status: statusSucceeded, BotRunId: "run-large-settled-replay",
+		BotProjectionJSON: raw, BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	var forwarded strings.Builder
+	out, err := NewService().QueryStream(
+		context.Background(), "alice", input, nil,
+		func(frame []byte) error {
+			_, _ = forwarded.Write(frame)
+			return nil
+		},
+	)
+	if err != nil || out == nil || out.Id != row.Id {
+		t.Fatalf("large settled retry=%+v error=%v", out, err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(forwarded.String()))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Split(splitSSEFrames)
+	acc := rxBot.NewAGUIAccumulator("")
+	contentFrames := 0
+	var eventTypes []string
+	for scanner.Scan() {
+		event, ok := rxBot.ParseAGUIFrame(scanner.Bytes())
+		if !ok {
+			t.Fatalf("invalid large replay frame: %q", scanner.Bytes())
+		}
+		if event.Type == "TextMessageContent" {
+			contentFrames++
+		}
+		eventTypes = append(eventTypes, event.Type)
+		acc.Observe(event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan large replay: %v", err)
+	}
+	if contentFrames < 2 {
+		t.Fatalf("large replay content frames=%d, want bounded multi-frame replay", contentFrames)
+	}
+	if acc.AnswerText() != answer {
+		t.Fatalf("large replay bytes=%d, want exact %d-byte structured answer", len(acc.AnswerText()), len(answer))
+	}
+	if len(eventTypes) == 0 || eventTypes[len(eventTypes)-1] != "RunFinished" {
+		t.Fatalf("large replay event sequence=%v, want terminal RunFinished", eventTypes)
+	}
+}
+
+func TestQueryStream_NonterminalKeyedV0RetryIsPendingBeforeReady(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	private := persistedConversationContext{ClientTurnID: "keyed-stream-pending"}
+	raw, err := marshalPersistedProjectionWithContext(BotRunProjection{ReportRevision: -1}, &private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: "78787878-7878-4787-8787-787878787878", UserName: "alice",
+		Query: "pending stream", ToolName: "ChatAgent", Mode: "instant",
+		Status: "RUNNING", BotProjectionJSON: raw, BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	ready := false
+	forwarded := false
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: "pending stream", Mode: "instant",
+			ClientTurnID: "keyed-stream-pending", Surface: QuerySurfaceChat,
+		},
+		func(StreamIdentity) { ready = true },
+		func([]byte) error { forwarded = true; return nil },
+	)
+	if out != nil || !errors.Is(err, ErrClientTurnSubmissionPending) {
+		t.Fatalf("pending retry=%+v error=%v, want ErrClientTurnSubmissionPending", out, err)
+	}
+	if ready || forwarded {
+		t.Fatalf("pending retry opened stream: ready=%v forwarded=%v", ready, forwarded)
+	}
+}
+
+func TestQueryStream_SubmittingKeyedV0RetryPublishesDurableIdentityBeforePending(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	var botCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		botCalls.Add(1)
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	private := persistedConversationContext{ClientTurnID: "keyed-stream-submitting"}
+	raw, err := marshalPersistedProjectionWithContext(BotRunProjection{ReportRevision: -1}, &private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: "71717171-7171-4717-8717-717171717171", UserName: "alice",
+		Query: "submitting stream", ToolName: "ChatAgent", Mode: "instant",
+		Status: "SUBMITTING", BotProjectionJSON: raw, BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	var ready StreamIdentity
+	forwarded := false
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: "submitting stream", Mode: "instant",
+			ClientTurnID: "keyed-stream-submitting", Surface: QuerySurfaceChat,
+		},
+		func(identity StreamIdentity) { ready = identity },
+		func([]byte) error { forwarded = true; return nil },
+	)
+	if !errors.Is(err, ErrClientTurnSubmissionPending) || out == nil ||
+		out.Id != row.Id || out.DialogueId != row.DialogueId || out.Status != "SUBMITTING" {
+		t.Fatalf("submitting retry=%+v error=%v, want pending durable row", out, err)
+	}
+	if ready.MessageID != row.Id || ready.DialogueID != row.DialogueId {
+		t.Fatalf("ready identity=%+v, want row %d/%q", ready, row.Id, row.DialogueId)
+	}
+	if forwarded || botCalls.Load() != 0 {
+		t.Fatalf("submitting retry forwarded=%v Bot calls=%d, want false/0", forwarded, botCalls.Load())
+	}
+}
+
+func TestQueryStream_FailedKeyedV0RetryReplaysRunError(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		ProxyEnabled: true, StreamEnabled: true,
+		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	private := persistedConversationContext{ClientTurnID: "keyed-stream-failed"}
+	raw, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{RunID: "run-keyed-failed", Status: "FAILED", ReportRevision: -1},
+		&private,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: "79797979-7979-4797-8797-797979797979", UserName: "alice",
+		Query: "failed stream", Answer: "partial safe answer", ToolName: "ChatAgent",
+		Mode: "instant", Status: "FAILED", BotRunId: "run-keyed-failed",
+		BotProjectionJSON: raw, BotReportRevision: -1,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	var forwarded strings.Builder
+	out, err := NewService().QueryStream(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: "failed stream", Mode: "instant",
+			ClientTurnID: "keyed-stream-failed", Surface: QuerySurfaceChat,
+		},
+		nil,
+		func(frame []byte) error {
+			_, _ = forwarded.Write(frame)
+			return nil
+		},
+	)
+	if err != nil || out == nil || out.Id != row.Id || out.Status != "FAILED" {
+		t.Fatalf("failed retry=%+v error=%v", out, err)
+	}
+	frames := forwarded.String()
+	eventTypes := assertValidAGUIReplay(t, frames)
+	if !strings.Contains(frames, "event: RunError") || strings.Contains(frames, "event: RunFinished") {
+		t.Fatalf("failed retry terminal frames=%q", frames)
+	}
+	if len(eventTypes) == 0 || eventTypes[len(eventTypes)-1] != "RunError" {
+		t.Fatalf("failed replay event types=%v, want terminal RunError", eventTypes)
+	}
+}
+
+func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		terminalEvent      string
+		wantStatus         string
+		wantPublicPromoted bool
+	}{
+		{
+			name:               "RunFinished promotes candidate",
+			terminalEvent:      "event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-stream-replacement\"}\n\n",
+			wantStatus:         statusSucceeded,
+			wantPublicPromoted: true,
+		},
+		{
+			name:          "RunError keeps accepted public result",
+			terminalEvent: "event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"replacement_failed\",\"message\":\"safe failure\"}\n\n",
+			wantStatus:    "FAILED",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			seed := seedResearchReplacementTarget(t, gdb)
+			const replacementAnswer = "streamed replacement answer"
+			body := "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-stream-replacement\",\"dialogue_id\":\"" + seed.DialogueId + "\"}\n\n" +
+				"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"" + replacementAnswer + "\"}\n\n" +
+				tc.terminalEvent
+			var botCalls atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				botCalls.Add(1)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(body))
+			}))
+			t.Cleanup(server.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
+				MultiturnV1Enabled: false, TimeoutSeconds: 2,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			input := QueryInput{
+				Query: "replace accepted result through SSE", Mode: "instant",
+				ClientTurnID: "keyed-stream-replacement-" + strings.ReplaceAll(tc.name, " ", "-"),
+				RefreshId:    seed.Id, Surface: QuerySurfaceChat,
+			}
+			var (
+				identity            StreamIdentity
+				firstFramePublic    model.QuestionAgentLog
+				firstFramePrivate   *persistedConversationContext
+				firstFrameReadError error
+			)
+			out, err := NewService().QueryStream(
+				context.Background(),
+				"alice",
+				input,
+				func(value StreamIdentity) { identity = value },
+				func(frame []byte) error {
+					if !strings.Contains(string(frame), "event: RunStarted") || firstFramePrivate != nil || firstFrameReadError != nil {
+						return nil
+					}
+					firstFrameReadError = gdb.First(&firstFramePublic, seed.Id).Error
+					if firstFrameReadError == nil {
+						var private persistedConversationContext
+						private, firstFrameReadError = LoadBotConversationContext(
+							context.Background(), "alice", seed.Id,
+						)
+						firstFramePrivate = &private
+					}
+					return nil
+				},
+			)
+			if err != nil {
+				t.Fatalf("keyed replacement QueryStream: %v", err)
+			}
+			if out == nil || out.Id != seed.Id || out.Status != tc.wantStatus ||
+				identity.MessageID != seed.Id || identity.DialogueID != seed.DialogueId {
+				t.Fatalf("replacement result=%+v identity=%+v, want row %d status %s", out, identity, seed.Id, tc.wantStatus)
+			}
+			if firstFrameReadError != nil {
+				t.Fatalf("read first-frame replacement state: %v", firstFrameReadError)
+			}
+			if firstFramePrivate == nil || firstFramePrivate.Replacement == nil ||
+				firstFramePrivate.Replacement.ClientTurnID != input.ClientTurnID ||
+				firstFramePrivate.Replacement.ActiveStatus != "RUNNING" ||
+				firstFramePrivate.Replacement.ActiveBotRunID != "run-stream-replacement" {
+				t.Fatalf("first-frame private replacement=%+v, want active RUNNING candidate", firstFramePrivate)
+			}
+			if firstFramePublic.Query != seed.Query || firstFramePublic.Answer != seed.Answer ||
+				firstFramePublic.ToolName != seed.ToolName || firstFramePublic.Status != seed.Status ||
+				firstFramePublic.BotRunId != seed.BotRunId {
+				t.Fatalf("first frame changed accepted public result: before=%+v after=%+v", seed, firstFramePublic)
+			}
+
+			var stored model.QuestionAgentLog
+			if err := gdb.First(&stored, seed.Id).Error; err != nil {
+				t.Fatalf("read terminal replacement row: %v", err)
+			}
+			private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatalf("load terminal replacement context: %v", err)
+			}
+			if tc.wantPublicPromoted {
+				if stored.Query != input.Query || stored.Answer != replacementAnswer ||
+					stored.ToolName != "ChatAgent" || stored.Status != statusSucceeded ||
+					stored.BotRunId != "run-stream-replacement" || private.Replacement != nil ||
+					private.ClientTurnID != input.ClientTurnID || len(private.RetiredIdentities) != 1 {
+					t.Fatalf("successful replacement was not atomically promoted: public=%+v private=%+v", stored, private)
+				}
+			} else {
+				if stored.Query != seed.Query || stored.Answer != seed.Answer ||
+					stored.ToolName != seed.ToolName || stored.Status != seed.Status ||
+					stored.BotRunId != seed.BotRunId || private.Replacement == nil ||
+					private.Replacement.TerminalResult == nil ||
+					private.Replacement.TerminalResult.Status != "FAILED" {
+					t.Fatalf("failed replacement changed public or lost terminal candidate: public=%+v private=%+v", stored, private)
+				}
+			}
+
+			var replay strings.Builder
+			retry, err := NewService().QueryStream(
+				context.Background(), "alice", input, nil,
+				func(frame []byte) error {
+					_, _ = replay.Write(frame)
+					return nil
+				},
+			)
+			if err != nil || retry == nil || retry.Id != seed.Id || retry.Status != tc.wantStatus {
+				t.Fatalf("terminal replacement replay=%+v error=%v", retry, err)
+			}
+			events := assertValidAGUIReplay(t, replay.String())
+			wantTerminal := "RunError"
+			if tc.wantPublicPromoted {
+				wantTerminal = "RunFinished"
+			}
+			if len(events) == 0 || events[len(events)-1] != wantTerminal {
+				t.Fatalf("replacement replay events=%v, want terminal %s", events, wantTerminal)
+			}
+			if botCalls.Load() != 1 {
+				t.Fatalf("replacement Bot calls=%d, want one", botCalls.Load())
+			}
+		})
+	}
+}
+
+func TestQueryAndQueryStreamShareClientTurnReservationWithoutConversationV1(t *testing.T) {
+	const streamBody = "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-shared-key-stream\"}\n\n" +
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"ok\"}\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-shared-key-stream\"}\n\n"
+	for _, tc := range []struct {
+		name          string
+		streamFirst   bool
+		clientTurnID  string
+		wantStreamHit int
+		wantRunHit    int
+	}{
+		{
+			name:         "blocking Research reserves before SSE Instant",
+			clientTurnID: "shared-key-research-before-stream",
+			wantRunHit:   1,
+		},
+		{
+			name:          "SSE Instant reserves before blocking Research",
+			streamFirst:   true,
+			clientTurnID:  "shared-key-stream-before-research",
+			wantStreamHit: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			streamHits := 0
+			runHits := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/chat/completions":
+					streamHits++
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = w.Write([]byte(streamBody))
+				case "/v1/agents/research/runs":
+					runHits++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusAccepted)
+					_, _ = w.Write([]byte(`{"id":"run-shared-key-research","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			t.Cleanup(server.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+				ResearchEnabled: true, StreamEnabled: true,
+				MultiturnV1Enabled: false, TimeoutSeconds: 2,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+			service := &Service{
+				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+			}
+			streamInput := QueryInput{
+				Query: "stream with an owner key", Mode: "instant",
+				ClientTurnID: tc.clientTurnID, Surface: QuerySurfaceChat,
+			}
+			researchInput := QueryInput{
+				Query: "Research with the same owner key", Mode: "expert",
+				Tool: "InSilicoResearchAgent", ClientTurnID: tc.clientTurnID,
+				Surface: QuerySurfaceChat,
+			}
+
+			if tc.streamFirst {
+				if _, err := service.QueryStream(
+					context.Background(), "alice@example.com", streamInput, nil, nil,
+				); err != nil {
+					t.Fatalf("first QueryStream: %v", err)
+				}
+				if out, err := service.Query(context.Background(), "alice@example.com", researchInput); out != nil || !errors.Is(err, ErrDuplicateClientTurn) {
+					t.Fatalf("Research reuse result=%+v error=%v, want ErrDuplicateClientTurn", out, err)
+				}
+			} else {
+				if _, err := service.Query(context.Background(), "alice@example.com", researchInput); err != nil {
+					t.Fatalf("first Research Query: %v", err)
+				}
+				if out, err := service.QueryStream(
+					context.Background(), "alice@example.com", streamInput, nil, nil,
+				); out != nil || !errors.Is(err, ErrDuplicateClientTurn) {
+					t.Fatalf("stream reuse result=%+v error=%v, want ErrDuplicateClientTurn", out, err)
+				}
+			}
+			if streamHits != tc.wantStreamHit || runHits != tc.wantRunHit {
+				t.Fatalf("Bot stream/run hits=%d/%d, want %d/%d",
+					streamHits, runHits, tc.wantStreamHit, tc.wantRunHit)
+			}
+			var rows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+				t.Fatalf("count shared-key rows: %v", err)
+			}
+			if rows != 1 {
+				t.Fatalf("shared-key rows=%d, want 1", rows)
+			}
+		})
+	}
+}
+
 func TestQueryStream_ReadyRowAndRunIDPrecedeFrames(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
@@ -1081,6 +1629,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 	ctx := utils.WithRequestID(context.Background(), "web-request-task27")
 	out, err := serviceWithValidResearchCatalog().Query(ctx, "task27-expert@example.com", QueryInput{
 		Query: "synthetic", Tool: "InSilicoResearchAgent", Mode: "expert",
+		ClientTurnID: "compat-expert-research-turn",
 	})
 	if err != nil {
 		t.Fatalf("Expert Query error: %v", err)

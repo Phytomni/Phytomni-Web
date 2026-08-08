@@ -84,6 +84,12 @@ type botProjectionRow struct {
 	BotReportRevision int64  `gorm:"column:bot_report_revision"`
 }
 
+type botProjectionRunRow struct {
+	BotProjectionJSON string `gorm:"column:bot_projection_json"`
+	BotReportRevision int64  `gorm:"column:bot_report_revision"`
+	BotRunID          string `gorm:"column:bot_run_id"`
+}
+
 // MergeBotRunProjection combines a poll snapshot with the row currently in
 // storage. Report revisions are monotonic: an older snapshot is ignored, an
 // equal snapshot may advance metadata, and a newer snapshot wins while blank
@@ -256,6 +262,64 @@ func saveBotRunProjection(ctx context.Context, username string, rowID int64, inc
 		}
 	}
 	return false, ErrBotProjectionConflict
+}
+
+// saveBotRunProjectionForRun extends the projection CAS with the live public
+// run identity. It is used by poll reconciliation so a delayed snapshot for an
+// old run cannot install a projection after a replacement has promoted a new
+// run on the same row.
+func saveBotRunProjectionForRun(
+	ctx context.Context,
+	username string,
+	rowID int64,
+	expectedRunID string,
+	incoming BotRunProjection,
+) error {
+	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
+		var stored botProjectionRunRow
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Select("bot_projection_json, bot_report_revision, bot_run_id").
+			Where("id = ? AND user_name = ?", rowID, username).
+			First(&stored)
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return ErrBotProjectionNotFound
+		}
+		if result.Error != nil {
+			return result.Error
+		}
+		if strings.TrimSpace(stored.BotRunID) != expectedRunID {
+			return ErrBotProjectionConflict
+		}
+		current, privateContext, err := unmarshalPersistedProjectionWithContext(stored.BotProjectionJSON)
+		if err != nil {
+			return err
+		}
+		current.ReportRevision = stored.BotReportRevision
+		merged, changed, err := MergeBotRunProjection(current, incoming)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return nil
+		}
+		encoded, err := marshalPersistedProjectionWithContext(merged, privateContext)
+		if err != nil {
+			return err
+		}
+		result = model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where(botProjectionCASPredicate+" AND bot_run_id = ?", rowID, username, stored.BotReportRevision, stored.BotProjectionJSON, expectedRunID).
+			Updates(map[string]interface{}{
+				"bot_projection_json": encoded,
+				"bot_report_revision": merged.ReportRevision,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			return nil
+		}
+	}
+	return ErrBotProjectionConflict
 }
 
 // LoadBotRunProjection reads a projection only through the authenticated

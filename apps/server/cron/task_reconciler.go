@@ -5,7 +5,6 @@ import (
 	rxCron "phytomni-server/cron/base"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
-	"phytomni-server/model"
 	"phytomni-server/service/api_service"
 	"time"
 )
@@ -25,10 +24,7 @@ func (r *TaskReconciler) Spec() string {
 
 func (r *TaskReconciler) Run() {
 	rxLog.Sugar().Infow("running task reconciliation")
-	var questionAgentList []model.QuestionAgentLog
-	err := model.Default().Model(&model.QuestionAgentLog{}).
-		Where("status = ?", "RUNNING").
-		Find(&questionAgentList).Error
+	questionAgentList, err := api_service.LoadBotRunReconciliationRows(context.Background())
 	if err != nil {
 		rxLog.Sugar().Errorw("task reconciliation query failed", "reason", "database_query_failed")
 		return

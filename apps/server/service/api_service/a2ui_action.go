@@ -35,19 +35,40 @@ func (ps *Service) A2uiAction(
 		return nil, err
 	}
 
-	var count int64
-	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
+	var rows []model.QuestionAgentLog
+	err = model.DB(ctx).
 		Where(
-			"dialogue_id = ? AND user_name = ? AND bot_run_id = ? AND delete_at IS NULL",
+			"dialogue_id = ? AND user_name = ? AND delete_at IS NULL",
 			dialogueID,
 			username,
-			env.RunID,
 		).
-		Count(&count).Error
+		Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	if count == 0 {
+	authorized := false
+	for index := range rows {
+		_, private, decodeErr := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if private != nil && private.Replacement != nil {
+			replacement := private.Replacement
+			if replacement.ActiveStatus == "INPUT_REQUIRED" &&
+				replacement.ActiveBotRunID == env.RunID {
+				authorized = true
+				break
+			}
+			// While a private replacement is active, the old public run is no
+			// longer an actionable A2UI target even though it remains visible.
+			continue
+		}
+		if rows[index].BotRunId == env.RunID {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
 		return nil, ErrA2uiActionNotFound
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
