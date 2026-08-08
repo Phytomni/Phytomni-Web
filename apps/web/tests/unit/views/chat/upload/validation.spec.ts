@@ -112,7 +112,7 @@ describe("validateUploadFile", () => {
 
   it("rejects a filename over the UTF-8 byte boundary", () => {
     expect(
-      validateUploadFile(metadata("界".repeat(128)), 0, NEGOTIATED_LIMITS)
+      validateUploadFile(metadata("\u754c".repeat(128)), 0, NEGOTIATED_LIMITS)
     ).toMatchObject({
       ok: false,
       code: "invalid_filename",

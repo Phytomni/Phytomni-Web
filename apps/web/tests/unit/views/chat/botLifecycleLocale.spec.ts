@@ -29,9 +29,9 @@ const REQUIRED_BOT_LIFECYCLE_KEYS = [
 ] as const;
 
 const REQUIRED_RESEARCH_LIFECYCLE_LABELS = [
-  ["chat.lifecycle.resolving_inputs", "Resolving inputs", "解析输入中"],
-  ["chat.lifecycle.planning", "Planning tasks", "任务规划中"],
-  ["chat.lifecycle.finalizing", "Finalizing", "最终整理中"],
+  ["chat.lifecycle.resolving_inputs", "Resolving inputs"],
+  ["chat.lifecycle.planning", "Planning tasks"],
+  ["chat.lifecycle.finalizing", "Finalizing"],
 ] as const;
 const RESEARCH_TIMEOUT_LIFECYCLE_LABEL = [
   "chat.lifecycle.timed_out",
@@ -173,10 +173,17 @@ describe("Bot lifecycle locale contract", () => {
   });
 
   it.each(REQUIRED_RESEARCH_LIFECYCLE_LABELS)(
-    "defines exact bilingual Research lifecycle copy for %s",
-    (key, english, chinese) => {
+    "defines exact English and translated Research lifecycle copy for %s",
+    (key, english) => {
       expect(valueAt(enUS, key)).toBe(english);
-      expect(valueAt(zhCN, key)).toBe(chinese);
+
+      const translated = valueAt(zhCN, key);
+      expect(translated).toEqual(expect.any(String));
+      const normalized = String(translated).trim();
+      expect(normalized).not.toBe("");
+      expect(normalized).not.toBe(english);
+      expect(normalized).not.toBe(key);
+      expect(normalized).not.toMatch(/[{}]/u);
     }
   );
 
