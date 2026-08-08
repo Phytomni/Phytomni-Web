@@ -297,6 +297,92 @@ describe("useSendMessage", () => {
     expect(ElMessage.warning).not.toHaveBeenCalled();
   });
 
+  it("projects bounded metadata-free history without mutating the hydrated Research ledger", async () => {
+    const expectedTransportPrefix = "🧬" + "a".repeat(32766) + "🌾";
+    const persistedResearchQuery =
+      expectedTransportPrefix + "🚫" + "z".repeat(98303);
+    const hydratedHistory: ChatMessage[] = Array.from(
+      { length: 22 },
+      (_, index) => ({
+        role: index === 2 ? "system" : index % 2 === 0 ? "user" : "assistant",
+        content:
+          index === 1 ? persistedResearchQuery : `persisted-message-${index}`,
+        id: `persisted-row-${index}`,
+        attachments: [
+          {
+            asset_id: `file-history-${index}`,
+            name: `history-${index}.txt`,
+            size: index + 1,
+            type: "text/plain",
+          },
+        ],
+      })
+    );
+    const state = stateFor("A");
+    state.messageInput = "Run Research with the exact current query.";
+    state.mode = "expert";
+    state.selectedAgent = "InSilicoResearchAgent";
+    state.historyQuestion = hydratedHistory;
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+    const sendPromise = makeComposable().sendMessage();
+    await vi.waitFor(() => {
+      expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+    });
+
+    const formData = queryCallAt(
+      0,
+      "bounded Research history query"
+    )[0] as FormData;
+    const wireHistory = JSON.parse(String(formData.get("history"))) as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(formData.get("query")).toBe(
+      "Run Research with the exact current query."
+    );
+    expect(wireHistory).toHaveLength(20);
+    expect(wireHistory[0]?.role).toBe("assistant");
+    expect(wireHistory[0]?.content).toBe(expectedTransportPrefix);
+    expect(Array.from(wireHistory[0]?.content ?? "")).toHaveLength(32768);
+    expect(wireHistory[1]).toEqual({
+      role: "assistant",
+      content: "persisted-message-3",
+    });
+    expect(wireHistory.some((message) => message.role === "system")).toBe(
+      false
+    );
+    expect(wireHistory.at(-1)).toEqual({
+      role: "assistant",
+      content: "persisted-message-21",
+    });
+    expect(
+      wireHistory.every(
+        (message) => Object.keys(message).sort().join(",") === "content,role"
+      )
+    ).toBe(true);
+    expect(state.historyQuestion).toBe(hydratedHistory);
+    expect(hydratedHistory[1]?.content).toBe(persistedResearchQuery);
+    expect(hydratedHistory[2]?.role).toBe("system");
+    expect(Array.from(String(hydratedHistory[1]?.content))).toHaveLength(
+      131072
+    );
+
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "InSilicoResearchAgent",
+          answer: "",
+          status: "RUNNING",
+          id: "9001",
+          bot_run_id: "run-bounded-history",
+        },
+      })
+    );
+    await sendPromise;
+  });
+
   it("fails a disabled or malformed-decoded forced Research capability closed before mutation", async () => {
     const draft = "preserve this unavailable Research draft";
     const state = stateFor("A");
@@ -1273,9 +1359,9 @@ describe("useSendMessage", () => {
   it("A→B switch during pre-request await still uses A's parent row/message/file/mode snapshot", async () => {
     stateFor("A").messageInput = "payload-A";
     stateFor("A").mode = "expert";
-    stateFor("A").historyQuestion = invalidInput<readonly ChatMessage[]>({
-      h: 1,
-    });
+    stateFor("A").historyQuestion = [
+      { role: "user", content: "captured-history-A" },
+    ];
     stateFor("A").fileList = [completedUpload("a.txt", "file_a")];
 
     let resolveScroll: (() => void) | undefined;
@@ -1319,7 +1405,9 @@ describe("useSendMessage", () => {
     expect(formData.get("mode")).toBe("expert");
     expect(formData.get("tool")).toBe("");
     expect(formData.get("query")).toContain("payload-A");
-    expect(formData.get("history")).toBe(JSON.stringify({ h: 1 }));
+    expect(formData.get("history")).toBe(
+      JSON.stringify([{ role: "user", content: "captured-history-A" }])
+    );
     expect(formData.get("attachments")).toBe(
       JSON.stringify([{ asset_id: "file_a" }])
     );

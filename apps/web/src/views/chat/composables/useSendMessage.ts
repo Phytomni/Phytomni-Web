@@ -52,10 +52,13 @@ import {
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
 import { queryWithinLimit } from "../utils/research-input-policy";
+import {
+  MAX_CONVERSATION_HISTORY_MESSAGES,
+  projectHistoryForTransport,
+} from "../utils/chat-history-normalization";
 import type { BotResearchInputCapability } from "./useBotCapabilities";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
-const MAX_CONTEXT_MESSAGES = 20;
 const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 type ChatUserStore = {
@@ -204,7 +207,7 @@ function commitSuccessfulTurn(
         : {}),
     },
     { role: "assistant", content: assistantContent },
-  ].slice(-MAX_CONTEXT_MESSAGES);
+  ].slice(-MAX_CONVERSATION_HISTORY_MESSAGES);
 }
 
 function parseBlockingProjection(data: QueryData) {
@@ -623,7 +626,10 @@ export function useSendMessage(opts: {
       queryData.append("mode", capturedMode);
       queryData.append("client_turn_id", clientTurnId);
       if (capturedHistory) {
-        queryData.append("history", JSON.stringify(capturedHistory));
+        queryData.append(
+          "history",
+          JSON.stringify(projectHistoryForTransport(capturedHistory))
+        );
       }
       queryData.append("attachments", JSON.stringify(attachmentRefs));
 

@@ -184,6 +184,66 @@ describe("useRefreshMessage", () => {
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
   });
 
+  it("projects bounded metadata-free refresh history without mutating hydrated content", async () => {
+    const expectedTransportPrefix = "🧬" + "a".repeat(32766) + "🌾";
+    const persistedResearchQuery =
+      expectedTransportPrefix + "🚫" + "z".repeat(98303);
+    const hydratedHistory: ChatMessage[] = [
+      {
+        role: "user",
+        content: persistedResearchQuery,
+        id: "persisted-research-row",
+        attachments: [
+          {
+            asset_id: "file-history-refresh",
+            name: "history-refresh.txt",
+            size: 42,
+            type: "text/plain",
+          },
+        ],
+      },
+    ];
+    stateFor("A").historyQuestion = hydratedHistory;
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    mockGetQuery.mockReturnValueOnce(pending.promise);
+
+    const refreshPromise = makeComposable().refreshMessage(1);
+
+    const refreshCall = mustGet(
+      mockGetQuery.mock.calls[0],
+      "bounded refresh history call"
+    );
+    const formData = refreshCall[0] as FormData;
+    const wireHistory = JSON.parse(String(formData.get("history"))) as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(formData.get("query")).toBe("Original question");
+    expect(wireHistory).toHaveLength(1);
+    expect(
+      Object.keys(mustGet(wireHistory[0], "wire history row")).sort()
+    ).toEqual(["content", "role"]);
+    expect(wireHistory[0]?.content).toBe(expectedTransportPrefix);
+    expect(Array.from(wireHistory[0]?.content ?? "")).toHaveLength(32768);
+    expect(stateFor("A").historyQuestion).toBe(hydratedHistory);
+    expect(hydratedHistory[0]?.content).toBe(persistedResearchQuery);
+    expect(Array.from(String(hydratedHistory[0]?.content))).toHaveLength(
+      131072
+    );
+
+    pending.resolve(
+      queryResponse({
+        tool_name: "ChatAgent",
+        answer: "Refreshed answer",
+        id: "msg-refreshed",
+      })
+    );
+    await refreshPromise;
+
+    expect(stateFor("A").historyQuestion).toBe(hydratedHistory);
+    expect(hydratedHistory[0]?.content).toBe(persistedResearchQuery);
+  });
+
   it("normalizes malformed follow-up JSON without discarding the refreshed answer", async () => {
     mockGetQuery.mockResolvedValueOnce(
       queryResponse({

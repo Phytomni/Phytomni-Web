@@ -1,3 +1,45 @@
+import type { ChatMessage } from "../types";
+import { chatContentToText } from "../messageTypes";
+
+export const MAX_CONVERSATION_HISTORY_MESSAGES = 20;
+const MAX_HISTORY_CONTENT_CODE_POINTS = 32768;
+
+type HistoryTransportMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+function boundCodePoints(value: string, limit: number): string {
+  let codePoints = 0;
+  let codeUnits = 0;
+  for (const point of value) {
+    if (codePoints === limit) return value.slice(0, codeUnits);
+    codePoints += 1;
+    codeUnits += point.length;
+  }
+  return value;
+}
+
+export function projectHistoryForTransport(
+  history: readonly ChatMessage[] | null | undefined
+): HistoryTransportMessage[] {
+  if (!Array.isArray(history)) return [];
+
+  return history
+    .filter(
+      (message): message is ChatMessage & { role: "user" | "assistant" } =>
+        message.role === "user" || message.role === "assistant"
+    )
+    .slice(-MAX_CONVERSATION_HISTORY_MESSAGES)
+    .map((message) => ({
+      role: message.role,
+      content: boundCodePoints(
+        chatContentToText(message.content),
+        MAX_HISTORY_CONTENT_CODE_POINTS
+      ),
+    }));
+}
+
 export function normalizeHistoryRows(data: unknown): Record<string, unknown>[] {
   if (!Array.isArray(data)) return [];
   return data.filter(

@@ -30,6 +30,7 @@ import {
   completedUploadDisplays,
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
+import { projectHistoryForTransport } from "../utils/chat-history-normalization";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -126,7 +127,10 @@ export function useRefreshMessage(opts: {
 
       // add the history (if any)
       if (chatState.historyQuestion) {
-        queryData.append("history", JSON.stringify(chatState.historyQuestion));
+        queryData.append(
+          "history",
+          JSON.stringify(projectHistoryForTransport(chatState.historyQuestion))
+        );
       }
 
       queryData.append("attachments", JSON.stringify(attachmentRefs));
