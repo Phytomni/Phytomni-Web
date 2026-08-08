@@ -30,17 +30,26 @@ func TestQueryErrorStatus_ExpertDisabled(t *testing.T) {
 func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
-		name    string
-		enabled bool
-		value   string
-		wantErr bool
+		name      string
+		enabled   bool
+		value     string
+		surface   api_service.QuerySurface
+		routeTool string
+		wantErr   bool
 	}{
-		{name: "v0 missing", enabled: false},
-		{name: "v0 malformed remains compatible", enabled: false, value: "bad turn"},
-		{name: "v1 missing", enabled: true, wantErr: true},
-		{name: "v1 malformed", enabled: true, value: "bad turn", wantErr: true},
-		{name: "v1 oversized", enabled: true, value: strings.Repeat("a", 129), wantErr: true},
-		{name: "v1 valid", enabled: true, value: "turn-1:retry_2"},
+		{name: "v0 chat missing", enabled: false, surface: api_service.QuerySurfaceChat},
+		{name: "v0 chat malformed remains compatible", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceChat},
+		{name: "v1 chat missing", enabled: true, surface: api_service.QuerySurfaceChat, wantErr: true},
+		{name: "v1 chat malformed", enabled: true, value: "bad turn", surface: api_service.QuerySurfaceChat, wantErr: true},
+		{name: "v1 chat oversized", enabled: true, value: strings.Repeat("a", 129), surface: api_service.QuerySurfaceChat, wantErr: true},
+		{name: "v1 chat valid", enabled: true, value: "turn-1:retry_2", surface: api_service.QuerySurfaceChat},
+		{name: "conversation V1 off Research product missing", enabled: false, surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "conversation V1 off Research product malformed", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "conversation V1 off Research product valid", enabled: false, value: "turn-research-direct", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent"},
+		{name: "v1 Research product missing", enabled: true, surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "v1 Research product malformed", enabled: true, value: "bad turn", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
+		{name: "v1 Research product valid", enabled: true, value: "turn-research-retry", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent"},
+		{name: "v1 design product remains compatible", enabled: true, surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent"},
 	}
 
 	for _, tc := range tests {
@@ -62,7 +71,7 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = request
 
-			input := queryInputForSurface(ctx, api_service.QuerySurfaceChat, "")
+			input := queryInputForSurface(ctx, tc.surface, tc.routeTool)
 			err := validateQueryClientTurn(input)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("validateQueryClientTurn() error = %v, wantErr %v", err, tc.wantErr)

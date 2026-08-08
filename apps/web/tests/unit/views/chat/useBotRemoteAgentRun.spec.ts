@@ -246,7 +246,7 @@ describe("useBotRemoteAgentRun", () => {
         true,
         true,
         "agent_run",
-        true
+        false
       ),
     });
 
@@ -281,8 +281,9 @@ describe("useBotRemoteAgentRun", () => {
     expect(
       Array.from(formData.values()).some((value) => value instanceof Blob)
     ).toBe(false);
-    expect(formData.get("gene_id")).toBe("AT1G01010");
-    expect(formData.get("species_code")).toBe("ath");
+    expect(formData.has("gene_id")).toBe(false);
+    expect(formData.has("to_id")).toBe(false);
+    expect(formData.has("species_code")).toBe(false);
     expect(formData.has("data_list")).toBe(false);
     expect(formData.get("interop_mode")).toBe("auto");
     expect(formData.get("interop_targets")).toBe(JSON.stringify(["mcp-peer"]));
@@ -312,7 +313,7 @@ describe("useBotRemoteAgentRun", () => {
     expect(mockQuery).toHaveBeenCalledOnce();
     const formData = mockQuery.mock.calls[0][1] as FormData;
     expect([...formData.keys()].sort()).toEqual(
-      ["attachments", "id", "query"].sort()
+      ["attachments", "client_turn_id", "id", "query"].sort()
     );
     expect(formData.get("query")).toBe("Compare all synthetic inputs");
     const submittedAttachments = JSON.parse(
@@ -328,6 +329,169 @@ describe("useBotRemoteAgentRun", () => {
     expect(formData.has("data_list")).toBe(false);
     expect(formData.has("obs_file_list")).toBe(false);
     expect(formData.has("dataset_description")).toBe(false);
+  });
+
+  it("reuses one Research client turn after an ambiguous failure and rotates it after success", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-retry-dialogue",
+          bot_run_id: "run-research-retry",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 18,
+          dialogue_id: "research-new-dialogue",
+          bot_run_id: "run-research-new",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-retry",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = {
+      query: "Reproduce the submitted paper",
+      attachments: [{ asset_id: "file_research_retry" }],
+    } as const;
+
+    await expect(run.submit(input)).rejects.toThrow(
+      "connection reset after dispatch"
+    );
+    await run.submit(input);
+    await run.submit(input);
+
+    const clientTurnIds = mockQuery.mock.calls.map((call) =>
+      String((call[1] as FormData).get("client_turn_id"))
+    );
+    expect(clientTurnIds[0]).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(clientTurnIds[1]).toBe(clientTurnIds[0]);
+    expect(clientTurnIds[2]).not.toBe(clientTurnIds[1]);
+    for (const call of mockQuery.mock.calls) {
+      const formData = call[1] as FormData;
+      expect([...formData.keys()].sort()).toEqual(
+        ["attachments", "client_turn_id", "id", "query"].sort()
+      );
+      expect(formData.has("data_list")).toBe(false);
+      expect(formData.has("obs_file_list")).toBe(false);
+      expect(formData.has("dataset_description")).toBe(false);
+    }
+  });
+
+  it("retains the Research client turn after a rejected response", async () => {
+    mockQuery
+      .mockRejectedValueOnce({
+        response: { status: 400, data: { code: "invalid_query" } },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-valid-dialogue",
+          bot_run_id: "run-research-valid",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-pre-dispatch",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = { query: "Reproduce the submitted paper" } as const;
+
+    await expect(run.submit(input)).rejects.toBeTruthy();
+    await run.submit(input);
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(first).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(second).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(second).toBe(first);
+  });
+
+  it("rotates the Research client turn when normalized interop controls change", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-interop-dialogue",
+          bot_run_id: "run-research-interop-change",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-interop-change",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(
+      run.submit({
+        query: "Reproduce with delegated evidence",
+        interopMode: "auto",
+        interopTargets: ["mcp-peer"],
+      })
+    ).rejects.toThrow("connection reset after dispatch");
+    await run.submit({
+      query: "Reproduce with delegated evidence",
+      interopMode: "auto",
+      interopTargets: ["mcp-other"],
+    });
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(second).not.toBe(first);
+  });
+
+  it("rotates the Research client turn after reset", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-reset-dialogue",
+          bot_run_id: "run-research-after-reset",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-reset",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = { query: "Reproduce after explicit reset" } as const;
+
+    await expect(run.submit(input)).rejects.toThrow(
+      "connection reset after dispatch"
+    );
+    run.reset();
+    await run.submit(input);
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(second).not.toBe(first);
   });
 
   it("rejects 65 Research attachment references before transport", async () => {
@@ -443,6 +607,9 @@ describe("useBotRemoteAgentRun", () => {
         "query",
         "Investigate drought tolerance",
       ]);
+      expect(entries.some(([key]) => key === "client_turn_id")).toBe(
+        tool === "InSilicoResearchAgent"
+      );
     }
   );
 

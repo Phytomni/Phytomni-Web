@@ -424,6 +424,8 @@ func newNegotiatedResearchRequest(
 		if err := writer.WriteField("tool", "InSilicoResearchAgent"); err != nil {
 			t.Fatalf("write tool: %v", err)
 		}
+	} else if err := writer.WriteField("client_turn_id", "negotiated-research-turn"); err != nil {
+		t.Fatalf("write client turn id: %v", err)
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close Research request: %v", err)

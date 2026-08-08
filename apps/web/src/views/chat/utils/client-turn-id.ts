@@ -5,6 +5,8 @@ export interface ClientTurnDraft {
   selectedAgent: string;
   query: string;
   attachments: readonly string[];
+  interopMode?: "off" | "auto" | "required";
+  interopTargets?: readonly string[];
 }
 
 const PRE_DISPATCH_4XX = new Set([
@@ -30,6 +32,7 @@ export function createClientTurnId(): string {
 
 /** Stable local retry key; file contents and browser File objects never enter it. */
 export function clientTurnDraftFingerprint(draft: ClientTurnDraft): string {
+  const interopMode = draft.interopMode ?? "off";
   return JSON.stringify({
     parentRowId: draft.parentRowId,
     operation: draft.operation,
@@ -37,6 +40,9 @@ export function clientTurnDraftFingerprint(draft: ClientTurnDraft): string {
     selectedAgent: draft.selectedAgent,
     query: draft.query,
     attachments: [...draft.attachments],
+    interopMode,
+    interopTargets:
+      interopMode === "off" ? [] : [...(draft.interopTargets ?? [])],
   });
 }
 
@@ -63,6 +69,8 @@ export function clientTurnDraftFingerprintMatches(
         return null;
       }
       const record = parsed as Record<string, unknown>;
+      const interopMode = record.interopMode ?? "off";
+      const interopTargets = record.interopTargets ?? [];
       if (
         typeof record.parentRowId !== "number" ||
         !Number.isSafeInteger(record.parentRowId) ||
@@ -72,6 +80,11 @@ export function clientTurnDraftFingerprintMatches(
         typeof record.query !== "string" ||
         !Array.isArray(record.attachments) ||
         !record.attachments.every((item) => typeof item === "string") ||
+        (interopMode !== "off" &&
+          interopMode !== "auto" &&
+          interopMode !== "required") ||
+        !Array.isArray(interopTargets) ||
+        !interopTargets.every((item) => typeof item === "string") ||
         (record.datasetDescription !== undefined &&
           typeof record.datasetDescription !== "string")
       ) {
@@ -85,6 +98,8 @@ export function clientTurnDraftFingerprintMatches(
           selectedAgent: record.selectedAgent,
           query: record.query,
           attachments: record.attachments,
+          interopMode,
+          interopTargets: interopMode === "off" ? [] : interopTargets,
         }),
       };
     } catch {

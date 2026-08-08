@@ -253,6 +253,345 @@ func TestLongResearchSubmissionPreservesRawQueryAndDuplicateClientTurn(t *testin
 	}
 }
 
+func TestDedicatedResearchSubmissionReusesClientTurnRowAndRun(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var (
+		calls    int
+		captured rxBot.AgentRunRequest
+	)
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/v1/agents/research/runs" {
+			t.Errorf("Bot path = %q, want Research run", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode dedicated Research request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"run-dedicated-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-dedicated-research"],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+	input := QueryInput{
+		Query:        "Reproduce the submitted paper",
+		Mode:         "instant",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "dedicated-research-turn-1",
+		Surface:      QuerySurfaceAgentProduct,
+		Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_dedicated_research"}},
+	}
+
+	first, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("first dedicated Research submission: %v", err)
+	}
+	second, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("duplicate dedicated Research submission: %v", err)
+	}
+	if first.Id != second.Id || first.BotRunID != second.BotRunID || first.BotRunID != "run-dedicated-research" {
+		t.Fatalf("duplicate identity changed: first=%+v second=%+v", first, second)
+	}
+	if calls != 1 {
+		t.Fatalf("Bot submissions = %d, want 1", calls)
+	}
+	if captured.Conversation == nil ||
+		captured.Conversation.TurnID != "1" ||
+		captured.Conversation.CurrentMessage.Content != input.Query ||
+		captured.Conversation.RequestedAgentID == nil ||
+		*captured.Conversation.RequestedAgentID != input.Tool {
+		t.Fatalf("dedicated Research conversation metadata = %#v", captured.Conversation)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, first.Id).Error; err != nil {
+		t.Fatalf("read dedicated Research row: %v", err)
+	}
+	if row.Query != input.Query || row.ToolName != input.Tool || row.Mode != "instant" {
+		t.Fatalf("stored dedicated Research row = %#v", row)
+	}
+}
+
+func TestDedicatedResearchSubmissionReusesClientTurnWithoutConversationV1(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var (
+		calls    int
+		captured rxBot.AgentRunRequest
+	)
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode dedicated Research request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"run-research-no-conversation-v1","object":"agent.run","agent":"research","status":"running","task_ids":["child-research-no-conversation-v1"],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	rxBot.BotConfig.MultiturnV1Enabled = false
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+	input := QueryInput{
+		Query:        "Reproduce the submitted paper without conversation V1",
+		Mode:         "instant",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "dedicated-research-no-conversation-v1",
+		Surface:      QuerySurfaceAgentProduct,
+		Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_research_no_conversation_v1"}},
+	}
+
+	first, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("first dedicated Research submission: %v", err)
+	}
+	second, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("duplicate dedicated Research submission: %v", err)
+	}
+	if first.Id != second.Id || first.BotRunID != second.BotRunID || first.BotRunID != "run-research-no-conversation-v1" {
+		t.Fatalf("duplicate identity changed: first=%+v second=%+v", first, second)
+	}
+	if calls != 1 {
+		t.Fatalf("Bot submissions = %d, want 1", calls)
+	}
+	if captured.Conversation != nil {
+		t.Fatalf("conversation V1 leaked while disabled: %#v", captured.Conversation)
+	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&count).Error; err != nil {
+		t.Fatalf("count dedicated Research rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("persisted rows = %d, want 1", count)
+	}
+}
+
+func TestDedicatedResearchSubmissionNeverRedispatchesAfterLeaseWithoutConversationV1(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var (
+		mu    sync.Mutex
+		calls int
+	)
+	v1SubmissionServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		if calls == 1 {
+			hijacker, ok := w.(http.Hijacker)
+			if !ok {
+				t.Error("test server does not support connection hijacking")
+				return
+			}
+			conn, _, err := hijacker.Hijack()
+			if err != nil {
+				t.Errorf("hijack ambiguous response: %v", err)
+				return
+			}
+			_ = conn.Close()
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"run-duplicate-after-lease","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	rxBot.BotConfig.MultiturnV1Enabled = false
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+	input := QueryInput{
+		Query:        "Reproduce the paper once",
+		Mode:         "instant",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "dedicated-research-ambiguous-lease",
+		Surface:      QuerySurfaceAgentProduct,
+	}
+
+	if _, err := service.Query(context.Background(), "alice", input); err == nil {
+		t.Fatal("ambiguous first response unexpectedly succeeded")
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("user_name = ?", "alice").First(&row).Error; err != nil {
+		t.Fatalf("read ambiguous Research row: %v", err)
+	}
+	if row.Status != "SUBMITTING" {
+		t.Fatalf("ambiguous row status = %q, want SUBMITTING", row.Status)
+	}
+	staleAt := time.Now().Add(-turnSubmissionLease - time.Second)
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ?", row.Id).
+		Updates(map[string]interface{}{"updated_at": staleAt}).Error; err != nil {
+		t.Fatalf("age ambiguous Research row: %v", err)
+	}
+
+	retry, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("retry ambiguous Research submission: %v", err)
+	}
+	if retry.Id != row.Id || retry.Status != "SUBMITTING" || retry.BotRunID != "" {
+		t.Fatalf("bounded pending retry = %+v, want original SUBMITTING row", retry)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("Bot submissions after stale lease = %d, want 1", calls)
+	}
+}
+
+func TestDedicatedResearchClientTurnRejectsChangedInteropFingerprint(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*QueryInput)
+	}{
+		{name: "mode", mutate: func(in *QueryInput) {
+			in.InteropMode = "off"
+			in.InteropTargets = nil
+		}},
+		{name: "target", mutate: func(in *QueryInput) {
+			in.InteropTargets = []string{"mcp-other"}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupExpertTestDB(t)
+			h := newInteropDelegationServer(
+				t,
+				http.StatusOK,
+				`{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"},{"target_id":"mcp-other","kind":"mcp"}],"errors":[]}`,
+			)
+			h.configure(t)
+			rxBot.BotConfig.MultiturnV1Enabled = false
+			service := &Service{
+				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+			}
+			input := QueryInput{
+				Query:          "Reproduce with delegated evidence",
+				Mode:           "instant",
+				Tool:           "InSilicoResearchAgent",
+				ClientTurnID:   "dedicated-research-interop-" + tc.name,
+				Surface:        QuerySurfaceAgentProduct,
+				InteropMode:    "auto",
+				InteropTargets: []string{"mcp-peer"},
+			}
+			first, err := service.Query(context.Background(), "alice", input)
+			if err != nil {
+				t.Fatalf("first dedicated Research submission: %v", err)
+			}
+			retry, err := service.Query(context.Background(), "alice", input)
+			if err != nil {
+				t.Fatalf("same interop fingerprint retry: %v", err)
+			}
+			if retry.Id != first.Id || retry.BotRunID != first.BotRunID {
+				t.Fatalf("same interop retry identity changed: first=%+v retry=%+v", first, retry)
+			}
+			conflict := input
+			tc.mutate(&conflict)
+			if _, err := service.Query(context.Background(), "alice", conflict); !errors.Is(err, ErrDuplicateClientTurn) {
+				t.Fatalf("changed interop fingerprint error=%v, want ErrDuplicateClientTurn", err)
+			}
+			if got := h.submissionHits.Load(); got != 1 {
+				t.Fatalf("Research submissions = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestDedicatedResearchClientTurnNormalizesOffInteropFingerprint(t *testing.T) {
+	setupExpertTestDB(t)
+	var calls int
+	v1SubmissionServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"run-research-off","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	rxBot.BotConfig.MultiturnV1Enabled = false
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+	input := QueryInput{
+		Query:        "Reproduce without delegation",
+		Mode:         "instant",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "dedicated-research-normalized-off",
+		Surface:      QuerySurfaceAgentProduct,
+	}
+	first, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("implicit off Research submission: %v", err)
+	}
+	retryInput := input
+	retryInput.InteropMode = "off"
+	retryInput.InteropTargets = []string{"mcp-peer"}
+	retry, err := service.Query(context.Background(), "alice", retryInput)
+	if err != nil {
+		t.Fatalf("explicit off Research retry: %v", err)
+	}
+	if retry.Id != first.Id || retry.BotRunID != first.BotRunID {
+		t.Fatalf("normalized off retry identity changed: first=%+v retry=%+v", first, retry)
+	}
+	if calls != 1 {
+		t.Fatalf("Research submissions = %d, want 1", calls)
+	}
+}
+
+func TestDedicatedResearchClientTurnRejectsConflictingFingerprint(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*QueryInput)
+	}{
+		{name: "query", mutate: func(in *QueryInput) { in.Query = "Reproduce a different paper" }},
+		{name: "attachment", mutate: func(in *QueryInput) {
+			in.Attachments = []rxBot.AssetAttachmentRef{{AssetID: "file_different_research"}}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			var calls int
+			v1SubmissionServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = w.Write([]byte(`{"id":"run-dedicated-conflict","object":"agent.run","agent":"research","status":"running","task_ids":["child-dedicated-conflict"],"result":{}}`))
+			})
+			rxBot.BotConfig.ResearchEnabled = true
+			rxBot.BotConfig.MultiturnV1Enabled = false
+			service := &Service{
+				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+			}
+			input := QueryInput{
+				Query:        "Reproduce the submitted paper",
+				Mode:         "instant",
+				Tool:         "InSilicoResearchAgent",
+				ClientTurnID: "dedicated-research-conflict-1",
+				Surface:      QuerySurfaceAgentProduct,
+				Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_dedicated_research"}},
+			}
+			if _, err := service.Query(context.Background(), "alice", input); err != nil {
+				t.Fatalf("first dedicated Research submission: %v", err)
+			}
+			conflict := input
+			tc.mutate(&conflict)
+			if _, err := service.Query(context.Background(), "alice", conflict); !errors.Is(err, ErrDuplicateClientTurn) {
+				t.Fatalf("conflicting dedicated Research submission error=%v, want ErrDuplicateClientTurn", err)
+			}
+			if calls != 1 {
+				t.Fatalf("Bot submissions = %d, want 1", calls)
+			}
+			var count int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&count).Error; err != nil {
+				t.Fatalf("count dedicated Research rows: %v", err)
+			}
+			if count != 1 {
+				t.Fatalf("persisted rows = %d, want 1", count)
+			}
+		})
+	}
+}
+
 func TestQuerySubmissionBoundsLegacyBlockingConversationTitle(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	var hit string

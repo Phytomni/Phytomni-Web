@@ -64,6 +64,8 @@ type persistedConversationContext struct {
 	AssistantSummary string                            `json:"assistant_summary,omitempty"`
 	ArtifactRefs     []rxBot.ArtifactRefV1             `json:"artifact_refs,omitempty"`
 	InputAttachments []rxBot.AssetAttachmentRef        `json:"input_attachments,omitempty"`
+	InteropMode      string                            `json:"interop_mode,omitempty"`
+	InteropTargets   []string                          `json:"interop_targets,omitempty"`
 	Replacement      *persistedConversationReplacement `json:"replacement,omitempty"`
 }
 
@@ -75,6 +77,8 @@ type persistedConversationReplacement struct {
 	FileName         string                     `json:"file_name,omitempty"`
 	UploadPath       string                     `json:"upload_path,omitempty"`
 	InputAttachments []rxBot.AssetAttachmentRef `json:"input_attachments,omitempty"`
+	InteropMode      string                     `json:"interop_mode,omitempty"`
+	InteropTargets   []string                   `json:"interop_targets,omitempty"`
 }
 
 func (value persistedConversationContext) clone() persistedConversationContext {
@@ -85,9 +89,11 @@ func (value persistedConversationContext) clone() persistedConversationContext {
 	}
 	copyValue.ArtifactRefs = append([]rxBot.ArtifactRefV1(nil), value.ArtifactRefs...)
 	copyValue.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.InputAttachments...)
+	copyValue.InteropTargets = append([]string(nil), value.InteropTargets...)
 	if value.Replacement != nil {
 		replacement := *value.Replacement
 		replacement.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.Replacement.InputAttachments...)
+		replacement.InteropTargets = append([]string(nil), value.Replacement.InteropTargets...)
 		copyValue.Replacement = &replacement
 	}
 	return copyValue

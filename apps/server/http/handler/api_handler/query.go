@@ -263,8 +263,14 @@ func parseAgentProductResolver(ctx *gin.Context, surface api_service.QuerySurfac
 }
 
 func validateQueryClientTurn(in api_service.QueryInput) error {
-	if rxBot.BotConfig == nil || !rxBot.BotConfig.MultiturnV1Enabled ||
-		in.Surface != api_service.QuerySurfaceChat {
+	requiresClientTurn := in.Surface == api_service.QuerySurfaceAgentProduct &&
+		api_service.IsDedicatedAgentProductTool(in.Tool) &&
+		api_service.IsResearchAgentProductTool(in.Tool)
+	if rxBot.BotConfig != nil && rxBot.BotConfig.MultiturnV1Enabled &&
+		in.Surface == api_service.QuerySurfaceChat {
+		requiresClientTurn = true
+	}
+	if !requiresClientTurn {
 		return nil
 	}
 	if !clientTurnIDPattern.MatchString(in.ClientTurnID) {

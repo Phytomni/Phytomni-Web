@@ -40,7 +40,8 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "paper", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_research"}},
+		ClientTurnID: "agent-arguments-research-turn",
+		Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_research"}},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)

@@ -447,7 +447,8 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 			name: "dedicated Research",
 			input: QueryInput{
 				Query: "research question", Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
-				Attachments: distinctQueryAttachmentRefs(65),
+				ClientTurnID: "admitted-research-turn",
+				Attachments:  distinctQueryAttachmentRefs(65),
 			},
 		},
 		{
@@ -510,6 +511,7 @@ func TestDirectResearchEnforcesNegotiatedLimitsWithOneCatalogFetch(t *testing.T)
 			name: "dedicated Research",
 			input: QueryInput{
 				Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+				ClientTurnID: "negotiated-limits-research-turn",
 			},
 		},
 		{
@@ -593,6 +595,7 @@ func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
 			name: "dedicated Research",
 			input: QueryInput{
 				Query: "valid", Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+				ClientTurnID: "attachment-advertisement-research-turn",
 			},
 		},
 		{
@@ -637,12 +640,18 @@ func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
 				service := &Service{catalogReader: reader}
 
 				allowed := surface.input
+				if allowed.Surface == QuerySurfaceAgentProduct {
+					allowed.ClientTurnID += "-allowed"
+				}
 				allowed.Attachments = distinctQueryAttachmentRefs(64)
 				if _, err := service.Query(context.Background(), "research-drift@example.com", allowed); err != nil {
 					t.Fatalf("Query at lower advertised limit: %v", err)
 				}
 
 				rejected := surface.input
+				if rejected.Surface == QuerySurfaceAgentProduct {
+					rejected.ClientTurnID += "-rejected"
+				}
 				rejected.Attachments = distinctQueryAttachmentRefs(65)
 				if _, err := service.Query(context.Background(), "research-drift@example.com", rejected); !errors.Is(err, ErrInvalidQueryAttachments) {
 					t.Fatalf("Query above lower advertised limit=%v, want ErrInvalidQueryAttachments", err)

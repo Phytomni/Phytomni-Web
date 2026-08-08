@@ -66,8 +66,46 @@ describe("client turn identity", () => {
       selectedAgent: "KnowledgeAgent",
       query: "Find evidence",
       attachments: ["file_evidence"],
+      interopMode: "off",
+      interopTargets: [],
     });
     expect(fingerprint).not.toHaveProperty("datasetDescription");
+  });
+
+  it("normalizes interop controls into the fingerprint", () => {
+    const implicitOff = clientTurnDraftFingerprint(baseDraft());
+    const explicitOff = clientTurnDraftFingerprint({
+      ...baseDraft(),
+      interopMode: "off",
+      interopTargets: ["mcp-peer"],
+    });
+    const delegated = JSON.parse(
+      clientTurnDraftFingerprint({
+        ...baseDraft(),
+        interopMode: "auto",
+        interopTargets: ["mcp-peer"],
+      })
+    );
+
+    expect(explicitOff).toBe(implicitOff);
+    expect(delegated.interopMode).toBe("auto");
+    expect(delegated.interopTargets).toEqual(["mcp-peer"]);
+  });
+
+  it("changes when a normalized interop target changes", () => {
+    expect(
+      clientTurnDraftFingerprint({
+        ...baseDraft(),
+        interopMode: "auto",
+        interopTargets: ["mcp-peer"],
+      })
+    ).not.toBe(
+      clientTurnDraftFingerprint({
+        ...baseDraft(),
+        interopMode: "auto",
+        interopTargets: ["mcp-other"],
+      })
+    );
   });
 
   it.each([

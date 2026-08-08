@@ -28,6 +28,10 @@ import {
   type BotLifecycleState,
 } from "../streaming/botLifecycleReducer";
 import { isSafeAssetId } from "../utils/asset-attachments";
+import {
+  clientTurnDraftFingerprint,
+  createClientTurnId,
+} from "../utils/client-turn-id";
 
 export type RemoteAgentRunPhase =
   | "idle"
@@ -366,15 +370,20 @@ function appendOptional(formData: FormData, key: string, value: unknown): void {
 
 function buildFormData(
   input: RemoteAgentSubmitInput,
-  dialogueId: string
+  dialogueId: string,
+  tool: RemoteAgentTool,
+  clientTurnId?: string
 ): FormData {
   const formData = new FormData();
   formData.append("id", dialogueId);
   formData.append("query", input.query);
   formData.append("attachments", JSON.stringify(input.attachments ?? []));
+  if (clientTurnId) {
+    formData.append("client_turn_id", clientTurnId);
+  }
 
   const resolver = input.resolver;
-  if (resolver) {
+  if (resolver && tool !== "InSilicoResearchAgent") {
     appendOptional(formData, "gene_id", resolver.geneId ?? resolver.gene_id);
     appendOptional(formData, "to_id", resolver.toId ?? resolver.to_id);
     appendOptional(
@@ -502,6 +511,21 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   const state = ref<BotRemoteAgentRunState>(initialState(owned));
   let activeToken: RemoteRequestToken | null = null;
   let capabilityLoadPromise: Promise<void> | null = null;
+  let pendingResearchTurn: { id: string; fingerprint: string } | null = null;
+
+  const clearPendingResearchTurn = (
+    clientTurnId: string | undefined,
+    fingerprint: string | undefined
+  ): void => {
+    if (
+      clientTurnId &&
+      fingerprint &&
+      pendingResearchTurn?.id === clientTurnId &&
+      pendingResearchTurn.fingerprint === fingerprint
+    ) {
+      pendingResearchTurn = null;
+    }
+  };
 
   const syncOwnedState = () => {
     const delivery = safeDeliveryCopy(state.value.delivery);
@@ -659,6 +683,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
 
     const resolver = input.resolver;
     const hasResolverValues =
+      tool !== "InSilicoResearchAgent" &&
       !!resolver &&
       [
         resolver.geneId ?? resolver.gene_id,
@@ -682,9 +707,33 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
+    let researchFingerprint: string | undefined;
+    let clientTurnId: string | undefined;
+    if (tool === "InSilicoResearchAgent") {
+      researchFingerprint = clientTurnDraftFingerprint({
+        parentRowId: 0,
+        operation: "append",
+        mode: "instant",
+        selectedAgent: tool,
+        query: input.query,
+        attachments: attachments.map(({ asset_id }) => asset_id),
+        interopMode: input.interopMode,
+        interopTargets: input.interopTargets,
+      });
+      clientTurnId =
+        pendingResearchTurn?.fingerprint === researchFingerprint
+          ? pendingResearchTurn.id
+          : createClientTurnId();
+      pendingResearchTurn = {
+        id: clientTurnId,
+        fingerprint: researchFingerprint,
+      };
+    }
     const formData = buildFormData(
       { ...input, attachments },
-      normalizedDialogueId
+      normalizedDialogueId,
+      tool,
+      clientTurnId
     );
     const requestId = requestIdFor(normalizedDialogueId);
     const token: RemoteRequestToken = { id: requestId, cancelled: false };
@@ -735,6 +784,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       owned.dialogueId = identity.dialogueId ?? undefined;
       owned.messageId = identity.messageId ?? undefined;
       syncOwnedState();
+      clearPendingResearchTurn(clientTurnId, researchFingerprint);
       return projection;
     } catch (error) {
       if (
@@ -785,6 +835,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   };
 
   const reset = (): void => {
+    pendingResearchTurn = null;
     const token = activeToken;
     if (token) {
       token.cancelled = true;

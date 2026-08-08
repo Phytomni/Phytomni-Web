@@ -97,6 +97,13 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string, fields map[string
 	if err := mw.WriteField("attachments", `[{"asset_id":"file_route"}]`); err != nil {
 		t.Fatalf("write attachments: %v", err)
 	}
+	if tool == "InSilicoResearchAgent" {
+		if _, supplied := fields["client_turn_id"]; !supplied {
+			if err := mw.WriteField("client_turn_id", "remote-product-research-turn"); err != nil {
+				t.Fatalf("write client turn id: %v", err)
+			}
+		}
+	}
 	for name, value := range fields {
 		if err := mw.WriteField(name, value); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -121,6 +128,11 @@ func newAttachmentTrackingRequest(t *testing.T, tool string) (*gin.Context, *htt
 	mw := multipart.NewWriter(&body)
 	if err := mw.WriteField("query", "remote query"); err != nil {
 		t.Fatalf("write query: %v", err)
+	}
+	if tool == "InSilicoResearchAgent" {
+		if err := mw.WriteField("client_turn_id", "file-part-research-turn"); err != nil {
+			t.Fatalf("write client turn id: %v", err)
+		}
 	}
 	file, err := mw.CreateFormFile("files", "attachment.txt")
 	if err != nil {

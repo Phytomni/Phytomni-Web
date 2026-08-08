@@ -96,7 +96,8 @@ func TestResearchInteropOffSkipsDiscoveryAndForwardsNoTargets(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "off", InteropTargets: []string{"mcp-peer"},
+		ClientTurnID: "interop-off-research-turn",
+		InteropMode:  "off", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -126,7 +127,8 @@ func TestResearchInteropAutoFallsBackWithoutPseudoSuccess(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
+		ClientTurnID: "interop-auto-fallback-research-turn",
+		InteropMode:  "auto", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("auto fallback Query: %v", err)
@@ -160,7 +162,8 @@ func TestResearchInteropAutoDelegatesOnlyDiscoveredTarget(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "auto", InteropTargets: []string{"mcp-peer"},
+		ClientTurnID: "interop-auto-delegated-research-turn",
+		InteropMode:  "auto", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("delegated Query: %v", err)
@@ -223,7 +226,8 @@ func TestRequiredInteropFailsBeforeAgentSubmission(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
+		ClientTurnID: "interop-required-discovery-research-turn",
+		InteropMode:  "required", InteropTargets: []string{"mcp-peer"},
 	})
 	if !errors.Is(err, ErrInteropRequired) {
 		t.Fatalf("error=%v, want ErrInteropRequired", err)
@@ -243,7 +247,8 @@ func TestRequiredInteropRuntimeFailureDoesNotPersistRunning(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "required", InteropTargets: []string{"mcp-peer"},
+		ClientTurnID: "interop-required-runtime-research-turn",
+		InteropMode:  "required", InteropTargets: []string{"mcp-peer"},
 	})
 	if err != nil {
 		t.Fatalf("runtime failed Query: %v", err)
@@ -283,7 +288,8 @@ func TestInteropUnknownTargetFailsBeforeAgentSubmission(t *testing.T) {
 
 	out, err := serviceWithValidResearchCatalog().Query(context.Background(), "alice", QueryInput{
 		Query: "research", Tool: "InSilicoResearchAgent", Mode: "instant", Surface: QuerySurfaceAgentProduct,
-		InteropMode: "auto", InteropTargets: []string{"unknown-peer"},
+		ClientTurnID: "interop-unknown-target-research-turn",
+		InteropMode:  "auto", InteropTargets: []string{"unknown-peer"},
 	})
 	if !errors.Is(err, ErrInteropTargetForbidden) {
 		t.Fatalf("error=%v, want ErrInteropTargetForbidden", err)

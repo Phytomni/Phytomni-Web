@@ -131,9 +131,25 @@ type v1Submission struct {
 }
 
 func multiturnV1Enabled(in QueryInput) bool {
-	return in.Surface == QuerySurfaceChat &&
-		rxBot.BotConfig != nil &&
-		rxBot.BotConfig.MultiturnV1Enabled
+	return in.Surface == QuerySurfaceChat && conversationV1Enabled(in)
+}
+
+func conversationV1Enabled(in QueryInput) bool {
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.MultiturnV1Enabled {
+		return false
+	}
+	return in.Surface == QuerySurfaceChat ||
+		dedicatedResearchProductSubmission(in)
+}
+
+func ownerAllocatedSubmissionEnabled(in QueryInput) bool {
+	return multiturnV1Enabled(in) || dedicatedResearchProductSubmission(in)
+}
+
+func dedicatedResearchProductSubmission(in QueryInput) bool {
+	return in.Surface == QuerySurfaceAgentProduct &&
+		IsDedicatedAgentProductTool(in.Tool) &&
+		isResearchProductTool(in.Tool)
 }
 
 func normalizeV1ChatRouting(in *QueryInput) error {
@@ -443,9 +459,20 @@ func validateDuplicateSubmission(
 	}
 	storedMode := normalizedConversationLedgerMode(row.Mode)
 	storedQuery := row.Query
+	storedAttachments := []rxBot.AssetAttachmentRef(nil)
+	storedInteropMode := ""
+	storedInteropTargets := []string(nil)
+	if private != nil {
+		storedAttachments = private.InputAttachments
+		storedInteropMode = private.InteropMode
+		storedInteropTargets = private.InteropTargets
+	}
 	if private != nil && private.Replacement != nil {
 		storedMode = private.Replacement.Mode
 		storedQuery = private.Replacement.Query
+		storedAttachments = private.Replacement.InputAttachments
+		storedInteropMode = private.Replacement.InteropMode
+		storedInteropTargets = private.Replacement.InteropTargets
 	}
 	storedOperation := storedSubmissionOperation(row, private)
 	if target.operation == "replace" && row.Id == in.RefreshId &&
@@ -454,7 +481,12 @@ func validateDuplicateSubmission(
 	}
 	if storedMode != target.mode ||
 		sha256Hex([]byte(storedQuery)) != sha256Hex([]byte(in.Query)) ||
-		storedOperation != target.operation {
+		storedOperation != target.operation ||
+		!sameAssetAttachmentRefs(storedAttachments, in.Attachments) ||
+		!sameInteropControls(storedInteropMode, storedInteropTargets, in.InteropMode, in.InteropTargets) {
+		return ErrDuplicateClientTurn
+	}
+	if in.Surface == QuerySurfaceAgentProduct && row.ToolName != in.Tool {
 		return ErrDuplicateClientTurn
 	}
 	if target.operation == "replace" && row.Id != in.RefreshId {
@@ -464,6 +496,32 @@ func validateDuplicateSubmission(
 		return ErrDuplicateClientTurn
 	}
 	return nil
+}
+
+func sameInteropControls(leftMode string, leftTargets []string, rightMode string, rightTargets []string) bool {
+	leftMode, leftTargets, leftErr := rxBot.ValidateInteropControls(leftMode, leftTargets)
+	rightMode, rightTargets, rightErr := rxBot.ValidateInteropControls(rightMode, rightTargets)
+	if leftErr != nil || rightErr != nil || leftMode != rightMode || len(leftTargets) != len(rightTargets) {
+		return false
+	}
+	for index := range leftTargets {
+		if leftTargets[index] != rightTargets[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameAssetAttachmentRefs(left, right []rxBot.AssetAttachmentRef) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].AssetID != right[index].AssetID {
+			return false
+		}
+	}
+	return true
 }
 
 func (ps *Service) queryDataFromStoredRowWithDB(
@@ -502,7 +560,7 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 }
 
 func requestedAgentForV1(in QueryInput) *string {
-	if in.Mode == "instant" {
+	if in.Surface == QuerySurfaceChat && in.Mode == "instant" {
 		tool := "ChatAgent"
 		return &tool
 	}
@@ -780,7 +838,8 @@ func (ps *Service) allocateV1SubmissionWithDB(
 				return err
 			}
 			allocated = *existing
-			if existing.Status != "SUBMITTING" ||
+			if dedicatedResearchProductSubmission(in) && !conversationV1Enabled(in) ||
+				existing.Status != "SUBMITTING" ||
 				(!existing.UpdatedAt.IsZero() &&
 					time.Since(existing.UpdatedAt) < turnSubmissionLease) {
 				duplicate, err = ps.queryDataFromStoredRowWithDB(ctx, gdb, username, *existing)
@@ -796,10 +855,12 @@ func (ps *Service) allocateV1SubmissionWithDB(
 			ModeLockState:    "provisional",
 			SettlementState:  "submission_append",
 			InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+			InteropMode:      in.InteropMode,
+			InteropTargets:   append([]string(nil), in.InteropTargets...),
 		}
 
 		toolName := in.Tool
-		if in.Mode == "instant" {
+		if in.Surface == QuerySurfaceChat && in.Mode == "instant" {
 			toolName = "ChatAgent"
 		}
 		titleQuery := ""
@@ -837,6 +898,8 @@ func (ps *Service) allocateV1SubmissionWithDB(
 				ToolName:         toolName,
 				Mode:             target.mode,
 				InputAttachments: append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
+				InteropMode:      in.InteropMode,
+				InteropTargets:   append([]string(nil), in.InteropTargets...),
 			}
 			raw, err := marshalPersistedProjectionWithContext(projection, &nextPrivate)
 			if err != nil {
@@ -930,8 +993,14 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		requestID = uuid.NewString()
 	}
 	allowedAgents := append([]string(nil), permissions.AllowedTools...)
-	if in.Mode == "instant" {
+	if in.Surface == QuerySurfaceAgentProduct {
+		allowedAgents = []string{in.Tool}
+	} else if in.Mode == "instant" {
 		allowedAgents = []string{"ChatAgent"}
+	}
+	envelopeMode := target.mode
+	if in.Surface == QuerySurfaceAgentProduct {
+		envelopeMode = "expert"
 	}
 	envelope := &rxBot.ConversationEnvelopeV1{
 		SchemaVersion:              1,
@@ -940,7 +1009,7 @@ func (ps *Service) allocateV1SubmissionWithDB(
 		TurnID:                     strconv.FormatInt(allocated.Id, 10),
 		RequestID:                  requestID,
 		Operation:                  target.operation,
-		Mode:                       target.mode,
+		Mode:                       envelopeMode,
 		CurrentMessage:             rxBot.CurrentMessageV1{Content: in.Query, Locale: "en-US"},
 		RequestedAgentID:           requestedAgentForV1(in),
 		AllowedAgentIDs:            allowedAgents,
@@ -1522,7 +1591,8 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // So Id=0 starts a new conversation (fresh dialogue_id), Id=N appends a child
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
-	v1 := multiturnV1Enabled(in)
+	conversationV1 := conversationV1Enabled(in)
+	v1 := ownerAllocatedSubmissionEnabled(in)
 	researchCandidate := isResearchProductTool(in.Tool) &&
 		(in.Surface == QuerySurfaceAgentProduct ||
 			in.Surface == QuerySurfaceChat && strings.EqualFold(strings.TrimSpace(in.Mode), "expert"))
@@ -1537,12 +1607,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	in.Attachments = attachments
 	// QuerySurface is exported, so no non-Chat caller may select an arbitrary
 	// tool. The only non-Chat surface is the route-owned dedicated product run.
+	if v1 {
+		if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
+			return nil, err
+		}
+		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
+	}
 	if in.Surface == QuerySurfaceChat {
 		if v1 {
-			if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
-				return nil, err
-			}
-			in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
 			if err := normalizeV1ChatRouting(&in); err != nil {
 				return nil, err
 			}
@@ -1645,6 +1717,8 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 		}
 	}
+	requestedInteropMode := in.InteropMode
+	requestedInteropTargets := append([]string(nil), in.InteropTargets...)
 	interop := localInteropDecision("off")
 	// A forced Expert selection dispatches directly (like instant), so it must
 	// pass the same server-owned interop authorization: prepareInterop authorizes
@@ -1664,10 +1738,22 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		in.InteropMode = interop.Mode
 		in.InteropTargets = append([]string(nil), interop.Targets...)
 	}
+	submissionInput := in
+	if dedicatedResearchProductSubmission(in) {
+		normalizedMode, normalizedTargets, normalizeErr := rxBot.ValidateInteropControls(
+			requestedInteropMode,
+			requestedInteropTargets,
+		)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		submissionInput.InteropMode = normalizedMode
+		submissionInput.InteropTargets = normalizedTargets
+	}
 
 	var submission *v1Submission
 	if v1 {
-		submission, err = ps.allocateV1Submission(ctx, username, in, target, permissions, true)
+		submission, err = ps.allocateV1Submission(ctx, username, submissionInput, target, permissions, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1953,7 +2039,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 			DialogueID:   dialogueID,
 		}
-		if v1 {
+		if conversationV1 {
 			agentRequest.Conversation = submission.envelope
 		}
 		var resp *rxBot.AgentRunResponse
@@ -1964,23 +2050,27 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			if err == nil {
 				break
 			}
-			retry, retryErr := prepareV1ConversationRebuildRetry(
-				ctx,
-				username,
-				submission,
-				target,
-				err,
-			)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				agentRequest.Conversation = submission.envelope
-				continue
+			if conversationV1 {
+				retry, retryErr := prepareV1ConversationRebuildRetry(
+					ctx,
+					username,
+					submission,
+					target,
+					err,
+				)
+				if retryErr != nil {
+					return nil, retryErr
+				}
+				if retry {
+					agentRequest.Conversation = submission.envelope
+					continue
+				}
 			}
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
-		contextStage = resp.ConversationContext
+		if conversationV1 {
+			contextStage = resp.ConversationContext
+		}
 		botRunID, err = normalizeAgentRunResponseID(*resp)
 		if err != nil {
 			return nil, v1SubmissionError(ctx, username, submission, err)
@@ -2055,7 +2145,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	out.TaskId = taskID
 	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), in.Attachments...)
 
-	if v1 && out.Status == statusSucceeded {
+	if conversationV1 && out.Status == statusSucceeded {
 		settlementState := conversationSettlementRebuildRequired
 		if contextStage != nil {
 			if err := validateV1ContextStage(

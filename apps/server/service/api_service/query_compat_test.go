@@ -192,9 +192,13 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 			if tt.slug == "research" {
 				service = serviceWithValidResearchCatalog()
 			}
-			out, err := service.Query(context.Background(), "alice", QueryInput{
+			input := QueryInput{
 				Query: "q", Tool: tt.tool, Mode: "instant", Surface: QuerySurfaceAgentProduct,
-			})
+			}
+			if tt.slug == "research" {
+				input.ClientTurnID = "native-id-research-turn"
+			}
+			out, err := service.Query(context.Background(), "alice", input)
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
