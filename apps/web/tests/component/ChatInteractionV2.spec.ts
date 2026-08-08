@@ -17,7 +17,7 @@ import type {
   ResumableUploadItem,
 } from "@/views/chat/types";
 import type { BotCapabilityByTool } from "@/views/chat/composables/useBotCapabilities";
-import type { BotUploadCapability } from "@/api/types";
+import type { AgentTaskLifecycle, BotUploadCapability } from "@/api/types";
 import type { ResumableUploadQueueOptions } from "@/views/chat/composables/useResumableUploads";
 import type { A2uiActionTransport } from "@/views/chat/streaming/a2uiAction";
 import { createMemoryA2uiTransport } from "@/views/chat/streaming/a2uiAction";
@@ -240,6 +240,27 @@ const LOADING_BUBBLE = CHAT_SOURCE.slice(loadingStart, loadingEnd);
 
 const EMPTY_IMAGES = {} as Record<string, string[]>;
 const EMPTY_LOADING = {} as Record<string, boolean>;
+
+function researchLifecycle(
+  phase: AgentTaskLifecycle["phase"]
+): AgentTaskLifecycle {
+  return {
+    id: 901,
+    phase,
+    terminal: false,
+    child_task_count: phase === "PREPARING" ? 0 : 1,
+    child_work_accepted: phase !== "PREPARING",
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+  };
+}
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
@@ -756,6 +777,100 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(MESSAGE_CITED.doc_list?.length).toBeGreaterThan(0);
     expect(MESSAGE_DEEP_GENOME.tool_name).toBe("DeepGenomeAgent");
   });
+
+  it.each([
+    ["PREPARING", "Preparing"],
+    ["RESOLVING_INPUTS", "Resolving inputs"],
+    ["PLANNING", "Planning tasks"],
+    ["RUNNING", "Running"],
+    ["FINALIZING", "Finalizing"],
+  ] as const)(
+    "renders %s Research as lifecycle-only progress",
+    (phase, label) => {
+      const rendererCases: Array<
+        Partial<ChatMessage> & {
+          artifactPreview?: {
+            title: string;
+            kind: string;
+            summary: string;
+            openLabel: string;
+          };
+        }
+      > = [
+        {
+          content: "No references available.",
+          artifactPreview: {
+            title: "Research result",
+            kind: "research",
+            summary: "No references available.",
+            openLabel: "Open artifact",
+          },
+        },
+        {
+          content: "No references available.",
+          doc_list: [{ title: "Synthetic reference" }],
+        },
+        { content: "No references available.", doc_list: [] },
+      ];
+
+      for (const { artifactPreview, ...message } of rendererCases) {
+        const wrapper = mount(ChatMessageContent, {
+          props: {
+            message: {
+              id: "research-message",
+              role: "assistant",
+              tool_name: "InSilicoResearchAgent",
+              ...message,
+            } as ChatMessage,
+            index: 0,
+            isLastMessage: true,
+            artifactPreview,
+            geneNetworkImages: EMPTY_IMAGES,
+            geneNetworkImagesLoading: EMPTY_LOADING,
+            digitalDesignImages: EMPTY_IMAGES,
+            digitalDesignImagesLoading: EMPTY_LOADING,
+            lifecycle: researchLifecycle(phase),
+          },
+          global: {
+            stubs: {
+              CitedAnswer: {
+                template:
+                  '<div data-testid="research-reference-viewer">No references available.</div>',
+              },
+              MarkdownViewer: {
+                props: ["content"],
+                template:
+                  '<div data-testid="research-result-viewer">{{ content }}</div>',
+              },
+              ResearchArtifactPreview: {
+                template:
+                  '<div data-testid="research-artifact-preview">No references available.</div>',
+              },
+              DeepGenomeResultViewer: true,
+              StreamMessage: true,
+              ElIcon: true,
+              ElTable: true,
+              ElTableColumn: true,
+            },
+          },
+        });
+
+        expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+        expect(
+          wrapper.find('[data-testid="research-artifact-preview"]').exists()
+        ).toBe(false);
+        expect(
+          wrapper.find('[data-testid="research-reference-viewer"]').exists()
+        ).toBe(false);
+        expect(
+          wrapper.find('[data-testid="research-result-viewer"]').exists()
+        ).toBe(false);
+        expect(wrapper.text()).not.toContain(enUS.common.noData);
+        expect(wrapper.text()).not.toContain("No references available.");
+        wrapper.unmount();
+      }
+    }
+  );
 
   it("routes a surface intent through the owning message and resolves it in place", async () => {
     expect(CHAT_SOURCE).toContain(

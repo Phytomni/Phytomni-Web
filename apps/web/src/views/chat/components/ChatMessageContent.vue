@@ -34,8 +34,9 @@
     >
       {{ $t(lifecycleLabel) }}
     </div>
+    <template v-if="isResearchNonterminal" />
     <StreamMessage
-      v-if="
+      v-else-if="
         message.role === 'assistant' &&
         (message.streaming || (message.blocks && message.blocks.length))
       "
@@ -305,6 +306,11 @@ const isDeepGenomeMessage = computed(
     props.message.role === "assistant" &&
     props.message.tool_name === "DeepGenomeAgent"
 );
+const isResearchMessage = computed(
+  () =>
+    props.message.role === "assistant" &&
+    props.message.tool_name === "InSilicoResearchAgent"
+);
 const hasMeaningfulDeepGenomeReport = computed(
   () =>
     isDeepGenomeMessage.value &&
@@ -321,7 +327,10 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   if (status === "CANCELED") return "CANCELLED";
   if (
     status === "PREPARING" ||
+    status === "RESOLVING_INPUTS" ||
+    status === "PLANNING" ||
     status === "RUNNING" ||
+    status === "FINALIZING" ||
     status === "SUCCEEDED" ||
     status === "FAILED" ||
     status === "CANCELLED"
@@ -345,6 +354,15 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
 
 const effectiveLifecyclePhase = computed(
   () => props.lifecycle?.phase ?? messageLifecyclePhase()
+);
+const isResearchNonterminal = computed(
+  () =>
+    isResearchMessage.value &&
+    (effectiveLifecyclePhase.value === "PREPARING" ||
+      effectiveLifecyclePhase.value === "RESOLVING_INPUTS" ||
+      effectiveLifecyclePhase.value === "PLANNING" ||
+      effectiveLifecyclePhase.value === "RUNNING" ||
+      effectiveLifecyclePhase.value === "FINALIZING")
 );
 const lifecycleLabel = computed(() =>
   effectiveLifecyclePhase.value

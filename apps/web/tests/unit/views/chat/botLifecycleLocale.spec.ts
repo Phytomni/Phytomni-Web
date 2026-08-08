@@ -28,6 +28,12 @@ const REQUIRED_BOT_LIFECYCLE_KEYS = [
   "chat.botReport.emptyArtifacts",
 ] as const;
 
+const REQUIRED_RESEARCH_LIFECYCLE_LABELS = [
+  ["chat.lifecycle.resolving_inputs", "Resolving inputs", "解析输入中"],
+  ["chat.lifecycle.planning", "Planning tasks", "任务规划中"],
+  ["chat.lifecycle.finalizing", "Finalizing", "最终整理中"],
+] as const;
+
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../../../src/views/chat/ChatView.vue"),
   "utf8"
@@ -156,6 +162,14 @@ describe("Bot lifecycle locale contract", () => {
       expect(String(valueAt(zhCN, key)).trim()).not.toBe("");
     }
   });
+
+  it.each(REQUIRED_RESEARCH_LIFECYCLE_LABELS)(
+    "defines exact bilingual Research lifecycle copy for %s",
+    (key, english, chinese) => {
+      expect(valueAt(enUS, key)).toBe(english);
+      expect(valueAt(zhCN, key)).toBe(chinese);
+    }
+  );
 
   it("wires Bot-owned artifact states to the stable render-time keys", () => {
     for (const key of REQUIRED_BOT_LIFECYCLE_KEYS) {

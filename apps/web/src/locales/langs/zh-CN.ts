@@ -597,7 +597,10 @@ export default {
     },
     lifecycle: {
       preparing: "准备中",
+      resolving_inputs: "解析输入中",
+      planning: "任务规划中",
       running: "运行中",
+      finalizing: "最终整理中",
       succeeded: "已成功",
       failed: "失败",
       cancelled: "已取消",

@@ -607,7 +607,10 @@ export default {
     },
     lifecycle: {
       preparing: "Preparing",
+      resolving_inputs: "Resolving inputs",
+      planning: "Planning tasks",
       running: "Running",
+      finalizing: "Finalizing",
       succeeded: "Succeeded",
       failed: "Failed",
       cancelled: "Cancelled",
