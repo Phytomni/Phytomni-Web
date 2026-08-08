@@ -197,7 +197,7 @@
         <ResearchArtifactShell
           :title="t(`${localePrefix}.reportTitle`)"
           :metadata="t(`${localePrefix}.agentLabel`)"
-          :status="reportStatusLabel"
+          :status="workspaceStatusLabel"
           :report-status="reportStatus"
           :tab-labels="tabLabels"
           :artifact-id="`${agentKey}-agent-artifact`"
@@ -238,7 +238,7 @@
               role="status"
               aria-live="polite"
             >
-              <p>{{ progressLabel }}</p>
+              <p>{{ workspaceStatusLabel }}</p>
               <p v-if="displayedState.failures.length">
                 {{ t(`${localePrefix}.degraded`) }}
               </p>
@@ -311,6 +311,7 @@ import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { queryWithinLimit } from "@/views/chat/utils/research-input-policy";
 import type {
+  AgentRunPhase,
   AgentResultDelivery,
   ConversationArtifactLink,
 } from "@/api/types";
@@ -543,13 +544,50 @@ const reportStatusLabel = computed(() => {
       return t(`${props.localePrefix}.progress`);
   }
 });
-const progressLabel = computed(() =>
-  isRunActive.value
-    ? t(`${props.localePrefix}.progress`)
-    : reportStatusLabel.value
-);
+const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
+  if (props.tool !== "InSilicoResearchAgent") return null;
+
+  const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
+  if (snapshotPhase) return snapshotPhase;
+
+  const state = displayedState.value;
+  const projection = state.projection;
+  if (
+    state.phase === "submitting" ||
+    projection?.status === "PENDING" ||
+    projection?.status === "QUEUED"
+  ) {
+    return "PREPARING";
+  }
+
+  switch (projection?.workStage ?? state.workStage) {
+    case "input_resolution":
+      return "RESOLVING_INPUTS";
+    case "planning":
+      return "PLANNING";
+    case "execution":
+      return "RUNNING";
+    case "report_assembly":
+      return "FINALIZING";
+  }
+
+  if (projection?.status === "RUNNING" || state.phase === "running") {
+    return "RUNNING";
+  }
+  return null;
+});
+const workspaceStatusLabel = computed(() => {
+  if (
+    props.tool !== "InSilicoResearchAgent" ||
+    reportStatus.value !== "loading" ||
+    !researchLifecyclePhase.value
+  ) {
+    return reportStatusLabel.value;
+  }
+  return t(`chat.lifecycle.${researchLifecyclePhase.value.toLowerCase()}`);
+});
 const reportLabels = computed(() => ({
-  loading: t(`${props.localePrefix}.progress`),
+  loading: workspaceStatusLabel.value,
   degraded: t(`${props.localePrefix}.degraded`),
   complete: t(`${props.localePrefix}.complete`),
   failed: t("common.failed"),

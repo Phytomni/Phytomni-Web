@@ -1,8 +1,13 @@
 import { flushPromises } from "@vue/test-utils";
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import RemoteAnalysisAgentWorkspace from "@/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue";
+import type {
+  BotRunProjection,
+  BotWorkStage,
+} from "@/views/chat/botProjection";
 import type { BotRemoteAgentRunState } from "@/views/chat/composables/useBotRemoteAgentRun";
 import { createTestAppContext } from "../helpers/test-app-context";
 import {
@@ -50,6 +55,9 @@ const mocks = vi.hoisted(() => {
       messageId: null,
     },
   };
+  const lifecycleSnapshot = {
+    value: null as AgentTaskLifecycle | null,
+  };
   const chatState = { fileList: [] as unknown[] };
   const analystCapability = {
     enabled: true,
@@ -68,6 +76,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     state,
+    lifecycleSnapshot,
     chatState,
     analystCapability,
     researchInputCapability,
@@ -149,7 +158,11 @@ vi.mock("@/views/chat/composables/useResumableUploads", () => ({
 }));
 
 vi.mock("@/views/chat/composables/useRemoteAgentLifecycle", () => ({
-  useRemoteAgentLifecycle: () => ({ dispose: vi.fn(), reset: vi.fn() }),
+  useRemoteAgentLifecycle: () => ({
+    snapshot: computed(() => mocks.lifecycleSnapshot.value),
+    dispose: vi.fn(),
+    reset: vi.fn(),
+  }),
 }));
 
 vi.mock("vue-router", () => ({
@@ -158,9 +171,18 @@ vi.mock("vue-router", () => ({
 }));
 
 function mountWorkspace(
-  tool: "AnalystAgent" | "InSilicoResearchAgent" = "AnalystAgent"
+  tool: "AnalystAgent" | "InSilicoResearchAgent" = "AnalystAgent",
+  options: { realArtifactShell?: boolean } = {}
 ) {
   const research = tool === "InSilicoResearchAgent";
+  const artifactShellStub = options.realArtifactShell
+    ? {}
+    : {
+        ResearchArtifactShell: {
+          template:
+            '<section><slot name="content" /><slot name="downloads" /></section>',
+        },
+      };
   return createTestAppContext().mount(RemoteAnalysisAgentWorkspace, {
     attachTo: document.body,
     props: {
@@ -169,15 +191,86 @@ function mountWorkspace(
     },
     global: {
       stubs: {
-        ResearchArtifactShell: {
-          template:
-            '<section><slot name="content" /><slot name="downloads" /></section>',
-        },
+        ...artifactShellStub,
         BotReportState: { template: '<div data-test="bot-report-state" />' },
         BotArtifactList: { template: '<div data-test="bot-artifact-list" />' },
       },
     },
   });
+}
+
+function lifecycle(phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle {
+  const terminal = ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase);
+  return {
+    id: 19,
+    phase,
+    terminal,
+    child_task_count: phase === "PREPARING" ? 0 : 1,
+    child_work_accepted: phase !== "PREPARING",
+    report_revision: terminal ? 1 : 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: phase === "SUCCEEDED",
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+  };
+}
+
+function setActiveRun(
+  options: {
+    phase?: BotRemoteAgentRunState["phase"];
+    projectionStatus?: BotRunProjection["status"];
+    workStage?: BotWorkStage | null;
+    includeProjection?: boolean;
+  } = {}
+): void {
+  const phase = options.phase ?? "running";
+  const projectionStatus = options.projectionStatus ?? "RUNNING";
+  const workStage = options.workStage ?? null;
+  const projection: BotRunProjection | null =
+    options.includeProjection === false
+      ? null
+      : {
+          runId: "run-research-stages",
+          agent: "InSilicoResearchAgent",
+          status: projectionStatus,
+          workStage,
+          reportPresentation: false,
+          reportStage: null,
+          reportCompleteness: "none",
+          reportRevision: 0,
+          reportUpdatedAt: null,
+          intermediateReport: "",
+          finalReport: "",
+          progress: {
+            completed: 0,
+            total: 1,
+            failed: 0,
+            pending: 1,
+            briefGeneStatus: "",
+          },
+          degraded: false,
+          degradedReason: null,
+          failures: [],
+          artifacts: [],
+          resultArchiveV1: false,
+          requestId: "request-research-stages",
+          trackingDegraded: false,
+        };
+
+  mocks.state.value = {
+    ...mocks.state.value,
+    runId: "run-research-stages",
+    status: "RUNNING",
+    workStage,
+    phase,
+    projection,
+    dialogueId: "research-agent",
+    messageId: "19",
+  };
 }
 
 function completedUpload(localId: string, name: string) {
@@ -427,12 +520,14 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     mocks.uploadOptions = null;
     mocks.chatState = reactive({ fileList: [] as unknown[] });
     mocks.state = reactive(mocks.state);
+    mocks.lifecycleSnapshot = reactive({ value: null });
     mocks.state.value = {
       ...mocks.state.value,
       phase: "idle",
       projection: null,
       degraded: false,
     };
+    mocks.lifecycleSnapshot.value = null;
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
     mocks.submit.mockResolvedValue(null);
@@ -560,6 +655,121 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+
+  it("renders each authoritative live Research stage in the shell and activity status", async () => {
+    setActiveRun({ workStage: "execution" });
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+    });
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+
+    for (const [phase, label] of [
+      ["PREPARING", "Preparing"],
+      ["RESOLVING_INPUTS", "Resolving inputs"],
+      ["PLANNING", "Planning tasks"],
+      ["RUNNING", "Running"],
+      ["FINALIZING", "Finalizing"],
+    ] as const) {
+      mocks.lifecycleSnapshot.value = lifecycle(phase);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        label
+      );
+      const activityPanel = wrapper.get('[data-panel-id="activity"]');
+      const activityStatus = wrapper.get('[data-test="research-progress"]');
+      expect(activityPanel.attributes("hidden")).toBeUndefined();
+      expect(activityStatus.isVisible()).toBe(true);
+      expect(activityStatus.text()).toBe(label);
+    }
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["submitting", "PENDING", null, false, "Preparing"],
+    ["running", "PENDING", null, true, "Preparing"],
+    ["running", "QUEUED", null, true, "Preparing"],
+    ["running", "RUNNING", "input_resolution", true, "Resolving inputs"],
+    ["running", "RUNNING", "planning", true, "Planning tasks"],
+    ["running", "RUNNING", "execution", true, "Running"],
+    ["running", "RUNNING", "report_assembly", true, "Finalizing"],
+    ["running", "RUNNING", null, true, "Running"],
+  ] as const)(
+    "maps the initial Research run phase=%s status=%s stage=%s projection=%s to %s",
+    (phase, projectionStatus, workStage, includeProjection, label) => {
+      setActiveRun({
+        phase,
+        projectionStatus,
+        workStage,
+        includeProjection,
+      });
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+      });
+
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        label
+      );
+
+      wrapper.unmount();
+    }
+  );
+
+  it("keeps the Analyst shell and activity on the existing generic progress label", async () => {
+    setActiveRun({ workStage: "report_assembly" });
+    mocks.lifecycleSnapshot.value = lifecycle("FINALIZING");
+    const wrapper = mountWorkspace("AnalystAgent", {
+      realArtifactShell: true,
+    });
+
+    expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+      "Analysis run in progress"
+    );
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    expect(wrapper.get('[data-test="analyst-progress"]').text()).toBe(
+      "Analysis run in progress"
+    );
+    expect(wrapper.text()).not.toContain("Finalizing");
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["succeeded", "SUCCEEDED", false, "Report ready"],
+    ["failed", "FAILED", false, "Failed"],
+    [
+      "running",
+      "RUNNING",
+      true,
+      "The report is partial because some analysis was unavailable.",
+    ],
+  ] as const)(
+    "preserves the Research %s terminal or degraded status",
+    async (phase, status, degraded, label) => {
+      setActiveRun({
+        phase,
+        projectionStatus: status,
+        workStage: "report_assembly",
+      });
+      mocks.state.value = {
+        ...mocks.state.value,
+        status,
+        degraded,
+      };
+      mocks.lifecycleSnapshot.value = lifecycle("FINALIZING");
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+      });
+
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        label
+      );
+      await wrapper.get('[data-tab-id="activity"]').trigger("click");
+      expect(wrapper.get('[data-test="research-progress"]').text()).toBe(label);
+
+      wrapper.unmount();
+    }
+  );
 
   it("retains the existing 4000-character limit for Analyst", async () => {
     const wrapper = mountWorkspace();
