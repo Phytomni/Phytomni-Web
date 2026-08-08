@@ -121,6 +121,14 @@ async function flushAsync(): Promise<void> {
   await nextTick();
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("useRemoteAgentLifecycle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -476,6 +484,254 @@ describe("useRemoteAgentLifecycle", () => {
     controller.dispose();
   });
 
+  it.each([
+    "throw",
+    "non-200 response",
+    "non-array data",
+    "no exact tool and run match",
+  ] as const)(
+    "retries terminal history after %s and hydrates the exact snapshot once",
+    async (failure) => {
+      const state = ref(runState());
+      const hydrate = vi.fn();
+      mocks.getTaskLifecycle.mockReset().mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+        }),
+      });
+      mocks.getAnswerCheck.mockReset();
+      switch (failure) {
+        case "throw":
+          mocks.getAnswerCheck.mockRejectedValueOnce(
+            new Error("history unavailable")
+          );
+          break;
+        case "non-200 response":
+          mocks.getAnswerCheck.mockResolvedValueOnce({ code: 503, data: [] });
+          break;
+        case "non-array data":
+          mocks.getAnswerCheck.mockResolvedValueOnce({
+            code: 200,
+            data: {},
+          });
+          break;
+        case "no exact tool and run match":
+          mocks.getAnswerCheck.mockResolvedValueOnce({
+            code: 200,
+            data: [
+              historyRow({ tool_name: "DigitalDesignAgent" }),
+              historyRow({ bot_run_id: "run-other" }),
+            ],
+          });
+          break;
+      }
+      mocks.getAnswerCheck.mockResolvedValueOnce({
+        code: 200,
+        data: [
+          historyRow({
+            status: "SUCCEEDED",
+            report_revision: 2,
+            answer: JSON.stringify({ final_report: "Network final" }),
+          }),
+        ],
+      });
+
+      const controller = useRemoteAgentLifecycle({
+        tool: "GeneNetworkAgent",
+        run: { state, hydrate },
+        dialogueId: "dialogue-42",
+      });
+      await flushAsync();
+
+      expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+      expect(hydrate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(999);
+      expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await flushAsync();
+
+      expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+      expect(hydrate).toHaveBeenCalledTimes(1);
+      expect(hydrate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "run-network",
+          status: "SUCCEEDED",
+          finalReport: "Network final",
+        }),
+        { dialogueId: "dialogue-42", messageId: "19" }
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+      expect(hydrate).toHaveBeenCalledTimes(1);
+      controller.dispose();
+    }
+  );
+
+  it("exhausts terminal history reconciliation after three attempts", async () => {
+    const state = ref(runState());
+    const hydrate = vi.fn();
+    mocks.getTaskLifecycle.mockReset().mockResolvedValueOnce({
+      data: lifecycle({ phase: "FAILED", terminal: true }),
+    });
+    mocks.getAnswerCheck.mockReset().mockResolvedValue({
+      code: 200,
+      data: [historyRow({ bot_run_id: "run-other" })],
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(3);
+    expect(hydrate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    controller.dispose();
+  });
+
+  it.each([
+    "reset",
+    "dispose",
+    "row replacement",
+    "run replacement",
+    "dialogue replacement",
+  ] as const)("cancels a scheduled terminal retry after %s", async (change) => {
+    const state = ref(runState());
+    const hydrate = vi.fn();
+    mocks.getTaskLifecycle
+      .mockReset()
+      .mockResolvedValueOnce({
+        data: lifecycle({ phase: "SUCCEEDED", terminal: true }),
+      })
+      .mockImplementation(() => new Promise(() => undefined));
+    mocks.getAnswerCheck.mockReset().mockResolvedValue({
+      code: 503,
+      data: [],
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(1);
+    switch (change) {
+      case "reset":
+        controller.reset();
+        break;
+      case "dispose":
+        controller.dispose();
+        break;
+      case "row replacement":
+        state.value = { ...state.value, messageId: "20" };
+        break;
+      case "run replacement":
+        state.value = {
+          ...state.value,
+          runId: "run-replacement",
+          projection: projection({ runId: "run-replacement" }),
+        };
+        break;
+      case "dialogue replacement":
+        state.value = { ...state.value, dialogueId: "dialogue-replacement" };
+        break;
+    }
+    await nextTick();
+
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(hydrate).not.toHaveBeenCalled();
+    if (change !== "dispose") controller.dispose();
+  });
+
+  it.each([
+    "reset",
+    "dispose",
+    "row replacement",
+    "run replacement",
+    "dialogue replacement",
+  ] as const)(
+    "ignores an in-flight terminal history response after %s",
+    async (change) => {
+      const pendingHistory = deferred<unknown>();
+      const state = ref(runState());
+      const hydrate = vi.fn();
+      mocks.getTaskLifecycle
+        .mockReset()
+        .mockResolvedValueOnce({
+          data: lifecycle({ phase: "SUCCEEDED", terminal: true }),
+        })
+        .mockImplementation(() => new Promise(() => undefined));
+      mocks.getAnswerCheck
+        .mockReset()
+        .mockReturnValueOnce(
+          pendingHistory.promise as ReturnType<typeof mocks.getAnswerCheck>
+        );
+      const controller = useRemoteAgentLifecycle({
+        tool: "GeneNetworkAgent",
+        run: { state, hydrate },
+        dialogueId: "dialogue-42",
+      });
+      await flushAsync();
+      expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+
+      switch (change) {
+        case "reset":
+          controller.reset();
+          break;
+        case "dispose":
+          controller.dispose();
+          break;
+        case "row replacement":
+          state.value = { ...state.value, messageId: "20" };
+          break;
+        case "run replacement":
+          state.value = {
+            ...state.value,
+            runId: "run-replacement",
+            projection: projection({ runId: "run-replacement" }),
+          };
+          break;
+        case "dialogue replacement":
+          state.value = { ...state.value, dialogueId: "dialogue-replacement" };
+          break;
+      }
+      await nextTick();
+      pendingHistory.resolve({
+        code: 200,
+        data: [
+          historyRow({
+            status: "SUCCEEDED",
+            answer: JSON.stringify({ final_report: "Stale terminal report" }),
+          }),
+        ],
+      });
+      await flushAsync();
+
+      expect(hydrate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+      if (change !== "dispose") controller.dispose();
+    }
+  );
+
   it("keeps the dedicated workspace watcher active for pending delivery after scientific success", async () => {
     const state = ref(
       runState({
@@ -573,9 +829,12 @@ describe("useRemoteAgentLifecycle", () => {
 
   it("ignores a late history response after the same row changes run identity", async () => {
     let resolveHistory: ((value: unknown) => void) | undefined;
-    mocks.getTaskLifecycle.mockReset().mockResolvedValueOnce({
-      data: lifecycle({ report_revision: 1 }),
-    });
+    mocks.getTaskLifecycle
+      .mockReset()
+      .mockResolvedValueOnce({
+        data: lifecycle({ report_revision: 1 }),
+      })
+      .mockImplementation(() => new Promise(() => undefined));
     mocks.getAnswerCheck.mockReset().mockImplementationOnce(
       () =>
         new Promise((resolve) => {

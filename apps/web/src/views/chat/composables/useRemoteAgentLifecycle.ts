@@ -12,6 +12,19 @@ import { findRemoteAgentHistorySnapshot } from "./remoteAgentHistory";
 
 const SAFE_ROW_ID = /^[1-9]\d{0,18}$/u;
 const ACTIVE_PHASES = new Set(["submitting", "running", "input_required"]);
+const TERMINAL_HISTORY_RETRY_DELAYS_MS = [1000, 2000] as const;
+
+type HistoryReconciliationIdentity = {
+  rowId: string;
+  runId: string;
+  dialogueId: string;
+  generation: number;
+};
+
+type TerminalHistoryWork = HistoryReconciliationIdentity & {
+  attempts: number;
+  timer?: ReturnType<typeof setTimeout>;
+};
 
 function needsHistoryHydration(
   next: AgentTaskLifecycle,
@@ -54,43 +67,138 @@ export function useRemoteAgentLifecycle(options: {
   dialogueId: string;
 }): RemoteAgentLifecycleController {
   const trackedRowId = ref<string | null>(null);
+  let trackedRunId: string | null = null;
+  let trackedDialogueId: string | null = null;
   let generation = 0;
   let disposed = false;
+  let terminalHistoryWork: TerminalHistoryWork | null = null;
 
-  const reconcileHistory = async (rowId: string): Promise<void> => {
-    const expectedRunId = options.run.state.value.projection?.runId;
-    if (!expectedRunId) return;
+  const ownsHistoryWork = (
+    identity: HistoryReconciliationIdentity
+  ): boolean => {
+    const state = options.run.state.value;
+    return (
+      !disposed &&
+      generation === identity.generation &&
+      trackedRowId.value === identity.rowId &&
+      trackedRunId === identity.runId &&
+      trackedDialogueId === identity.dialogueId &&
+      positiveRowId(state.messageId) === identity.rowId &&
+      state.projection?.runId === identity.runId &&
+      (state.dialogueId ?? options.dialogueId) === identity.dialogueId
+    );
+  };
+
+  const captureHistoryIdentity = (
+    rowId: string
+  ): HistoryReconciliationIdentity | null => {
+    const runId = options.run.state.value.projection?.runId;
+    if (!runId) return null;
     const dialogueId = options.run.state.value.dialogueId ?? options.dialogueId;
-    const currentGeneration = generation;
-    const response = await getAnswerCheck({ dialogue_id: dialogueId });
-    if (
-      disposed ||
-      generation !== currentGeneration ||
-      trackedRowId.value !== rowId ||
-      options.run.state.value.projection?.runId !== expectedRunId
-    ) {
-      return;
-    }
-    if (response.code !== 200 || !Array.isArray(response.data)) return;
+    const identity = { rowId, runId, dialogueId, generation };
+    return ownsHistoryWork(identity) ? identity : null;
+  };
+
+  const reconcileHistoryAttempt = async (
+    identity: HistoryReconciliationIdentity
+  ): Promise<boolean> => {
+    if (!ownsHistoryWork(identity)) return false;
+    const response = await getAnswerCheck({
+      dialogue_id: identity.dialogueId,
+    });
+    if (!ownsHistoryWork(identity)) return false;
+    if (response.code !== 200 || !Array.isArray(response.data)) return false;
     const snapshot = findRemoteAgentHistorySnapshot(
       response.data,
       options.tool,
-      expectedRunId
+      identity.runId
     );
-    if (!snapshot) return;
-    const identity: Partial<RemoteAgentRunIdentity> = {
-      dialogueId: snapshot.dialogueId ?? dialogueId,
+    if (!snapshot || !ownsHistoryWork(identity)) return false;
+    const snapshotDialogueId = snapshot.dialogueId ?? identity.dialogueId;
+    if (snapshotDialogueId !== identity.dialogueId) return false;
+    const runIdentity: Partial<RemoteAgentRunIdentity> = {
+      dialogueId: snapshotDialogueId,
       messageId: snapshot.rowId,
     };
     if (snapshot.artifactLinks !== undefined) {
-      identity.artifactLinks = snapshot.artifactLinks;
+      runIdentity.artifactLinks = snapshot.artifactLinks;
     }
-    options.run.hydrate(snapshot.projection, identity);
+    if (!ownsHistoryWork(identity)) return false;
+    options.run.hydrate(snapshot.projection, runIdentity);
+    return true;
+  };
+
+  const reconcileHistory = async (rowId: string): Promise<void> => {
+    const identity = captureHistoryIdentity(rowId);
+    if (!identity) return;
+    await reconcileHistoryAttempt(identity);
+  };
+
+  const clearTerminalHistoryWork = (work?: TerminalHistoryWork): void => {
+    if (!terminalHistoryWork || (work && terminalHistoryWork !== work)) return;
+    if (terminalHistoryWork.timer !== undefined) {
+      clearTimeout(terminalHistoryWork.timer);
+    }
+    terminalHistoryWork = null;
+  };
+
+  const runTerminalHistoryWork = async (
+    work: TerminalHistoryWork
+  ): Promise<void> => {
+    if (terminalHistoryWork !== work || !ownsHistoryWork(work)) {
+      clearTerminalHistoryWork(work);
+      return;
+    }
+    work.attempts += 1;
+    let hydrated = false;
+    try {
+      hydrated = await reconcileHistoryAttempt(work);
+    } catch {
+      hydrated = false;
+    }
+    if (terminalHistoryWork !== work || !ownsHistoryWork(work)) {
+      clearTerminalHistoryWork(work);
+      return;
+    }
+    if (hydrated) {
+      clearTerminalHistoryWork(work);
+      return;
+    }
+    const delay = TERMINAL_HISTORY_RETRY_DELAYS_MS[work.attempts - 1];
+    if (delay === undefined) {
+      clearTerminalHistoryWork(work);
+      return;
+    }
+    work.timer = setTimeout(() => {
+      work.timer = undefined;
+      void runTerminalHistoryWork(work);
+    }, delay);
+  };
+
+  const reconcileTerminalHistory = (rowId: string): void => {
+    const identity = captureHistoryIdentity(rowId);
+    if (!identity) return;
+    if (
+      terminalHistoryWork?.rowId === identity.rowId &&
+      terminalHistoryWork.runId === identity.runId &&
+      terminalHistoryWork.dialogueId === identity.dialogueId &&
+      terminalHistoryWork.generation === identity.generation
+    ) {
+      return;
+    }
+    clearTerminalHistoryWork();
+    const work: TerminalHistoryWork = { ...identity, attempts: 0 };
+    terminalHistoryWork = work;
+    void runTerminalHistoryWork(work);
   };
 
   const lifecycle = useAgentRunLifecycle({
     scope: `remote-${options.tool}`,
     onSnapshot: (rowId, next, previous) => {
+      if (next.terminal) {
+        reconcileTerminalHistory(rowId);
+        return;
+      }
       if (needsHistoryHydration(next, previous)) {
         return reconcileHistory(rowId);
       }
@@ -99,8 +207,11 @@ export function useRemoteAgentLifecycle(options: {
 
   const stopTracking = (): void => {
     generation += 1;
+    clearTerminalHistoryWork();
     const rowId = trackedRowId.value;
     trackedRowId.value = null;
+    trackedRunId = null;
+    trackedDialogueId = null;
     if (rowId) lifecycle.unwatchRow(rowId);
   };
 
@@ -110,20 +221,30 @@ export function useRemoteAgentLifecycle(options: {
         options.run.state.value.messageId,
         options.run.state.value.phase,
         options.run.state.value.delivery?.status,
+        options.run.state.value.projection?.runId,
+        options.run.state.value.dialogueId ?? options.dialogueId,
       ] as const,
-    ([messageId, phase, deliveryStatus]) => {
+    ([messageId, phase, deliveryStatus, runId, dialogueId]) => {
       const rowId = positiveRowId(messageId);
       if (!rowId) {
         stopTracking();
         return;
       }
-      if (trackedRowId.value === rowId) return;
+      if (
+        trackedRowId.value === rowId &&
+        trackedRunId === (runId ?? null) &&
+        trackedDialogueId === dialogueId
+      ) {
+        return;
+      }
       if (!ACTIVE_PHASES.has(phase) && deliveryStatus !== "pending") {
         stopTracking();
         return;
       }
       stopTracking();
       trackedRowId.value = rowId;
+      trackedRunId = runId ?? null;
+      trackedDialogueId = dialogueId;
       lifecycle.watchRow(rowId);
     },
     { immediate: true, flush: "sync" }
