@@ -25,6 +25,14 @@ const WORKSPACE_SOURCE = readFileSync(
   ),
   "utf8"
 );
+const PAGE_STYLE =
+  WORKSPACE_SOURCE.match(/\.analysis-agent-page\s*\{[^}]*\}/)?.[0] ?? "";
+const FORM_STYLE =
+  WORKSPACE_SOURCE.match(/\.analysis-agent-form\s*\{[^}]*\}/)?.[0] ?? "";
+const FILE_INPUT_STYLE =
+  WORKSPACE_SOURCE.match(
+    /\.analysis-agent-field input\[type="file"\]\s*\{[^}]*\}/
+  )?.[0] ?? "";
 
 const SAFE_RESEARCH_PATH_LINES = [
   "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
@@ -608,10 +616,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
   });
 
-  it("keeps the vertical scroll owner from exposing a page-level horizontal axis", () => {
-    expect(WORKSPACE_SOURCE).toMatch(
-      /\.analysis-agent-page\s*\{(?=[^}]*overflow-y:\s*auto;)(?=[^}]*overflow-x:\s*hidden;)[^}]*\}/
-    );
+  it("constrains the vertical scroll owner's grid and intrinsic form width", () => {
+    expect(PAGE_STYLE).toContain("overflow-y: auto;");
+    expect(PAGE_STYLE).toContain("overflow-x: hidden;");
+    expect.soft(PAGE_STYLE).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect.soft(FORM_STYLE).toContain("box-sizing: border-box;");
+    expect.soft(FILE_INPUT_STYLE).toMatch(/\n\s*width:\s*100%;/);
   });
 
   it("applies the shared attachment behavior contract", async () => {

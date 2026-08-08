@@ -826,6 +826,7 @@ onBeforeUnmount(() => {
 .analysis-agent-page {
   box-sizing: border-box;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--phy-space-24);
   width: 100%;
   height: 100%;
@@ -897,6 +898,7 @@ onBeforeUnmount(() => {
 }
 
 .analysis-agent-form {
+  box-sizing: border-box;
   display: grid;
   gap: var(--phy-space-20);
   padding: var(--phy-space-24);
@@ -928,6 +930,7 @@ onBeforeUnmount(() => {
 }
 
 .analysis-agent-field input[type="file"] {
+  width: 100%;
   max-width: 100%;
   padding: var(--phy-space-8) 0;
   color: var(--phy-color-text-secondary);
