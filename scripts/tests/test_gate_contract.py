@@ -17,6 +17,9 @@ DISPATCHER = ROOT / "scripts" / "run_gate_group.sh"
 FULL_GATE = ROOT / "scripts" / "validate_web_local.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 RUNBOOK = ROOT / "docs" / "deployment" / "upgrading.md"
+CONFIGURATION = ROOT / "docs" / "deployment" / "configuration.md"
+OPERATIONS = ROOT / "docs" / "deployment" / "operations.md"
+FRONTEND_DESIGN_SYSTEM = ROOT / "docs" / "frontend-design-system.md"
 PUBLIC_GATE_DOCS = (ROOT / "README.md", ROOT / "CONTRIBUTING.md")
 
 GROUP_ORDER = (
@@ -417,3 +420,35 @@ def test_deployment_version_probe_classifies_unavailable_flag() -> None:
         'printf \'%s\\n\' "Version flag unavailable; verify the artifact checksum instead."'
         in text
     )
+
+
+def test_research_input_rollout_docs_define_limits_schema_and_ux() -> None:
+    configuration = CONFIGURATION.read_text(encoding="utf-8")
+    upgrading = RUNBOOK.read_text(encoding="utf-8")
+    operations = OPERATIONS.read_text(encoding="utf-8")
+    frontend = FRONTEND_DESIGN_SYSTEM.read_text(encoding="utf-8")
+
+    assert "max_query_chars: 131072" in configuration
+    assert "default is `131072`; the hard maximum is `1048576`" in configuration
+    assert re.search(
+        r"attachment\s+default is `64`; the hard maximum is `256`", configuration
+    )
+    assert re.search(
+        r"dataset-path default is `64`; the hard maximum is\s+`256`", configuration
+    )
+    assert re.search(
+        r"combined-reference default is `128`; the hard maximum is\s+`256`",
+        configuration,
+    )
+    assert "`research_input_resolution_v1` version `1`" in configuration
+
+    assert "`query` and `answer` columns must both be `MEDIUMTEXT`" in upgrading
+    assert "Rollback keeps `query` and `answer` widened as `MEDIUMTEXT`" in upgrading
+
+    assert re.search(
+        r"Bot deployment must\s+complete before Web deployment", operations
+    )
+    assert "separately transferred operator handoff" in operations
+
+    assert "must never silently truncate" in frontend
+    assert "does not add a new input control" in frontend

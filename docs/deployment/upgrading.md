@@ -205,6 +205,20 @@ If the merged binary does not expose `add-mode`, stop and use the operator's
 approved equivalent additive DDL; do not invent a destructive migration. Repeat
 §4.1 after the command and keep `bot.expert_enabled=false`.
 
+### 4.4 Research input storage and proxy precondition
+
+When the selected release includes extended Research input, the
+`question_agent_logs` `query` and `answer` columns must both be `MEDIUMTEXT`
+before Web receives traffic. Inspect both column types and the effective
+reverse-proxy request-body allowance during preflight. The allowance must cover
+the configured query limit plus bounded history, attachment metadata, and
+multipart framing; it does not authorize file-body relay through Web Go.
+
+Production DDL and reverse-proxy changes are operator-owned and follow the
+separately transferred operator handoff. Do not paste live configuration into
+the repository, run AutoMigrate against production, or infer readiness from the
+fresh-schema model tags. Record the sanitized inspection result before rollout.
+
 ## 5. Deploy sequence
 
 1. Confirm the backup and rollback artifacts from §2.
@@ -221,6 +235,13 @@ approved equivalent additive DDL; do not invent a destructive migration. Repeat
 
 Do not flip a feature flag during the deploy window. A flag change is a separate
 operator action that requires the evidence gates in §8.
+
+For the extended Research input contract, complete the §4.4 database/proxy
+preflight, deploy the compatible Bot resolver and
+`research_input_resolution_v1` version `1`, and only then deploy Web. This
+contract adds no post-deploy flag or user cohort. A missing or incompatible Bot
+capability fails Research submission closed instead of falling back to a lower
+limit or truncating the query.
 
 ## 6. Verification and smoke
 
@@ -289,6 +310,11 @@ If `/readyz`, core smoke, or data correctness fails:
 
 Do not drop the projection columns or restore a pre-migration schema as part of
 rollback. A later forward deployment can reuse the additive schema.
+
+Rollback keeps `query` and `answer` widened as `MEDIUMTEXT`; narrowing either
+column can truncate rows already accepted by the extended contract. The larger
+proxy allowance may also remain because application limits continue to bound
+accepted requests.
 
 ## 8. Dark-launch activation gates
 

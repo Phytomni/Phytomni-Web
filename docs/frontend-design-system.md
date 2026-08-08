@@ -294,6 +294,21 @@ derives `dataset` or `document` before it asks Bot to create an asset; every
 archive suffix defaults to `dataset`, while unsupported or ambiguous names are
 rejected before a Bot/OBS session is created.
 
+Research accepts the same single-composer interaction in three forms: a short
+query with same-turn PDF and uploaded dataset assets; a query with a same-turn
+PDF and dataset paths pasted into the query; or a query containing pasted paper
+text and pasted dataset paths. The ordinary query remains one field, gives the
+resolver the full user text, and does not add a new input control for paths or
+descriptions. The attachment count default is 64, subject to the compatible
+Bot-advertised limit, and the Web hard maximum is 256.
+
+The current-message character limit is negotiated with
+`research_input_resolution_v1` version `1`. Browser validation, Web Go relay,
+persistence, and Bot validation count the decoded raw input consistently and
+must never silently truncate an accepted query. If the protocol or bounded
+descriptor is missing or incompatible, Research fails closed with the existing
+error surface rather than shrinking, rewriting, or splitting the user's text.
+
 The attachment control and data boundaries are deliberately narrow:
 
 - **Browser → Web Go:** `/api/v1/files` is a JSON-only control plane for

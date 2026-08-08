@@ -13,6 +13,23 @@ Newest first.
 
 ## [Unreleased]
 
+### 🧬 Research input resolution
+
+- Research submissions retain one query and one Attach action while accepting
+  uploaded assets or pasted dataset paths; no path or description input is
+  added, and the complete user text remains available to the Bot-owned resolver.
+- The Web query default is 131,072 Unicode code points with a 1,048,576 hard
+  maximum. Version 1 of `research_input_resolution_v1` negotiates the effective
+  limits: 64 attachments, 64 pasted dataset paths, and 128 combined references
+  by default, each with a 256 hard maximum. No layer silently truncates or adds
+  a new rollout cohort.
+- Fresh schemas declare `question_agent_logs.query` and `answer` as
+  `MEDIUMTEXT`. Production widening and proxy allowance remain operator-owned;
+  deploy the compatible Bot before Web and keep widened columns on rollback.
+- Local Web gates cover repository behavior only. Bot delivery, production DDL,
+  proxy configuration, paired runtime, staging, and production acceptance
+  remain independently verified external work.
+
 ### 🧪 Frontend toolchain contract reconciliation
 
 - Keep Vitest 4 coverage auto-update disabled through its supported

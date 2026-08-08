@@ -179,10 +179,10 @@ Two windows, matching the staged §6:
 
 ## 11. `0.1.3` / `0.1.4` dark-launched features — Bot-coordination activation gates
 
-The `0.1.4` compatibility follow-up preserves the `0.1.3` dark-launch contract:
-it adds no new operator flag or migration, and every capability remains off
-until its external acceptance row is reviewed. The `0.1.3` release ships
-several Web↔Bot capabilities **dark** on the Web side
+The `0.1.4` compatibility follow-up preserves the `0.1.3` dark-launch contract
+for the capabilities listed below. The extended Research input rollout is a
+separate, no-new-flag deployment contract with storage and proxy preconditions
+in §12. The `0.1.3` release ships several Web↔Bot capabilities **dark** on the Web side
 (default-OFF flags, byte-identical to the blocking behavior until flipped). Each
 flip requires a matching Bot-side capability, security review where applicable,
 and owner/CI/staging/live evidence **first**, or the feature breaks on
@@ -319,3 +319,37 @@ as documented in [`upgrading.md`](upgrading.md). The local
 `validate_web_local.sh` G13–G17 result cannot substitute for Bot-owner,
 operations, staging, or live acceptance. Keep all flags false on the initial
 deploy unless a separately authorized acceptance packet says otherwise.
+
+## 12. Extended Research input rollout
+
+This rollout does not add a hidden switch, cohort, path field, or description
+field. Every user already authorized for Research uses the same ordinary query
+and Attach action. Protocol compatibility is the mixed-version safety boundary.
+
+After the operator storage/proxy preflight completes, Bot deployment must
+complete before Web deployment. The Bot must advertise
+`research_input_resolution_v1` version `1` with compatible query, attachment,
+path, reference, and scientific-format limits. Web then consumes that contract
+and fails Research closed when it is absent or incompatible; it never silently
+falls back to a smaller query limit.
+
+Production widening of `question_agent_logs.query` and
+`question_agent_logs.answer` to `MEDIUMTEXT`, plus any reverse-proxy request-body
+adjustment, follows the separately transferred operator handoff. Operators own
+the backup, lock/performance assessment, execution, verification, rollout
+observation, and rollback. Repository code and local gates do not execute or
+prove those production actions.
+
+Deploy and smoke in this order:
+
+1. Verify the widened columns and proxy allowance using sanitized evidence.
+2. Deploy Bot and verify the versioned capability without exposing private
+   paths, document text, credentials, or resolver internals.
+3. Deploy Web and exercise the supported Research submission forms with a
+   non-production account.
+4. Record Bot, Web, staging, and operations results independently; a local Web
+   pass is not paired-runtime or production acceptance.
+
+On rollback, revert Web before Bot so the active Web never depends on a missing
+protocol. Keep both widened columns and the larger safe proxy allowance; do not
+delete uploads, Research runs, or user history.

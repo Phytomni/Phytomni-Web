@@ -6,9 +6,9 @@ This is the single source of truth for _what every key does_. The per-release
 [`history/`](history/) reference this file instead of re-documenting keys — when a
 release adds or changes a key, update it **here**.
 
-The `0.1.4` compatibility follow-up adds no configuration keys or production
-schema changes beyond the `0.1.3` baseline. Preserve the existing dark-launch
-defaults and use the release-specific upgrade addendum for deployment steps.
+The `0.1.4` Research input extension adds `bot.max_query_chars` and requires an
+operator-managed storage/proxy preflight. Preserve the existing dark-launch
+defaults and use the release-specific upgrade procedure for deployment steps.
 
 Config is loaded by Viper from `apps/server/config/app.yml` (copy from
 `app.yml.example`; git-ignored, keep it out of VCS and not world-readable).
@@ -143,6 +143,7 @@ bot:
   user_api_key: "<PTM_WEB_KEY>" # mint/rotate per operations.md §1–3
   # Fallback for uploads, control calls, and background-Agent submission.
   timeout_seconds: 900
+  max_query_chars: 131072
   # Per synchronous Agent execution request; keys are canonical Bot slugs.
   agent_timeout_seconds:
     chat: 3000
@@ -167,6 +168,22 @@ bot:
   max_upload_file_count: 10
   max_upload_total_bytes: 52428800 # 50 MiB per request
 ```
+
+`bot.max_query_chars` counts decoded Unicode code points in the current user
+message. The default is `131072`; the hard maximum is `1048576`. Missing values
+use the default, invalid values fail configuration loading, and accepted input
+is never truncated. Conversation-history entries retain their independent
+bound.
+
+Research input compatibility is negotiated through
+`research_input_resolution_v1` version `1`. The Bot-advertised attachment
+default is `64`; the hard maximum is `256`. The effective request limit is the
+compatible advertised value within that bound, not multipart concurrency or a
+storage quota. The pasted dataset-path default is `64`; the hard maximum is
+`256`. The combined-reference default is `128`; the hard maximum is `256`.
+Missing or incompatible Research metadata fails submission closed. This
+extension adds no second feature flag or cohort: every user who is already
+authorized for Research receives the same negotiated contract.
 
 `agent_timeout_seconds` overrides the compiled defaults entry by entry for one
 Web Go-to-Bot synchronous Agent request. Instant uses `chat`; forced Expert
