@@ -168,7 +168,7 @@
             }}
           </button>
           <button
-            v-if="isRunActive"
+            v-if="canCancelRun"
             type="button"
             class="analysis-agent-cancel"
             :data-test="`${agentKey}-cancel`"
@@ -202,6 +202,8 @@
           :metadata="t(`${localePrefix}.agentLabel`)"
           :status="workspaceStatusLabel"
           :report-status="reportStatus"
+          :tab="artifactTab"
+          :tabs="artifactTabs"
           :tab-labels="tabLabels"
           :artifact-id="`${agentKey}-agent-artifact`"
           :back-label="t('common.back')"
@@ -236,7 +238,20 @@
           </template>
 
           <template #activity>
+            <BotReportState
+              v-if="isActiveResearch"
+              :state="reportComponentState"
+              :progress="reportProgress"
+              :updated-at="reportUpdatedAt"
+              :ns="`${agentKey}-agent-activity`"
+              :labels="reportLabels"
+              :failure-label="reportFailureLabel"
+              :empty-report-label="t(`${localePrefix}.emptyReport`)"
+              :data-test="`${agentKey}-progress`"
+              hide-active-report
+            />
             <div
+              v-else
               class="analysis-agent-activity"
               :data-test="`${agentKey}-progress`"
               role="status"
@@ -544,6 +559,11 @@ const isRunActive = computed(() =>
     displayedState.value.phase
   )
 );
+const canCancelRun = computed(() =>
+  props.tool === "InSilicoResearchAgent"
+    ? isSubmitting.value
+    : isRunActive.value
+);
 const hasRun = computed(
   () =>
     props.state !== undefined ||
@@ -595,6 +615,17 @@ const isResearchCancellation = computed(
 );
 const isResearchTimeout = computed(
   () => researchTerminalPhase.value === "TIMED_OUT"
+);
+const isActiveResearch = computed(
+  () =>
+    props.tool === "InSilicoResearchAgent" &&
+    researchTerminalPhase.value === null
+);
+const artifactTab = computed(() =>
+  isActiveResearch.value ? "activity" : "content"
+);
+const artifactTabs = computed(() =>
+  isActiveResearch.value ? (["activity"] as const) : undefined
 );
 const reportComponentState = computed<BotRemoteAgentRunState>(() => {
   const state = displayedState.value;

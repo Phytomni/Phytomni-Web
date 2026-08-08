@@ -117,6 +117,7 @@ const props = withDefaults(
     status?: string;
     formatScientificAgentName?: boolean;
     tab?: ResearchArtifactTab;
+    tabs?: readonly ResearchArtifactTab[];
     tabLabels?: ResearchArtifactTabLabels;
     contentLayout?: ResearchArtifactContentLayout;
     reportStatus?: ResearchArtifactReportStatus;
@@ -142,25 +143,29 @@ const emit = defineEmits<{
   (event: "tab", tab: ResearchArtifactTab): void;
 }>();
 
-const shellRef = ref<HTMLElement | null>(null);
-const selectedTab = ref<ResearchArtifactTab>(props.tab);
 const instanceId = getCurrentInstance()?.uid ?? 0;
 const idBase = computed(
   () => props.artifactId || `research-artifact-${instanceId}`
 );
+const visibleTabs = computed<ResearchArtifactTab[]>(() => {
+  const requestedTabs = new Set(props.tabs ?? TAB_ORDER);
+  const filteredTabs = TAB_ORDER.filter((tab) => requestedTabs.has(tab));
+  return filteredTabs.length > 0 ? filteredTabs : [...TAB_ORDER];
+});
+const shellRef = ref<HTMLElement | null>(null);
+const selectedTab = ref<ResearchArtifactTab>(
+  visibleTabs.value.includes(props.tab) ? props.tab : visibleTabs.value[0]
+);
 const tabItems = computed(() =>
-  TAB_ORDER.map((id) => ({
+  visibleTabs.value.map((id) => ({
     id,
     label: props.tabLabels[id] || DEFAULT_TAB_LABELS[id],
   }))
 );
 
-watch(
-  () => props.tab,
-  (tab) => {
-    selectedTab.value = tab;
-  }
-);
+watch([() => props.tab, visibleTabs], ([tab, tabs]) => {
+  selectedTab.value = tabs.includes(tab) ? tab : tabs[0];
+});
 
 function tabId(tab: ResearchArtifactTab): string {
   return `${idBase.value}-tab-${tab}`;
@@ -191,23 +196,25 @@ function handleTabKeydown(
   event: KeyboardEvent,
   tab: ResearchArtifactTab
 ): void {
-  const currentIndex = TAB_ORDER.indexOf(tab);
+  const tabs = visibleTabs.value;
+  const currentIndex = tabs.indexOf(tab);
+  if (currentIndex < 0) return;
   let nextIndex: number | null = null;
 
   if (event.key === "ArrowRight") {
-    nextIndex = (currentIndex + 1) % TAB_ORDER.length;
+    nextIndex = (currentIndex + 1) % tabs.length;
   } else if (event.key === "ArrowLeft") {
-    nextIndex = (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
   } else if (event.key === "Home") {
     nextIndex = 0;
   } else if (event.key === "End") {
-    nextIndex = TAB_ORDER.length - 1;
+    nextIndex = tabs.length - 1;
   }
 
   if (nextIndex === null) return;
 
   event.preventDefault();
-  activateTab(TAB_ORDER[nextIndex], true);
+  activateTab(tabs[nextIndex], true);
 }
 </script>
 

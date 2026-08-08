@@ -566,16 +566,16 @@ describe("Bot remote-agent surface matrix", () => {
     const wrapper = mountSurface("research");
 
     expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
-      true
+      false
     );
     expect(wrapper.find('[data-test="bot-report-evidence"]').exists()).toBe(
-      true
+      false
     );
     expect(wrapper.find('[data-test="bot-report-activity"]').exists()).toBe(
       true
     );
     expect(wrapper.find('[data-test="bot-report-downloads"]').exists()).toBe(
-      true
+      false
     );
     expect(wrapper.find(".bot-report-state").exists()).toBe(true);
     expect(wrapper.find('[data-test="bot-report-progress"]').exists()).toBe(
@@ -590,9 +590,14 @@ describe("Bot remote-agent surface matrix", () => {
         .exists()
     ).toBe(false);
     expect(wrapper.find(".bot-artifact-list").exists()).toBe(false);
+    expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="research-evidence-empty"]').exists()).toBe(
+      false
+    );
     expect(
       wrapper.findAll('button[data-test="bot-artifact-download"]')
     ).toHaveLength(0);
+    expect(wrapper.text()).toContain("partial");
     expect(wrapper.text()).not.toContain("Synthetic report");
     expect(wrapper.text()).not.toContain("secret.txt");
 

@@ -21,7 +21,8 @@ const tabs = {
 
 function mountShell(
   tab: keyof typeof tabs = "content",
-  contentLayout: "reading" | "wide" = "reading"
+  contentLayout: "reading" | "wide" = "reading",
+  visibleTabs?: Array<keyof typeof tabs>
 ) {
   return mountWithApp(ResearchArtifactShell, {
     attachTo: document.body,
@@ -30,6 +31,7 @@ function mountShell(
       metadata: ["Deep Genome Agent", "Oryza sativa"],
       status: "Complete",
       tab,
+      ...(visibleTabs ? { tabs: visibleTabs } : {}),
       contentLayout,
       tabLabels: tabs,
       backLabel: "Back to conversation",
@@ -148,6 +150,33 @@ describe("ResearchArtifactShell", () => {
       expect(panel.attributes("aria-labelledby")).toBe(button.attributes("id"));
       expect(panel.attributes("hidden")).toBe(selected ? undefined : "");
     });
+  });
+
+  it("mounts only explicitly enabled tabs and keeps keyboard focus within them", async () => {
+    const wrapper = mountShell("activity", "reading", ["activity"]);
+
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(1);
+    expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(1);
+    expect(wrapper.get('[data-tab-id="activity"]').attributes("tabindex")).toBe(
+      "0"
+    );
+    expect(
+      wrapper.get('[data-panel-id="activity"]').attributes("hidden")
+    ).toBeUndefined();
+    expect(wrapper.find('[data-test="activity"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="content"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="evidence"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="downloads"]').exists()).toBe(false);
+
+    await wrapper.get('[data-tab-id="activity"]').trigger("keydown", {
+      key: "ArrowRight",
+    });
+
+    expect(wrapper.emitted("tab")?.at(-1)).toEqual(["activity"]);
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-tab-id="activity"]').element
+    );
+    wrapper.unmount();
   });
 
   it.each([

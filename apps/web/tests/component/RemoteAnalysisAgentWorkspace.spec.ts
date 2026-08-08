@@ -778,8 +778,8 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     setActiveRun({ workStage: "execution" });
     const wrapper = mountWorkspace("InSilicoResearchAgent", {
       realArtifactShell: true,
+      realBotReportState: true,
     });
-    await wrapper.get('[data-tab-id="activity"]').trigger("click");
 
     for (const [phase, label] of [
       ["PREPARING", "Preparing"],
@@ -793,11 +793,39 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       expect(wrapper.get(".research-artifact-header__status").text()).toBe(
         label
       );
+      expect(
+        wrapper
+          .findAll('[role="tab"]')
+          .map((tab) => tab.attributes("data-tab-id"))
+      ).toEqual(["activity"]);
+      expect(
+        wrapper
+          .findAll('[role="tabpanel"]')
+          .map((panel) => panel.attributes("data-panel-id"))
+      ).toEqual(["activity"]);
       const activityPanel = wrapper.get('[data-panel-id="activity"]');
       const activityStatus = wrapper.get('[data-test="research-progress"]');
       expect(activityPanel.attributes("hidden")).toBeUndefined();
       expect(activityStatus.isVisible()).toBe(true);
-      expect(activityStatus.text()).toBe(label);
+      expect(activityStatus.text()).toContain(label);
+      expect(
+        activityPanel.get('[data-test="bot-report-progress"]').text()
+      ).toContain("0/1");
+      expect(wrapper.find('[data-tab-id="content"]').exists()).toBe(false);
+      expect(wrapper.find('[data-tab-id="evidence"]').exists()).toBe(false);
+      expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
+      expect(wrapper.find('[data-panel-id="content"]').exists()).toBe(false);
+      expect(wrapper.find('[data-panel-id="evidence"]').exists()).toBe(false);
+      expect(wrapper.find('[data-panel-id="downloads"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(
+        false
+      );
+      expect(
+        wrapper.find('[data-test="research-evidence-empty"]').exists()
+      ).toBe(false);
+      expect(wrapper.find('[data-test="bot-artifact-list"]').exists()).toBe(
+        false
+      );
     }
 
     wrapper.unmount();
@@ -878,7 +906,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
         expect(wrapper.text()).not.toContain(finalReport);
       }
       await wrapper.get('[data-tab-id="activity"]').trigger("click");
-      expect(wrapper.get('[data-test="research-progress"]').text()).toBe(
+      expect(wrapper.get('[data-test="research-progress"]').text()).toContain(
         expectedLabel
       );
 
@@ -907,6 +935,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     });
 
     await expectResearchStatusSurfaces(wrapper, "Report ready");
+    expect(
+      wrapper
+        .findAll('[role="tab"]')
+        .map((tab) => tab.attributes("data-tab-id"))
+    ).toEqual(["content", "evidence", "activity", "downloads"]);
+    expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(4);
     expect(
       wrapper
         .get(".bot-report-state")
@@ -992,12 +1026,58 @@ describe("RemoteAnalysisAgentWorkspace", () => {
         .text()
     ).toContain("Active Analyst report");
     expect(wrapper.find('[data-test="bot-artifact-list"]').exists()).toBe(true);
+    expect(
+      wrapper
+        .findAll('[role="tab"]')
+        .map((tab) => tab.attributes("data-tab-id"))
+    ).toEqual(["content", "evidence", "activity", "downloads"]);
     await wrapper.get('[data-tab-id="activity"]').trigger("click");
     expect(wrapper.get('[data-test="analyst-progress"]').text()).toBe(
       "Analysis run in progress"
     );
 
     wrapper.unmount();
+  });
+
+  it("does not offer request cancellation after Research HTTP acceptance", () => {
+    setActiveRun({
+      phase: "running",
+      projectionStatus: "RUNNING",
+      workStage: "execution",
+    });
+    const wrapper = mountWorkspace("InSilicoResearchAgent");
+
+    expect(wrapper.find('[data-test="research-cancel"]').exists()).toBe(false);
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("offers cancellation only while the Research submit request is in flight", async () => {
+    let resolveSubmit: ((value: null) => void) | undefined;
+    mocks.submit.mockImplementationOnce(
+      () =>
+        new Promise<null>((resolveSubmitPromise) => {
+          resolveSubmit = resolveSubmitPromise;
+        })
+    );
+    const wrapper = mountWorkspace("InSilicoResearchAgent");
+
+    await wrapper
+      .get('[data-testid="research-query"]')
+      .setValue("Resolve this full paper input");
+    await wrapper.get('[data-testid="research-submit"]').trigger("click");
+
+    const cancel = wrapper.find('[data-test="research-cancel"]');
+    const cancelVisible = cancel.exists();
+    if (cancelVisible) await cancel.trigger("click");
+    const abortCalled = mocks.cancel.mock.calls.length === 1;
+
+    resolveSubmit?.(null);
+    await flushPromises();
+    wrapper.unmount();
+
+    expect(cancelVisible).toBe(true);
+    expect(abortCalled).toBe(true);
   });
 
   it.each([
@@ -1259,13 +1339,16 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       mocks.lifecycleSnapshot.value = lifecycle("FINALIZING");
       const wrapper = mountWorkspace("InSilicoResearchAgent", {
         realArtifactShell: true,
+        realBotReportState: true,
       });
 
       expect(wrapper.get(".research-artifact-header__status").text()).toBe(
         label
       );
       await wrapper.get('[data-tab-id="activity"]').trigger("click");
-      expect(wrapper.get('[data-test="research-progress"]').text()).toBe(label);
+      expect(wrapper.get('[data-test="research-progress"]').text()).toContain(
+        label
+      );
 
       wrapper.unmount();
     }
