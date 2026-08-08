@@ -52,6 +52,7 @@ import {
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
 import { queryWithinLimit } from "../utils/research-input-policy";
+import type { BotResearchInputCapability } from "./useBotCapabilities";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const MAX_CONTEXT_MESSAGES = 20;
@@ -394,7 +395,7 @@ export function useSendMessage(opts: {
   selectChat: (dialogueId: string) => Promise<void> | void;
   scrollToBottom: () => Promise<void>;
   attachmentTargetBlocked?: Readonly<Ref<boolean>>;
-  researchInputMaxQueryChars: Readonly<Ref<number>>;
+  researchInputCapability: Readonly<Ref<BotResearchInputCapability>>;
 }) {
   const {
     getChatState,
@@ -409,7 +410,7 @@ export function useSendMessage(opts: {
     selectChat,
     scrollToBottom,
     attachmentTargetBlocked,
-    researchInputMaxQueryChars,
+    researchInputCapability,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
@@ -435,10 +436,17 @@ export function useSendMessage(opts: {
     if (!currentMessage.trim()) return;
     if (
       capturedMode === "expert" &&
-      capturedSelectedAgent === "InSilicoResearchAgent" &&
-      !queryWithinLimit(currentMessage, researchInputMaxQueryChars.value)
+      capturedSelectedAgent === "InSilicoResearchAgent"
     ) {
-      return;
+      const capability = researchInputCapability.value;
+      if (!capability.enabled) {
+        ElMessage.warning(t("agents.research.unavailableMessage"));
+        return;
+      }
+      if (!queryWithinLimit(currentMessage, capability.max_user_query_chars)) {
+        ElMessage.warning(t("agents.research.questionTooLong"));
+        return;
+      }
     }
 
     // Capture parent row, completed asset references, mode, history, and request

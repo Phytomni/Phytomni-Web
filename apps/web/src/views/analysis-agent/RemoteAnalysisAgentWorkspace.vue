@@ -385,7 +385,9 @@ const capabilityAllowed = computed(() => {
     product.value.live === true &&
     capability?.enabled === true &&
     capability.execution === "agent_run" &&
-    capability.artifacts === true
+    capability.artifacts === true &&
+    (props.tool !== "InSilicoResearchAgent" ||
+      capabilities.researchInput.value.enabled === true)
   );
 });
 const canPickAttachments = computed(

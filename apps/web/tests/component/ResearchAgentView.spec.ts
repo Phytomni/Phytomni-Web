@@ -82,6 +82,14 @@ const mocks = vi.hoisted(() => {
     hasBlockingUploads: { value: false, __v_isRef: true },
     completedAssetIds: { value: [] as Array<{ asset_id: string }> },
   };
+  const researchInputCapability = {
+    enabled: true,
+    protocol: "research_input_resolution_v1",
+    max_user_query_chars: 131072,
+    max_attachments_per_request: 64,
+    max_research_dataset_paths: 64,
+    max_research_input_references: 128,
+  };
   return {
     state,
     submit: vi.fn().mockResolvedValue(null),
@@ -92,6 +100,7 @@ const mocks = vi.hoisted(() => {
     load: vi.fn().mockResolvedValue([]),
     chatState,
     uploadQueue,
+    researchInputCapability,
     getChatState: vi.fn(() => chatState),
     getAnswerCheck: vi.fn().mockResolvedValue({ code: 200, data: [] }),
     getTaskLifecycle: vi.fn(),
@@ -152,14 +161,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
       },
     },
     researchInput: {
-      value: {
-        enabled: true,
-        protocol: "research_input_resolution_v1",
-        max_user_query_chars: 131072,
-        max_attachments_per_request: 64,
-        max_research_dataset_paths: 64,
-        max_research_input_references: 128,
-      },
+      value: mocks.researchInputCapability,
     },
     load: mocks.load,
   }),
@@ -330,6 +332,14 @@ describe("ResearchAgentView", () => {
     mocks.chatState.fileList = [];
     mocks.uploadQueue.hasBlockingUploads.value = false;
     mocks.uploadQueue.completedAssetIds.value = [];
+    Object.assign(mocks.researchInputCapability, {
+      enabled: true,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    });
   });
 
   afterEach(() => {
@@ -533,7 +543,28 @@ describe("ResearchAgentView", () => {
     expect(wrapper.get('[data-test="research-form-error"]').exists()).toBe(
       true
     );
+    expect(wrapper.get('[data-test="research-form-error"]').text()).toBe(
+      "The research question is too long."
+    );
     expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("renders Research unavailable when the decoded input capability is disabled", () => {
+    Object.assign(mocks.researchInputCapability, {
+      enabled: false,
+      max_user_query_chars: 0,
+      max_attachments_per_request: 0,
+      max_research_dataset_paths: 0,
+      max_research_input_references: 0,
+    });
+
+    const wrapper = mountView();
+    const unavailable = wrapper.get('[data-test="research-unavailable"]');
+
+    expect(unavailable.attributes("role")).toBe("status");
+    expect(unavailable.attributes("aria-live")).toBe("polite");
+    expect(wrapper.find("form.research-agent-form").exists()).toBe(false);
     wrapper.unmount();
   });
 

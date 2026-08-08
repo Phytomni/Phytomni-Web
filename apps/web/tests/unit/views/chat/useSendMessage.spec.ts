@@ -11,6 +11,7 @@ import type {
 } from "@/views/chat/types";
 import type { ResumableUploadItem } from "@/views/chat/upload/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
+import type { BotResearchInputCapability } from "@/views/chat/composables/useBotCapabilities";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 import {
   buildChatMessage,
@@ -191,8 +192,27 @@ describe("useSendMessage", () => {
     vi.unstubAllEnvs();
   });
 
-  function makeComposable(researchInputMaxQueryChars = 131072) {
-    return useSendMessage({
+  function researchInputCapability(
+    overrides: Partial<BotResearchInputCapability> = {}
+  ): BotResearchInputCapability {
+    return {
+      enabled: true,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+      ...overrides,
+    };
+  }
+
+  function makeComposable(
+    options: {
+      researchInput?: BotResearchInputCapability;
+    } = {}
+  ) {
+    const researchInput = options.researchInput ?? researchInputCapability();
+    const composableOptions = {
       getChatState,
       currentChatId,
       currentChat,
@@ -206,8 +226,9 @@ describe("useSendMessage", () => {
       timestamp,
       selectChat,
       scrollToBottom,
-      researchInputMaxQueryChars: ref(researchInputMaxQueryChars),
-    });
+      researchInputCapability: ref(researchInput),
+    };
+    return useSendMessage(composableOptions);
   }
 
   it("rejects an over-limit forced Research draft before any mutation", async () => {
@@ -229,6 +250,9 @@ describe("useSendMessage", () => {
     expect(state.activeRequestId).toBe("");
     expect(state.pendingTurnId).toBeNull();
     expect(state.pendingTurnFingerprint).toBeNull();
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      "agents.research.questionTooLong"
+    );
   });
 
   it("sends an exact-limit forced Research draft without changing its raw text", async () => {
@@ -256,6 +280,73 @@ describe("useSendMessage", () => {
       "exact-limit Research query"
     )[0] as FormData;
     expect(formData.get("query")).toBe(draft);
+    expect(ElMessage.warning).not.toHaveBeenCalled();
+  });
+
+  it("fails a disabled or malformed-decoded forced Research capability closed before mutation", async () => {
+    const draft = "preserve this unavailable Research draft";
+    const state = stateFor("A");
+    state.messageInput = draft;
+    state.mode = "expert";
+    state.selectedAgent = "InSilicoResearchAgent";
+    const originalRenderedChat = state.renderedChat;
+
+    await makeComposable({
+      researchInput: researchInputCapability({
+        enabled: false,
+        max_user_query_chars: 0,
+        max_attachments_per_request: 0,
+        max_research_dataset_paths: 0,
+        max_research_input_references: 0,
+      }),
+    }).sendMessage();
+
+    expect(mockGetQueryAbortable).not.toHaveBeenCalled();
+    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
+    expect(state.messageInput).toBe(draft);
+    expect(state.renderedChat).toBe(originalRenderedChat);
+    expect(currentChat.value?.messages).toEqual([]);
+    expect(state.isSending).toBe(false);
+    expect(state.activeRequestId).toBe("");
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      "agents.research.unavailableMessage"
+    );
+  });
+
+  it("does not apply a disabled Research capability to autonomous Expert routing", async () => {
+    const state = stateFor("A");
+    state.messageInput = "route autonomously";
+    state.mode = "expert";
+    state.selectedAgent = "";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "InSilicoResearchAgent",
+          answer: "",
+          status: "RUNNING",
+          id: "autonomous-research",
+          bot_run_id: "run-autonomous-research",
+        },
+      })
+    );
+
+    await makeComposable({
+      researchInput: researchInputCapability({
+        enabled: false,
+        max_user_query_chars: 0,
+        max_attachments_per_request: 0,
+        max_research_dataset_paths: 0,
+        max_research_input_references: 0,
+      }),
+    }).sendMessage();
+
+    expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+    expect(ElMessage.warning).not.toHaveBeenCalled();
+    const formData = queryCallAt(0, "autonomous Expert query")[0] as FormData;
+    expect(formData.get("tool")).toBe("");
+    expect(formData.get("query")).toBe("route autonomously");
   });
 
   it("does not apply the negotiated Research limit to another forced Expert agent", async () => {
@@ -274,7 +365,9 @@ describe("useSendMessage", () => {
       })
     );
 
-    await makeComposable(2).sendMessage();
+    await makeComposable({
+      researchInput: researchInputCapability({ max_user_query_chars: 2 }),
+    }).sendMessage();
 
     expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
   });

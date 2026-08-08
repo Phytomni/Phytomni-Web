@@ -44,10 +44,19 @@ const mocks = vi.hoisted(() => {
     attachmentChannels: ["document", "dataset"],
     artifacts: true,
   };
+  const researchInputCapability = {
+    enabled: true,
+    protocol: "research_input_resolution_v1",
+    max_user_query_chars: 131072,
+    max_attachments_per_request: 64,
+    max_research_dataset_paths: 64,
+    max_research_input_references: 128,
+  };
   return {
     state,
     chatState,
     analystCapability,
+    researchInputCapability,
     submit: vi.fn().mockResolvedValue(null),
     cancel: vi.fn(),
     reset: vi.fn(),
@@ -96,14 +105,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
       },
     },
     researchInput: {
-      value: {
-        enabled: true,
-        protocol: "research_input_resolution_v1",
-        max_user_query_chars: 131072,
-        max_attachments_per_request: 64,
-        max_research_dataset_paths: 64,
-        max_research_input_references: 128,
-      },
+      value: mocks.researchInputCapability,
     },
     load: mocks.load,
   }),
@@ -196,6 +198,14 @@ function makeUnifiedAttachmentSurface(): UnifiedAttachmentSurface {
     mocks.uploadQueue.hasBlockingUploads.value = false;
     mocks.analystCapability.attachments = true;
     mocks.analystCapability.attachmentChannels = ["document", "dataset"];
+    Object.assign(mocks.researchInputCapability, {
+      enabled: true,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    });
     mocks.submit.mockReset();
     mocks.submit.mockResolvedValue(null);
     mocks.uploadQueue.queueFiles.mockClear();
@@ -417,6 +427,14 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     ];
     mocks.analystCapability.attachments = true;
     mocks.analystCapability.attachmentChannels = ["document", "dataset"];
+    Object.assign(mocks.researchInputCapability, {
+      enabled: true,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    });
   });
 
   afterEach(() => {
@@ -467,6 +485,25 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       query: rawQuery,
       attachments: [{ asset_id: "file_dataset_1234567890" }],
     });
+    wrapper.unmount();
+  });
+
+  it("renders the existing unavailable surface for incompatible Research input", () => {
+    Object.assign(mocks.researchInputCapability, {
+      enabled: false,
+      max_user_query_chars: 0,
+      max_attachments_per_request: 0,
+      max_research_dataset_paths: 0,
+      max_research_input_references: 0,
+    });
+
+    const wrapper = mountWorkspace("InSilicoResearchAgent");
+    const unavailable = wrapper.get('[data-test="research-unavailable"]');
+
+    expect(unavailable.attributes("role")).toBe("status");
+    expect(unavailable.attributes("aria-live")).toBe("polite");
+    expect(wrapper.find("form.research-agent-form").exists()).toBe(false);
+    expect(mocks.submit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
