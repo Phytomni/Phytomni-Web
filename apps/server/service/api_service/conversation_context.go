@@ -27,9 +27,13 @@ const (
 	maxPersistedModeLockStateBytes    = 16
 	maxPersistedLedgerHashBytes       = 128
 	maxPersistedReplacementQueryBytes = rxBot.HardMaxUserQueryChars * utf8.UTFMax
-	maxPersistedConversationBytes     = maxPersistedReplacementQueryBytes + 1<<20
-	maxPersistedReplacementFileBytes  = 4 << 10
-	maxPersistedReplacementPathBytes  = 8 << 10
+	// encoding/json escapes <, >, &, U+2028, and U+2029 as six-byte \uXXXX
+	// sequences. Keep the serialized envelope large enough for any semantically
+	// valid hard-limit query while the raw UTF-8 byte bound remains unchanged.
+	maxPersistedJSONEscapedRuneBytes = 6
+	maxPersistedConversationBytes    = rxBot.HardMaxUserQueryChars*maxPersistedJSONEscapedRuneBytes + 1<<20
+	maxPersistedReplacementFileBytes = 4 << 10
+	maxPersistedReplacementPathBytes = 8 << 10
 )
 
 var (
@@ -173,6 +177,9 @@ func (value persistedConversationReplacement) validate() error {
 		maxPersistedReplacementQueryBytes,
 	); err != nil {
 		return err
+	}
+	if utf8.RuneCountInString(value.Query) > rxBot.HardMaxUserQueryChars {
+		return persistedContextError("replacement.query exceeds bounds")
 	}
 	if strings.TrimSpace(value.Query) == "" {
 		return persistedContextError("replacement.query is required")

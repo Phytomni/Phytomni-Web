@@ -133,7 +133,7 @@ func TestLongResearchSqlLoggerParameterized(t *testing.T) {
 	prefix := paperMarker + "\n"
 	suffix := "\n" + pathMarker
 	fillerCount := maxCodePoints - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
-	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	query := prefix + strings.Repeat("\u7A3B", fillerCount) + suffix
 	if got := utf8.RuneCountInString(query); got != maxCodePoints {
 		t.Fatalf("synthetic query code points = %d, want %d", got, maxCodePoints)
 	}

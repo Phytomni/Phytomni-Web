@@ -2342,21 +2342,17 @@ func parseHistory(s string) []rxBot.ChatMessage {
 	if json.Unmarshal([]byte(s), &msgs) != nil {
 		return nil
 	}
-	const (
-		maxMessages     = 20
-		maxContentRunes = 32 * 1024
-	)
 	clean := make([]rxBot.ChatMessage, 0, len(msgs))
 	for _, msg := range msgs {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
 		content := strings.TrimSpace(msg.Content)
-		if (role != "user" && role != "assistant") || content == "" || utf8.RuneCountInString(content) > maxContentRunes {
+		if (role != "user" && role != "assistant") || content == "" || utf8.RuneCountInString(content) > maxQueryHistoryContentRunes {
 			continue
 		}
 		clean = append(clean, rxBot.ChatMessage{Role: role, Content: content})
 	}
-	if len(clean) > maxMessages {
-		clean = clean[len(clean)-maxMessages:]
+	if len(clean) > maxQueryHistoryMessages {
+		clean = clean[len(clean)-maxQueryHistoryMessages:]
 	}
 	return clean
 }

@@ -55,7 +55,7 @@ func syntheticLongResearchQuery(t *testing.T) string {
 	if fillerCount < 1 {
 		t.Fatal("synthetic Research markers exceed the query boundary")
 	}
-	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	query := prefix + strings.Repeat("\u7A3B", fillerCount) + suffix
 	if got := utf8.RuneCountInString(query); got != rxBot.DefaultMaxUserQueryChars {
 		t.Fatalf("synthetic query code points = %d, want %d", got, rxBot.DefaultMaxUserQueryChars)
 	}
@@ -71,8 +71,77 @@ func TestLongResearchV1CurrentMessageBoundary(t *testing.T) {
 	if err := validateV1CurrentMessage(query); err != nil {
 		t.Fatalf("exact Research boundary rejected: %v", err)
 	}
-	if !errors.Is(validateV1CurrentMessage(query+"稻"), ErrInvalidChatRouting) {
+	if !errors.Is(validateV1CurrentMessage(query+"\u7A3B"), ErrInvalidChatRouting) {
 		t.Fatal("Research query above the configured V1 boundary was accepted")
+	}
+}
+
+func TestV1AllocationAcceptsWorstCaseJSONEscapingForAppendAndReplace(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		MaxQueryChars:      rxBot.HardMaxUserQueryChars,
+		MultiturnV1Enabled: true,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	query := strings.Repeat("<", rxBot.HardMaxUserQueryChars)
+	dialogueID := "77777777-7777-4777-8777-777777777777"
+	service := NewService()
+	appendSubmission, err := service.allocateV1Submission(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: query, Mode: "instant", ClientTurnID: "escape-append-1",
+		},
+		v1SubmissionTarget{
+			dialogueID: dialogueID,
+			mode:       "instant",
+			operation:  "append",
+		},
+		AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("allocate hard-limit append: %v", err)
+	}
+	if appendSubmission.row.Query != query {
+		t.Fatal("hard-limit append query was not persisted exactly")
+	}
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ?", appendSubmission.row.Id).
+		Update("status", statusSucceeded).Error; err != nil {
+		t.Fatalf("accept append row for replacement: %v", err)
+	}
+
+	replaceSubmission, err := service.allocateV1Submission(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: query, Mode: "instant", ClientTurnID: "escape-replace-1",
+			RefreshId: appendSubmission.row.Id,
+		},
+		v1SubmissionTarget{
+			dialogueID: dialogueID,
+			mode:       "instant",
+			operation:  "replace",
+		},
+		AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("allocate hard-limit replacement: %v", err)
+	}
+	private, err := LoadBotConversationContext(
+		context.Background(),
+		"alice",
+		replaceSubmission.row.Id,
+	)
+	if err != nil {
+		t.Fatalf("load hard-limit replacement: %v", err)
+	}
+	if private.Replacement == nil || private.Replacement.Query != query {
+		t.Fatal("hard-limit replacement query was not persisted exactly")
 	}
 }
 
@@ -596,7 +665,7 @@ func TestQuerySubmissionBoundsLegacyBlockingConversationTitle(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	var hit string
 	botRouter(t, &hit)
-	rawQuery := strings.Repeat("稻", 161) + "\nignored"
+	rawQuery := strings.Repeat("\u7A3B", 161) + "\nignored"
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query: rawQuery, Mode: "instant",
@@ -611,7 +680,7 @@ func TestQuerySubmissionBoundsLegacyBlockingConversationTitle(t *testing.T) {
 	if row.Query != rawQuery {
 		t.Fatal("blocking submission changed the stored raw query")
 	}
-	if row.TitleQuery != strings.Repeat("稻", 160) {
+	if row.TitleQuery != strings.Repeat("\u7A3B", 160) {
 		t.Fatalf("stored title has %d code points, want 160", len([]rune(row.TitleQuery)))
 	}
 }

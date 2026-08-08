@@ -102,11 +102,11 @@ func TestConversationEnvelopeV1RejectsUnsafeValues(t *testing.T) {
 
 func TestConversationEnvelopeAllowsExtendedCurrentButBoundsHistory(t *testing.T) {
 	envelope := validConversationEnvelope()
-	envelope.CurrentMessage.Content = strings.Repeat("稻", 131_072)
+	envelope.CurrentMessage.Content = strings.Repeat("\u7A3B", 131_072)
 	if err := envelope.Validate(); err != nil {
 		t.Fatalf("current rejected: %v", err)
 	}
-	envelope.HistoryDelta[0].Content = strings.Repeat("稻", 32_769)
+	envelope.HistoryDelta[0].Content = strings.Repeat("\u7A3B", 32_769)
 	if err := envelope.Validate(); err == nil {
 		t.Fatal("oversized history accepted")
 	}

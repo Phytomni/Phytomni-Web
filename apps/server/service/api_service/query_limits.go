@@ -7,8 +7,14 @@ import (
 )
 
 const (
-	queryControlBodyFloor     int64 = 2 << 20
-	queryControlAuxiliaryRoom int64 = 1 << 20
+	queryControlBodyFloor       int64 = 2 << 20
+	queryControlAuxiliaryRoom   int64 = 1 << 20
+	maxQueryHistoryMessages           = 20
+	maxQueryHistoryContentRunes       = 32 * 1024
+
+	// MaxQueryAttachmentsJSONBytes is the handler's raw bound for the JSON array
+	// of opaque attachment references carried in the multipart control body.
+	MaxQueryAttachmentsJSONBytes int64 = 64 << 10
 )
 
 var (
@@ -42,7 +48,10 @@ func conversationTitle(raw string) string {
 }
 
 func QueryControlBodyLimit(maxChars int) int64 {
-	candidate := int64(maxChars)*utf8.UTFMax + queryControlAuxiliaryRoom
+	candidate := int64(maxChars)*utf8.UTFMax +
+		int64(maxQueryHistoryMessages*maxQueryHistoryContentRunes)*utf8.UTFMax +
+		MaxQueryAttachmentsJSONBytes +
+		queryControlAuxiliaryRoom
 	if candidate < queryControlBodyFloor {
 		return queryControlBodyFloor
 	}

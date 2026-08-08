@@ -47,7 +47,7 @@ func TestA2uiRedactRejectsMalformedEnvelope(t *testing.T) {
 func TestA2uiRedactRejectsInvalidIdentifiers(t *testing.T) {
 	for _, body := range [][]byte{
 		[]byte(`{"surface_id":7,"widget":"form","action_id":"act-1","run_id":"run-1","payload":{}}`),
-		[]byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":"form","action_id":%q,"run_id":"run-1","payload":{}}`, strings.Repeat("界", 257))),
+		[]byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":"form","action_id":%q,"run_id":"run-1","payload":{}}`, strings.Repeat("\u754C", 257))),
 	} {
 		if got := redactA2uiActionBody(body); got != "[redacted: invalid a2ui action]" {
 			t.Fatalf("invalid A2UI identifier = %q, want fixed placeholder", got)
@@ -91,7 +91,7 @@ func TestLongResearchMultipartRedactionDropsBody(t *testing.T) {
 	prefix := paperMarker + "\n"
 	suffix := "\n" + pathMarker
 	fillerCount := maxCodePoints - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
-	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	query := prefix + strings.Repeat("\u7A3B", fillerCount) + suffix
 	if got := utf8.RuneCountInString(query); got != maxCodePoints {
 		t.Fatalf("synthetic query code points = %d, want %d", got, maxCodePoints)
 	}

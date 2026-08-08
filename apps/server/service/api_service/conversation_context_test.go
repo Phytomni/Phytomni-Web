@@ -372,3 +372,40 @@ func TestPersistedReplacementAllowsExtendedQueryAndRejectsHardByteOverflow(t *te
 		t.Fatalf("over-hard replacement query error = %v", err)
 	}
 }
+
+func TestPersistedReplacementAcceptsWorstCaseJSONEscapingAtHardLimit(t *testing.T) {
+	query := strings.Repeat("<", rxBot.HardMaxUserQueryChars)
+	value := validPersistedConversationContext()
+	value.Replacement = &persistedConversationReplacement{
+		ClientTurnID: "refresh-turn-json-escape",
+		Query:        query,
+		ToolName:     "ChatAgent",
+		Mode:         "instant",
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("hard-limit JSON-escaped replacement rejected: %v", err)
+	}
+	var decoded persistedConversationContext
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("decode hard-limit JSON-escaped replacement: %v", err)
+	}
+	if decoded.Replacement == nil || decoded.Replacement.Query != query {
+		t.Fatal("hard-limit JSON-escaped replacement did not round-trip exactly")
+	}
+}
+
+func TestPersistedReplacementRejectsSemanticHardLimitOverflow(t *testing.T) {
+	value := validPersistedConversationContext()
+	value.Replacement = &persistedConversationReplacement{
+		ClientTurnID: "refresh-turn-semantic-overflow",
+		Query:        strings.Repeat("x", rxBot.HardMaxUserQueryChars+1),
+		ToolName:     "ChatAgent",
+		Mode:         "instant",
+	}
+
+	if _, err := json.Marshal(value); !errors.Is(err, ErrInvalidBotConversationContext) {
+		t.Fatalf("semantic replacement overflow error = %v", err)
+	}
+}

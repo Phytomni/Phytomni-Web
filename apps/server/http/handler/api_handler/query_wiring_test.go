@@ -75,16 +75,71 @@ func TestApiQuery_DisabledGatewayWiring(t *testing.T) {
 
 func TestQueryRejectsOversizedUnicode(t *testing.T) {
 	previousConfig := rxBot.BotConfig
-	rxBot.BotConfig = nil
+	botCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		botCalls++
+	}))
+	t.Cleanup(server.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL:       server.URL,
+		ProxyEnabled:  true,
+		MaxQueryChars: rxBot.DefaultMaxUserQueryChars,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
-	c, w := newQueryRequest(t, strings.Repeat("稻", rxBot.DefaultMaxUserQueryChars+1))
+	c, w := newQueryRequest(t, strings.Repeat("\u7A3B", rxBot.DefaultMaxUserQueryChars+1))
 	c.Set("username", "alice")
 
 	NewHandler().Query(c)
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status=%d body=%s, want 413", w.Code, w.Body.String())
+	}
+	if botCalls != 0 {
+		t.Fatalf("oversized query reached Bot %d time(s), want 0", botCalls)
+	}
+}
+
+func TestQueryRejectsControlBodyOverDerivedLimitBeforeBot(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	botCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		botCalls++
+	}))
+	t.Cleanup(server.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL:       server.URL,
+		ProxyEnabled:  true,
+		MaxQueryChars: rxBot.DefaultMaxUserQueryChars,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("query", "bounded query"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("history", strings.Repeat("x", 5<<20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("username", "alice")
+	i18n.Localize()(c)
+
+	NewHandler().Query(c)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s, want 413", w.Code, w.Body.String())
+	}
+	if botCalls != 0 {
+		t.Fatalf("over-limit control body reached Bot %d time(s), want 0", botCalls)
 	}
 }
 
@@ -100,7 +155,7 @@ func TestLongResearchQueryAcceptsMaximumUnicode(t *testing.T) {
 	prefix := paperMarker + "\n"
 	suffix := "\n" + pathMarker
 	fillerCount := rxBot.DefaultMaxUserQueryChars - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
-	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	query := prefix + strings.Repeat("\u7A3B", fillerCount) + suffix
 	if got := utf8.RuneCountInString(query); got != rxBot.DefaultMaxUserQueryChars {
 		t.Fatalf("synthetic query code points = %d, want %d", got, rxBot.DefaultMaxUserQueryChars)
 	}
@@ -519,7 +574,7 @@ func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testin
 		message  string
 	}{
 		{name: "English", language: "en-US", message: "Research input compatibility is temporarily unavailable"},
-		{name: "Chinese", language: "zh-CN", message: "研究输入兼容能力暂时不可用"},
+		{name: "Chinese", language: "zh-CN", message: "\u7814\u7A76\u8F93\u5165\u517C\u5BB9\u80FD\u529B\u6682\u65F6\u4E0D\u53EF\u7528"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

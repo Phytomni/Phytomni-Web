@@ -45,7 +45,7 @@ func TestParseHistoryBoundsContentByUnicodeCodePoints(t *testing.T) {
 		unit string
 	}{
 		{name: "ASCII", unit: "x"},
-		{name: "Chinese", unit: "稻"},
+		{name: "Chinese", unit: "\u7A3B"},
 		{name: "emoji", unit: "🧬"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -253,7 +253,7 @@ func TestContextRebuildUsesAcceptedOwnerScopedSummariesOnly(t *testing.T) {
 func TestConversationLedgerPreservesExtendedCurrentAndBoundsPriorHistory(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	dialogueID := "44444444-4444-4444-8444-444444444444"
-	priorQuery := strings.Repeat("稻", 131_072)
+	priorQuery := strings.Repeat("\u7A3B", 131_072)
 	currentQuery := strings.Repeat("🧬", 131_072)
 	prior := model.QuestionAgentLog{
 		Id: 1, DialogueId: dialogueID, UserName: "alice",

@@ -164,13 +164,11 @@ func parseArtifactIDs(raw string) ([]string, bool) {
 	return artifactIDs, true
 }
 
-const maxQueryAttachmentsJSONBytes = 64 << 10
-
 // parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
 // future authority fields out of the Chat/Agent request contract.
 func parseAssetAttachments(raw string) ([]rxBot.AssetAttachmentRef, bool) {
-	if len(raw) > maxQueryAttachmentsJSONBytes {
+	if int64(len(raw)) > api_service.MaxQueryAttachmentsJSONBytes {
 		return nil, false
 	}
 	raw = strings.TrimSpace(raw)
