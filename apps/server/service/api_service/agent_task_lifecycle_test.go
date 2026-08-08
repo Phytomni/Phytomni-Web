@@ -487,7 +487,7 @@ func TestLifecyclePhaseMapsResearchWorkStages(t *testing.T) {
 		"report_assembly":  "FINALIZING",
 	}
 	for stage, want := range cases {
-		got, terminal := lifecyclePhase("RUNNING", stage, 0)
+		got, terminal := lifecyclePhase("RUNNING", stage)
 		if got != want || terminal {
 			t.Fatalf("%s => %s/%v, want %s/false", stage, got, terminal, want)
 		}
@@ -496,7 +496,7 @@ func TestLifecyclePhaseMapsResearchWorkStages(t *testing.T) {
 
 func TestLifecyclePhaseKeepsLegacyRunningGeneric(t *testing.T) {
 	for _, stage := range []string{"", "unknown", strings.Repeat("x", 65)} {
-		got, terminal := lifecyclePhase("RUNNING", stage, 0)
+		got, terminal := lifecyclePhase("RUNNING", stage)
 		if got != "RUNNING" || terminal {
 			t.Fatalf("stage=%q => %s/%v, want RUNNING/false", stage, got, terminal)
 		}
@@ -516,7 +516,7 @@ func TestLifecyclePhaseTerminalAuthority(t *testing.T) {
 		{status: "CANCELLED", want: "CANCELLED", terminal: true},
 	}
 	for _, tt := range tests {
-		got, terminal := lifecyclePhase(tt.status, "", 0)
+		got, terminal := lifecyclePhase(tt.status, "")
 		if got != tt.want || terminal != tt.terminal {
 			t.Fatalf("status=%q => %s/%v, want %s/%v", tt.status, got, terminal, tt.want, tt.terminal)
 		}

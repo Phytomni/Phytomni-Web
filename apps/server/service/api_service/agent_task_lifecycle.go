@@ -126,7 +126,7 @@ func rowIsTerminal(status string) bool {
 func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, errorCode *string) AgentTaskLifecycleDTO {
 	projection := lifecycleStoredProjection(row)
 	childCount := boundedLifecycleCount(projection.ChildTaskCount)
-	phase, terminal := lifecyclePhase(lifecycleScientificStatus(row, projection), projection.WorkStage, childCount)
+	phase, terminal := lifecyclePhase(lifecycleScientificStatus(row, projection), projection.WorkStage)
 	phase, terminal = lifecycleDeliveryPhase(phase, terminal, projection)
 
 	revision := projection.ReportRevision
@@ -218,7 +218,7 @@ func lifecycleStoredProjection(row *model.QuestionAgentLog) BotRunProjection {
 	return projection
 }
 
-func lifecyclePhase(status, workStage string, childCount int) (string, bool) {
+func lifecyclePhase(status, workStage string) (string, bool) {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
 	case "QUEUED", "PENDING", "ACCEPTED":
 		return "PREPARING", false
