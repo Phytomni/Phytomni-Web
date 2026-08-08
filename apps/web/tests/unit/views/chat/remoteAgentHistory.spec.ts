@@ -111,7 +111,7 @@ describe("findRemoteAgentHistorySnapshot", () => {
     );
   });
 
-  it("continues past an explicit dialogue mismatch and accepts legacy null dialogue", () => {
+  it("continues past an explicit dialogue mismatch and accepts legacy nullish dialogue", () => {
     const wrongDialogue = {
       ...baseRow,
       dialogue_id: "dialogue-foreign",
@@ -133,16 +133,58 @@ describe("findRemoteAgentHistorySnapshot", () => {
         "dialogue-42"
       )?.projection.finalReport
     ).toBe("Exact dialogue report");
-    expect(
-      findRemoteAgentHistorySnapshot(
-        [{ ...exactDialogue, dialogue_id: null }],
-        "InSilicoResearchAgent",
-        "run-research",
-        "19",
-        "dialogue-42"
-      )?.dialogueId
-    ).toBeNull();
+    const absentDialogue = { ...exactDialogue } as Record<string, unknown>;
+    delete absentDialogue.dialogue_id;
+    for (const legacyRow of [
+      absentDialogue,
+      { ...exactDialogue, dialogue_id: undefined },
+      { ...exactDialogue, dialogue_id: null },
+    ]) {
+      expect(
+        findRemoteAgentHistorySnapshot(
+          [legacyRow],
+          "InSilicoResearchAgent",
+          "run-research",
+          "19",
+          "dialogue-42"
+        )?.dialogueId
+      ).toBeNull();
+    }
   });
+
+  it.each([
+    ["an empty string", "", "dialogue-42"],
+    ["illegal characters", "dialogue/foreign", "dialogue-42"],
+    ["an object", { id: "dialogue-42" }, "dialogue-42"],
+    ["a safe number", 42, "42"],
+    ["an unsafe number", Number.MAX_SAFE_INTEGER + 1, "dialogue-42"],
+  ])(
+    "skips a row with %s as its explicit dialogue identity",
+    (_description, invalidDialogueId, expectedDialogueId) => {
+      const invalidDialogue = {
+        ...baseRow,
+        dialogue_id: invalidDialogueId,
+        status: "SUCCEEDED",
+        answer: JSON.stringify({ final_report: "Invalid dialogue report" }),
+      };
+      const exactDialogue = {
+        ...baseRow,
+        dialogue_id: expectedDialogueId,
+        status: "SUCCEEDED",
+        answer: JSON.stringify({ final_report: "Exact dialogue report" }),
+      };
+
+      expect(
+        findRemoteAgentHistorySnapshot(
+          [invalidDialogue, exactDialogue],
+          "InSilicoResearchAgent",
+          "run-research",
+          "19",
+          expectedDialogueId
+        )?.projection.finalReport
+      ).toBe("Exact dialogue report");
+    }
+  );
 
   it("hydrates v1 delivery and opaque artifact links without legacy OBS paths", () => {
     const snapshot = findRemoteAgentHistorySnapshot(

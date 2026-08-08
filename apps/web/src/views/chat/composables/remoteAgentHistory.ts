@@ -96,6 +96,16 @@ function snapshotFromHistoryRow(
   }
   const rowId = safeHistoryIdentity(row.id, SAFE_ROW_ID);
   if (!rowId) return null;
+  const rawDialogueId = row.dialogue_id;
+  const dialogueId =
+    rawDialogueId === undefined || rawDialogueId === null
+      ? null
+      : typeof rawDialogueId === "string"
+        ? safeHistoryIdentity(rawDialogueId, SAFE_DIALOGUE_ID)
+        : null;
+  if (rawDialogueId !== undefined && rawDialogueId !== null && !dialogueId) {
+    return null;
+  }
 
   let answerPayload: unknown = row.answer;
   if (typeof row.answer === "string" && row.answer.trim() !== "") {
@@ -151,7 +161,7 @@ function snapshotFromHistoryRow(
           rowArtifacts.length > 0 ? rowArtifacts : projection.artifacts,
       },
       rowId,
-      dialogueId: safeHistoryIdentity(row.dialogue_id, SAFE_DIALOGUE_ID),
+      dialogueId,
       ...(projection.delivery ? { delivery: { ...projection.delivery } } : {}),
       ...(projection.resultArchiveV1
         ? { artifactLinks: artifactLinks.map((artifact) => ({ ...artifact })) }
