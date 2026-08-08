@@ -86,6 +86,7 @@ const baseProps = () => ({
   expertModeEnabled: true,
   modeUsable: true,
   showModeSelector: true,
+  maxAttachments: 64,
   fileList: [] as ResumableUploadItem[],
   hasBlockingUploads: false,
   attachmentTargetAvailable: true,
@@ -217,6 +218,16 @@ describe("ChatComposer", () => {
     expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
       false
     );
+    expect(wrapper.findAllComponents({ name: "MentionSender" })).toHaveLength(
+      1
+    );
+    expect(wrapper.findAll("input")).toHaveLength(0);
+  });
+
+  it("binds the existing upload action to the negotiated attachment limit", () => {
+    const wrapper = mountComposer({ maxAttachments: 64 });
+
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(64);
   });
 
   it("keeps compact DOM order without legacy wrappers", () => {

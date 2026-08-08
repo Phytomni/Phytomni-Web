@@ -340,6 +340,7 @@ const agentKey = computed(() =>
   props.tool === "AnalystAgent" ? "analyst" : "research"
 );
 const capabilities = useBotCapabilities(`${agentKey.value}-agent-view`);
+const uploadCapability = capabilities.upload;
 const routeDialogueId =
   typeof route.query.dialogue_id === "string" ? route.query.dialogue_id : "";
 const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)
@@ -390,12 +391,12 @@ const canPickAttachments = computed(
   () =>
     agentCapability.value?.attachments === true &&
     attachmentChannels.value.length > 0 &&
-    capabilities.upload.value.enabled === true
+    uploadCapability.value.enabled === true
 );
 const uploadQueue = useResumableUploads({
   currentChatId: uploadDialogueId,
   getChatState,
-  uploadCapability: capabilities.upload,
+  uploadCapability,
   username: uploadUsername,
   onValidationError: (error) => {
     const message = attachmentErrorMessage(error);
@@ -415,13 +416,9 @@ const attachmentTargetBlocked = computed(
 function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
   return t(`chat.attachmentErrors.${error.code}`, {
     file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
-    maxFiles: capabilities.upload.value.max_attachments,
-    maxFileMb: Math.ceil(
-      capabilities.upload.value.max_file_bytes / 1024 / 1024
-    ),
-    maxTotalMb: Math.ceil(
-      capabilities.upload.value.max_file_bytes / 1024 / 1024
-    ),
+    maxFiles: uploadCapability.value.max_attachments,
+    maxFileMb: Math.ceil(uploadCapability.value.max_file_bytes / 1024 / 1024),
+    maxTotalMb: Math.ceil(uploadCapability.value.max_file_bytes / 1024 / 1024),
   });
 }
 

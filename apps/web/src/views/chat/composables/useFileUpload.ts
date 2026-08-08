@@ -1,20 +1,14 @@
 import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
 import type { UploadFile as ElementUploadFile } from "element-plus";
+import type { BotUploadCapability } from "@/api/types";
 import type { ChatComposerHandle, ChatUIState } from "../types";
 import type { ResumableUploadItem } from "../upload/types";
 import {
-  RESUMABLE_UPLOAD_LIMITS,
   validateUploadFile,
   type UploadValidationErrorCode,
+  type UploadValidationLimits,
 } from "../upload/validation";
-
-/** Legacy names retained for the composer contract until ChatUploadCard lands. */
-export const CHAT_ATTACHMENT_LIMITS = Object.freeze({
-  maxFileBytes: RESUMABLE_UPLOAD_LIMITS.maxFileBytes,
-  maxTotalBytes: RESUMABLE_UPLOAD_LIMITS.maxFileBytes,
-  maxFiles: RESUMABLE_UPLOAD_LIMITS.maxAttachments,
-});
 
 export type ChatAttachmentValidationError = {
   code: UploadValidationErrorCode | "upload_disabled" | "upload_unavailable";
@@ -54,9 +48,10 @@ function fallbackItem(file: File, index: number): ResumableUploadItem {
 function reportValidation(
   file: File,
   existingCount: number,
+  limits: Readonly<UploadValidationLimits>,
   onValidationError?: (error: ChatAttachmentValidationError) => void
 ): boolean {
-  const result = validateUploadFile(file, existingCount);
+  const result = validateUploadFile(file, existingCount, limits);
   if (result.ok) return true;
   onValidationError?.({ code: result.code, fileName: file.name });
   return false;
@@ -67,6 +62,7 @@ export function useFileUpload(opts: {
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
+  uploadCapability: Ref<BotUploadCapability>;
   scrollToBottom: () => Promise<void>;
   queueFiles?: (files: readonly File[]) => void | Promise<void>;
   removeUpload?: (item: ResumableUploadItem) => void | Promise<void>;
@@ -77,6 +73,7 @@ export function useFileUpload(opts: {
     currentChatId,
     getChatState,
     composerRef,
+    uploadCapability,
     scrollToBottom,
     queueFiles,
     removeUpload,
@@ -98,6 +95,11 @@ export function useFileUpload(opts: {
     if (!currentChatId.value) return;
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
+    const capability = uploadCapability.value;
+    const limits: Readonly<UploadValidationLimits> = Object.freeze({
+      maxFileBytes: capability.max_file_bytes,
+      maxAttachments: capability.max_attachments,
+    });
 
     if (queueFiles) {
       if (files.length === 0) return;
@@ -114,6 +116,7 @@ export function useFileUpload(opts: {
         reportValidation(
           file,
           chatState.fileList.length + accepted.length,
+          limits,
           onValidationError
         )
       ) {

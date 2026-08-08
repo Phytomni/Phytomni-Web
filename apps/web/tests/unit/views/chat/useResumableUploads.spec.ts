@@ -58,7 +58,7 @@ const enabledCapability: BotUploadCapability = {
   protocol: "obs-multipart-v2",
   upload_origin: "https://upload.example",
   max_file_bytes: 10 * 1024 * 1024 * 1024,
-  max_attachments: 10,
+  max_attachments: 64,
 };
 
 function session(assetId: string, size: number) {
@@ -329,7 +329,7 @@ describe("useResumableUploads", () => {
     const duplicate = fixtureFile("duplicate-at-limit.bam", {
       lastModified: 88,
     });
-    getChatState("A").fileList = Array.from({ length: 10 }, (_, index) =>
+    getChatState("A").fileList = Array.from({ length: 64 }, (_, index) =>
       retainedItem(
         index === 4
           ? duplicate
@@ -352,6 +352,36 @@ describe("useResumableUploads", () => {
     );
     expect(onValidationError).not.toHaveBeenCalled();
     expect(mocks.createUpload).not.toHaveBeenCalled();
+    await queue.dispose();
+  });
+
+  it("accepts attachment 64 and rejects attachment 65 from the negotiated capability", async () => {
+    const { queue, getChatState, onValidationError } = setup();
+    getChatState("A").fileList = Array.from({ length: 63 }, (_, index) =>
+      retainedItem(
+        fixtureFile(`existing-${index}.bam`, { lastModified: index }),
+        "completed",
+        `existing-${index}`
+      )
+    );
+
+    await queue.queueFiles([
+      fixtureFile("attachment-64.bam", { lastModified: 64 }),
+    ]);
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList).toHaveLength(64);
+    });
+    expect(onValidationError).not.toHaveBeenCalled();
+
+    await queue.queueFiles([
+      fixtureFile("attachment-65.bam", { lastModified: 65 }),
+    ]);
+
+    expect(getChatState("A").fileList).toHaveLength(64);
+    expect(onValidationError).toHaveBeenCalledWith({
+      code: "too_many_files",
+      fileName: "attachment-65.bam",
+    });
     await queue.dispose();
   });
 
@@ -433,6 +463,23 @@ describe("useResumableUploads", () => {
         fileName: "blocked.fastq",
       })
     );
+    await queue.dispose();
+  });
+
+  it("rejects files above the negotiated byte limit before creating an upload", async () => {
+    const { queue, capability, onValidationError } = setup();
+    capability.value = {
+      ...enabledCapability,
+      max_file_bytes: 2,
+    };
+
+    await queue.queueFiles([fixtureFile("oversized.fastq")]);
+
+    expect(mocks.createUpload).not.toHaveBeenCalled();
+    expect(onValidationError).toHaveBeenCalledWith({
+      code: "invalid_size",
+      fileName: "oversized.fastq",
+    });
     await queue.dispose();
   });
 

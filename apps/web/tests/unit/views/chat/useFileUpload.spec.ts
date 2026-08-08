@@ -10,10 +10,8 @@ import type {
   UploadFile as ElementUploadFile,
   UploadRawFile,
 } from "element-plus";
-import {
-  CHAT_ATTACHMENT_LIMITS,
-  useFileUpload,
-} from "@/views/chat/composables/useFileUpload";
+import { useFileUpload } from "@/views/chat/composables/useFileUpload";
+import type { BotUploadCapability } from "@/api/types";
 import type {
   ChatComposerHandle,
   ChatUIState,
@@ -30,6 +28,7 @@ describe("useFileUpload", () => {
   let composerRef: Ref<ChatComposerHandle | null>;
   let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
   let onValidationError: ReturnType<typeof vi.fn>;
+  let uploadCapability: Ref<BotUploadCapability>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,6 +43,13 @@ describe("useFileUpload", () => {
     });
     scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     onValidationError = vi.fn();
+    uploadCapability = ref({
+      enabled: true,
+      protocol: "obs-multipart-v2",
+      upload_origin: "https://upload.example",
+      max_file_bytes: 10 * 1024 ** 3,
+      max_attachments: 64,
+    });
   });
 
   function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
@@ -108,6 +114,7 @@ describe("useFileUpload", () => {
       getChatState,
       composerRef,
       scrollToBottom,
+      uploadCapability,
       onValidationError,
       ...overrides,
     });
@@ -159,9 +166,13 @@ describe("useFileUpload", () => {
     expect(onValidationError).not.toHaveBeenCalled();
   });
 
-  it("accepts files through the inclusive 10 GiB limit and rejects only larger files", () => {
+  it("accepts the inclusive negotiated byte limit and rejects only larger files", () => {
     const { handlePastedFiles } = makeComposable();
-    const max = CHAT_ATTACHMENT_LIMITS.maxFileBytes;
+    uploadCapability.value = {
+      ...uploadCapability.value,
+      max_file_bytes: 2,
+    };
+    const max = uploadCapability.value.max_file_bytes;
 
     handlePastedFiles([
       sizedFile("sample.bam", max, "application/octet-stream"),
@@ -178,17 +189,19 @@ describe("useFileUpload", () => {
     );
   });
 
-  it("enforces the ten-file limit for selection and paste", () => {
+  it("accepts attachment 64 and rejects attachment 65 for the legacy queue", () => {
     const { handlePastedFiles } = makeComposable();
-    chatState.fileList = Array.from(
-      { length: CHAT_ATTACHMENT_LIMITS.maxFiles },
-      (_, index) =>
-        uploadItem(sizedFile(`existing-${index}.txt`, 1), `existing-${index}`)
+    chatState.fileList = Array.from({ length: 63 }, (_, index) =>
+      uploadItem(sizedFile(`existing-${index}.txt`, 1), `existing-${index}`)
     );
 
-    handlePastedFiles([sizedFile("extra.txt", 1)]);
+    handlePastedFiles([sizedFile("attachment-64.txt", 1)]);
+    expect(chatState.fileList).toHaveLength(64);
+    expect(onValidationError).not.toHaveBeenCalled();
 
-    expect(chatState.fileList).toHaveLength(CHAT_ATTACHMENT_LIMITS.maxFiles);
+    handlePastedFiles([sizedFile("attachment-65.txt", 1)]);
+
+    expect(chatState.fileList).toHaveLength(64);
     expect(onValidationError).toHaveBeenCalledWith(
       expect.objectContaining({ code: "too_many_files" })
     );
@@ -198,7 +211,7 @@ describe("useFileUpload", () => {
     const queueFiles = vi.fn();
     const duplicate = sizedFile("existing-4.bam", 1, "application/x-bam");
     chatState.fileList = Array.from(
-      { length: CHAT_ATTACHMENT_LIMITS.maxFiles },
+      { length: uploadCapability.value.max_attachments },
       (_, index) =>
         uploadItem(sizedFile(`existing-${index}.bam`, 1), `existing-${index}`)
     );

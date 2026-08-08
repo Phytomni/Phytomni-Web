@@ -102,7 +102,7 @@ const mockBotCapabilities = {
     protocol: "obs-multipart-v2",
     upload_origin: "https://upload.example",
     max_file_bytes: 10 * 1024 * 1024 * 1024,
-    max_attachments: 10,
+    max_attachments: 64,
   }),
   load: vi.fn().mockResolvedValue(undefined),
 };
@@ -363,6 +363,7 @@ function mountChatComposerBehavior(
       expertModeEnabled: true,
       modeUsable: true,
       showModeSelector: true,
+      maxAttachments: 64,
       fileList: [],
       attachmentAnnouncement: "",
       attachmentAnnouncementNonce: 0,
@@ -501,7 +502,7 @@ async function exerciseChatViewSubmission(
     protocol: "obs-multipart-v2",
     upload_origin: "https://upload.example",
     max_file_bytes: 10 * 1024 * 1024 * 1024,
-    max_attachments: 10,
+    max_attachments: 64,
   };
 
   const wrapper = context.mount(ChatView, {
@@ -733,6 +734,18 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     const surface = makeChatUnifiedAttachmentSurface();
     await assertUnifiedAttachmentBehaviorTable(surface);
     await surface.reset();
+  });
+
+  it("uses the negotiated count on the single existing authoring surface", () => {
+    const wrapper = mountChatComposerBehavior({ maxAttachments: 64 });
+
+    expect(wrapper.findAllComponents({ name: "MentionSender" })).toHaveLength(
+      1
+    );
+    expect(wrapper.findAllComponents({ name: "ElUpload" })).toHaveLength(1);
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(64);
+    expect(wrapper.findAll("input")).toHaveLength(0);
+    wrapper.unmount();
   });
 
   it("covers Phase 3B message content branches via shared fixtures", () => {
@@ -1300,7 +1313,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         protocol: "obs-multipart-v2",
         upload_origin: "https://upload.example",
         max_file_bytes: 10 * 1024 * 1024 * 1024,
-        max_attachments: 10,
+        max_attachments: 64,
       };
 
       const wrapper = context.mount(ChatView, {
@@ -1313,7 +1326,11 @@ describe("ChatInteractionV2 — behavior matrix", () => {
             },
             ChatComposer: {
               name: "ChatComposer",
-              props: ["attachmentTargetAvailable", "attachmentTargetBlocked"],
+              props: [
+                "attachmentTargetAvailable",
+                "attachmentTargetBlocked",
+                "maxAttachments",
+              ],
               setup(
                 _props: unknown,
                 { expose }: { expose: (value: Record<string, unknown>) => void }
@@ -1369,6 +1386,11 @@ describe("ChatInteractionV2 — behavior matrix", () => {
             .findComponent({ name: "ChatComposer" })
             .props("attachmentTargetBlocked")
         ).toBe(!expected);
+        expect(
+          wrapper
+            .findComponent({ name: "ChatComposer" })
+            .props("maxAttachments")
+        ).toBe(64);
       } finally {
         wrapper.unmount();
       }
@@ -1399,7 +1421,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       protocol: "obs-multipart-v2",
       upload_origin: "https://upload.example",
       max_file_bytes: 10 * 1024 * 1024 * 1024,
-      max_attachments: 10,
+      max_attachments: 64,
     };
 
     const wrapper = context.mount(ChatView, {

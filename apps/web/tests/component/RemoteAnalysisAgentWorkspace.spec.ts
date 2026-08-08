@@ -68,6 +68,7 @@ const mocks = vi.hoisted(() => {
       reselectUpload: vi.fn(),
     },
     uploadOptions: null as {
+      uploadCapability?: { value: { max_attachments: number } };
       onDuplicate?: (localId: string, fileName: string) => void;
       onValidationError?: (error: { code: string; fileName?: string }) => void;
     } | null,
@@ -88,7 +89,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
       value: {
         enabled: true,
         max_file_bytes: 10 * 1024 * 1024 * 1024,
-        max_attachments: 10,
+        max_attachments: 64,
       },
     },
     load: mocks.load,
@@ -446,6 +447,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     await input.trigger("change");
 
     expect(wrapper.findAll('[data-test="analyst-files"]')).toHaveLength(1);
+    expect(wrapper.findAll("textarea")).toHaveLength(1);
+    expect(wrapper.findAll('input:not([type="file"])')).toHaveLength(0);
+    expect(input.attributes("type")).toBe("file");
+    expect(mocks.uploadOptions?.uploadCapability?.value.max_attachments).toBe(
+      64
+    );
     expect(input.attributes("accept")).toBeUndefined();
     expect(mocks.uploadQueue.queueFiles).toHaveBeenCalledWith([file]);
     wrapper.unmount();

@@ -406,6 +406,7 @@ export function removeDeletedChat(options: {
                   :expert-mode-enabled="expertModeEnabled"
                   :mode-usable="activeModeEnabled"
                   :show-mode-selector="!currentChat?.messages?.length"
+                  :max-attachments="uploadValidationLimits.maxAttachments"
                   :file-list="fileList"
                   :attachment-announcement="attachmentAnnouncement"
                   :attachment-announcement-nonce="attachmentAnnouncementNonce"
@@ -652,10 +653,10 @@ import { useAgentImages } from "./composables/useAgentImages";
 import { useReactions } from "./composables/useReactions";
 import { useCopyDownload } from "./composables/useCopyDownload";
 import {
-  CHAT_ATTACHMENT_LIMITS,
   useFileUpload,
   type ChatAttachmentValidationError,
 } from "./composables/useFileUpload";
+import type { UploadValidationLimits } from "./upload/validation";
 import { useComposer } from "./composables/useComposer";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
@@ -801,9 +802,9 @@ const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
   const messageKey = `chat.attachmentErrors.${error.code}`;
   const message = t(messageKey, {
     file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
-    maxFiles: CHAT_ATTACHMENT_LIMITS.maxFiles,
-    maxFileMb: CHAT_ATTACHMENT_LIMITS.maxFileBytes / 1024 / 1024,
-    maxTotalMb: CHAT_ATTACHMENT_LIMITS.maxTotalBytes / 1024 / 1024,
+    maxFiles: uploadValidationLimits.value.maxAttachments,
+    maxFileMb: uploadValidationLimits.value.maxFileBytes / 1024 / 1024,
+    maxTotalMb: uploadValidationLimits.value.maxFileBytes / 1024 / 1024,
   });
   ElMessage.warning(message);
   announceAttachment(message);
@@ -1036,6 +1037,12 @@ async function onAttachmentDuplicate(
 }
 
 const botCapabilities = useBotCapabilities("chat");
+const uploadValidationLimits = computed<Readonly<UploadValidationLimits>>(() =>
+  Object.freeze({
+    maxFileBytes: botCapabilities.upload.value.max_file_bytes,
+    maxAttachments: botCapabilities.upload.value.max_attachments,
+  })
+);
 const attachmentTargetAvailable = computed(() => {
   if (!botCapabilities.upload.value.enabled) return false;
 
@@ -1783,6 +1790,7 @@ const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
   currentChatId,
   getChatState,
   composerRef,
+  uploadCapability: botCapabilities.upload,
   scrollToBottom,
   queueFiles: uploadQueue.queueFiles,
   removeUpload: uploadQueue.removeUpload,

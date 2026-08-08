@@ -2,10 +2,15 @@ import type { ResumableUploadItem } from "./types";
 
 export const RESUMABLE_UPLOAD_LIMITS = Object.freeze({
   maxFileBytes: 10 * 1024 * 1024 * 1024,
-  maxAttachments: 10,
+  maxAttachments: 256,
   maxFilenameBytes: 255,
   maxContentTypeBytes: 256,
 });
+
+export interface UploadValidationLimits {
+  readonly maxFileBytes: number;
+  readonly maxAttachments: number;
+}
 
 export type UploadFileMetadata = Pick<
   File,
@@ -87,12 +92,15 @@ function isSafeContentType(value: unknown): value is string {
 /** Validate browser metadata without reading or allocating file bytes. */
 export function validateUploadFile(
   file: UploadFileMetadata,
-  existingCount = 0
+  existingCount = 0,
+  limits: Readonly<UploadValidationLimits> = RESUMABLE_UPLOAD_LIMITS
 ): UploadValidationResult {
   if (
+    !Number.isSafeInteger(limits.maxAttachments) ||
+    limits.maxAttachments < 1 ||
     !Number.isSafeInteger(existingCount) ||
     existingCount < 0 ||
-    existingCount >= RESUMABLE_UPLOAD_LIMITS.maxAttachments
+    existingCount >= limits.maxAttachments
   ) {
     return { ok: false, code: "too_many_files" };
   }
@@ -101,8 +109,10 @@ export function validateUploadFile(
   }
   if (
     !Number.isSafeInteger(file?.size) ||
+    !Number.isSafeInteger(limits.maxFileBytes) ||
+    limits.maxFileBytes < 1 ||
     file.size < 1 ||
-    file.size > RESUMABLE_UPLOAD_LIMITS.maxFileBytes
+    file.size > limits.maxFileBytes
   ) {
     return { ok: false, code: "invalid_size" };
   }

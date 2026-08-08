@@ -89,7 +89,7 @@
             <el-upload
               ref="uploadRef"
               class="upload-demo"
-              :limit="10"
+              :limit="maxAttachments"
               :show-file-list="false"
               :auto-upload="false"
               :disabled="!canQueueFiles"
@@ -217,6 +217,7 @@ const props = defineProps<{
   expertModeEnabled: boolean;
   modeUsable: boolean;
   showModeSelector: boolean;
+  maxAttachments?: number;
   fileList: ResumableUploadItem[];
   attachmentAnnouncement?: string;
   attachmentAnnouncementNonce?: number;

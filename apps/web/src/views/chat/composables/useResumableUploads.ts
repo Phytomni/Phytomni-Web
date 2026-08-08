@@ -28,7 +28,10 @@ import {
   type UploadRecoveryStore,
 } from "@/views/chat/upload/store";
 import type { ResumableUploadItem } from "@/views/chat/upload/types";
-import { validateUploadFile } from "@/views/chat/upload/validation";
+import {
+  validateUploadFile,
+  type UploadValidationLimits,
+} from "@/views/chat/upload/validation";
 import type { ChatUIState } from "../types";
 import type { ChatAttachmentValidationError } from "./useFileUpload";
 
@@ -221,11 +224,15 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
     const dialogueId = options.currentChatId.value;
     if (!dialogueId) return;
     const capability = options.uploadCapability.value;
+    const limits: Readonly<UploadValidationLimits> = Object.freeze({
+      maxFileBytes: capability.max_file_bytes,
+      maxAttachments: capability.max_attachments,
+    });
     const state = stateFor(dialogueId);
     let accountScope: string | null | undefined;
     const engines = mapFor(dialogueId);
     for (const file of files) {
-      const metadataValidation = validateUploadFile(file, 0);
+      const metadataValidation = validateUploadFile(file, 0, limits);
       if (!metadataValidation.ok) {
         options.onValidationError?.({
           code: metadataValidation.code,
@@ -262,14 +269,11 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
         });
         continue;
       }
-      if (state.fileList.length >= capability.max_attachments) {
-        options.onValidationError?.({
-          code: "too_many_files",
-          fileName: file.name,
-        });
-        continue;
-      }
-      const validation = validateUploadFile(file, state.fileList.length);
+      const validation = validateUploadFile(
+        file,
+        state.fileList.length,
+        limits
+      );
       if (!validation.ok) {
         options.onValidationError?.({
           code: validation.code,
