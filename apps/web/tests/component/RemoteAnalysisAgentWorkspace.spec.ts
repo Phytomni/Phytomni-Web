@@ -172,7 +172,10 @@ vi.mock("vue-router", () => ({
 
 function mountWorkspace(
   tool: "AnalystAgent" | "InSilicoResearchAgent" = "AnalystAgent",
-  options: { realArtifactShell?: boolean } = {}
+  options: {
+    realArtifactShell?: boolean;
+    realBotReportState?: boolean;
+  } = {}
 ) {
   const research = tool === "InSilicoResearchAgent";
   const artifactShellStub = options.realArtifactShell
@@ -181,6 +184,13 @@ function mountWorkspace(
         ResearchArtifactShell: {
           template:
             '<section><slot name="content" /><slot name="downloads" /></section>',
+        },
+      };
+  const botReportStateStub = options.realBotReportState
+    ? {}
+    : {
+        BotReportState: {
+          template: '<div data-test="bot-report-state" />',
         },
       };
   return createTestAppContext().mount(RemoteAnalysisAgentWorkspace, {
@@ -192,7 +202,7 @@ function mountWorkspace(
     global: {
       stubs: {
         ...artifactShellStub,
-        BotReportState: { template: '<div data-test="bot-report-state" />' },
+        ...botReportStateStub,
         BotArtifactList: { template: '<div data-test="bot-artifact-list" />' },
       },
     },
@@ -217,6 +227,20 @@ function lifecycle(phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle {
     tracking_degraded: false,
     error_code: null,
   };
+}
+
+async function expectResearchStatusSurfaces(
+  wrapper: ReturnType<typeof mountWorkspace>,
+  label: string
+): Promise<void> {
+  expect(wrapper.get(".research-artifact-header__status").text()).toBe(label);
+  expect(wrapper.get(".bot-report-state__status-label").text()).toBe(label);
+  await wrapper.get('[data-tab-id="activity"]').trigger("click");
+  const activityPanel = wrapper.get('[data-panel-id="activity"]');
+  const activityStatus = wrapper.get('[data-test="research-progress"]');
+  expect(activityPanel.attributes("hidden")).toBeUndefined();
+  expect(activityStatus.isVisible()).toBe(true);
+  expect(activityStatus.text()).toBe(label);
 }
 
 function setActiveRun(
@@ -523,9 +547,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     mocks.lifecycleSnapshot = reactive({ value: null });
     mocks.state.value = {
       ...mocks.state.value,
+      status: "RUNNING",
+      workStage: null,
       phase: "idle",
       projection: null,
       degraded: false,
+      failures: [],
     };
     mocks.lifecycleSnapshot.value = null;
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
@@ -710,6 +737,103 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       expect(wrapper.get(".research-artifact-header__status").text()).toBe(
         label
       );
+
+      wrapper.unmount();
+    }
+  );
+
+  it("renders local Research cancellation as authoritative across every status surface", async () => {
+    setActiveRun({
+      phase: "cancelled",
+      projectionStatus: "CANCELLED",
+      workStage: "report_assembly",
+    });
+    mocks.state.value = {
+      ...mocks.state.value,
+      status: "FAILED",
+      degraded: true,
+      failures: ["analysis task cancelled"],
+    };
+    mocks.lifecycleSnapshot.value = lifecycle("FINALIZING");
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    await expectResearchStatusSurfaces(wrapper, "Cancelled");
+    expect(wrapper.text()).not.toContain(
+      "The report is partial because some analysis was unavailable."
+    );
+    expect(wrapper.text()).not.toContain("Finalizing");
+    expect(wrapper.text()).not.toContain("Failed");
+
+    wrapper.unmount();
+  });
+
+  it("renders hydrated Research cancellation ahead of its retained work stage", async () => {
+    setActiveRun({
+      phase: "running",
+      projectionStatus: "CANCELLED",
+      workStage: "report_assembly",
+    });
+    mocks.state.value = {
+      ...mocks.state.value,
+      status: "FAILED",
+    };
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    await expectResearchStatusSurfaces(wrapper, "Cancelled");
+    expect(wrapper.text()).not.toContain("Finalizing");
+    expect(wrapper.text()).not.toContain("Failed");
+
+    wrapper.unmount();
+  });
+
+  it("keeps a live CANCELLED Research snapshot authoritative", async () => {
+    setActiveRun({
+      phase: "running",
+      projectionStatus: "RUNNING",
+      workStage: "report_assembly",
+    });
+    mocks.lifecycleSnapshot.value = lifecycle("CANCELLED");
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    await expectResearchStatusSurfaces(wrapper, "Cancelled");
+    expect(wrapper.text()).not.toContain("Finalizing");
+    expect(wrapper.text()).not.toContain("Failed");
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["succeeded", "SUCCEEDED", "Report ready"],
+    ["failed", "FAILED", "Failed"],
+  ] as const)(
+    "keeps committed Research %s ahead of a stale CANCELLED snapshot",
+    async (phase, status, label) => {
+      setActiveRun({
+        phase,
+        projectionStatus: status,
+        workStage: "report_assembly",
+      });
+      mocks.state.value = {
+        ...mocks.state.value,
+        status,
+      };
+      mocks.lifecycleSnapshot.value = lifecycle("CANCELLED");
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+        realBotReportState: true,
+      });
+
+      await expectResearchStatusSurfaces(wrapper, label);
+      expect(wrapper.text()).not.toContain("Cancelled");
 
       wrapper.unmount();
     }

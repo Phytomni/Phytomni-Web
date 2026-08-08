@@ -180,7 +180,7 @@
       </form>
 
       <p
-        v-if="displayedState.degraded"
+        v-if="displayedState.degraded && !isResearchCancellation"
         class="analysis-agent-degraded"
         :data-test="`${agentKey}-degraded`"
         role="status"
@@ -239,7 +239,9 @@
               aria-live="polite"
             >
               <p>{{ workspaceStatusLabel }}</p>
-              <p v-if="displayedState.failures.length">
+              <p
+                v-if="displayedState.failures.length && !isResearchCancellation"
+              >
                 {{ t(`${localePrefix}.degraded`) }}
               </p>
             </div>
@@ -524,9 +526,34 @@ const hasRun = computed(
     displayedState.value.projection !== null ||
     displayedState.value.degraded
 );
+const isResearchCancellation = computed(() => {
+  if (props.tool !== "InSilicoResearchAgent") return false;
+  const state = displayedState.value;
+  if (state.phase === "cancelled" || state.projection?.status === "CANCELLED") {
+    return true;
+  }
+  if (
+    state.phase === "succeeded" ||
+    state.phase === "failed" ||
+    state.status === "SUCCEEDED" ||
+    state.status === "FAILED" ||
+    state.projection?.status === "SUCCEEDED" ||
+    state.projection?.status === "FAILED" ||
+    state.projection?.status === "TIMED_OUT"
+  ) {
+    return false;
+  }
+  return remoteLifecycle.snapshot.value?.phase === "CANCELLED";
+});
 const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
   () => {
-    if (displayedState.value.phase === "failed") return "failed";
+    if (
+      displayedState.value.phase === "failed" ||
+      displayedState.value.phase === "cancelled" ||
+      isResearchCancellation.value
+    ) {
+      return "failed";
+    }
     if (displayedState.value.degraded) return "degraded";
     if (displayedState.value.phase === "succeeded") return "complete";
     return "loading";
@@ -546,6 +573,7 @@ const reportStatusLabel = computed(() => {
 });
 const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   if (props.tool !== "InSilicoResearchAgent") return null;
+  if (isResearchCancellation.value) return "CANCELLED";
 
   const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
   if (snapshotPhase) return snapshotPhase;
@@ -577,6 +605,9 @@ const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   return null;
 });
 const workspaceStatusLabel = computed(() => {
+  if (isResearchCancellation.value) {
+    return t("chat.lifecycle.cancelled");
+  }
   if (
     props.tool !== "InSilicoResearchAgent" ||
     reportStatus.value !== "loading" ||
@@ -590,12 +621,16 @@ const reportLabels = computed(() => ({
   loading: workspaceStatusLabel.value,
   degraded: t(`${props.localePrefix}.degraded`),
   complete: t(`${props.localePrefix}.complete`),
-  failed: t("common.failed"),
+  failed: isResearchCancellation.value
+    ? t("chat.lifecycle.cancelled")
+    : t("common.failed"),
 }));
 const reportFailureLabel = computed(() =>
-  displayedState.value.failures.includes("unsupported_asset_format")
-    ? t(`${props.localePrefix}.unsupportedAssetFormat`)
-    : t("common.failed")
+  isResearchCancellation.value
+    ? t("chat.lifecycle.cancelled")
+    : displayedState.value.failures.includes("unsupported_asset_format")
+      ? t(`${props.localePrefix}.unsupportedAssetFormat`)
+      : t("common.failed")
 );
 const tabLabels = computed(() => ({
   content: t(`${props.localePrefix}.report`),
