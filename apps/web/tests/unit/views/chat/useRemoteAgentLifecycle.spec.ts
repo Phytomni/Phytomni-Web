@@ -167,6 +167,156 @@ describe("useRemoteAgentLifecycle", () => {
     }
   );
 
+  it("polls the full Research sequence before one terminal history hydration", async () => {
+    const phases = [
+      "PREPARING",
+      "RESOLVING_INPUTS",
+      "PLANNING",
+      "RUNNING",
+      "FINALIZING",
+      "SUCCEEDED",
+    ] as const;
+    const researchProjection = projection({
+      agent: "InSilicoResearchAgent",
+      runId: "run-research",
+      intermediateReport: "",
+    });
+    const state = ref(
+      runState({
+        runId: "run-research",
+        visibleReport: "",
+        intermediateReport: "",
+        projection: researchProjection,
+        dialogueId: "dialogue-research",
+        messageId: "19",
+      })
+    );
+    mocks.getTaskLifecycle.mockReset();
+    mocks.getAnswerCheck.mockReset();
+    for (const phase of phases) {
+      mocks.getTaskLifecycle.mockResolvedValueOnce({
+        data: lifecycle({
+          phase,
+          terminal: phase === "SUCCEEDED",
+          artifact_summary: {
+            image_count: 0,
+            output_directory_count: 0,
+            has_report: false,
+          },
+        }),
+      });
+    }
+    mocks.getAnswerCheck.mockResolvedValue({
+      code: 200,
+      data: [
+        historyRow({
+          dialogue_id: "dialogue-research",
+          tool_name: "InSilicoResearchAgent",
+          bot_run_id: "run-research",
+          status: "SUCCEEDED",
+          report_revision: 0,
+          answer: JSON.stringify({ final_report: "Final Research report" }),
+        }),
+      ],
+    });
+    const hydrate = vi.fn();
+    const controller = useRemoteAgentLifecycle({
+      tool: "InSilicoResearchAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-research",
+    });
+
+    for (const [index, phase] of phases.entries()) {
+      if (index > 0) await vi.advanceTimersByTimeAsync(1000);
+      await flushAsync();
+      expect(controller.snapshot.value?.phase).toBe(phase);
+      expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(index + 1);
+      if (phase !== "SUCCEEDED") {
+        expect(mocks.getAnswerCheck).not.toHaveBeenCalled();
+        expect(hydrate).not.toHaveBeenCalled();
+      }
+    }
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(hydrate).toHaveBeenCalledOnce();
+    expect(hydrate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-research",
+        status: "SUCCEEDED",
+        finalReport: "Final Research report",
+      }),
+      { dialogueId: "dialogue-research", messageId: "19" }
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(phases.length);
+    controller.dispose();
+  });
+
+  it.each(["FAILED", "CANCELLED"] as const)(
+    "hydrates Research RUNNING to %s without transient success",
+    async (terminalPhase) => {
+      const researchProjection = projection({
+        agent: "InSilicoResearchAgent",
+        runId: "run-research-terminal",
+      });
+      const state = ref(
+        runState({
+          runId: "run-research-terminal",
+          projection: researchProjection,
+          dialogueId: "dialogue-research",
+          messageId: "19",
+        })
+      );
+      mocks.getTaskLifecycle
+        .mockReset()
+        .mockResolvedValueOnce({
+          data: lifecycle({
+            phase: "RUNNING",
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 0,
+              has_report: false,
+            },
+          }),
+        })
+        .mockResolvedValueOnce({
+          data: lifecycle({ phase: terminalPhase, terminal: true }),
+        });
+      mocks.getAnswerCheck.mockReset().mockResolvedValue({
+        code: 200,
+        data: [
+          historyRow({
+            dialogue_id: "dialogue-research",
+            tool_name: "InSilicoResearchAgent",
+            bot_run_id: "run-research-terminal",
+            status: terminalPhase,
+            answer: "",
+          }),
+        ],
+      });
+      const observedStatuses: string[] = [];
+      const hydrate = vi.fn((next: BotRunProjection) => {
+        observedStatuses.push(next.status);
+      });
+      const controller = useRemoteAgentLifecycle({
+        tool: "InSilicoResearchAgent",
+        run: { state, hydrate },
+        dialogueId: "dialogue-research",
+      });
+
+      await flushAsync();
+      expect(hydrate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      await flushAsync();
+
+      expect(observedStatuses).toEqual([terminalPhase]);
+      expect(observedStatuses).not.toContain("SUCCEEDED");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(2);
+      controller.dispose();
+    }
+  );
+
   it("hydrates exact history only when lifecycle material changes and stops terminal polling", async () => {
     const state = ref(runState({ messageId: null }));
     const hydrate = vi.fn((next: BotRunProjection) => {
@@ -419,6 +569,64 @@ describe("useRemoteAgentLifecycle", () => {
     resolveHistory?.({ code: 200, data: [historyRow()] });
     await flushAsync();
     expect(hydrate).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late history response after the same row changes run identity", async () => {
+    let resolveHistory: ((value: unknown) => void) | undefined;
+    mocks.getTaskLifecycle.mockReset().mockResolvedValueOnce({
+      data: lifecycle({ report_revision: 1 }),
+    });
+    mocks.getAnswerCheck.mockReset().mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHistory = resolve;
+        })
+    );
+    const oldProjection = projection({
+      agent: "InSilicoResearchAgent",
+      runId: "run-research-old",
+    });
+    const state = ref(
+      runState({
+        runId: "run-research-old",
+        projection: oldProjection,
+        dialogueId: "dialogue-research",
+        messageId: "19",
+      })
+    );
+    const hydrate = vi.fn();
+    const controller = useRemoteAgentLifecycle({
+      tool: "InSilicoResearchAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-research",
+    });
+    await flushAsync();
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+
+    const nextProjection = projection({
+      agent: "InSilicoResearchAgent",
+      runId: "run-research-new",
+    });
+    state.value = runState({
+      runId: "run-research-new",
+      projection: nextProjection,
+      dialogueId: "dialogue-research",
+      messageId: "19",
+    });
+    resolveHistory?.({
+      code: 200,
+      data: [
+        historyRow({
+          dialogue_id: "dialogue-research",
+          tool_name: "InSilicoResearchAgent",
+          bot_run_id: "run-research-old",
+        }),
+      ],
+    });
+    await flushAsync();
+
+    expect(hydrate).not.toHaveBeenCalled();
+    controller.dispose();
   });
 
   it("leaves tracking degraded and never guesses an invalid row or run identity", async () => {

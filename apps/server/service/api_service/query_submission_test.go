@@ -437,6 +437,62 @@ func TestQuerySubmissionRejectsInvalidAttachmentReferencesBeforeAllocation(t *te
 	}
 }
 
+func TestQuerySubmissionResearchMissingRunIDBeforePersistence(t *testing.T) {
+	tests := []struct {
+		name     string
+		tool     string
+		wantPath string
+	}{
+		{name: "dedicated Research", tool: "InSilicoResearchAgent", wantPath: "/v1/agents/research/runs"},
+		{name: "autonomous Expert selects Research", wantPath: "/v1/query/route"},
+	}
+
+	for index, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			var calls int
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.URL.Path != tt.wantPath {
+					t.Errorf("Bot path = %q, want %q", r.URL.Path, tt.wantPath)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
+			})
+			rxBot.BotConfig.ResearchEnabled = true
+			service := &Service{
+				catalogReader: staticResearchCatalogReader{
+					response: validResearchCapabilityCatalog(),
+				},
+			}
+
+			out, err := service.Query(context.Background(), "alice", QueryInput{
+				Query: "resolve Research inputs", Mode: "expert", Tool: tt.tool,
+				ClientTurnID: fmt.Sprintf("research-run-id-%d", index),
+			})
+			if !errors.Is(err, ErrMissingBotRunID) {
+				t.Fatalf("error = %v, want ErrMissingBotRunID", err)
+			}
+			if out != nil {
+				t.Fatalf("missing run identity returned output: %+v", out)
+			}
+			if calls != 1 {
+				t.Fatalf("Bot calls = %d, want 1", calls)
+			}
+
+			var pollableRows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).
+				Where("status IN ? OR COALESCE(bot_run_id, '') != ''", []string{"SUBMITTING", "RUNNING"}).
+				Count(&pollableRows).Error; err != nil {
+				t.Fatalf("count pollable question rows: %v", err)
+			}
+			if pollableRows != 0 {
+				t.Fatalf("missing Research run identity persisted %d pollable row(s)", pollableRows)
+			}
+		})
+	}
+}
+
 func TestQuerySubmissionAsyncReconcilerRemainsRunningOnly(t *testing.T) {
 	source, err := os.ReadFile("../../cron/task_reconciler.go")
 	if err != nil {

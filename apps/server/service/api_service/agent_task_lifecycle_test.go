@@ -523,6 +523,36 @@ func TestLifecyclePhaseTerminalAuthority(t *testing.T) {
 	}
 }
 
+func TestResearchLifecycleSequenceHasOneTerminalSuccess(t *testing.T) {
+	sequence := []struct {
+		status   string
+		stage    string
+		want     string
+		terminal bool
+	}{
+		{status: "PENDING", want: "PREPARING"},
+		{status: "RUNNING", stage: "input_resolution", want: "RESOLVING_INPUTS"},
+		{status: "RUNNING", stage: "planning", want: "PLANNING"},
+		{status: "RUNNING", stage: "execution", want: "RUNNING"},
+		{status: "RUNNING", stage: "report_assembly", want: "FINALIZING"},
+		{status: "SUCCEEDED", want: "SUCCEEDED", terminal: true},
+	}
+
+	terminalCount := 0
+	for index, step := range sequence {
+		got, terminal := lifecyclePhase(step.status, step.stage)
+		if got != step.want || terminal != step.terminal {
+			t.Fatalf("step %d = %s/%v, want %s/%v", index, got, terminal, step.want, step.terminal)
+		}
+		if terminal {
+			terminalCount++
+		}
+	}
+	if terminalCount != 1 {
+		t.Fatalf("terminal lifecycle steps = %d, want exactly one", terminalCount)
+	}
+}
+
 // Mutation coverage: dropping user_name from the lookup lets a caller probe a
 // foreign row and causes either a Bot call or a distinguishable response.
 func TestAgentTaskLifecycleHidesAbsentAndForeignRows(t *testing.T) {

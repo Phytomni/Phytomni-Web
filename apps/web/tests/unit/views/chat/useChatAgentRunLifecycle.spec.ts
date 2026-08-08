@@ -44,6 +44,145 @@ async function flush(): Promise<void> {
 describe("useChatAgentRunLifecycle", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("keeps the live Research stage sequence owner-scoped until one terminal hydration", async () => {
+    vi.useFakeTimers();
+    const phases = [
+      "PREPARING",
+      "RESOLVING_INPUTS",
+      "PLANNING",
+      "RUNNING",
+      "FINALIZING",
+      "SUCCEEDED",
+    ] as const;
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        dialogue_id: "research",
+        messages: [
+          buildChatMessage({
+            id: "151",
+            tool_name: "InSilicoResearchAgent",
+            status: "RUNNING",
+            content: "",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ research: state });
+    const fetchLifecycle = vi.fn();
+    for (const phase of phases) {
+      fetchLifecycle.mockResolvedValueOnce(
+        response(
+          lifecycle(151, {
+            phase,
+            terminal: phase === "SUCCEEDED",
+          })
+        )
+      );
+    }
+    const reloadChat = vi.fn(async () => {
+      if (state.renderedChat) {
+        state.renderedChat.messages[0] = {
+          ...state.renderedChat.messages[0],
+          status: "SUCCEEDED",
+          content: "Final Research report",
+        };
+      }
+      return "applied" as const;
+    });
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat,
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    for (const [index, phase] of phases.entries()) {
+      if (index > 0) await vi.advanceTimersByTimeAsync(1000);
+      await flush();
+      expect(state.agentRunLifecycles["151"]?.phase).toBe(phase);
+      expect(fetchLifecycle).toHaveBeenCalledTimes(index + 1);
+      if (phase !== "SUCCEEDED") {
+        expect(reloadChat).not.toHaveBeenCalled();
+        expect(state.renderedChat?.messages[0]).toMatchObject({
+          status: "RUNNING",
+          content: "",
+        });
+      }
+    }
+
+    expect(reloadChat).toHaveBeenCalledOnce();
+    expect(state.agentRunLifecycles["151"]).toMatchObject({
+      phase: "SUCCEEDED",
+      terminal: true,
+    });
+    expect(state.renderedChat?.messages[0]).toMatchObject({
+      status: "SUCCEEDED",
+      content: "Final Research report",
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchLifecycle).toHaveBeenCalledTimes(phases.length);
+    coordinator.dispose();
+  });
+
+  it.each(["FAILED", "CANCELLED"] as const)(
+    "settles Research RUNNING to %s without transient success",
+    async (terminalPhase) => {
+      vi.useFakeTimers();
+      const observedStatuses = ["RUNNING"];
+      const state = buildChatState({
+        historyHydration: "ready",
+        renderedChat: {
+          messages: [
+            buildChatMessage({
+              id: "152",
+              tool_name: "InSilicoResearchAgent",
+              status: "RUNNING",
+              content: "",
+            }),
+          ],
+        },
+      });
+      const chatStates = ref({ research: state });
+      const fetchLifecycle = vi
+        .fn()
+        .mockResolvedValueOnce(response(lifecycle(152, { phase: "RUNNING" })))
+        .mockResolvedValueOnce(
+          response(lifecycle(152, { phase: terminalPhase, terminal: true }))
+        );
+      const reloadChat = vi.fn(async () => {
+        observedStatuses.push(terminalPhase);
+        if (state.renderedChat) {
+          state.renderedChat.messages[0] = {
+            ...state.renderedChat.messages[0],
+            status: terminalPhase,
+          };
+        }
+        return "applied" as const;
+      });
+      const coordinator = useChatAgentRunLifecycle({
+        chatStates,
+        getChatState: (dialogueId) => chatStates.value[dialogueId],
+        reloadChat,
+        fetchLifecycle,
+        jitter: () => 0,
+      });
+
+      await flush();
+      expect(reloadChat).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      await flush();
+
+      expect(observedStatuses).toEqual(["RUNNING", terminalPhase]);
+      expect(observedStatuses).not.toContain("SUCCEEDED");
+      expect(reloadChat).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchLifecycle).toHaveBeenCalledTimes(2);
+      coordinator.dispose();
+    }
+  );
+
   it("reloads the first report-bearing Deep Genome snapshot immediately", async () => {
     vi.useFakeTimers();
     const state = buildChatState({
@@ -795,7 +934,7 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
-  it("watches nonterminal background rows in every hydrated dialogue and reloads only material changes", async () => {
+  it("watches background rows and stores phase-only changes without history hydration", async () => {
     vi.useFakeTimers();
     const stateA = buildChatState({
       historyHydration: "ready",
@@ -853,8 +992,7 @@ describe("useChatAgentRunLifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await flush();
 
-    expect(reloadChat).toHaveBeenCalledTimes(1);
-    expect(reloadChat).toHaveBeenCalledWith("a");
+    expect(reloadChat).not.toHaveBeenCalled();
     expect(stateA.agentRunLifecycles["41"]?.phase).toBe("RUNNING");
     expect(stateB.agentRunLifecycles["42"]?.phase).toBe("PREPARING");
     coordinator.dispose();
@@ -1175,9 +1313,32 @@ describe("useChatAgentRunLifecycle", () => {
       });
     const fetchLifecycle = vi
       .fn()
-      .mockResolvedValueOnce(response(lifecycle(91, { phase: "RUNNING" })))
       .mockResolvedValueOnce(
-        response(lifecycle(91, { phase: "SUCCEEDED", terminal: true }))
+        response(
+          lifecycle(91, {
+            phase: "RUNNING",
+            report_revision: 1,
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 0,
+              has_report: true,
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        response(
+          lifecycle(91, {
+            phase: "SUCCEEDED",
+            terminal: true,
+            report_revision: 2,
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 0,
+              has_report: true,
+            },
+          })
+        )
       );
     const coordinator = useChatAgentRunLifecycle({
       chatStates,
@@ -1228,9 +1389,32 @@ describe("useChatAgentRunLifecycle", () => {
     const reloadChat = vi.fn().mockReturnValue(materialReload.promise);
     const fetchLifecycle = vi
       .fn()
-      .mockResolvedValueOnce(response(lifecycle(92, { phase: "RUNNING" })))
       .mockResolvedValueOnce(
-        response(lifecycle(92, { phase: "SUCCEEDED", terminal: true }))
+        response(
+          lifecycle(92, {
+            phase: "RUNNING",
+            report_revision: 1,
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 0,
+              has_report: true,
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        response(
+          lifecycle(92, {
+            phase: "SUCCEEDED",
+            terminal: true,
+            report_revision: 2,
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 0,
+              has_report: true,
+            },
+          })
+        )
       );
     const coordinator = useChatAgentRunLifecycle({
       chatStates,

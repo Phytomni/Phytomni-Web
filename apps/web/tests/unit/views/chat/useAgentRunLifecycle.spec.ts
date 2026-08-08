@@ -136,6 +136,44 @@ describe("useAgentRunLifecycle", () => {
     expect(decoded.terminal).toBe(true);
   });
 
+  it("polls every Research preparation phase and stops at the sole success", async () => {
+    vi.useFakeTimers();
+    const phases = [
+      "PREPARING",
+      "RESOLVING_INPUTS",
+      "PLANNING",
+      "RUNNING",
+      "FINALIZING",
+      "SUCCEEDED",
+    ] as const;
+    const fetchLifecycle = vi.fn();
+    for (const phase of phases) {
+      fetchLifecycle.mockResolvedValueOnce(
+        response(lifecycle({ phase, terminal: phase === "SUCCEEDED" }))
+      );
+    }
+    const poller = useAgentRunLifecycle({
+      scope: "research-sequence",
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    poller.watchRow("42");
+    await flush();
+    expect(poller.snapshots.value["42"]?.phase).toBe("PREPARING");
+
+    for (const phase of phases.slice(1)) {
+      await vi.advanceTimersByTimeAsync(1000);
+      await flush();
+      expect(poller.snapshots.value["42"]?.phase).toBe(phase);
+      expect(fetchLifecycle).toHaveBeenCalledTimes(phases.indexOf(phase) + 1);
+    }
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchLifecycle).toHaveBeenCalledTimes(phases.length);
+    poller.dispose();
+  });
+
   it("schedules unchanged nonterminal rows with capped exponential delays", async () => {
     vi.useFakeTimers();
     const delays: number[] = [];

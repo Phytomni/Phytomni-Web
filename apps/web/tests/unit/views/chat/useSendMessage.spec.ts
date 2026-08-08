@@ -2368,6 +2368,47 @@ describe("useSendMessage", () => {
     expect(stateFor("A").historyQuestion).toBeNull();
   });
 
+  it("keeps an accepted Research row and run identity on the captured dialogue", async () => {
+    const pending = deferred<ApiEnvelope<DecodedQueryData>>();
+    const stateA = stateFor("A");
+    const peerBefore = stateFor("B").renderedChat;
+    stateA.messageInput = "resolve these Research inputs";
+    stateA.mode = "expert";
+    stateA.selectedAgent = "InSilicoResearchAgent";
+    mockGetQueryAbortable.mockReturnValueOnce(pending.promise);
+
+    const sent = makeComposable().sendMessage();
+    await Promise.resolve();
+    currentChatId.value = "B";
+    currentChat.value = { messages: [] };
+    pending.resolve(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          id: "501",
+          dialogue_id: "A",
+          tool_name: "InSilicoResearchAgent",
+          answer: "",
+          status: "RUNNING",
+          bot_run_id: "run-research-owned",
+          follow_up_questions: [],
+        },
+      })
+    );
+    await sent;
+
+    expect(lastMessageFor(stateA, "owned Research response")).toMatchObject({
+      id: "501",
+      tool_name: "InSilicoResearchAgent",
+      status: "RUNNING",
+      botProjection: {
+        runId: "run-research-owned",
+        agent: "InSilicoResearchAgent",
+        status: "RUNNING",
+      },
+    });
+    expect(stateFor("B").renderedChat).toBe(peerBefore);
+  });
+
   it.each(["GeneNetworkAgent", "DigitalDesignAgent"] as const)(
     "%s keeps an accepted empty background response free of refusal copy",
     async (toolName) => {

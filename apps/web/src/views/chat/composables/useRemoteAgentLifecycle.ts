@@ -13,6 +13,21 @@ import { findRemoteAgentHistorySnapshot } from "./remoteAgentHistory";
 const SAFE_ROW_ID = /^[1-9]\d{0,18}$/u;
 const ACTIVE_PHASES = new Set(["submitting", "running", "input_required"]);
 
+function needsHistoryHydration(
+  next: AgentTaskLifecycle,
+  previous?: AgentTaskLifecycle
+): boolean {
+  if (next.terminal) return true;
+  const previousSummary = previous?.artifact_summary;
+  return (
+    next.report_revision > (previous?.report_revision ?? 0) ||
+    (next.artifact_summary.has_report && !previousSummary?.has_report) ||
+    next.artifact_summary.image_count > (previousSummary?.image_count ?? 0) ||
+    next.artifact_summary.output_directory_count >
+      (previousSummary?.output_directory_count ?? 0)
+  );
+}
+
 export interface RemoteAgentLifecycleRun {
   state: Ref<BotRemoteAgentRunState>;
   hydrate: (
@@ -51,7 +66,8 @@ export function useRemoteAgentLifecycle(options: {
     if (
       disposed ||
       generation !== currentGeneration ||
-      trackedRowId.value !== rowId
+      trackedRowId.value !== rowId ||
+      options.run.state.value.projection?.runId !== expectedRunId
     ) {
       return;
     }
@@ -74,7 +90,11 @@ export function useRemoteAgentLifecycle(options: {
 
   const lifecycle = useAgentRunLifecycle({
     scope: `remote-${options.tool}`,
-    onSnapshot: (rowId) => reconcileHistory(rowId),
+    onSnapshot: (rowId, next, previous) => {
+      if (needsHistoryHydration(next, previous)) {
+        return reconcileHistory(rowId);
+      }
+    },
   });
 
   const stopTracking = (): void => {

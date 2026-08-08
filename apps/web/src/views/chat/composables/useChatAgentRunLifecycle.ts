@@ -31,6 +31,21 @@ type ReloadWork = {
   timer?: ReloadTimer;
 };
 
+function needsHistoryHydration(
+  next: AgentTaskLifecycle,
+  previous?: AgentTaskLifecycle
+): boolean {
+  if (next.terminal) return true;
+  const previousSummary = previous?.artifact_summary;
+  return (
+    next.report_revision > (previous?.report_revision ?? 0) ||
+    (next.artifact_summary.has_report && !previousSummary?.has_report) ||
+    next.artifact_summary.image_count > (previousSummary?.image_count ?? 0) ||
+    next.artifact_summary.output_directory_count >
+      (previousSummary?.output_directory_count ?? 0)
+  );
+}
+
 function lifecycleReloadSignature(next: AgentTaskLifecycle): string {
   return [
     next.phase,
@@ -200,14 +215,16 @@ export function useChatAgentRunLifecycle(options: {
     scheduler,
     jitter: options.jitter,
     documentRef: options.documentRef,
-    onSnapshot: (rowId, next) => {
+    onSnapshot: (rowId, next, previous) => {
       const dialogueId = watchedRows.get(rowId);
       if (!dialogueId) return;
       const state = options.chatStates.value[dialogueId];
       if (!state) return;
 
       state.agentRunLifecycles[rowId] = next;
-      requestReload(rowId, dialogueId, state, next);
+      if (needsHistoryHydration(next, previous)) {
+        requestReload(rowId, dialogueId, state, next);
+      }
     },
   });
 
