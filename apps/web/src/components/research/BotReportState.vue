@@ -34,7 +34,7 @@
       data-test="bot-report-content"
     />
     <p
-      v-else-if="state.status !== 'TIMED_OUT'"
+      v-else-if="state.status !== 'TIMED_OUT' && !activeReportHidden"
       class="bot-report-state__empty"
       data-test="bot-report-empty"
     >
@@ -96,19 +96,31 @@ const props = withDefaults(
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
     failureLabel?: string;
+    hideActiveReport?: boolean;
   }>(),
   {
     progress: null,
     updatedAt: null,
     ns: "",
     labels: () => ({}),
+    hideActiveReport: false,
   }
 );
 
 const { t, d } = useI18n();
 const lifecycleMetadata = computed(() => props.state as LifecycleMetadata);
-const reportStatus = computed(() => reportStatusForLifecycle(props.state));
+const activeReportHidden = computed(
+  () =>
+    props.hideActiveReport &&
+    (props.state.status === "RUNNING" ||
+      props.state.status === "INPUT_REQUIRED")
+);
+const reportStatus = computed(() => {
+  const status = reportStatusForLifecycle(props.state);
+  return activeReportHidden.value && status === "complete" ? "loading" : status;
+});
 const reportText = computed(() => {
+  if (activeReportHidden.value) return "";
   const state = props.state;
   if (typeof state.visibleReport === "string" && state.visibleReport.trim()) {
     return state.visibleReport;

@@ -35,9 +35,15 @@ function lifecycle(
   };
 }
 
-function mountReport(state: BotLifecycleState & { reportStage?: ReportStage }) {
+function mountReport(
+  state: BotLifecycleState & { reportStage?: ReportStage },
+  hideActiveReport?: boolean
+) {
   return mountWithApp(BotReportState, {
-    props: { state },
+    props: {
+      state,
+      ...(hideActiveReport === undefined ? {} : { hideActiveReport }),
+    },
     global: {
       stubs: {
         MarkdownViewer: {
@@ -72,6 +78,43 @@ describe("BotReportState", () => {
 
     expect(wrapper.attributes("data-report-status")).toBe(expected);
     expect(wrapper.text()).not.toContain("raw.phytomni_state");
+  });
+
+  it.each([
+    [
+      "final report content",
+      {
+        visibleReport: "# Premature final report",
+        finalReport: "# Premature final report",
+      },
+    ],
+    ["final report stage", { reportStage: "final" as const }],
+  ])("defers active %s when requested", (_name, overrides) => {
+    const wrapper = mountReport(lifecycle(overrides), true);
+
+    expect(wrapper.attributes("data-report-status")).toBe("loading");
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Premature final report");
+  });
+
+  it("renders a successful report when active report deferral is enabled", () => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "SUCCEEDED",
+        reportStage: "final",
+        visibleReport: "# Successful report",
+        finalReport: "# Successful report",
+      }),
+      true
+    );
+
+    expect(wrapper.attributes("data-report-status")).toBe("complete");
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+      "# Successful report"
+    );
   });
 
   it("renders the sanitized report body and a localized timestamp", () => {

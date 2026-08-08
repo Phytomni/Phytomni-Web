@@ -196,6 +196,7 @@ function mountWorkspace(
   tool: "AnalystAgent" | "InSilicoResearchAgent" = "AnalystAgent",
   options: {
     realArtifactShell?: boolean;
+    realBotArtifactList?: boolean;
     realBotReportState?: boolean;
     locale?: "en-US" | "zh-CN";
   } = {}
@@ -216,6 +217,13 @@ function mountWorkspace(
           template: '<div data-test="bot-report-state" />',
         },
       };
+  const botArtifactListStub = options.realBotArtifactList
+    ? {}
+    : {
+        BotArtifactList: {
+          template: '<div data-test="bot-artifact-list" />',
+        },
+      };
   return createTestAppContext({ locale: options.locale }).mount(
     RemoteAnalysisAgentWorkspace,
     {
@@ -228,9 +236,7 @@ function mountWorkspace(
         stubs: {
           ...artifactShellStub,
           ...botReportStateStub,
-          BotArtifactList: {
-            template: '<div data-test="bot-artifact-list" />',
-          },
+          ...botArtifactListStub,
         },
       },
     }
@@ -325,6 +331,37 @@ function setActiveRun(
     dialogueId: "research-agent",
     messageId: "19",
   };
+}
+
+function setReportMaterial(options: {
+  finalReport: string;
+  reportStage: "final" | null;
+  agent?: BotRunProjection["agent"];
+  outputDir: string;
+}): void {
+  const projection = mocks.state.value.projection;
+  if (!projection) throw new Error("active projection required");
+  const artifacts = [
+    {
+      outputDir: options.outputDir,
+      paths: [`${options.outputDir}/report.txt`],
+    },
+  ];
+  mocks.state.value = {
+    ...mocks.state.value,
+    ...(options.reportStage ? { reportStage: options.reportStage } : {}),
+    visibleReport: options.finalReport,
+    finalReport: options.finalReport,
+    artifacts,
+    projection: {
+      ...projection,
+      agent: options.agent ?? projection.agent,
+      reportStage: options.reportStage,
+      reportCompleteness: "complete",
+      finalReport: options.finalReport,
+      artifacts,
+    },
+  } as BotRemoteAgentRunState;
 }
 
 function completedUpload(localId: string, name: string) {
@@ -581,9 +618,18 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       workStage: null,
       phase: "idle",
       projection: null,
+      visibleReport: "",
+      intermediateReport: "",
+      finalReport: "",
+      artifacts: [],
       degraded: false,
       failures: [],
     };
+    delete (
+      mocks.state.value as BotRemoteAgentRunState & {
+        reportStage?: "final";
+      }
+    ).reportStage;
     mocks.lifecycleSnapshot.value = null;
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
@@ -753,6 +799,203 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       expect(activityStatus.isVisible()).toBe(true);
       expect(activityStatus.text()).toBe(label);
     }
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    [
+      "initial RUNNING projection",
+      null,
+      "execution",
+      null,
+      "Premature final report",
+      "Running",
+    ],
+    [
+      "live FINALIZING snapshot",
+      "FINALIZING",
+      "report_assembly",
+      "final",
+      "",
+      "Finalizing",
+    ],
+    [
+      "hydrated RUNNING history",
+      null,
+      "report_assembly",
+      "final",
+      "Premature hydrated report",
+      "Finalizing",
+    ],
+  ] as const)(
+    "keeps %s progress-only despite premature terminal material",
+    async (
+      _source,
+      snapshotPhase,
+      workStage,
+      reportStage,
+      finalReport,
+      expectedLabel
+    ) => {
+      setActiveRun({ workStage });
+      setReportMaterial({
+        finalReport,
+        reportStage,
+        outputDir: "/obs/bucket/premature",
+      });
+      if (snapshotPhase) {
+        mocks.lifecycleSnapshot.value = lifecycle(snapshotPhase);
+      }
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+        realBotArtifactList: true,
+        realBotReportState: true,
+      });
+
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        expectedLabel
+      );
+      expect(
+        wrapper.get(".bot-report-state").attributes("data-report-status")
+      ).toBe("loading");
+      expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+        expectedLabel
+      );
+      const reportState = wrapper.get(".bot-report-state");
+      expect(
+        reportState.find('[data-test="bot-report-content"]').exists()
+      ).toBe(false);
+      expect(reportState.find('[data-test="bot-report-empty"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.find('[data-test="bot-artifact-list"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.text()).not.toContain("Report ready");
+      expect(wrapper.text()).not.toContain("Finished");
+      if (finalReport) {
+        expect(wrapper.text()).not.toContain(finalReport);
+      }
+      await wrapper.get('[data-tab-id="activity"]').trigger("click");
+      expect(wrapper.get('[data-test="research-progress"]').text()).toBe(
+        expectedLabel
+      );
+
+      wrapper.unmount();
+    }
+  );
+
+  it("renders Research report content and artifacts after success", async () => {
+    setActiveRun({
+      phase: "succeeded",
+      projectionStatus: "SUCCEEDED",
+      workStage: "report_assembly",
+    });
+    setReportMaterial({
+      finalReport: "Successful Research report",
+      reportStage: "final",
+      outputDir: "/obs/bucket/succeeded",
+    });
+    mocks.state.value = {
+      ...mocks.state.value,
+      status: "SUCCEEDED",
+    };
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    await expectResearchStatusSurfaces(wrapper, "Report ready");
+    expect(
+      wrapper
+        .get(".bot-report-state")
+        .get('[data-test="bot-report-content"]')
+        .text()
+    ).toContain("Successful Research report");
+    expect(wrapper.find('[data-test="bot-artifact-list"]').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["SUCCEEDED", "Report ready", "complete", true],
+    ["FAILED", "Failed", "failed", false],
+    ["CANCELLED", "Cancelled", "failed", false],
+    ["TIMED_OUT", "Timed out", "failed", false],
+  ] as const)(
+    "uses a live %s Research snapshot for the report body and downloads",
+    async (snapshotPhase, label, reportState, successful) => {
+      setActiveRun({
+        phase: "running",
+        projectionStatus: "RUNNING",
+        workStage: "report_assembly",
+      });
+      setReportMaterial({
+        finalReport: `Live ${snapshotPhase} Research report`,
+        reportStage: "final",
+        outputDir: `/obs/bucket/live-${snapshotPhase.toLowerCase()}`,
+      });
+      mocks.lifecycleSnapshot.value = lifecycle(snapshotPhase);
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+        realBotArtifactList: true,
+        realBotReportState: true,
+      });
+
+      await expectResearchStatusSurfaces(wrapper, label);
+      const report = wrapper.get(".bot-report-state");
+      expect(report.attributes("data-report-status")).toBe(reportState);
+      expect(report.find('[data-test="bot-report-content"]').exists()).toBe(
+        successful
+      );
+      expect(wrapper.find(".bot-artifact-list").exists()).toBe(true);
+      expect(
+        wrapper.findAll('button[data-test="bot-artifact-download"]')
+      ).toHaveLength(successful ? 1 : 0);
+      if (successful) {
+        expect(report.text()).toContain(
+          `Live ${snapshotPhase} Research report`
+        );
+      } else {
+        expect(report.text()).not.toContain(
+          `Live ${snapshotPhase} Research report`
+        );
+        expect(wrapper.text()).not.toContain("Report ready");
+        expect(wrapper.text()).not.toContain("Finished");
+      }
+
+      wrapper.unmount();
+    }
+  );
+
+  it("keeps Analyst active report and artifact rendering unchanged", async () => {
+    setActiveRun({ workStage: "report_assembly" });
+    setReportMaterial({
+      finalReport: "Active Analyst report",
+      reportStage: "final",
+      agent: "AnalystAgent",
+      outputDir: "/obs/bucket/analyst",
+    });
+    const wrapper = mountWorkspace("AnalystAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+      "Analysis run in progress"
+    );
+    expect(
+      wrapper
+        .get(".bot-report-state")
+        .get('[data-test="bot-report-content"]')
+        .text()
+    ).toContain("Active Analyst report");
+    expect(wrapper.find('[data-test="bot-artifact-list"]').exists()).toBe(true);
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    expect(wrapper.get('[data-test="analyst-progress"]').text()).toBe(
+      "Analysis run in progress"
+    );
 
     wrapper.unmount();
   });

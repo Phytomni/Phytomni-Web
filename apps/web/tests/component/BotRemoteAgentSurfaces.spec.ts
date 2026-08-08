@@ -509,7 +509,7 @@ describe("Bot remote-agent surface matrix", () => {
     });
   });
 
-  it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
+  it.each(["analyst", "design", "network"] as const)(
     "renders one shared report contract for %s",
     (surface) => {
       const wrapper = mountSurface(surface);
@@ -561,6 +561,43 @@ describe("Bot remote-agent surface matrix", () => {
       wrapper.unmount();
     }
   );
+
+  it("keeps active degraded Research progress-only", () => {
+    const wrapper = mountSurface("research");
+
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-evidence"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-activity"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="bot-report-downloads"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find(".bot-report-state").exists()).toBe(true);
+    expect(wrapper.find('[data-test="bot-report-progress"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.get('[data-test="bot-report-progress"]').text()).toContain(
+      "2/4"
+    );
+    expect(
+      wrapper
+        .find('.bot-report-state [data-test="bot-report-content"]')
+        .exists()
+    ).toBe(false);
+    expect(wrapper.find(".bot-artifact-list").exists()).toBe(false);
+    expect(
+      wrapper.findAll('button[data-test="bot-artifact-download"]')
+    ).toHaveLength(0);
+    expect(wrapper.text()).not.toContain("Synthetic report");
+    expect(wrapper.text()).not.toContain("secret.txt");
+
+    wrapper.unmount();
+  });
 
   it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
     "renders one opaque archive with its report and no legacy artifact list for active v1 %s",

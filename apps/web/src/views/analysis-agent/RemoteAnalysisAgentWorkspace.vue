@@ -182,8 +182,7 @@
       <p
         v-if="
           displayedState.degraded &&
-          !isResearchCancellation &&
-          !isResearchTimeout
+          (tool !== 'InSilicoResearchAgent' || !researchTerminalPhase)
         "
         class="analysis-agent-degraded"
         :data-test="`${agentKey}-degraded`"
@@ -222,6 +221,7 @@
               :labels="reportLabels"
               :failure-label="reportFailureLabel"
               :empty-report-label="t(`${localePrefix}.emptyReport`)"
+              :hide-active-report="tool === 'InSilicoResearchAgent'"
             />
           </template>
 
@@ -246,8 +246,7 @@
               <p
                 v-if="
                   displayedState.failures.length &&
-                  !isResearchCancellation &&
-                  !isResearchTimeout
+                  (tool !== 'InSilicoResearchAgent' || !researchTerminalPhase)
                 "
               >
                 {{ t(`${localePrefix}.degraded`) }}
@@ -256,30 +255,36 @@
           </template>
 
           <template #downloads>
-            <ResultArchiveDelivery
-              v-if="isResultArchiveV1"
-              :delivery="displayedState.delivery"
-              :artifacts="displayedState.artifactLinks"
-              :retrying="archiveRetrying"
-              @download="downloadResultArchive"
-              @retry="retryResultArchive"
-            />
-            <template v-else>
-              <BotArtifactList
-                :artifacts="displayedState.artifacts"
-                :download="downloadArtifact"
-                :title-label="t(`${localePrefix}.downloads`)"
-                :download-text="t(`${localePrefix}.download`)"
-                :empty-label="t(`${localePrefix}.noDownloads`)"
+            <template v-if="showReportArtifacts">
+              <ResultArchiveDelivery
+                v-if="
+                  isResultArchiveV1 &&
+                  (tool !== 'InSilicoResearchAgent' ||
+                    researchTerminalPhase === 'SUCCEEDED')
+                "
+                :delivery="displayedState.delivery"
+                :artifacts="displayedState.artifactLinks"
+                :retrying="archiveRetrying"
+                @download="downloadResultArchive"
+                @retry="retryResultArchive"
               />
-              <p
-                v-if="downloadError"
-                class="analysis-agent-error"
-                :data-test="`${agentKey}-download-error`"
-                role="alert"
-              >
-                {{ downloadError }}
-              </p>
+              <template v-else>
+                <BotArtifactList
+                  :artifacts="reportArtifacts"
+                  :download="downloadArtifact"
+                  :title-label="t(`${localePrefix}.downloads`)"
+                  :download-text="t(`${localePrefix}.download`)"
+                  :empty-label="t(`${localePrefix}.noDownloads`)"
+                />
+                <p
+                  v-if="downloadError"
+                  class="analysis-agent-error"
+                  :data-test="`${agentKey}-download-error`"
+                  role="alert"
+                >
+                  {{ downloadError }}
+                </p>
+              </template>
             </template>
           </template>
         </ResearchArtifactShell>
@@ -333,6 +338,11 @@ export type AnalysisRemoteAgentTool = Extract<
 >;
 
 type LocalePrefix = "agents.analyst" | "agents.research";
+
+type ResearchTerminalPhase = Extract<
+  AgentRunPhase,
+  "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "CANCELLED"
+>;
 
 type Props = {
   tool: AnalysisRemoteAgentTool;
@@ -541,68 +551,78 @@ const hasRun = computed(
     displayedState.value.projection !== null ||
     displayedState.value.degraded
 );
-const isResearchCancellation = computed(() => {
-  if (props.tool !== "InSilicoResearchAgent") return false;
+const researchTerminalPhase = computed<ResearchTerminalPhase | null>(() => {
+  if (props.tool !== "InSilicoResearchAgent") return null;
   const state = displayedState.value;
-  if (state.phase === "cancelled") return true;
-  if (
-    state.phase === "succeeded" ||
-    state.phase === "failed" ||
-    state.phase === "timed_out" ||
-    state.status === "SUCCEEDED" ||
-    state.status === "TIMED_OUT"
-  ) {
-    return false;
+
+  switch (state.phase) {
+    case "succeeded":
+      return "SUCCEEDED";
+    case "failed":
+      return "FAILED";
+    case "timed_out":
+      return "TIMED_OUT";
+    case "cancelled":
+      return "CANCELLED";
   }
-  if (state.projection?.status === "CANCELLED") return true;
-  if (
-    state.status === "FAILED" ||
-    state.projection?.status === "SUCCEEDED" ||
-    state.projection?.status === "FAILED" ||
-    state.projection?.status === "TIMED_OUT"
-  ) {
-    return false;
+
+  if (state.status === "SUCCEEDED") return "SUCCEEDED";
+  if (state.status === "TIMED_OUT") return "TIMED_OUT";
+  if (state.status === "FAILED") {
+    return state.projection?.status === "CANCELLED" ? "CANCELLED" : "FAILED";
   }
-  return remoteLifecycle.snapshot.value?.phase === "CANCELLED";
+
+  const projectionPhase = state.projection?.status;
+  if (
+    projectionPhase === "SUCCEEDED" ||
+    projectionPhase === "FAILED" ||
+    projectionPhase === "TIMED_OUT" ||
+    projectionPhase === "CANCELLED"
+  ) {
+    return projectionPhase;
+  }
+
+  const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
+  return snapshotPhase === "SUCCEEDED" ||
+    snapshotPhase === "FAILED" ||
+    snapshotPhase === "TIMED_OUT" ||
+    snapshotPhase === "CANCELLED"
+    ? snapshotPhase
+    : null;
 });
-const isResearchTimeout = computed(() => {
-  if (props.tool !== "InSilicoResearchAgent") return false;
-  const state = displayedState.value;
-  if (
-    state.phase === "succeeded" ||
-    state.phase === "failed" ||
-    state.phase === "cancelled" ||
-    state.status === "SUCCEEDED" ||
-    state.status === "FAILED"
-  ) {
-    return false;
-  }
-  if (state.phase === "timed_out" || state.status === "TIMED_OUT") {
-    return true;
-  }
-  if (
-    state.projection?.status === "SUCCEEDED" ||
-    state.projection?.status === "FAILED" ||
-    state.projection?.status === "CANCELLED"
-  ) {
-    return false;
-  }
-  if (state.projection?.status === "TIMED_OUT") return true;
-  return remoteLifecycle.snapshot.value?.phase === "TIMED_OUT";
-});
+const isResearchCancellation = computed(
+  () => researchTerminalPhase.value === "CANCELLED"
+);
+const isResearchTimeout = computed(
+  () => researchTerminalPhase.value === "TIMED_OUT"
+);
 const reportComponentState = computed<BotRemoteAgentRunState>(() => {
   const state = displayedState.value;
-  return isResearchTimeout.value && state.status !== "TIMED_OUT"
-    ? { ...state, status: "TIMED_OUT" }
-    : state;
+  const terminalPhase = researchTerminalPhase.value;
+  if (!terminalPhase) return state;
+  if (terminalPhase === "SUCCEEDED") {
+    return state.status === "SUCCEEDED"
+      ? state
+      : { ...state, status: "SUCCEEDED" };
+  }
+  return {
+    ...state,
+    status: terminalPhase === "TIMED_OUT" ? "TIMED_OUT" : "FAILED",
+    visibleReport: "",
+    intermediateReport: "",
+    finalReport: "",
+  };
 });
 const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
   () => {
+    if (researchTerminalPhase.value) {
+      return researchTerminalPhase.value === "SUCCEEDED"
+        ? "complete"
+        : "failed";
+    }
     if (
       displayedState.value.phase === "failed" ||
-      displayedState.value.phase === "cancelled" ||
-      isResearchCancellation.value ||
-      isResearchTimeout.value
+      displayedState.value.phase === "cancelled"
     ) {
       return "failed";
     }
@@ -610,6 +630,17 @@ const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
     if (displayedState.value.phase === "succeeded") return "complete";
     return "loading";
   }
+);
+const showReportArtifacts = computed(
+  () =>
+    props.tool !== "InSilicoResearchAgent" ||
+    researchTerminalPhase.value !== null
+);
+const reportArtifacts = computed(() =>
+  props.tool === "InSilicoResearchAgent" &&
+  researchTerminalPhase.value !== "SUCCEEDED"
+    ? []
+    : displayedState.value.artifacts
 );
 const reportStatusLabel = computed(() => {
   switch (reportStatus.value) {
@@ -625,8 +656,7 @@ const reportStatusLabel = computed(() => {
 });
 const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   if (props.tool !== "InSilicoResearchAgent") return null;
-  if (isResearchCancellation.value) return "CANCELLED";
-  if (isResearchTimeout.value) return "TIMED_OUT";
+  if (researchTerminalPhase.value) return researchTerminalPhase.value;
 
   const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
   if (snapshotPhase) return snapshotPhase;
