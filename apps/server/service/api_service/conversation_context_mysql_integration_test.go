@@ -58,7 +58,7 @@ func TestMySQLClientTurnLookupIsParameterized(t *testing.T) {
 	}
 }
 
-func TestConversationContextMySQLIntegration(t *testing.T) {
+func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 	if os.Getenv("PHYTOMNI_RUN_MYSQL_INTEGRATION") != "1" {
 		t.Skip("set PHYTOMNI_RUN_MYSQL_INTEGRATION=1 for development MySQL acceptance")
 	}
@@ -161,7 +161,8 @@ func TestConversationContextMySQLIntegration(t *testing.T) {
 		mode:       "instant",
 		operation:  "append",
 	}
-	input := QueryInput{Query: "concurrent query", Mode: "instant", ClientTurnID: clientTurnID}
+	rawQuery := syntheticLongResearchQuery(t)
+	input := QueryInput{Query: rawQuery, Mode: "instant", ClientTurnID: clientTurnID}
 	start := make(chan struct{})
 	type allocationResult struct {
 		submission *v1Submission
@@ -216,6 +217,17 @@ func TestConversationContextMySQLIntegration(t *testing.T) {
 	}
 	if rowCount != 1 {
 		t.Fatalf("concurrent row count = %d, want 1", rowCount)
+	}
+	var persisted model.QuestionAgentLog
+	if err := firstDB.Where("user_name = ? AND dialogue_id = ?", owner, concurrentTarget.dialogueID).
+		First(&persisted).Error; err != nil {
+		t.Fatalf("read long Research allocation: %v", err)
+	}
+	if persisted.Query != rawQuery {
+		t.Fatal("MySQL persisted query differs from the authored Research query")
+	}
+	if persisted.TitleQuery != longResearchPaperMarker || strings.Contains(persisted.TitleQuery, longResearchPathMarker) {
+		t.Fatalf("MySQL title is not the bounded first meaningful line: code_points=%d", len([]rune(persisted.TitleQuery)))
 	}
 
 	_, err = NewService().allocateV1SubmissionWithDB(

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -39,6 +40,40 @@ func distinctQueryAttachmentRefs(count int) []rxBot.AssetAttachmentRef {
 		refs[index].AssetID = fmt.Sprintf("file_%03d", index)
 	}
 	return refs
+}
+
+const (
+	longResearchPaperMarker = "Synthetic paper abstract: rice root development evidence."
+	longResearchPathMarker  = "scrubbed-bucket/synthetic-study/late/reads.fastq.gz"
+)
+
+func syntheticLongResearchQuery(t *testing.T) string {
+	t.Helper()
+	prefix := "\n\t  " + longResearchPaperMarker + "  \n"
+	suffix := "\n" + longResearchPathMarker
+	fillerCount := rxBot.DefaultMaxUserQueryChars - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
+	if fillerCount < 1 {
+		t.Fatal("synthetic Research markers exceed the query boundary")
+	}
+	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	if got := utf8.RuneCountInString(query); got != rxBot.DefaultMaxUserQueryChars {
+		t.Fatalf("synthetic query code points = %d, want %d", got, rxBot.DefaultMaxUserQueryChars)
+	}
+	return query
+}
+
+func TestLongResearchV1CurrentMessageBoundary(t *testing.T) {
+	previousConfig := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{MaxQueryChars: rxBot.DefaultMaxUserQueryChars}
+	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+
+	query := syntheticLongResearchQuery(t)
+	if err := validateV1CurrentMessage(query); err != nil {
+		t.Fatalf("exact Research boundary rejected: %v", err)
+	}
+	if !errors.Is(validateV1CurrentMessage(query+"稻"), ErrInvalidChatRouting) {
+		t.Fatal("Research query above the configured V1 boundary was accepted")
+	}
 }
 
 func TestQuerySubmissionAttachmentRefsUseManagedLimit(t *testing.T) {
@@ -135,6 +170,67 @@ func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T)
 	}
 	if private.ClientTurnID != input.ClientTurnID {
 		t.Fatalf("stored client turn = %q, want %q", private.ClientTurnID, input.ClientTurnID)
+	}
+}
+
+func TestLongResearchSubmissionPreservesRawQueryAndDuplicateClientTurn(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	rawQuery := syntheticLongResearchQuery(t)
+	var calls int
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/v1/agents/research/runs" {
+			t.Errorf("Bot path = %q, want Research run", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"run-long-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-long-research"],"result":{}}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+	input := QueryInput{
+		Query:        rawQuery,
+		Mode:         "expert",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "long-research-turn-1",
+	}
+
+	first, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("first long Research submission: %v", err)
+	}
+	second, err := service.Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("duplicate long Research submission: %v", err)
+	}
+	if first.Id != second.Id || first.BotRunID != second.BotRunID || first.BotRunID != "run-long-research" {
+		t.Fatalf("duplicate identity changed: rows=%d/%d same_run=%t", first.Id, second.Id, first.BotRunID == second.BotRunID)
+	}
+	if calls != 1 {
+		t.Fatalf("Bot submissions = %d, want 1", calls)
+	}
+
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, first.Id).Error; err != nil {
+		t.Fatalf("read long Research row: %v", err)
+	}
+	if row.Query != rawQuery {
+		t.Fatal("persisted query differs from the authored Research query")
+	}
+	if row.TitleQuery != longResearchPaperMarker || utf8.RuneCountInString(row.TitleQuery) > 160 {
+		t.Fatalf("stored title is not the bounded first meaningful line: code_points=%d", utf8.RuneCountInString(row.TitleQuery))
+	}
+	if strings.Contains(row.TitleQuery, longResearchPathMarker) {
+		t.Fatal("stored title retained the late path-like marker")
+	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&count).Error; err != nil {
+		t.Fatalf("count long Research rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("persisted rows = %d, want 1", count)
 	}
 }
 

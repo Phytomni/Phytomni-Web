@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -117,6 +118,36 @@ func TestSqlLogger_ParameterizedQueries(t *testing.T) {
 	}
 	if !strings.Contains(got, "?") {
 		t.Errorf("sql_content not parameterized (no ? placeholder): %s", got)
+	}
+}
+
+// TestLongResearchSqlLoggerParameterized catches parameter interpolation that
+// would copy a paper-length Research query into sql_operation_logs.
+func TestLongResearchSqlLoggerParameterized(t *testing.T) {
+	gdb := openLoggedTestDB(t)
+	const (
+		maxCodePoints = 131_072
+		paperMarker   = "Synthetic paper abstract: rice root development evidence."
+		pathMarker    = "scrubbed-bucket/synthetic-study/late/reads.fastq.gz"
+	)
+	prefix := paperMarker + "\n"
+	suffix := "\n" + pathMarker
+	fillerCount := maxCodePoints - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
+	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	if got := utf8.RuneCountInString(query); got != maxCodePoints {
+		t.Fatalf("synthetic query code points = %d, want %d", got, maxCodePoints)
+	}
+
+	var rows []map[string]interface{}
+	if err := gdb.Table("s_probe_users").Where("email = ?", query).Find(&rows).Error; err != nil {
+		t.Fatalf("long Research probe query failed: %v", err)
+	}
+	logged := fetchLatestSQLContent(t, gdb, "SELECT%s_probe_users%")
+	if strings.Contains(logged, paperMarker) || strings.Contains(logged, pathMarker) {
+		t.Fatal("sql_content retained a synthetic Research marker")
+	}
+	if !strings.Contains(logged, "?") {
+		t.Fatal("sql_content omitted its bind placeholder")
 	}
 }
 

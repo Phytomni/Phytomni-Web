@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const wantA2uiAuditBody = `{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":"[REDACTED]"}`
@@ -76,6 +77,37 @@ func TestUploadCreateAuditMarkerDropsMetadata(t *testing.T) {
 	}
 	if strings.Contains(out, "patient-cohort.fastq.gz") || strings.Contains(out, "application/octet-stream") {
 		t.Fatalf("upload metadata leaked into audit body: %q", out)
+	}
+}
+
+// TestLongResearchMultipartRedactionDropsBody catches any change that buffers
+// or serializes multipart query text into user_operation_logs.
+func TestLongResearchMultipartRedactionDropsBody(t *testing.T) {
+	const (
+		maxCodePoints = 131_072
+		paperMarker   = "Synthetic paper abstract: rice root development evidence."
+		pathMarker    = "scrubbed-bucket/synthetic-study/late/reads.fastq.gz"
+	)
+	prefix := paperMarker + "\n"
+	suffix := "\n" + pathMarker
+	fillerCount := maxCodePoints - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
+	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	if got := utf8.RuneCountInString(query); got != maxCodePoints {
+		t.Fatalf("synthetic query code points = %d, want %d", got, maxCodePoints)
+	}
+
+	got := redactOperationLogBody(
+		"POST",
+		"/api/v1/conversations/0/messages",
+		"/api/v1/conversations/:id/messages",
+		"multipart/form-data; boundary=synthetic-boundary",
+		[]byte(query),
+	)
+	if got != "[Multipart Content - Body Ignored]" {
+		t.Fatalf("multipart audit body used an unexpected finite marker")
+	}
+	if strings.Contains(got, paperMarker) || strings.Contains(got, pathMarker) {
+		t.Fatal("multipart audit body retained a synthetic Research marker")
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -167,7 +166,11 @@ func validateV1ClientTurnID(value string) error {
 }
 
 func validateV1CurrentMessage(value string) error {
-	if strings.TrimSpace(value) == "" || utf8.RuneCountInString(value) > 32_768 {
+	limit := rxBot.ConfiguredMaxUserQueryChars()
+	if limit == 0 {
+		limit = rxBot.DefaultMaxUserQueryChars
+	}
+	if err := ValidateCurrentQuery(value, limit); err != nil {
 		return ErrInvalidChatRouting
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
@@ -87,18 +88,30 @@ func TestQueryRejectsOversizedUnicode(t *testing.T) {
 	}
 }
 
-func TestQueryAcceptsMaximumUnicode(t *testing.T) {
+func TestLongResearchQueryAcceptsMaximumUnicode(t *testing.T) {
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = nil
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
-	c, w := newQueryRequest(t, strings.Repeat("稻", rxBot.DefaultMaxUserQueryChars))
+	const (
+		paperMarker = "Synthetic paper abstract: rice root development evidence."
+		pathMarker  = "scrubbed-bucket/synthetic-study/late/reads.fastq.gz"
+	)
+	prefix := paperMarker + "\n"
+	suffix := "\n" + pathMarker
+	fillerCount := rxBot.DefaultMaxUserQueryChars - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
+	query := prefix + strings.Repeat("稻", fillerCount) + suffix
+	if got := utf8.RuneCountInString(query); got != rxBot.DefaultMaxUserQueryChars {
+		t.Fatalf("synthetic query code points = %d, want %d", got, rxBot.DefaultMaxUserQueryChars)
+	}
+
+	c, w := newQueryRequest(t, query)
 	c.Set("username", "alice")
 
 	NewHandler().Query(c)
 
 	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status=%d body=%s, want service dispatch to return 503", w.Code, w.Body.String())
+		t.Fatalf("status=%d, want service dispatch to return 503 after accepting the boundary", w.Code)
 	}
 }
 
