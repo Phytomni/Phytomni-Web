@@ -1037,6 +1037,9 @@ async function onAttachmentDuplicate(
 }
 
 const botCapabilities = useBotCapabilities("chat");
+const researchInputMaxQueryChars = computed(
+  () => botCapabilities.researchInput.value.max_user_query_chars
+);
 const uploadValidationLimits = computed<Readonly<UploadValidationLimits>>(() =>
   Object.freeze({
     maxFileBytes: botCapabilities.upload.value.max_file_bytes,
@@ -1975,6 +1978,7 @@ const { sendMessage } = useSendMessage({
   selectChat,
   scrollToBottom,
   attachmentTargetBlocked,
+  researchInputMaxQueryChars,
 });
 
 const { submitAction, retryAction } = useA2uiInteraction();

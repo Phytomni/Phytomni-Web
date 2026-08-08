@@ -191,7 +191,7 @@ describe("useSendMessage", () => {
     vi.unstubAllEnvs();
   });
 
-  function makeComposable() {
+  function makeComposable(researchInputMaxQueryChars = 131072) {
     return useSendMessage({
       getChatState,
       currentChatId,
@@ -206,8 +206,78 @@ describe("useSendMessage", () => {
       timestamp,
       selectChat,
       scrollToBottom,
+      researchInputMaxQueryChars: ref(researchInputMaxQueryChars),
     });
   }
+
+  it("rejects an over-limit forced Research draft before any mutation", async () => {
+    const draft = "🧬".repeat(131073);
+    const state = stateFor("A");
+    state.messageInput = draft;
+    state.mode = "expert";
+    state.selectedAgent = "InSilicoResearchAgent";
+    const originalRenderedChat = state.renderedChat;
+
+    await makeComposable().sendMessage();
+
+    expect(mockGetQueryAbortable).not.toHaveBeenCalled();
+    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
+    expect(state.messageInput).toBe(draft);
+    expect(state.renderedChat).toBe(originalRenderedChat);
+    expect(currentChat.value?.messages).toEqual([]);
+    expect(state.isSending).toBe(false);
+    expect(state.activeRequestId).toBe("");
+    expect(state.pendingTurnId).toBeNull();
+    expect(state.pendingTurnFingerprint).toBeNull();
+  });
+
+  it("sends an exact-limit forced Research draft without changing its raw text", async () => {
+    const draft = `\n${"🧬".repeat(131070)}\n`;
+    const state = stateFor("A");
+    state.messageInput = draft;
+    state.mode = "expert";
+    state.selectedAgent = "InSilicoResearchAgent";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "InSilicoResearchAgent",
+          answer: "",
+          status: "RUNNING",
+          id: "131072",
+          bot_run_id: "run-research-exact-limit",
+        },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const formData = queryCallAt(
+      0,
+      "exact-limit Research query"
+    )[0] as FormData;
+    expect(formData.get("query")).toBe(draft);
+  });
+
+  it("does not apply the negotiated Research limit to another forced Expert agent", async () => {
+    const state = stateFor("A");
+    state.messageInput = "longer than the test Research limit";
+    state.mode = "expert";
+    state.selectedAgent = "DataAgent";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "DataAgent",
+          answer: "accepted",
+          status: "SUCCEEDED",
+          id: "data-agent-limit-scope",
+        },
+      })
+    );
+
+    await makeComposable(2).sendMessage();
+
+    expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
+  });
 
   it("happy path: pushes user+assistant messages, clears input/files, resets isSending, syncs reaction", async () => {
     stateFor("A").messageInput = "Hello world";

@@ -51,6 +51,7 @@ import {
   completedUploadDisplays,
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
+import { queryWithinLimit } from "../utils/research-input-policy";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const MAX_CONTEXT_MESSAGES = 20;
@@ -393,6 +394,7 @@ export function useSendMessage(opts: {
   selectChat: (dialogueId: string) => Promise<void> | void;
   scrollToBottom: () => Promise<void>;
   attachmentTargetBlocked?: Readonly<Ref<boolean>>;
+  researchInputMaxQueryChars: Readonly<Ref<number>>;
 }) {
   const {
     getChatState,
@@ -407,6 +409,7 @@ export function useSendMessage(opts: {
     selectChat,
     scrollToBottom,
     attachmentTargetBlocked,
+    researchInputMaxQueryChars,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
@@ -430,6 +433,13 @@ export function useSendMessage(opts: {
       capturedMode === "expert" ? chatState.selectedAgent : "";
     const currentMessage = chatState.messageInput;
     if (!currentMessage.trim()) return;
+    if (
+      capturedMode === "expert" &&
+      capturedSelectedAgent === "InSilicoResearchAgent" &&
+      !queryWithinLimit(currentMessage, researchInputMaxQueryChars.value)
+    ) {
+      return;
+    }
 
     // Capture parent row, completed asset references, mode, history, and request
     // key before any await so an A→B switch during scrollToBottom cannot

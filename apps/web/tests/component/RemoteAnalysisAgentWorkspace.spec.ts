@@ -83,6 +83,9 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
         AnalystAgent: {
           ...mocks.analystCapability,
         },
+        InSilicoResearchAgent: {
+          ...mocks.analystCapability,
+        },
       },
     },
     upload: {
@@ -90,6 +93,16 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
         enabled: true,
         max_file_bytes: 10 * 1024 * 1024 * 1024,
         max_attachments: 64,
+      },
+    },
+    researchInput: {
+      value: {
+        enabled: true,
+        protocol: "research_input_resolution_v1",
+        max_user_query_chars: 131072,
+        max_attachments_per_request: 64,
+        max_research_dataset_paths: 64,
+        max_research_input_references: 128,
       },
     },
     load: mocks.load,
@@ -128,10 +141,16 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: mocks.routerBack }),
 }));
 
-function mountWorkspace() {
+function mountWorkspace(
+  tool: "AnalystAgent" | "InSilicoResearchAgent" = "AnalystAgent"
+) {
+  const research = tool === "InSilicoResearchAgent";
   return createTestAppContext().mount(RemoteAnalysisAgentWorkspace, {
     attachTo: document.body,
-    props: { tool: "AnalystAgent", localePrefix: "agents.analyst" },
+    props: {
+      tool,
+      localePrefix: research ? "agents.research" : "agents.analyst",
+    },
     global: {
       stubs: {
         ResearchArtifactShell: {
@@ -391,6 +410,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       degraded: false,
     };
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
     mocks.submit.mockResolvedValue(null);
     mocks.chatState.fileList = [
       completedUpload("upload-existing", "counts.csv"),
@@ -401,6 +421,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
   afterEach(() => {
     REMOTE_AGENT_PRODUCT_REGISTRY.AnalystAgent.live = false;
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
   });
 
   it("applies the shared attachment behavior contract", async () => {
@@ -432,6 +453,33 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       query: "Compare groups",
       attachments: [{ asset_id: "file_dataset_1234567890" }],
     });
+    wrapper.unmount();
+  });
+
+  it("preserves leading and trailing newlines for negotiated Research input", async () => {
+    const wrapper = mountWorkspace("InSilicoResearchAgent");
+    const rawQuery = "\n  Compare complete paper evidence  \n";
+
+    await wrapper.get('[data-testid="research-query"]').setValue(rawQuery);
+    await wrapper.get('[data-testid="research-submit"]').trigger("click");
+
+    expect(mocks.submit).toHaveBeenCalledWith({
+      query: rawQuery,
+      attachments: [{ asset_id: "file_dataset_1234567890" }],
+    });
+    wrapper.unmount();
+  });
+
+  it("retains the existing 4000-character limit for Analyst", async () => {
+    const wrapper = mountWorkspace();
+
+    await wrapper
+      .get('[data-testid="analyst-query"]')
+      .setValue("x".repeat(4001));
+    await wrapper.get('[data-testid="analyst-submit"]').trigger("click");
+
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-test="analyst-form-error"]').exists()).toBe(true);
     wrapper.unmount();
   });
 

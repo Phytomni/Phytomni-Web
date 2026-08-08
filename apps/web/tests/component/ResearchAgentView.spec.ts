@@ -151,6 +151,16 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
         max_attachments: 10,
       },
     },
+    researchInput: {
+      value: {
+        enabled: true,
+        protocol: "research_input_resolution_v1",
+        max_user_query_chars: 131072,
+        max_attachments_per_request: 64,
+        max_research_dataset_paths: 64,
+        max_research_input_references: 128,
+      },
+    },
     load: mocks.load,
   }),
 }));
@@ -507,7 +517,7 @@ describe("ResearchAgentView", () => {
     wrapper.unmount();
   });
 
-  it("uses localized custom validation for empty and oversized questions", async () => {
+  it("uses localized custom validation for empty and negotiated oversized questions", async () => {
     const wrapper = mountView();
 
     await wrapper.get("form.research-agent-form").trigger("submit");
@@ -518,12 +528,26 @@ describe("ResearchAgentView", () => {
 
     await wrapper
       .get('[data-test="research-question"]')
-      .setValue("x".repeat(4001));
+      .setValue("🧬".repeat(131073));
     await wrapper.get("form.research-agent-form").trigger("submit");
     expect(wrapper.get('[data-test="research-form-error"]').exists()).toBe(
       true
     );
     expect(mocks.submit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("removes the old 4000-character limit only for negotiated Research", async () => {
+    const wrapper = mountView();
+    const query = "x".repeat(4001);
+
+    await wrapper.get('[data-test="research-question"]').setValue(query);
+    await wrapper.get("form.research-agent-form").trigger("submit");
+
+    expect(mocks.submit).toHaveBeenCalledWith({
+      query,
+      attachments: [],
+    });
     wrapper.unmount();
   });
 

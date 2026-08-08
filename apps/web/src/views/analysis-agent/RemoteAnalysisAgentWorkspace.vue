@@ -309,6 +309,7 @@ import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgent
 import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { queryWithinLimit } from "@/views/chat/utils/research-input-policy";
 import type {
   AgentResultDelivery,
   ConversationArtifactLink,
@@ -327,7 +328,7 @@ type Props = {
   state?: BotLifecycleState;
 };
 
-const MAX_QUERY_LENGTH = 4000;
+const LEGACY_MAX_QUERY_LENGTH = 4000;
 const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
 const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
 
@@ -607,12 +608,20 @@ async function submit(): Promise<void> {
   )
     return;
 
-  const query = question.value.trim();
-  if (query === "") {
+  const rawQuery = question.value;
+  const isResearch = props.tool === "InSilicoResearchAgent";
+  const query = isResearch ? rawQuery : rawQuery.trim();
+  if (rawQuery.trim() === "") {
     formError.value = t(`${props.localePrefix}.questionRequired`);
     return;
   }
-  if (Array.from(query).length > MAX_QUERY_LENGTH) {
+  const queryAllowed = isResearch
+    ? queryWithinLimit(
+        rawQuery,
+        capabilities.researchInput.value.max_user_query_chars
+      )
+    : Array.from(query).length <= LEGACY_MAX_QUERY_LENGTH;
+  if (!queryAllowed) {
     formError.value = t(`${props.localePrefix}.questionTooLong`);
     return;
   }
