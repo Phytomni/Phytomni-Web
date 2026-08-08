@@ -330,20 +330,26 @@ func (reader *countingResearchCatalogReader) GetAgents(context.Context) (*rxBot.
 }
 
 func researchCatalogWithLimits(maxQueryChars, maxAttachments int) *rxBot.AgentsListResponse {
+	return researchCatalogWithAttachmentLimits(maxQueryChars, maxAttachments, maxAttachments)
+}
+
+func researchCatalogWithAttachmentLimits(
+	maxQueryChars, descriptorAttachments, datasetFiles int,
+) *rxBot.AgentsListResponse {
 	response := validResearchCapabilityCatalog()
 	response.ResearchInputResolution.MaxUserQueryChars = maxQueryChars
-	response.ResearchInputResolution.MaxAttachments = maxAttachments
+	response.ResearchInputResolution.MaxAttachments = descriptorAttachments
 	response.ResearchInputResolution.MaxReferences = 128
-	if maxAttachments > response.ResearchInputResolution.MaxReferences {
-		response.ResearchInputResolution.MaxReferences = maxAttachments
+	if descriptorAttachments > response.ResearchInputResolution.MaxReferences {
+		response.ResearchInputResolution.MaxReferences = descriptorAttachments
 	}
 	for index := range response.Data {
 		if response.Data[index].Slug != "research" {
 			continue
 		}
 		dataset := response.Data[index].Capabilities.Attachments.Datasets
-		dataset.MaxFiles = maxAttachments
-		dataset.MaxTotalBytes = dataset.MaxFileBytes * int64(maxAttachments)
+		dataset.MaxFiles = datasetFiles
+		dataset.MaxTotalBytes = dataset.MaxFileBytes * int64(datasetFiles)
 	}
 	return response
 }
@@ -572,6 +578,80 @@ func TestDirectResearchEnforcesNegotiatedLimitsWithOneCatalogFetch(t *testing.T)
 				}
 				if reader.calls != 1 {
 					t.Fatalf("catalog calls=%d, want exactly 1", reader.calls)
+				}
+			})
+		}
+	}
+}
+
+func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
+	surfaces := []struct {
+		name  string
+		input QueryInput
+	}{
+		{
+			name: "dedicated Research",
+			input: QueryInput{
+				Query: "valid", Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+			},
+		},
+		{
+			name: "explicit Expert Research",
+			input: QueryInput{
+				Query: "valid", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+			},
+		},
+	}
+	drifts := []struct {
+		name                  string
+		descriptorAttachments int
+		datasetFiles          int
+	}{
+		{name: "descriptor higher", descriptorAttachments: 128, datasetFiles: 64},
+		{name: "dataset channel higher", descriptorAttachments: 64, datasetFiles: 128},
+	}
+
+	for _, surface := range surfaces {
+		for _, drift := range drifts {
+			t.Run(surface.name+"/"+drift.name, func(t *testing.T) {
+				gdb := setupExpertTestDB(t)
+				seedExpertPermissionUser(t, gdb, "research-drift@example.com", "research-role")
+				seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+				runs := 0
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					runs++
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"succeeded","task_ids":[],"result":{}}`))
+				}))
+				t.Cleanup(server.Close)
+				previous := rxBot.BotConfig
+				rxBot.BotConfig = &rxBot.Config{
+					BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+				}
+				t.Cleanup(func() { rxBot.BotConfig = previous })
+				reader := &countingResearchCatalogReader{
+					response: researchCatalogWithAttachmentLimits(
+						262_144, drift.descriptorAttachments, drift.datasetFiles,
+					),
+				}
+				service := &Service{catalogReader: reader}
+
+				allowed := surface.input
+				allowed.Attachments = distinctQueryAttachmentRefs(64)
+				if _, err := service.Query(context.Background(), "research-drift@example.com", allowed); err != nil {
+					t.Fatalf("Query at lower advertised limit: %v", err)
+				}
+
+				rejected := surface.input
+				rejected.Attachments = distinctQueryAttachmentRefs(65)
+				if _, err := service.Query(context.Background(), "research-drift@example.com", rejected); !errors.Is(err, ErrInvalidQueryAttachments) {
+					t.Fatalf("Query above lower advertised limit=%v, want ErrInvalidQueryAttachments", err)
+				}
+				if reader.calls != 2 {
+					t.Fatalf("catalog calls=%d, want one per direct Query", reader.calls)
+				}
+				if runs != 1 {
+					t.Fatalf("Research runs=%d, want only the allowed request", runs)
 				}
 			})
 		}

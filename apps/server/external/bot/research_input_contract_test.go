@@ -69,6 +69,33 @@ func TestValidateResearchInputContract(t *testing.T) {
 	}
 }
 
+func TestValidateResearchInputContractUsesLowerAttachmentAdvertisement(t *testing.T) {
+	tests := []struct {
+		name                  string
+		descriptorAttachments int
+		datasetFiles          int
+	}{
+		{name: "descriptor higher", descriptorAttachments: 128, datasetFiles: 64},
+		{name: "dataset channel higher", descriptorAttachments: 64, datasetFiles: 128},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			response := validResearchCatalog()
+			response.ResearchInputResolution.MaxAttachments = tc.descriptorAttachments
+			response.Data[0].Capabilities.Attachments.Datasets.MaxFiles = tc.datasetFiles
+
+			contract, err := ValidateResearchInputContract(response)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if contract.MaxAttachments != 64 {
+				t.Fatalf("MaxAttachments=%d, want lower advertised limit 64", contract.MaxAttachments)
+			}
+		})
+	}
+}
+
 func TestResearchFormatsCompatibleCoversCompleteAndMissingMatrices(t *testing.T) {
 	required := []string{"gz", "mtx", "tar", "tsv", "txt.gz", "mtx.gz", "tar.gz"}
 	tests := []struct {

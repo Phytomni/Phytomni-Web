@@ -121,7 +121,7 @@ func ValidateResearchInputContract(response *AgentsListResponse) (ResearchInputC
 
 	return ResearchInputContract{
 		MaxUserQueryChars: descriptor.MaxUserQueryChars,
-		MaxAttachments:    descriptor.MaxAttachments,
+		MaxAttachments:    min(descriptor.MaxAttachments, dataset.MaxFiles),
 		MaxDatasetPaths:   descriptor.MaxDatasetPaths,
 		MaxReferences:     descriptor.MaxReferences,
 		DatasetFormats:    formats,

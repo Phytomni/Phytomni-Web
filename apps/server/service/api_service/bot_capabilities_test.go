@@ -210,6 +210,47 @@ func TestBotCapabilitiesProjectsResearchInputContract(t *testing.T) {
 	}
 }
 
+func TestBotCapabilitiesProjectsLowerAttachmentAdvertisement(t *testing.T) {
+	tests := []struct {
+		name                  string
+		descriptorAttachments int
+		datasetFiles          int
+	}{
+		{name: "descriptor higher", descriptorAttachments: 128, datasetFiles: 64},
+		{name: "dataset channel higher", descriptorAttachments: 64, datasetFiles: 128},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			response := validResearchCapabilityCatalog()
+			response.ResearchInputResolution.MaxAttachments = tc.descriptorAttachments
+			for index := range response.Data {
+				if response.Data[index].Slug == "research" {
+					response.Data[index].Capabilities.Attachments.Datasets.MaxFiles = tc.datasetFiles
+					break
+				}
+			}
+			server := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
+			t.Cleanup(server.Close)
+			useCapabilityBotConfig(t, server.URL, rxBot.Config{
+				ProxyEnabled: true, ResumableUploadEnabled: true,
+				UploadPublicOrigin: "https://upload.example", ResearchEnabled: true,
+			})
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.ResearchInput.MaxAttachments != 64 {
+				t.Fatalf("Research input max attachments=%d, want 64", manifest.ResearchInput.MaxAttachments)
+			}
+			if manifest.Upload.MaxAttachments != 64 {
+				t.Fatalf("upload max attachments=%d, want 64", manifest.Upload.MaxAttachments)
+			}
+		})
+	}
+}
+
 func TestBotCapabilitiesMalformedResearchInputDisablesOnlyResearch(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -196,13 +196,8 @@ func (ps *Service) CheckChatAllowed(ctx context.Context, email string) error {
 	return ErrChatQuotaExhausted
 }
 
-// CheckRemoteProductAllowed is the server-side authorization boundary for
-// remote Research, Design, and Network runs. A product must be explicitly
-// enabled in BotConfig and the authenticated user's role must grant the
-// canonical tool in user_tool_names/tool_names. Missing users or permission
-// tables fail closed: a capability must never be inferred from browser input.
-// This check is intentionally independent of the quota gate above so turning
-// quota enforcement off cannot activate a remote product.
+// checkRemoteProductAllowed enforces the complete server-owned product gate
+// and returns detached admission data for downstream Research validation.
 func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
 	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	if !ok {
@@ -232,6 +227,13 @@ func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool st
 	return admission, nil
 }
 
+// CheckRemoteProductAllowed is the server-side authorization boundary for
+// remote Research, Design, and Network runs. A product must be explicitly
+// enabled in BotConfig and the authenticated user's role must grant the
+// canonical tool in user_tool_names/tool_names. Missing users or permission
+// tables fail closed: a capability must never be inferred from browser input.
+// This check is intentionally independent of the quota gate above so turning
+// quota enforcement off cannot activate a remote product.
 func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool string) error {
 	_, err := ps.checkRemoteProductAllowed(ctx, email, tool)
 	return err
@@ -268,13 +270,7 @@ func researchInputLimits(admission remoteProductAdmission) (maxQueryChars, maxAt
 		admission.researchInput.MaxAttachments < 1 {
 		return 0, 0, false
 	}
-	maxQueryChars = rxBot.ConfiguredMaxUserQueryChars()
-	if maxQueryChars < 1 {
-		maxQueryChars = rxBot.DefaultMaxUserQueryChars
-	}
-	if admission.researchInput.MaxUserQueryChars < maxQueryChars {
-		maxQueryChars = admission.researchInput.MaxUserQueryChars
-	}
+	maxQueryChars = effectiveResearchQueryLimit(admission.researchInput.MaxUserQueryChars)
 	return maxQueryChars, admission.researchInput.MaxAttachments, true
 }
 

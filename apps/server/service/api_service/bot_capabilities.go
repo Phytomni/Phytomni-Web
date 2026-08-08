@@ -198,17 +198,10 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 	researchContract, researchErr := ps.validatedResearchInputContract(ctx, response)
 	researchCompatible := researchErr == nil
 	if researchCompatible {
-		maxQueryChars := rxBot.ConfiguredMaxUserQueryChars()
-		if maxQueryChars < 1 {
-			maxQueryChars = rxBot.DefaultMaxUserQueryChars
-		}
-		if researchContract.MaxUserQueryChars < maxQueryChars {
-			maxQueryChars = researchContract.MaxUserQueryChars
-		}
 		manifest.ResearchInput = BotResearchInputCapability{
 			Enabled:         true,
 			Protocol:        rxBot.ResearchInputProtocol,
-			MaxQueryChars:   maxQueryChars,
+			MaxQueryChars:   effectiveResearchQueryLimit(researchContract.MaxUserQueryChars),
 			MaxAttachments:  researchContract.MaxAttachments,
 			MaxDatasetPaths: researchContract.MaxDatasetPaths,
 			MaxReferences:   researchContract.MaxReferences,
@@ -271,6 +264,14 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		}
 	}
 	return manifest, nil
+}
+
+func effectiveResearchQueryLimit(advertised int) int {
+	configured := rxBot.ConfiguredMaxUserQueryChars()
+	if configured < 1 {
+		configured = rxBot.DefaultMaxUserQueryChars
+	}
+	return min(configured, advertised)
 }
 
 // validatedResearchInputContract reuses an already-fetched catalog for public
