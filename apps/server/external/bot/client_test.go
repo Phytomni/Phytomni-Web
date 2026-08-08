@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,10 +43,11 @@ func TestListRunsSendsDialogueFilter(t *testing.T) {
 }
 
 func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
+	const sensitiveMessage = "PAPER_FULLTEXT_MARKER path=/private/papers/input.pdf prompt=classify-this"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"type":"bad_request","code":400,"message":"streaming unsupported","request_id":"req-7"}}`))
+		_, _ = w.Write([]byte(`{"error":{"type":"bad_request","code":400,"message":"` + sensitiveMessage + `","request_id":"req-7"}}`))
 	}))
 	defer srv.Close()
 
@@ -53,11 +55,23 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 400 response")
 	}
-	if want := "streaming unsupported"; !contains(err.Error(), want) {
-		t.Errorf("error %q does not surface envelope message %q", err.Error(), want)
+	if contains(err.Error(), sensitiveMessage) || contains(err.Error(), "/private/papers/input.pdf") {
+		t.Fatalf("typed error leaked Bot envelope message: %q", err.Error())
 	}
-	if !contains(err.Error(), "req-7") {
-		t.Errorf("error %q does not surface request id", err.Error())
+	if got, want := err.Error(), "bot request failed: status 400"; got != want {
+		t.Errorf("error = %q, want ordinary-log-safe text %q", got, want)
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %T, want *APIError", err)
+	}
+	if apiErr.Method != http.MethodGet || apiErr.Path != "/v1/agents" ||
+		apiErr.Status != http.StatusBadRequest || apiErr.Message != sensitiveMessage ||
+		apiErr.RequestID != "req-7" {
+		t.Fatalf("structured APIError metadata changed: %#v", apiErr)
+	}
+	if message, ok := SurfaceableMessage(err); !ok || message != sensitiveMessage {
+		t.Fatalf("same-user correction message changed: ok=%v message=%q", ok, message)
 	}
 }
 
@@ -315,24 +329,88 @@ func TestSurfaceableMessage(t *testing.T) {
 	}
 }
 
-func TestAPIErrorTruncatesRawBody(t *testing.T) {
-	// No envelope message → Error() falls back to the raw body branch, which
-	// reaches the logs. An oversized body must be truncated, not echoed whole.
-	big := strings.Repeat("x", 1000)
-	got := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: big}).Error()
-	if contains(got, big) {
-		t.Fatalf("full 1000-char raw body leaked into error string: %q", got)
+func TestAPIErrorErrorEmitsOnlyLocalTextAndStatus(t *testing.T) {
+	const sensitiveMessage = "PAPER_PROMPT_MARKER path=/private/papers/study.pdf prompt=extract-all"
+	const methodMarker = "METHOD_MARKER\r\nforged-log-line"
+	const pathMarker = "PATH_MARKER\t/private/papers/study.pdf"
+	const stageMarker = "STAGE_MARKER\nresolver-detail"
+	const requestIDMarker = "REQUEST_ID_MARKER\rforged-correlation"
+	oversizedCode := "CODE_MARKER\n" + strings.Repeat("untrusted-code", 256)
+	err := &APIError{
+		Method:    methodMarker,
+		Path:      pathMarker,
+		Status:    http.StatusUnprocessableEntity,
+		Code:      oversizedCode,
+		Message:   sensitiveMessage,
+		Stage:     stageMarker,
+		Retryable: true,
+		RequestID: requestIDMarker,
 	}
-	if !contains(got, "(truncated)") {
-		t.Fatalf("oversized body should be marked truncated: %q", got)
+
+	for name, tc := range map[string]struct {
+		got  string
+		want string
+	}{
+		"direct": {
+			got:  err.Error(),
+			want: "bot request failed: status 422",
+		},
+		"wrapped": {
+			got:  fmt.Errorf("submit research: %w", err).Error(),
+			want: "submit research: bot request failed: status 422",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, marker := range []string{
+				"METHOD_MARKER", "PATH_MARKER", "CODE_MARKER", "STAGE_MARKER",
+				"REQUEST_ID_MARKER", "PAPER_PROMPT_MARKER", "forged-log-line",
+			} {
+				if contains(tc.got, marker) {
+					t.Fatalf("error leaked untrusted marker %q: %q", marker, tc.got)
+				}
+			}
+			if tc.got != tc.want {
+				t.Errorf("error = %q, want %q", tc.got, tc.want)
+			}
+		})
 	}
-	// A short body is diagnostic and stays intact.
-	short := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: "oops"}).Error()
-	if !contains(short, "oops") {
-		t.Fatalf("short body should be preserved for diagnostics: %q", short)
+}
+
+func TestAPIErrorErrorRedactsShortAndLongRawBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "short", body: "RAW_PAPER_PATH_MARKER=/private/papers/short.pdf"},
+		{name: "long", body: "RAW_LONG_PROMPT_MARKER=" + strings.Repeat("secret-paper-content", 100)},
 	}
-	if contains(short, "(truncated)") {
-		t.Fatalf("short body should not be marked truncated: %q", short)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := botError("GET", "/v1/runs", http.StatusInternalServerError, []byte(tt.body))
+			for name, tc := range map[string]struct {
+				got  string
+				want string
+			}{
+				"direct": {
+					got:  err.Error(),
+					want: "bot request failed: status 500",
+				},
+				"wrapped": {
+					got:  fmt.Errorf("poll research: %w", err).Error(),
+					want: "poll research: bot request failed: status 500",
+				},
+			} {
+				t.Run(name, func(t *testing.T) {
+					if contains(tc.got, tt.body) || contains(tc.got, "RAW_PAPER_PATH_MARKER") || contains(tc.got, "RAW_LONG_PROMPT_MARKER") {
+						t.Fatalf("error leaked raw Bot body: %q", tc.got)
+					}
+					if tc.got != tc.want {
+						t.Errorf("error = %q, want %q", tc.got, tc.want)
+					}
+				})
+			}
+		})
 	}
 }
 

@@ -96,9 +96,9 @@ func preferBotRequestID(err error, requestID string) error {
 }
 
 // APIError is a non-2xx Bot response decoded into a typed error so callers can
-// distinguish a client-correctable status (surfaced to the Web app) from a 5xx or
-// transport failure (kept generic). Message is the Bot envelope message; body
-// is the raw payload kept for logs only.
+// distinguish a client-correctable status (surfaced to the Web app) from a 5xx
+// or transport failure (kept generic). Message stays out of Error() because it
+// can contain user input; SurfaceableMessage is the only user-facing accessor.
 type APIError struct {
 	Method    string
 	Path      string
@@ -108,37 +108,16 @@ type APIError struct {
 	Stage     string
 	Retryable bool
 	RequestID string
-	body      string
 }
 
 func (e *APIError) Error() string {
-	if e.Message != "" {
-		return fmt.Sprintf("bot %s %s: %s (code=%d req=%s)", e.Method, e.Path, e.Message, e.Status, e.RequestID)
-	}
-	return fmt.Sprintf("bot %s %s: status %d body %s", e.Method, e.Path, e.Status, truncateForLog(e.body))
-}
-
-// maxBodyInError bounds how much of a non-envelope Bot response body is
-// embedded in the error string.
-const maxBodyInError = 256
-
-// truncateForLog caps the raw Bot body that gets stringified into the error.
-// The error reaches the logs, and a 5xx body may carry internal detail or user
-// data, so short payloads survive intact while oversized ones are truncated
-// rather than echoed in full. Truncation is on a rune boundary so a multibyte
-// (e.g. Chinese) body never lands as invalid UTF-8.
-func truncateForLog(s string) string {
-	r := []rune(s)
-	if len(r) <= maxBodyInError {
-		return s
-	}
-	return string(r[:maxBodyInError]) + "…(truncated)"
+	return fmt.Sprintf("bot request failed: status %d", e.Status)
 }
 
 // botError turns a non-2xx response into a typed *APIError, preferring the
-// uniform Bot error envelope and falling back to the raw body (logs only).
+// uniform Bot error envelope and otherwise retaining status metadata only.
 func botError(method, path string, status int, raw []byte) error {
-	e := &APIError{Method: method, Path: path, Status: status, body: string(raw)}
+	e := &APIError{Method: method, Path: path, Status: status}
 	var safe struct {
 		Error struct {
 			Code      string `json:"code"`
