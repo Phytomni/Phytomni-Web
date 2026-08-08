@@ -484,6 +484,78 @@ describe("useRemoteAgentLifecycle", () => {
     controller.dispose();
   });
 
+  it("ignores an older nonterminal history response after terminal hydration", async () => {
+    const pendingNonterminalHistory = deferred<unknown>();
+    const state = ref(runState());
+    mocks.getTaskLifecycle
+      .mockReset()
+      .mockResolvedValueOnce({
+        data: lifecycle({ report_revision: 1 }),
+      })
+      .mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          report_revision: 2,
+        }),
+      });
+    mocks.getAnswerCheck
+      .mockReset()
+      .mockReturnValueOnce(
+        pendingNonterminalHistory.promise as ReturnType<
+          typeof mocks.getAnswerCheck
+        >
+      )
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [
+          historyRow({
+            status: "SUCCEEDED",
+            report_revision: 2,
+            answer: JSON.stringify({ final_report: "Network final" }),
+          }),
+        ],
+      });
+    const hydrate = vi.fn((next: BotRunProjection) => {
+      const succeeded = next.status === "SUCCEEDED";
+      state.value = {
+        ...state.value,
+        status: succeeded ? "SUCCEEDED" : "RUNNING",
+        phase: succeeded ? "succeeded" : "running",
+        projection: next,
+      };
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate },
+      dialogueId: "dialogue-42",
+    });
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledOnce();
+    expect(hydrate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushAsync();
+
+    expect(mocks.getAnswerCheck).toHaveBeenCalledTimes(2);
+    expect(hydrate).toHaveBeenCalledOnce();
+    expect(state.value.status).toBe("SUCCEEDED");
+    expect(state.value.phase).toBe("succeeded");
+    expect(state.value.projection?.status).toBe("SUCCEEDED");
+
+    pendingNonterminalHistory.resolve({
+      code: 200,
+      data: [historyRow({ report_revision: 1 })],
+    });
+    await flushAsync();
+
+    expect(hydrate).toHaveBeenCalledOnce();
+    expect(state.value.status).toBe("SUCCEEDED");
+    expect(state.value.phase).toBe("succeeded");
+    expect(state.value.projection?.status).toBe("SUCCEEDED");
+    controller.dispose();
+  });
+
   it.each([
     "throw",
     "non-200 response",
@@ -872,6 +944,8 @@ describe("useRemoteAgentLifecycle", () => {
       dialogueId: "dialogue-research",
       messageId: "19",
     });
+    await nextTick();
+    expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(2);
     resolveHistory?.({
       code: 200,
       data: [

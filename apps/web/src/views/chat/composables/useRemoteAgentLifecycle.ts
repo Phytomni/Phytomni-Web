@@ -19,6 +19,7 @@ type HistoryReconciliationIdentity = {
   runId: string;
   dialogueId: string;
   generation: number;
+  historyEpoch: number;
 };
 
 type TerminalHistoryWork = HistoryReconciliationIdentity & {
@@ -70,6 +71,7 @@ export function useRemoteAgentLifecycle(options: {
   let trackedRunId: string | null = null;
   let trackedDialogueId: string | null = null;
   let generation = 0;
+  let historyEpoch = 0;
   let disposed = false;
   let terminalHistoryWork: TerminalHistoryWork | null = null;
 
@@ -80,6 +82,7 @@ export function useRemoteAgentLifecycle(options: {
     return (
       !disposed &&
       generation === identity.generation &&
+      historyEpoch === identity.historyEpoch &&
       trackedRowId.value === identity.rowId &&
       trackedRunId === identity.runId &&
       trackedDialogueId === identity.dialogueId &&
@@ -95,8 +98,21 @@ export function useRemoteAgentLifecycle(options: {
     const runId = options.run.state.value.projection?.runId;
     if (!runId) return null;
     const dialogueId = options.run.state.value.dialogueId ?? options.dialogueId;
-    const identity = { rowId, runId, dialogueId, generation };
+    const identity = {
+      rowId,
+      runId,
+      dialogueId,
+      generation,
+      historyEpoch,
+    };
     return ownsHistoryWork(identity) ? identity : null;
+  };
+
+  const beginHistoryReconciliation = (
+    rowId: string
+  ): HistoryReconciliationIdentity | null => {
+    historyEpoch += 1;
+    return captureHistoryIdentity(rowId);
   };
 
   const reconcileHistoryAttempt = async (
@@ -129,7 +145,8 @@ export function useRemoteAgentLifecycle(options: {
   };
 
   const reconcileHistory = async (rowId: string): Promise<void> => {
-    const identity = captureHistoryIdentity(rowId);
+    if (terminalHistoryWork) return;
+    const identity = beginHistoryReconciliation(rowId);
     if (!identity) return;
     await reconcileHistoryAttempt(identity);
   };
@@ -176,17 +193,15 @@ export function useRemoteAgentLifecycle(options: {
   };
 
   const reconcileTerminalHistory = (rowId: string): void => {
-    const identity = captureHistoryIdentity(rowId);
-    if (!identity) return;
     if (
-      terminalHistoryWork?.rowId === identity.rowId &&
-      terminalHistoryWork.runId === identity.runId &&
-      terminalHistoryWork.dialogueId === identity.dialogueId &&
-      terminalHistoryWork.generation === identity.generation
+      terminalHistoryWork?.rowId === rowId &&
+      ownsHistoryWork(terminalHistoryWork)
     ) {
       return;
     }
     clearTerminalHistoryWork();
+    const identity = beginHistoryReconciliation(rowId);
+    if (!identity) return;
     const work: TerminalHistoryWork = { ...identity, attempts: 0 };
     terminalHistoryWork = work;
     void runTerminalHistoryWork(work);
@@ -207,6 +222,7 @@ export function useRemoteAgentLifecycle(options: {
 
   const stopTracking = (): void => {
     generation += 1;
+    historyEpoch += 1;
     clearTerminalHistoryWork();
     const rowId = trackedRowId.value;
     trackedRowId.value = null;
