@@ -472,7 +472,7 @@ def test_routed_014_upgrade_addendum_requires_research_preconditions() -> None:
         r"Bot deployment must\s+complete before Web\s+deployment", addendum
     )
     assert "does not add a new input flag or cohort" in addendum
-    assert "research_enabled: false" not in addendum
+    assert "research_input_enabled:" not in addendum
     assert re.search(
         r"Rollback keeps `query` and `answer` widened as\s+`MEDIUMTEXT`", addendum
     )
