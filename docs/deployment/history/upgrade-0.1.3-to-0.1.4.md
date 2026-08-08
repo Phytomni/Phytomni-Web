@@ -7,11 +7,14 @@ choosing this addendum.
 
 ## Release boundary
 
-- This is a Web-only compatibility and quality follow-up.
-- It adds no production database migration or configuration key beyond the
-  `0.1.3` baseline.
-- Bot, operations, deployment automation, secrets, and live feature activation
-  remain outside this repository change.
+- This Web release consumes an extended Research input contract. Compatible Bot
+  delivery plus operator-owned storage and proxy work are deployment
+  preconditions, not changes executed from this repository.
+- The Web configuration surface adds `bot.max_query_chars`; use only scrubbed
+  examples in source control and preserve live values through approved secret
+  delivery.
+- Bot code, production DDL, reverse-proxy configuration, deployment automation,
+  secrets, and live execution remain owned by their respective teams.
 - `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` remain **External
   Pending** until an authorized acceptance packet is reviewed.
 
@@ -25,7 +28,15 @@ choosing this addendum.
    `idx_question_agent_logs_bot_report_revision` on
    `question_agent_logs`. If any item is missing, stop and follow the
    `0.1.2` → `0.1.3` procedure first; do not invent a new DDL path here.
-4. Confirm `/readyz` and the current core Web smoke checks pass before the
+4. The `question_agent_logs` `query` and `answer` columns must both be
+   `MEDIUMTEXT` before new Web traffic. Confirm both live types through the
+   separately transferred operator procedure; do not run AutoMigrate against
+   production.
+5. Confirm the effective reverse-proxy request-body allowance covers the
+   configured query maximum plus bounded history, attachment metadata, and
+   multipart framing. This allowance does not permit file-body relay through
+   Web Go.
+6. Confirm `/readyz` and the current core Web smoke checks pass before the
    replacement binary is started.
 
 ## What changes in `0.1.4`
@@ -38,66 +49,78 @@ choosing this addendum.
   responses to safe 502 errors, and keep Web failures at 500.
 - The local quality gate and static-analysis closure are refreshed for the
   release candidate. The human-reviewed visual package is local evidence only.
+- Research accepts the complete raw user query plus opaque managed attachments;
+  pasted paper text and dataset paths remain in the same ordinary query. No
+  layer silently truncates an accepted query or adds a path/description field.
+- Web requires `research_input_resolution_v1` version `1` and compatible
+  advertised query, attachment, path, reference, and scientific-format limits.
+  Missing or incompatible metadata fails Research closed.
 - The frontend build uses Vite `8.1.5` and targets Chrome/Edge 111, Firefox 114,
-  and Safari 16.4 or newer. Hashed frontend filenames may change even though
-  no Go configuration, database schema, Bot code, or operations code changes.
+  and Safari 16.4 or newer. Hashed frontend filenames may change; the browser
+  support floor is unchanged.
 
 ## Configuration and flags
 
-Preserve the `0.1.3` configuration. Keep every new capability dark by default:
+Preserve unrelated `0.1.3` configuration and add the bounded query key:
 
 ```yaml
 bot:
-  expert_enabled: false
-  stream_enabled: false
-  a2ui_actions_enabled: false
-  interop_enabled: false
-  research_enabled: false
-  design_enabled: false
-  network_enabled: false
-  history_dual_read: false
+  max_query_chars: 131072
 ```
 
-Do not add a migration, flip a flag, or change the Bot key as part of this
-addendum. A flag change requires its own reviewed acceptance row and operator
+The default query limit is 131,072 Unicode code points and the hard maximum is
+1,048,576. Extended Research input does not add a new input flag or cohort:
+every user already authorized for Research receives the same negotiated
+contract. Preserve the deployed values of existing product flags; any unrelated
+flag change still requires its own reviewed acceptance row and operator
 authorization.
 
 ## Deploy and smoke
 
-1. Build or copy the Web Go binary and matching frontend `dist/` from the
+After the database and proxy preflight, Bot deployment must complete before Web
+deployment. Use this order:
+
+1. Deploy the compatible Bot resolver and verify
+   `research_input_resolution_v1` version `1` plus its bounded descriptor.
+2. Build or copy the Web Go binary and matching frontend `dist/` from the
    reviewed `0.1.4` SHA. If building the frontend from source, use Node 26.x
    and npm 11.x, run `npm ci` in `apps/web`, then run `npm run build`.
-2. Publish the complete new `dist/` directory atomically; do not mix old HTML
+3. Publish the complete new `dist/` directory atomically; do not mix old HTML
    with new hashed assets or publish only changed files.
-3. Preserve the production port, database/registry key, Bot URL, and existing
+4. Preserve the production port, database/registry key, Bot URL, and existing
    secret delivery. Restart using the approved operations procedure.
-4. Check `/readyz` and service logs for startup, configuration, or Bot relay
+5. Check `/readyz` and service logs for startup, configuration, or Bot relay
    errors.
-5. With a non-production test account, verify login, blocking chat, same-title
-   new-chat failure recovery, Bot timeout/5xx error mapping, history replay,
-   owner isolation, and existing artifact behavior.
-6. Keep all Bot-facing capabilities disabled and record the smoke result with
-   the deployed SHA. Local G13–G17 output does not replace Bot, CI, staging,
-   live, or operations acceptance.
+6. With a non-production Research-authorized account, verify the three supported
+   forms: uploaded PDF plus uploaded data; uploaded PDF plus paths pasted into
+   the query; and paper text plus paths pasted into the query. Also verify
+   lifecycle truthfulness, refresh, history replay, and owner isolation.
+7. Record the Bot and Web SHAs plus sanitized smoke results. Local repository
+   output does not replace Bot CI, paired runtime, staging, live, or operations
+   acceptance.
 
 ## Rollback
 
 If readiness, smoke, or data correctness fails:
 
 1. Stop the `0.1.4` service using the approved operations procedure.
-2. Restore the saved `0.1.3` binary, frontend `dist/`, and configuration.
+2. Restore the saved `0.1.3` binary, frontend `dist/`, and configuration before
+   reverting Bot, so active Web never depends on a missing protocol.
 3. Keep the additive projection columns and index in place; `0.1.3` can use
    them and no schema rollback is needed.
-4. Keep every capability flag false, restart, and repeat `/readyz` plus the
-   core smoke checks.
-5. Preserve sanitized logs and results without secrets, credentials, cookies,
+4. Rollback keeps `query` and `answer` widened as `MEDIUMTEXT`; never narrow
+   columns that may contain already accepted rows. The larger safe proxy
+   allowance may remain because application limits still bound requests.
+5. Preserve existing product-flag values, restart, and repeat `/readyz` plus
+   the core smoke checks. Do not delete uploads, Research runs, or user history.
+6. Preserve sanitized logs and results without secrets, credentials, cookies,
    or real user/biological data.
 
 ## Repository-local evidence
 
-The current Web closure record is `1e210119` on `release/0.1.4`; operators must
-record the exact selected SHA in deployment evidence rather than relying on a
-branch name. `./scripts/validate_web_local.sh` passes locally, including
-G13–G17, with 207 frontend test files and 2724 tests. This is repository
-evidence only; no production deployment or external acceptance is claimed by
-this addendum.
+Record the exact selected Web and Bot SHAs, check date, command, exit code, and
+the final `./scripts/validate_web_local.sh` result rather than copying volatile
+test counts into this rolling addendum. Repository checks are Web evidence only;
+Bot delivery, operator DDL/proxy execution, paired runtime, staging, and
+production acceptance remain **External Pending** until their owners return
+reviewable evidence.

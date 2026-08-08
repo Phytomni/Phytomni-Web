@@ -17,6 +17,9 @@ DISPATCHER = ROOT / "scripts" / "run_gate_group.sh"
 FULL_GATE = ROOT / "scripts" / "validate_web_local.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 RUNBOOK = ROOT / "docs" / "deployment" / "upgrading.md"
+UPGRADE_014_ADDENDUM = (
+    ROOT / "docs" / "deployment" / "history" / "upgrade-0.1.3-to-0.1.4.md"
+)
 CONFIGURATION = ROOT / "docs" / "deployment" / "configuration.md"
 OPERATIONS = ROOT / "docs" / "deployment" / "operations.md"
 FRONTEND_DESIGN_SYSTEM = ROOT / "docs" / "frontend-design-system.md"
@@ -452,3 +455,26 @@ def test_research_input_rollout_docs_define_limits_schema_and_ux() -> None:
 
     assert "must never silently truncate" in frontend
     assert "does not add a new input control" in frontend
+
+
+def test_routed_014_upgrade_addendum_requires_research_preconditions() -> None:
+    addendum = UPGRADE_014_ADDENDUM.read_text(encoding="utf-8")
+
+    assert (
+        "It adds no production database migration or configuration key"
+        not in addendum
+    )
+    assert re.search(
+        r"`query` and `answer` columns must both be\s+`MEDIUMTEXT`", addendum
+    )
+    assert "reverse-proxy request-body allowance" in addendum
+    assert re.search(
+        r"Bot deployment must\s+complete before Web\s+deployment", addendum
+    )
+    assert "does not add a new input flag or cohort" in addendum
+    assert "research_enabled: false" not in addendum
+    assert re.search(
+        r"Rollback keeps `query` and `answer` widened as\s+`MEDIUMTEXT`", addendum
+    )
+    assert "External Pending" in addendum
+    assert "frontend test files" not in addendum
