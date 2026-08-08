@@ -45,6 +45,7 @@ import {
 import type {
   BotCapability,
   BotCapabilityExecution,
+  BotResearchInputCapability,
 } from "@/views/chat/composables/useBotCapabilities";
 import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import router, {
@@ -77,8 +78,20 @@ const remoteTools = [
 ] as const;
 type TestCapabilitySource = {
   byTool: Ref<CapabilityMap>;
+  researchInput?: Ref<unknown>;
   load?: (force?: boolean) => Promise<unknown>;
 };
+
+function enabledResearchInputCapability(): BotResearchInputCapability {
+  return {
+    enabled: true,
+    protocol: "research_input_resolution_v1",
+    max_user_query_chars: 131072,
+    max_attachments_per_request: 64,
+    max_research_dataset_paths: 64,
+    max_research_input_references: 128,
+  };
+}
 
 function makeCapabilities(
   tool: string,
@@ -99,6 +112,9 @@ function makeCapabilities(
         artifacts,
       },
     }),
+    ...(tool === "InSilicoResearchAgent"
+      ? { researchInput: ref(enabledResearchInputCapability()) }
+      : {}),
     load,
   };
 }
@@ -239,6 +255,123 @@ describe("useBotRemoteAgentRun", () => {
     expect(formData.get("interop_targets")).toBe(JSON.stringify(["mcp-peer"]));
     expect(formData.get("query")).not.toContain("AT1G01010");
     expect(getChatState("d1").activeRequestId).toBe("");
+  });
+
+  it("accepts exactly 64 Research attachment references from the negotiated limit", async () => {
+    const attachments = Array.from({ length: 64 }, (_, index) => ({
+      asset_id: `file_research_${String(index + 1).padStart(3, "0")}`,
+    }));
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-research-64",
+        tool_name: "InSilicoResearchAgent",
+        status: "RUNNING",
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-64",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "Compare all synthetic inputs", attachments });
+
+    expect(mockQuery).toHaveBeenCalledOnce();
+    const formData = mockQuery.mock.calls[0][1] as FormData;
+    expect([...formData.keys()].sort()).toEqual(
+      ["attachments", "id", "query"].sort()
+    );
+    expect(formData.get("query")).toBe("Compare all synthetic inputs");
+    const submittedAttachments = JSON.parse(
+      String(formData.get("attachments"))
+    ) as Array<Record<string, unknown>>;
+    expect(submittedAttachments).toHaveLength(64);
+    expect(submittedAttachments[0]).toEqual({
+      asset_id: "file_research_001",
+    });
+    expect(submittedAttachments[63]).toEqual({
+      asset_id: "file_research_064",
+    });
+    expect(formData.has("data_list")).toBe(false);
+    expect(formData.has("obs_file_list")).toBe(false);
+    expect(formData.has("dataset_description")).toBe(false);
+  });
+
+  it("rejects 65 Research attachment references before transport", async () => {
+    const attachments = Array.from({ length: 65 }, (_, index) => ({
+      asset_id: `file_research_${String(index + 1).padStart(3, "0")}`,
+    }));
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-65",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(
+      run.submit({ query: "Compare all synthetic inputs", attachments })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", undefined],
+    [
+      "disabled",
+      {
+        ...enabledResearchInputCapability(),
+        enabled: false,
+      },
+    ],
+    [
+      "over hard maximum",
+      {
+        ...enabledResearchInputCapability(),
+        max_attachments_per_request: 257,
+      },
+    ],
+    [
+      "fractional",
+      {
+        ...enabledResearchInputCapability(),
+        max_attachments_per_request: 63.5,
+      },
+    ],
+    [
+      "unknown protocol",
+      {
+        ...enabledResearchInputCapability(),
+        protocol: "research_input_resolution_v2",
+      },
+    ],
+  ])("fails Research closed for a %s input capability", async (_, value) => {
+    const capabilities = makeCapabilities("InSilicoResearchAgent");
+    capabilities.researchInput = value === undefined ? undefined : ref(value);
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-invalid-capability",
+      capabilities,
+    });
+
+    await expect(
+      run.submit({ query: "Research safely" })
+    ).rejects.toMatchObject({ code: "capability_disabled" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("preserves the legacy ten-reference ceiling for non-Research products", async () => {
+    const attachments = Array.from({ length: 11 }, (_, index) => ({
+      asset_id: `file_design_${String(index + 1).padStart(2, "0")}`,
+    }));
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "design-11",
+      capabilities: makeCapabilities("DigitalDesignAgent"),
+    });
+
+    await expect(
+      run.submit({ query: "Design with references", attachments })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it.each(remoteTools)(

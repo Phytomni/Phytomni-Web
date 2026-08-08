@@ -106,13 +106,21 @@ describe("useChatAgentRunLifecycle", () => {
       );
     }
     const reloadChat = vi.fn(async () => {
-      if (state.renderedChat) {
-        state.renderedChat.messages[1] = {
-          ...state.renderedChat.messages[1],
-          status: "SUCCEEDED",
-          content: "Final Research report",
-        };
-      }
+      state.renderedChat = {
+        dialogue_id: "research",
+        messages: [
+          buildChatMessage({
+            role: "user",
+            content: rawQuery,
+          }),
+          buildChatMessage({
+            id: "151",
+            tool_name: "InSilicoResearchAgent",
+            status: "SUCCEEDED",
+            content: "Final Research report",
+          }),
+        ],
+      };
       return "applied" as const;
     });
     const coordinator = useChatAgentRunLifecycle({

@@ -13,7 +13,10 @@ import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
   type RemoteAgentTool,
 } from "@/constants/agents";
-import type { BotCapability } from "./useBotCapabilities";
+import type {
+  BotCapability,
+  BotResearchInputCapability,
+} from "./useBotCapabilities";
 import { useBotCapabilities } from "./useBotCapabilities";
 import { parseBotProjection, type BotRunProjection } from "../botProjection";
 import {
@@ -72,6 +75,8 @@ export type RemoteAgentCapabilitySource =
       byTool:
         | RefLike<Record<string, Partial<BotCapability> | undefined>>
         | Record<string, Partial<BotCapability> | undefined>;
+      researchInput?:
+        RefLike<BotResearchInputCapability> | BotResearchInputCapability;
       load?: (force?: boolean) => Promise<unknown>;
     }
   | RefLike<unknown>
@@ -126,6 +131,9 @@ export type RemoteAgentRunIdentity = {
 let requestSequence = 0;
 const localChatStates = new Map<string, RemoteAgentChatState>();
 const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+const LEGACY_REMOTE_AGENT_ATTACHMENT_LIMIT = 10;
+const HARD_REMOTE_AGENT_ATTACHMENT_LIMIT = 256;
+const RESEARCH_INPUT_PROTOCOL = "research_input_resolution_v1";
 
 type RemoteRequestToken = {
   id: string;
@@ -177,6 +185,41 @@ function capabilityFor(
     return (byTool as Record<string, Partial<BotCapability> | undefined>)[tool];
   }
   return undefined;
+}
+
+function researchAttachmentLimit(
+  source: RemoteAgentCapabilitySource
+): number | null {
+  const unwrappedSource = isRefLike(source) ? source.value : source;
+  if (
+    !unwrappedSource ||
+    typeof unwrappedSource !== "object" ||
+    !("researchInput" in unwrappedSource)
+  ) {
+    return null;
+  }
+  const raw = (unwrappedSource as { researchInput: unknown }).researchInput;
+  const capability = isRefLike(raw) ? raw.value : raw;
+  if (
+    !capability ||
+    typeof capability !== "object" ||
+    Array.isArray(capability)
+  ) {
+    return null;
+  }
+  const descriptor = capability as Partial<BotResearchInputCapability>;
+  const limit = descriptor.max_attachments_per_request;
+  if (
+    descriptor.enabled !== true ||
+    descriptor.protocol !== RESEARCH_INPUT_PROTOCOL ||
+    typeof limit !== "number" ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > HARD_REMOTE_AGENT_ATTACHMENT_LIMIT
+  ) {
+    return null;
+  }
+  return limit;
 }
 
 function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
@@ -365,10 +408,11 @@ function isCanceledRequest(error: unknown): boolean {
 }
 
 function normalizeAttachments(
-  attachments: readonly AssetAttachmentRef[] | undefined
+  attachments: readonly AssetAttachmentRef[] | undefined,
+  maxAttachments: number
 ): AssetAttachmentRef[] {
   if (attachments === undefined) return [];
-  if (!Array.isArray(attachments) || attachments.length > 10) {
+  if (!Array.isArray(attachments) || attachments.length > maxAttachments) {
     throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
   }
   const seen = new Set<string>();
@@ -558,7 +602,17 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
-    const attachments = normalizeAttachments(input.attachments);
+    const maxAttachments =
+      tool === "InSilicoResearchAgent"
+        ? researchAttachmentLimit(capabilities)
+        : LEGACY_REMOTE_AGENT_ATTACHMENT_LIMIT;
+    if (maxAttachments === null) {
+      throw new BotRemoteAgentRunError(
+        "capability_disabled",
+        "Research input capability is unavailable"
+      );
+    }
+    const attachments = normalizeAttachments(input.attachments, maxAttachments);
     if (attachments.length > 0 && capability.attachments !== true) {
       throw new BotRemoteAgentRunError(
         "attachments_disabled",
