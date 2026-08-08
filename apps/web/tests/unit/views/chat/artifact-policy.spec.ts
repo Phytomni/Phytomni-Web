@@ -3,6 +3,7 @@ import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
   artifactKindForMessage,
   isCompletedDeepGenomeMessage,
+  isCompletedResearchMessage,
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
   shouldAutoOpenArtifact,
@@ -125,10 +126,52 @@ describe("artifact policy", () => {
     }
   });
 
+  it.each([
+    undefined,
+    "",
+    "PENDING",
+    "QUEUED",
+    "RUNNING",
+    "FAILED",
+    "CANCELLED",
+    "TIMED_OUT",
+    "succeeded",
+    " SUCCEEDED ",
+  ])("does not expose Research artifact at %j", (status) => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "InSilicoResearchAgent",
+      status,
+    };
+
+    expect(isCompletedResearchMessage(message)).toBe(false);
+    expect(artifactKindForMessage(message)).toBeNull();
+    expect(shouldAutoOpenArtifact(message)).toBe(false);
+  });
+
+  it("exposes only a succeeded durable Research report", () => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+    };
+
+    expect(isCompletedResearchMessage(message)).toBe(true);
+    expect(artifactKindForMessage(message)).toBe("research");
+    expect(shouldAutoOpenArtifact(message)).toBe(true);
+  });
+
   it.each(CANONICAL_AGENT_TOOLS)(
     "maps canonical %s results to the approved artifact kind",
     (toolName) => {
-      const message = { ...ELIGIBLE_MESSAGE, tool_name: toolName };
+      const message = {
+        ...ELIGIBLE_MESSAGE,
+        tool_name: toolName,
+        ...(toolName === "DeepGenomeAgent" ||
+        toolName === "InSilicoResearchAgent"
+          ? { status: "SUCCEEDED" }
+          : {}),
+      };
 
       expect(artifactKindForMessage(message)).toBe(artifactByTool[toolName]);
       expect(shouldAutoOpenArtifact(message)).toBe(autoOpenByTool[toolName]);

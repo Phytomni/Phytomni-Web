@@ -58,16 +58,40 @@ export function isMeaningfulDeepGenomeReport(
   return normalized !== "" && !isDeepGenomeTransportPlaceholder(normalized);
 }
 
-export function artifactKindForMessage(
-  message: ArtifactPolicyMessage
-): ArtifactKind {
-  if (
+function isArtifactMessageEligible(message: ArtifactPolicyMessage): boolean {
+  return !(
     message.role !== "assistant" ||
     message.streaming === true ||
     message.id == null ||
     String(message.id).trim() === "" ||
     typeof message.content !== "string" ||
     message.content.trim() === ""
+  );
+}
+
+export function isCompletedResearchMessage(
+  message: ArtifactPolicyMessage
+): boolean {
+  return (
+    isArtifactMessageEligible(message) &&
+    message.tool_name === "InSilicoResearchAgent" &&
+    message.status === "SUCCEEDED"
+  );
+}
+
+export function artifactKindForMessage(
+  message: ArtifactPolicyMessage
+): ArtifactKind {
+  if (!isArtifactMessageEligible(message)) return null;
+  if (
+    message.tool_name === "InSilicoResearchAgent" &&
+    !isCompletedResearchMessage(message)
+  ) {
+    return null;
+  }
+  if (
+    message.tool_name === "DeepGenomeAgent" &&
+    !isCompletedDeepGenomeMessage(message)
   ) {
     return null;
   }
@@ -88,13 +112,11 @@ export function shouldAutoOpenArtifact(
 }
 
 export function isCompletedDeepGenomeMessage(
-  message: Pick<
-    ChatMessage,
-    "role" | "content" | "id" | "streaming" | "tool_name" | "status"
-  >
+  message: ArtifactPolicyMessage
 ): boolean {
   return (
-    artifactKindForMessage(message) === "deep-genome" &&
+    isArtifactMessageEligible(message) &&
+    message.tool_name === "DeepGenomeAgent" &&
     String(message.status || "")
       .trim()
       .toUpperCase() === "SUCCEEDED" &&
