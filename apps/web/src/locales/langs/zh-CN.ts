@@ -789,7 +789,7 @@ export default {
       questionPlaceholder: "描述您需要的分析、物种与比较组",
       contextFilesLabel: "分析文件",
       contextFilesHint:
-        "上传支持的文档或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
+        "上传支持的文档或生物学数据，最多 {maxFiles} 个文件，每个文件不超过 {maxFileSize}。",
       submit: "开始分析运行",
       submitting: "正在提交…",
       reset: "开始新的运行",
@@ -969,7 +969,7 @@ export default {
       questionPlaceholder: "描述您希望复现或探索的研究",
       contextFilesLabel: "论文与上下文文件",
       contextFilesHint:
-        "可上传任意格式的论文或生物学数据，最多 10 个文件，每个文件不超过 10 GiB。",
+        "可上传任意格式的论文或生物学数据，最多 {maxFiles} 个文件，每个文件不超过 {maxFileSize}。",
       submit: "开始研究运行",
       submitting: "正在提交…",
       reset: "开始新的运行",

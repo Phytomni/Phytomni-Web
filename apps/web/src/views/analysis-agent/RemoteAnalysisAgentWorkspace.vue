@@ -105,7 +105,7 @@
             @change="handleFiles"
           />
           <p class="analysis-agent-hint">
-            {{ t(`${localePrefix}.contextFilesHint`) }}
+            {{ contextFilesHint }}
           </p>
           <div class="analysis-agent-attachments">
             <AttachmentChipStrip
@@ -301,6 +301,7 @@ import {
   type AttachmentChannel,
 } from "@/views/chat/composables/useBotCapabilities";
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
+import { formatBytes } from "@/utils/transfer-progress";
 import {
   useBotRemoteAgentRun,
   type BotRemoteAgentRunState,
@@ -345,6 +346,12 @@ const agentKey = computed(() =>
 );
 const capabilities = useBotCapabilities(`${agentKey.value}-agent-view`);
 const uploadCapability = capabilities.upload;
+const contextFilesHint = computed(() =>
+  t(`${props.localePrefix}.contextFilesHint`, {
+    maxFiles: uploadCapability.value.max_attachments,
+    maxFileSize: formatBytes(uploadCapability.value.max_file_bytes),
+  })
+);
 const routeDialogueId =
   typeof route.query.dialogue_id === "string" ? route.query.dialogue_id : "";
 const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)

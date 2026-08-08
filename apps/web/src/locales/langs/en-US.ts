@@ -810,7 +810,7 @@ export default {
         "Describe the analysis, species, and comparison you need",
       contextFilesLabel: "Analysis files",
       contextFilesHint:
-        "Attach supported documents or biological data, up to 10 files and 10 GiB each.",
+        "Attach supported documents or biological data, up to {maxFiles} files and {maxFileSize} each.",
       submit: "Start analysis run",
       submitting: "Submitting…",
       reset: "Start another run",
@@ -1011,7 +1011,7 @@ export default {
         "Describe the study you want to reproduce or explore",
       contextFilesLabel: "Paper and context files",
       contextFilesHint:
-        "Attach papers or biological data in any format, up to 10 files and 10 GiB each.",
+        "Attach papers or biological data in any format, up to {maxFiles} files and {maxFileSize} each.",
       submit: "Start research run",
       submitting: "Submitting…",
       reset: "Start another run",

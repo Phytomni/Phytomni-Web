@@ -74,12 +74,22 @@ const mocks = vi.hoisted(() => {
     max_research_dataset_paths: 64,
     max_research_input_references: 128,
   };
+  const uploadCapability = {
+    value: {
+      enabled: true,
+      protocol: "obs-multipart-v2",
+      upload_origin: "https://upload.example.test",
+      max_file_bytes: 10 * 1024 * 1024 * 1024,
+      max_attachments: 64,
+    },
+  };
   return {
     state,
     lifecycleSnapshot,
     chatState,
     analystCapability,
     researchInputCapability,
+    uploadCapability,
     submit: vi.fn().mockResolvedValue(null),
     cancel: vi.fn(),
     reset: vi.fn(),
@@ -120,13 +130,7 @@ vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
         },
       },
     },
-    upload: {
-      value: {
-        enabled: true,
-        max_file_bytes: 10 * 1024 * 1024 * 1024,
-        max_attachments: 64,
-      },
-    },
+    upload: mocks.uploadCapability,
     researchInput: {
       value: mocks.researchInputCapability,
     },
@@ -175,6 +179,7 @@ function mountWorkspace(
   options: {
     realArtifactShell?: boolean;
     realBotReportState?: boolean;
+    locale?: "en-US" | "zh-CN";
   } = {}
 ) {
   const research = tool === "InSilicoResearchAgent";
@@ -193,20 +198,25 @@ function mountWorkspace(
           template: '<div data-test="bot-report-state" />',
         },
       };
-  return createTestAppContext().mount(RemoteAnalysisAgentWorkspace, {
-    attachTo: document.body,
-    props: {
-      tool,
-      localePrefix: research ? "agents.research" : "agents.analyst",
-    },
-    global: {
-      stubs: {
-        ...artifactShellStub,
-        ...botReportStateStub,
-        BotArtifactList: { template: '<div data-test="bot-artifact-list" />' },
+  return createTestAppContext({ locale: options.locale }).mount(
+    RemoteAnalysisAgentWorkspace,
+    {
+      attachTo: document.body,
+      props: {
+        tool,
+        localePrefix: research ? "agents.research" : "agents.analyst",
       },
-    },
-  });
+      global: {
+        stubs: {
+          ...artifactShellStub,
+          ...botReportStateStub,
+          BotArtifactList: {
+            template: '<div data-test="bot-artifact-list" />',
+          },
+        },
+      },
+    }
+  );
 }
 
 function lifecycle(phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle {
@@ -574,6 +584,13 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       max_research_dataset_paths: 64,
       max_research_input_references: 128,
     });
+    Object.assign(mocks.uploadCapability.value, {
+      enabled: true,
+      protocol: "obs-multipart-v2",
+      upload_origin: "https://upload.example.test",
+      max_file_bytes: 10 * 1024 * 1024 * 1024,
+      max_attachments: 64,
+    });
   });
 
   afterEach(() => {
@@ -905,6 +922,30 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(wrapper.get('[data-test="analyst-form-error"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("renders the negotiated Analyst upload limits in English", () => {
+    const wrapper = mountWorkspace();
+
+    expect(wrapper.get("input[type=file] + .analysis-agent-hint").text()).toBe(
+      "Attach supported documents or biological data, up to 64 files and 10.0 GB each."
+    );
+    wrapper.unmount();
+  });
+
+  it("renders changed Research upload limits in Chinese", () => {
+    Object.assign(mocks.uploadCapability.value, {
+      max_file_bytes: 5 * 1024 * 1024 * 1024,
+      max_attachments: 32,
+    });
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      locale: "zh-CN",
+    });
+
+    expect(wrapper.get("input[type=file] + .analysis-agent-hint").text()).toBe(
+      "可上传任意格式的论文或生物学数据，最多 32 个文件，每个文件不超过 5.0 GB。"
+    );
     wrapper.unmount();
   });
 
