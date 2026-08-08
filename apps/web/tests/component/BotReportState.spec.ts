@@ -131,6 +131,16 @@ describe("BotReportState", () => {
       "common.loading"
     );
   });
+
+  it("keeps timeout as a distinct label with failed visual treatment", () => {
+    const wrapper = mountReport(lifecycle({ status: "TIMED_OUT" }));
+
+    expect(wrapper.attributes("data-report-status")).toBe("failed");
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      enUS.chat.lifecycle.timed_out
+    );
+    expect(wrapper.text()).not.toContain(enUS.common.failed);
+  });
 });
 
 describe("BotArtifactList", () => {

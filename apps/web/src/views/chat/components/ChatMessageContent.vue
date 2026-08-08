@@ -158,7 +158,7 @@
       </div>
     </div>
     <ResearchArtifactPreview
-      v-else-if="artifactPreview"
+      v-else-if="artifactPreview && effectiveLifecyclePhase !== 'TIMED_OUT'"
       :title="artifactPreview.title"
       :kind="artifactPreview.kind"
       :summary="artifactPreview.summary"
@@ -324,7 +324,7 @@ const hasDeepGenomeReferences = computed(
 function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   const status = props.message.status?.trim().toUpperCase();
   if (status === "PENDING" || status === "SUBMITTED") return "PREPARING";
-  if (status === "TIMEOUT" || status === "TIMED_OUT") return "FAILED";
+  if (status === "TIMEOUT" || status === "TIMED_OUT") return "TIMED_OUT";
   if (status === "CANCELED") return "CANCELLED";
   if (
     isResearchMessage.value &&
@@ -339,6 +339,7 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
     status === "RUNNING" ||
     status === "SUCCEEDED" ||
     status === "FAILED" ||
+    status === "TIMED_OUT" ||
     status === "CANCELLED"
   ) {
     return status;
@@ -403,6 +404,7 @@ const showLeadingLifecycleStatus = computed(
 const isTerminalLifecycle = computed(
   () =>
     effectiveLifecyclePhase.value === "FAILED" ||
+    effectiveLifecyclePhase.value === "TIMED_OUT" ||
     effectiveLifecyclePhase.value === "CANCELLED"
 );
 const hasSpecializedReport = computed(

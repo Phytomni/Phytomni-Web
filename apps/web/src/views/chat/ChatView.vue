@@ -1218,8 +1218,10 @@ function lifecycleFromMessage(
       break;
     case "FAILED":
     case "CANCELLED":
-    case "TIMED_OUT":
       status = "FAILED";
+      break;
+    case "TIMED_OUT":
+      status = "TIMED_OUT";
       break;
   }
 
@@ -1302,7 +1304,9 @@ function reportStatusForArtifact(
       reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
     }
   ).reportStage;
-  if (state.status === "FAILED") return "failed";
+  if (state.status === "FAILED" || state.status === "TIMED_OUT") {
+    return "failed";
+  }
   if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
     return "loading";
   }
@@ -1326,6 +1330,7 @@ const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
 
 function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
   const stage = state.reportStage;
+  if (state.status === "TIMED_OUT") return t("chat.lifecycle.timed_out");
   if (state.status === "FAILED") return t("chat.botReport.failed");
   if (state.status === "INPUT_REQUIRED") {
     return t("chat.botReport.inputRequired");
@@ -1352,7 +1357,10 @@ const currentArtifactBotReportLabels = computed(() => {
       status === "degraded"
         ? botReportLabelForLifecycle(state)
         : t("chat.botReport.degraded"),
-    failed: t("chat.botReport.failed"),
+    failed:
+      state.status === "TIMED_OUT"
+        ? t("chat.lifecycle.timed_out")
+        : t("chat.botReport.failed"),
     complete: t("chat.botReport.complete"),
   };
 });

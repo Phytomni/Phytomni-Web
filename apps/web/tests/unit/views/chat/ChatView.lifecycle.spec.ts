@@ -66,7 +66,7 @@ describe("ChatView lifecycle cleanup", () => {
     expect(remaining).toEqual([retained]);
   });
 
-  it("does not render a Finished preview for a running Research row", async () => {
+  it("renders Research active and timeout lifecycle states without Finished previews", async () => {
     const context = createTestAppContext({ locale: "en-US" });
     const wrapper = context.mount(ChatView, {
       global: {
@@ -147,6 +147,72 @@ describe("ChatView lifecycle cleanup", () => {
     const row = wrapper.get('[data-message-id="research-running-1"]');
     expect(row.find(".research-artifact-preview").exists()).toBe(false);
     expect(row.text()).not.toContain("Finished");
+
+    state.getChatState("research-dialogue").renderedChat = {
+      dialogue_id: "research-dialogue",
+      messages: [
+        {
+          role: "assistant",
+          id: "82",
+          tool_name: "InSilicoResearchAgent",
+          status: "TIMEOUT",
+          content: "",
+          doc_list: [],
+        },
+      ],
+    };
+    await nextTick();
+    await nextTick();
+
+    const historyTimeout = wrapper.get('[data-message-id="82"]');
+    expect(historyTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
+    expect(historyTimeout.find(".research-artifact-preview").exists()).toBe(
+      false
+    );
+    expect(historyTimeout.text()).not.toContain("No references available.");
+    expect(historyTimeout.text()).not.toContain("Finished");
+    expect(historyTimeout.text()).not.toContain("Failed");
+
+    state.getChatState("research-dialogue").renderedChat = {
+      dialogue_id: "research-dialogue",
+      messages: [
+        {
+          role: "assistant",
+          id: "83",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+          content: "",
+          doc_list: [],
+        },
+      ],
+    };
+    state.getChatState("research-dialogue").agentRunLifecycles["83"] = {
+      id: 83,
+      phase: "TIMED_OUT",
+      terminal: true,
+      child_task_count: 1,
+      child_work_accepted: true,
+      report_revision: 1,
+      artifact_summary: {
+        image_count: 0,
+        output_directory_count: 0,
+        has_report: false,
+      },
+      reconciliation: "FRESH",
+      tracking_degraded: false,
+      error_code: null,
+    };
+    await nextTick();
+    await nextTick();
+
+    const polledTimeout = wrapper.get('[data-message-id="83"]');
+    expect(polledTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
+    expect(polledTimeout.find(".research-artifact-preview").exists()).toBe(
+      false
+    );
+    expect(polledTimeout.text()).not.toContain("No references available.");
+    expect(polledTimeout.text()).not.toContain("Finished");
+    expect(polledTimeout.text()).not.toContain("Failed");
 
     wrapper.unmount();
   });

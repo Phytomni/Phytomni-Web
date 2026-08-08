@@ -32,6 +32,7 @@ const REQUIRED_RESEARCH_LIFECYCLE_LABELS = [
   ["chat.lifecycle.resolving_inputs", "Resolving inputs", "解析输入中"],
   ["chat.lifecycle.planning", "Planning tasks", "任务规划中"],
   ["chat.lifecycle.finalizing", "Finalizing", "最终整理中"],
+  ["chat.lifecycle.timed_out", "Timed out", "已超时"],
 ] as const;
 
 const CHAT_SOURCE = readFileSync(
@@ -87,24 +88,29 @@ function reportLabels(pack: LocalePack, state: ReturnType<typeof lifecycle>) {
   const botReport = pack.chat.botReport;
   const stage = state.reportStage;
   const lifecycleLabel =
-    state.status === "FAILED"
-      ? botReport.failed
-      : state.status === "INPUT_REQUIRED"
-        ? botReport.inputRequired
-        : stage === "waiting_for_brief_gene"
-          ? botReport.waiting
-          : state.degraded
-            ? botReport.degraded
-            : stage === "intermediate"
-              ? botReport.partial
-              : state.status === "RUNNING"
-                ? botReport.waiting
-                : botReport.complete;
+    state.status === "TIMED_OUT"
+      ? pack.chat.lifecycle.timed_out
+      : state.status === "FAILED"
+        ? botReport.failed
+        : state.status === "INPUT_REQUIRED"
+          ? botReport.inputRequired
+          : stage === "waiting_for_brief_gene"
+            ? botReport.waiting
+            : state.degraded
+              ? botReport.degraded
+              : stage === "intermediate"
+                ? botReport.partial
+                : state.status === "RUNNING"
+                  ? botReport.waiting
+                  : botReport.complete;
 
   return {
     loading: lifecycleLabel,
     degraded: lifecycleLabel,
-    failed: botReport.failed,
+    failed:
+      state.status === "TIMED_OUT"
+        ? pack.chat.lifecycle.timed_out
+        : botReport.failed,
     complete: botReport.complete,
   };
 }
@@ -186,6 +192,7 @@ describe("Bot lifecycle locale contract", () => {
     ["partial", "RUNNING", "intermediate", false, "partial"],
     ["degraded", "RUNNING", "intermediate", true, "degraded"],
     ["failed", "FAILED", "final", false, "failed"],
+    ["timed-out", "TIMED_OUT", "final", false, "timed_out"],
     ["input-required", "INPUT_REQUIRED", null, false, "inputRequired"],
     ["complete", "SUCCEEDED", "final", false, "complete"],
   ] as const)(
@@ -194,7 +201,12 @@ describe("Bot lifecycle locale contract", () => {
       for (const locale of ["en-US", "zh-CN"] as const) {
         const state = lifecycle({ status, reportStage, degraded });
         const wrapper = mountReport(locale, state);
-        const expected = valueAt(localePack(locale), `chat.botReport.${key}`);
+        const expected = valueAt(
+          localePack(locale),
+          key === "timed_out"
+            ? "chat.lifecycle.timed_out"
+            : `chat.botReport.${key}`
+        );
 
         expect(wrapper.get('[data-test="bot-report-status"]').text()).toContain(
           expected as string

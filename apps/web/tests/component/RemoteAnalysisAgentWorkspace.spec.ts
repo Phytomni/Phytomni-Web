@@ -238,7 +238,9 @@ function mountWorkspace(
 }
 
 function lifecycle(phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle {
-  const terminal = ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase);
+  const terminal = ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(
+    phase
+  );
   return {
     id: 19,
     phase,
@@ -853,6 +855,90 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
     wrapper.unmount();
   });
+
+  it("keeps hydrated Research timeout ahead of a stale CANCELLED snapshot", async () => {
+    setActiveRun({
+      phase: "timed_out",
+      projectionStatus: "CANCELLED",
+    });
+    mocks.state.value = {
+      ...mocks.state.value,
+      status: "TIMED_OUT",
+    };
+    mocks.lifecycleSnapshot.value = lifecycle("CANCELLED");
+    const wrapper = mountWorkspace("InSilicoResearchAgent", {
+      realArtifactShell: true,
+      realBotReportState: true,
+    });
+
+    await expectResearchStatusSurfaces(wrapper, "Timed out");
+    expect(wrapper.text()).not.toContain("Cancelled");
+
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["initial projection", "projection"],
+    ["live lifecycle snapshot", "snapshot"],
+    ["hydrated history state", "history"],
+  ] as const)(
+    "renders a timed-out Research %s across every status surface",
+    async (_name, source) => {
+      setActiveRun({
+        phase: source === "history" ? "timed_out" : "running",
+        projectionStatus: source === "projection" ? "TIMED_OUT" : "RUNNING",
+        workStage: "report_assembly",
+        includeProjection: source !== "history",
+      });
+      mocks.state.value = {
+        ...mocks.state.value,
+        status: source === "history" ? "TIMED_OUT" : "RUNNING",
+      };
+      if (source === "snapshot") {
+        mocks.lifecycleSnapshot.value = lifecycle("TIMED_OUT");
+      }
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+        realBotReportState: true,
+      });
+
+      await expectResearchStatusSurfaces(wrapper, "Timed out");
+      expect(wrapper.text()).not.toContain("Finalizing");
+      expect(wrapper.text()).not.toContain("Failed");
+      expect(wrapper.text()).not.toContain("Report ready");
+
+      wrapper.unmount();
+    }
+  );
+
+  it.each([
+    ["succeeded", "SUCCEEDED", "Report ready"],
+    ["failed", "FAILED", "Failed"],
+    ["cancelled", "CANCELLED", "Cancelled"],
+  ] as const)(
+    "keeps committed Research %s ahead of a stale TIMED_OUT snapshot",
+    async (phase, status, label) => {
+      setActiveRun({
+        phase,
+        projectionStatus: status,
+        workStage: "report_assembly",
+      });
+      mocks.state.value = {
+        ...mocks.state.value,
+        status: status === "CANCELLED" ? "FAILED" : status,
+      };
+      mocks.lifecycleSnapshot.value = lifecycle("TIMED_OUT");
+      const wrapper = mountWorkspace("InSilicoResearchAgent", {
+        realArtifactShell: true,
+        realBotReportState: true,
+      });
+
+      await expectResearchStatusSurfaces(wrapper, label);
+      expect(wrapper.text()).not.toContain("Timed out");
+
+      wrapper.unmount();
+    }
+  );
 
   it.each([
     ["succeeded", "SUCCEEDED", "Report ready"],

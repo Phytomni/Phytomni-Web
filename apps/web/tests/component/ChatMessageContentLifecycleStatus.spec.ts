@@ -26,7 +26,7 @@ vi.mock("@/views/chat/components/StreamMessage.vue", () => ({
 const lifecycle = (phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle => ({
   id: 901,
   phase,
-  terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+  terminal: ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(phase),
   child_task_count: phase === "PREPARING" ? 0 : 1,
   child_work_accepted: phase !== "PREPARING",
   report_revision: phase === "PREPARING" ? 0 : 2,
@@ -103,5 +103,16 @@ describe("ChatMessageContent lifecycle status", () => {
     expect(wrapper.findAll(".agent-lifecycle")).toHaveLength(1);
     expect(wrapper.findAll('[role="status"]')).toHaveLength(1);
     expect(wrapper.find(".agent-lifecycle").text()).toBe("Running");
+  });
+
+  it("renders a passed Research timeout lifecycle as its exact status", () => {
+    const wrapper = mountContent(
+      { tool_name: "InSilicoResearchAgent", content: "" },
+      lifecycle("TIMED_OUT")
+    );
+
+    expect(wrapper.get(".agent-lifecycle").text()).toBe("Timed out");
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Failed");
   });
 });

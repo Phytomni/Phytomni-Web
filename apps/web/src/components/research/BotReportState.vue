@@ -67,7 +67,9 @@ function reportStatusForLifecycle(
   lifecycle: BotLifecycleState
 ): BotReportStatus {
   const state = lifecycle as LifecycleMetadata;
-  if (state.status === "FAILED") return "failed";
+  if (state.status === "FAILED" || state.status === "TIMED_OUT") {
+    return "failed";
+  }
   if (state.reportStage === "waiting_for_brief_gene") return "loading";
   if (state.status === "INPUT_REQUIRED") return "loading";
   if (state.degraded || state.reportStage === "intermediate") return "degraded";
@@ -116,6 +118,9 @@ const reportText = computed(() => {
 });
 
 const statusLabel = computed(() => {
+  if (props.state.status === "TIMED_OUT") {
+    return t("chat.lifecycle.timed_out");
+  }
   const custom = props.labels[reportStatus.value];
   if (custom) return custom;
   switch (reportStatus.value) {
@@ -132,13 +137,19 @@ const statusLabel = computed(() => {
 
 const emptyReportLabel = computed(() => {
   if (props.emptyReportLabel) return props.emptyReportLabel;
+  if (props.state.status === "TIMED_OUT") {
+    return t("chat.lifecycle.timed_out");
+  }
   return reportStatus.value === "failed"
     ? t("common.failed")
     : t("common.loading");
 });
-const resolvedFailureLabel = computed(
-  () => props.failureLabel || t("common.failed")
-);
+const resolvedFailureLabel = computed(() => {
+  if (props.failureLabel) return props.failureLabel;
+  return props.state.status === "TIMED_OUT"
+    ? t("chat.lifecycle.timed_out")
+    : t("common.failed");
+});
 
 const effectiveUpdatedAt = computed(
   () => props.updatedAt ?? lifecycleMetadata.value.reportUpdatedAt ?? null

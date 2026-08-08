@@ -613,6 +613,7 @@ export default {
       finalizing: "Finalizing",
       succeeded: "Succeeded",
       failed: "Failed",
+      timed_out: "Timed out",
       cancelled: "Cancelled",
       resultUnavailable:
         "The task finished, but the report is not yet available.",

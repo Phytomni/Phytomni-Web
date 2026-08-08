@@ -180,7 +180,11 @@
       </form>
 
       <p
-        v-if="displayedState.degraded && !isResearchCancellation"
+        v-if="
+          displayedState.degraded &&
+          !isResearchCancellation &&
+          !isResearchTimeout
+        "
         class="analysis-agent-degraded"
         :data-test="`${agentKey}-degraded`"
         role="status"
@@ -240,7 +244,11 @@
             >
               <p>{{ workspaceStatusLabel }}</p>
               <p
-                v-if="displayedState.failures.length && !isResearchCancellation"
+                v-if="
+                  displayedState.failures.length &&
+                  !isResearchCancellation &&
+                  !isResearchTimeout
+                "
               >
                 {{ t(`${localePrefix}.degraded`) }}
               </p>
@@ -536,13 +544,18 @@ const hasRun = computed(
 const isResearchCancellation = computed(() => {
   if (props.tool !== "InSilicoResearchAgent") return false;
   const state = displayedState.value;
-  if (state.phase === "cancelled" || state.projection?.status === "CANCELLED") {
-    return true;
-  }
+  if (state.phase === "cancelled") return true;
   if (
     state.phase === "succeeded" ||
     state.phase === "failed" ||
+    state.phase === "timed_out" ||
     state.status === "SUCCEEDED" ||
+    state.status === "TIMED_OUT"
+  ) {
+    return false;
+  }
+  if (state.projection?.status === "CANCELLED") return true;
+  if (
     state.status === "FAILED" ||
     state.projection?.status === "SUCCEEDED" ||
     state.projection?.status === "FAILED" ||
@@ -552,12 +565,38 @@ const isResearchCancellation = computed(() => {
   }
   return remoteLifecycle.snapshot.value?.phase === "CANCELLED";
 });
+const isResearchTimeout = computed(() => {
+  if (props.tool !== "InSilicoResearchAgent") return false;
+  const state = displayedState.value;
+  if (
+    state.phase === "succeeded" ||
+    state.phase === "failed" ||
+    state.phase === "cancelled" ||
+    state.status === "SUCCEEDED" ||
+    state.status === "FAILED"
+  ) {
+    return false;
+  }
+  if (state.phase === "timed_out" || state.status === "TIMED_OUT") {
+    return true;
+  }
+  if (
+    state.projection?.status === "SUCCEEDED" ||
+    state.projection?.status === "FAILED" ||
+    state.projection?.status === "CANCELLED"
+  ) {
+    return false;
+  }
+  if (state.projection?.status === "TIMED_OUT") return true;
+  return remoteLifecycle.snapshot.value?.phase === "TIMED_OUT";
+});
 const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
   () => {
     if (
       displayedState.value.phase === "failed" ||
       displayedState.value.phase === "cancelled" ||
-      isResearchCancellation.value
+      isResearchCancellation.value ||
+      isResearchTimeout.value
     ) {
       return "failed";
     }
@@ -581,6 +620,7 @@ const reportStatusLabel = computed(() => {
 const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   if (props.tool !== "InSilicoResearchAgent") return null;
   if (isResearchCancellation.value) return "CANCELLED";
+  if (isResearchTimeout.value) return "TIMED_OUT";
 
   const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
   if (snapshotPhase) return snapshotPhase;
@@ -615,6 +655,9 @@ const workspaceStatusLabel = computed(() => {
   if (isResearchCancellation.value) {
     return t("chat.lifecycle.cancelled");
   }
+  if (isResearchTimeout.value) {
+    return t("chat.lifecycle.timed_out");
+  }
   if (
     props.tool !== "InSilicoResearchAgent" ||
     reportStatus.value !== "loading" ||
@@ -630,14 +673,18 @@ const reportLabels = computed(() => ({
   complete: t(`${props.localePrefix}.complete`),
   failed: isResearchCancellation.value
     ? t("chat.lifecycle.cancelled")
-    : t("common.failed"),
+    : isResearchTimeout.value
+      ? t("chat.lifecycle.timed_out")
+      : t("common.failed"),
 }));
 const reportFailureLabel = computed(() =>
   isResearchCancellation.value
     ? t("chat.lifecycle.cancelled")
-    : displayedState.value.failures.includes("unsupported_asset_format")
-      ? t(`${props.localePrefix}.unsupportedAssetFormat`)
-      : t("common.failed")
+    : isResearchTimeout.value
+      ? t("chat.lifecycle.timed_out")
+      : displayedState.value.failures.includes("unsupported_asset_format")
+        ? t(`${props.localePrefix}.unsupportedAssetFormat`)
+        : t("common.failed")
 );
 const tabLabels = computed(() => ({
   content: t(`${props.localePrefix}.report`),

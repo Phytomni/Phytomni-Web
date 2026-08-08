@@ -194,6 +194,7 @@ const mountContent = (
             "chat.lifecycle.running": "Running",
             "chat.lifecycle.succeeded": "Succeeded",
             "chat.lifecycle.failed": "Failed",
+            "chat.lifecycle.timed_out": "Timed out",
             "chat.lifecycle.cancelled": "Cancelled",
             "chat.lifecycle.resultUnavailable":
               "The task finished, but the report is not yet available.",
@@ -214,7 +215,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
   ): AgentTaskLifecycle => ({
     id: 1,
     phase,
-    terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+    terminal: ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(phase),
     child_task_count: 0,
     child_work_accepted: false,
     report_revision: 0,
@@ -254,6 +255,37 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       expect(failed.text()).not.toContain("common.noData");
     }
   });
+
+  it.each(["TIMEOUT", "TIMED_OUT"])(
+    "renders a Research %s row as timed out without mounting an artifact",
+    (status) => {
+      const wrapper = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `research-${status.toLowerCase()}`,
+          tool_name: "InSilicoResearchAgent",
+          status,
+          doc_list: [],
+        },
+        {
+          artifactPreview: {
+            title: "Finished",
+            kind: "In Silico Research Agent",
+            summary: "Research result",
+            openLabel: "View",
+          },
+        }
+      );
+
+      expect(wrapper.get(".agent-lifecycle").text()).toBe("Timed out");
+      expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+      expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain("No references available.");
+      expect(wrapper.text()).not.toContain("Finished");
+      expect(wrapper.text()).not.toContain("Failed");
+    }
+  );
 
   it("renders lifecycle before specialized-agent artifact emptiness", () => {
     for (const tool_name of [

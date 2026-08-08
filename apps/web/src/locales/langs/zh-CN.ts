@@ -603,6 +603,7 @@ export default {
       finalizing: "最终整理中",
       succeeded: "已成功",
       failed: "失败",
+      timed_out: "已超时",
       cancelled: "已取消",
       resultUnavailable: "任务已完成，但报告暂不可用。",
     },

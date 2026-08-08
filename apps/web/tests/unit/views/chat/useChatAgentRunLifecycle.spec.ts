@@ -163,7 +163,7 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
-  it.each(["FAILED", "CANCELLED"] as const)(
+  it.each(["FAILED", "TIMED_OUT", "CANCELLED"] as const)(
     "settles Research RUNNING to %s without transient success",
     async (terminalPhase) => {
       vi.useFakeTimers();
