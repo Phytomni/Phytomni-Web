@@ -47,6 +47,7 @@ import type {
   BotCapabilityExecution,
   BotResearchInputCapability,
 } from "@/views/chat/composables/useBotCapabilities";
+import type { BotRunProjection } from "@/views/chat/botProjection";
 import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import router, {
   REMOTE_AGENT_ROUTE_CONTRACTS,
@@ -67,6 +68,38 @@ function makeState(): RemoteAgentChatState {
     uploadTransfer: null,
     activeRequestId: "",
     generationStopped: false,
+  };
+}
+
+function runProjection(
+  status: BotRunProjection["status"],
+  reportRevision = 1
+): BotRunProjection {
+  return {
+    runId: "run-timeout",
+    agent: "InSilicoResearchAgent",
+    status,
+    workStage: null,
+    reportStage: "intermediate",
+    reportCompleteness: "partial",
+    reportRevision,
+    reportUpdatedAt: null,
+    reportPresentation: true,
+    intermediateReport: "",
+    finalReport: "",
+    progress: {
+      completed: 0,
+      total: 1,
+      failed: 0,
+      pending: 1,
+      briefGeneStatus: "",
+    },
+    degraded: false,
+    degradedReason: null,
+    failures: [],
+    artifacts: [],
+    requestId: null,
+    trackingDegraded: false,
   };
 }
 
@@ -602,6 +635,55 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.messageId).toBeNull();
     expect(run.state.value.interop).toBeNull();
     expect(run.state.value.degradedInterop).toBe(false);
+  });
+
+  it("restores and hydrates a timed-out run without reopening its phase", () => {
+    const owned: RemoteAgentChatState = {
+      ...makeState(),
+      botProjection: runProjection("TIMED_OUT", 2),
+      botLifecycle: {
+        ...initBotLifecycleState(),
+        status: "TIMED_OUT",
+        reportRevision: 2,
+      },
+    };
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-timeout",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+
+    run.hydrate(runProjection("RUNNING", 3));
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+  });
+
+  it("canonicalizes a raw TIMEOUT response before it enters owned state", async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-timeout-alias",
+        tool_name: "InSilicoResearchAgent",
+        status: "TIMEOUT",
+      },
+    });
+    const owned = makeState();
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-timeout-alias",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "Reproduce this paper" });
+
+    expect(run.state.value.projection?.status).toBe("TIMED_OUT");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(owned.botProjection?.status).toBe("TIMED_OUT");
   });
 
   it("restores pending archive delivery from dialogue-owned run state", () => {

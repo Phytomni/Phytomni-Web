@@ -76,6 +76,15 @@ describe("agent lifecycle decoding", () => {
     expect(decodeAgentTaskLifecycle(lifecycle)).toEqual(lifecycle);
   });
 
+  it.each(["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"])(
+    "accepts canonical terminal phase %s",
+    (phase) => {
+      expect(decodeAgentTaskLifecycle({ ...lifecycle, phase }).phase).toBe(
+        phase
+      );
+    }
+  );
+
   it("decodes only the exact browser-safe result delivery DTO", () => {
     const delivery = {
       schema_version: 1,
@@ -186,6 +195,11 @@ describe("agent lifecycle decoding", () => {
     ["excessive count", { child_task_count: 257 }],
     ["nonterminal phase marked terminal", { phase: "RUNNING", terminal: true }],
     ["terminal phase marked nonterminal", { phase: "FAILED", terminal: false }],
+    ["timeout alias", { phase: "TIMEOUT" }],
+    [
+      "canonical timeout marked nonterminal",
+      { phase: "TIMED_OUT", terminal: false },
+    ],
     ["inconsistent child work", { child_work_accepted: false }],
     [
       "missing artifact member",

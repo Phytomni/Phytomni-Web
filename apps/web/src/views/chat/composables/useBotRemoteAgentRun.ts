@@ -24,6 +24,7 @@ import {
   initBotLifecycleState,
   reduceBotFailure,
   reduceBotProjection,
+  type BotLifecycleStatus,
   type BotLifecycleState,
 } from "../streaming/botLifecycleReducer";
 import { isSafeAssetId } from "../utils/asset-attachments";
@@ -35,6 +36,7 @@ export type RemoteAgentRunPhase =
   | "input_required"
   | "succeeded"
   | "failed"
+  | "timed_out"
   | "cancelled";
 
 export type RemoteAgentResolver = {
@@ -237,7 +239,7 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
   return {
     ...lifecycle,
     ...(delivery ? { delivery } : {}),
-    phase: projection ? phaseFor(projection.status) : "idle",
+    phase: initialPhase(lifecycle.status, projection),
     requestId: owned.activeRequestId?.trim() || null,
     uploadTransfer: owned.uploadTransfer ?? null,
     projection,
@@ -292,8 +294,9 @@ function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
     case "SUCCEEDED":
       return "succeeded";
     case "FAILED":
-    case "TIMED_OUT":
       return "failed";
+    case "TIMED_OUT":
+      return "timed_out";
     case "CANCELLED":
       return "cancelled";
     case "PENDING":
@@ -302,6 +305,36 @@ function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
     default:
       return "running";
   }
+}
+
+function committedPhase(
+  status: BotLifecycleStatus,
+  currentPhase?: RemoteAgentRunPhase
+): RemoteAgentRunPhase | null {
+  if (currentPhase === "cancelled") return "cancelled";
+  switch (status) {
+    case "SUCCEEDED":
+      return "succeeded";
+    case "FAILED":
+      return "failed";
+    case "TIMED_OUT":
+      return "timed_out";
+    default:
+      return null;
+  }
+}
+
+function initialPhase(
+  status: BotLifecycleStatus,
+  projection: BotRunProjection | null
+): RemoteAgentRunPhase {
+  if (projection?.status === "CANCELLED" && status === "FAILED") {
+    return "cancelled";
+  }
+  return (
+    committedPhase(status) ??
+    (projection ? phaseFor(projection.status) : "idle")
+  );
 }
 
 function requestIdFor(dialogueId: string): string {
@@ -499,6 +532,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     identity: Partial<RemoteAgentRunIdentity> = {}
   ): void => {
     const safeProjection = parseBotProjection(projection);
+    const previousTerminalPhase = committedPhase(
+      state.value.status,
+      state.value.phase
+    );
     const lifecycle = reduceBotProjection(state.value, safeProjection);
     const dialogueId =
       identity.dialogueId === undefined
@@ -511,7 +548,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     state.value = {
       ...state.value,
       ...lifecycle,
-      phase: phaseFor(safeProjection.status),
+      phase: previousTerminalPhase ?? phaseFor(safeProjection.status),
       requestId: null,
       uploadTransfer: null,
       projection: safeProjection,

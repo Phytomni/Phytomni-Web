@@ -337,6 +337,39 @@ describe("bot lifecycle reducer", () => {
     ).toBe("FAILED");
   });
 
+  it("preserves a timed-out run as its own sticky terminal state", () => {
+    const timedOut = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ status: "TIMED_OUT", reportRevision: 2 })
+    );
+
+    expect(timedOut.status).toBe("TIMED_OUT");
+    for (const status of ["RUNNING", "SUCCEEDED", "FAILED"] as const) {
+      expect(
+        reduceBotProjection(timedOut, projection({ status, reportRevision: 3 }))
+          .status
+      ).toBe("TIMED_OUT");
+    }
+    expect(reduceBotFailure(timedOut, new Error("late transport")).status).toBe(
+      "TIMED_OUT"
+    );
+  });
+
+  it("does not let a timeout overwrite another committed terminal state", () => {
+    for (const status of ["SUCCEEDED", "FAILED"] as const) {
+      const terminal = reduceBotProjection(
+        initBotLifecycleState(),
+        projection({ status, reportRevision: 2 })
+      );
+      expect(
+        reduceBotProjection(
+          terminal,
+          projection({ status: "TIMED_OUT", reportRevision: 3 })
+        ).status
+      ).toBe(status);
+    }
+  });
+
   it("folds a terminal failure without exposing the raw error", () => {
     const state = reduceBotProjection(
       initBotLifecycleState(),

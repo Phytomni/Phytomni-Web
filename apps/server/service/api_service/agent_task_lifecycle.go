@@ -160,7 +160,7 @@ func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunPro
 
 func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {
 	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required ||
-		phase == "FAILED" || phase == "CANCELLED" {
+		phase == "FAILED" || phase == "TIMED_OUT" || phase == "CANCELLED" {
 		return phase, terminal
 	}
 	switch projection.Delivery.Status {
@@ -236,8 +236,10 @@ func lifecyclePhase(status, workStage string) (string, bool) {
 		return "RUNNING", false
 	case "SUCCEEDED":
 		return "SUCCEEDED", true
-	case "FAILED", "TIMED_OUT", "TIMEOUT":
+	case "FAILED":
 		return "FAILED", true
+	case "TIMED_OUT", "TIMEOUT":
+		return "TIMED_OUT", true
 	case "CANCELLED", "CANCELED":
 		return "CANCELLED", true
 	default:

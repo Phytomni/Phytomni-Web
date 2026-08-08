@@ -17,7 +17,7 @@ import type {
 import type { AguiEvent } from "./aguiEvents";
 
 export type BotLifecycleStatus =
-  "RUNNING" | "INPUT_REQUIRED" | "SUCCEEDED" | "FAILED";
+  "RUNNING" | "INPUT_REQUIRED" | "SUCCEEDED" | "FAILED" | "TIMED_OUT";
 
 export interface BotLifecycleState {
   runId: string | null;
@@ -35,7 +35,11 @@ export interface BotLifecycleState {
   delivery?: AgentResultDelivery;
 }
 
-const TERMINAL_STATUSES = new Set<BotLifecycleStatus>(["SUCCEEDED", "FAILED"]);
+const TERMINAL_STATUSES = new Set<BotLifecycleStatus>([
+  "SUCCEEDED",
+  "FAILED",
+  "TIMED_OUT",
+]);
 
 export function reduceContextStagedNotice(
   current: ConversationContextNotice,
@@ -225,8 +229,9 @@ function mapStatus(status: BotRunStatus): BotLifecycleStatus {
       return "SUCCEEDED";
     case "FAILED":
     case "CANCELLED":
-    case "TIMED_OUT":
       return "FAILED";
+    case "TIMED_OUT":
+      return "TIMED_OUT";
     case "RUNNING":
     case "PENDING":
     case "QUEUED":

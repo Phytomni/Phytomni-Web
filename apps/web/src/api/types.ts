@@ -279,6 +279,7 @@ export type AgentRunPhase =
   | "FINALIZING"
   | "SUCCEEDED"
   | "FAILED"
+  | "TIMED_OUT"
   | "CANCELLED";
 
 export type AgentReconciliation = "FRESH" | "CACHED" | "DEGRADED";
@@ -478,6 +479,7 @@ const AGENT_RUN_PHASES = new Set<AgentRunPhase>([
   "FINALIZING",
   "SUCCEEDED",
   "FAILED",
+  "TIMED_OUT",
   "CANCELLED",
 ]);
 const AGENT_RECONCILIATIONS = new Set<AgentReconciliation>([
@@ -666,7 +668,10 @@ export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
   if (id <= 0) invalid(label);
   const phase = requiredAllowedString(value, "phase", AGENT_RUN_PHASES, label);
   const terminal = requiredBoolean(value, "terminal", label);
-  if (terminal !== ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase)) {
+  if (
+    terminal !==
+    ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(phase)
+  ) {
     invalid(label);
   }
   const childTaskCount = requiredNonnegativeCount(

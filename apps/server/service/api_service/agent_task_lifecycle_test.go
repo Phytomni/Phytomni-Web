@@ -246,6 +246,10 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 			delivery: testPendingDelivery(1, ""), wantPhase: "FAILED", wantTerminal: true,
 		},
 		{
+			name: "scientific timeout remains terminal with initial pending delivery", scientificStatus: "TIMED_OUT",
+			delivery: testPendingDelivery(1, ""), wantPhase: "TIMED_OUT", wantTerminal: true,
+		},
+		{
 			name: "ready delivery completes business result", scientificStatus: "SUCCEEDED",
 			delivery: testReadyDelivery(1, testProjectionDigestA), wantPhase: "SUCCEEDED", wantTerminal: true,
 		},
@@ -384,7 +388,7 @@ func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing
 		{status: "SUCCEEDED", wantPhase: "SUCCEEDED"},
 		{status: "FAILED", wantPhase: "FAILED"},
 		{status: "CANCELLED", wantPhase: "CANCELLED"},
-		{status: "TIMED_OUT", wantPhase: "FAILED"},
+		{status: "TIMED_OUT", wantPhase: "TIMED_OUT"},
 	}
 
 	for _, tt := range tests {
@@ -513,6 +517,8 @@ func TestLifecyclePhaseTerminalAuthority(t *testing.T) {
 		{status: "RUNNING", want: "RUNNING"},
 		{status: "SUCCEEDED", want: "SUCCEEDED", terminal: true},
 		{status: "FAILED", want: "FAILED", terminal: true},
+		{status: "TIMED_OUT", want: "TIMED_OUT", terminal: true},
+		{status: "TIMEOUT", want: "TIMED_OUT", terminal: true},
 		{status: "CANCELLED", want: "CANCELLED", terminal: true},
 	}
 	for _, tt := range tests {
