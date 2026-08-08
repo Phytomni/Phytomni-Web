@@ -392,6 +392,17 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	if maxQueryChars == 0 {
 		maxQueryChars = rxBot.DefaultMaxUserQueryChars
 	}
+	researchAdmission := researchIntent ||
+		(surface == api_service.QuerySurfaceAgentProduct && api_service.IsResearchAgentProductTool(routeTool))
+	if researchAdmission {
+		admittedMaxQueryChars, _, ok := api_service.ResearchInputLimitsFromAdmission(serviceCtx)
+		if !ok {
+			status, message := localizedQueryErrorStatus(ctx, api_service.ErrResearchInputIncompatible)
+			writeQueryError(ctx, status, message)
+			return
+		}
+		maxQueryChars = admittedMaxQueryChars
+	}
 	ctx.Request.Body = http.MaxBytesReader(
 		ctx.Writer,
 		ctx.Request.Body,

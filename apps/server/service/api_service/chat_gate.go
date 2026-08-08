@@ -90,8 +90,9 @@ type remoteProductRequirement struct {
 type remoteProductAdmissionContextKey struct{}
 
 type remoteProductAdmission struct {
-	email string
-	tool  string
+	email         string
+	tool          string
+	researchInput rxBot.ResearchInputContract
 }
 
 var remoteProductRequirements = map[string]remoteProductRequirement{
@@ -140,6 +141,17 @@ var remoteProductRequirements = map[string]remoteProductRequirement{
 func isRemoteProductTool(tool string) bool {
 	_, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	return ok
+}
+
+func isResearchProductTool(tool string) bool {
+	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
+	return ok && requirement.tool == "InSilicoResearchAgent"
+}
+
+// IsResearchAgentProductTool reports whether a route-owned identifier maps to
+// the canonical Research product.
+func IsResearchAgentProductTool(tool string) bool {
+	return isResearchProductTool(tool)
 }
 
 func isRemoteProductEnabled(tool string) bool {
@@ -191,30 +203,38 @@ func (ps *Service) CheckChatAllowed(ctx context.Context, email string) error {
 // tables fail closed: a capability must never be inferred from browser input.
 // This check is intentionally independent of the quota gate above so turning
 // quota enforcement off cannot activate a remote product.
-func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool string) error {
+func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
 	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	if !ok {
-		return ErrRemoteProductForbidden
+		return remoteProductAdmission{}, ErrRemoteProductForbidden
 	}
 	if !requirement.enabled(rxBot.BotConfig) {
-		return ErrRemoteProductDisabled
+		return remoteProductAdmission{}, ErrRemoteProductDisabled
 	}
 	resolution, err := ps.ResolveAgentPermissions(ctx, email)
 	if err != nil {
-		return ErrRemoteProductForbidden
+		return remoteProductAdmission{}, ErrRemoteProductForbidden
 	}
 	if !containsAgentTool(resolution.GrantedTools, requirement.tool) {
-		return ErrRemoteProductForbidden
+		return remoteProductAdmission{}, ErrRemoteProductForbidden
 	}
 	if !containsAgentTool(resolution.AllowedTools, requirement.tool) {
-		return ErrRemoteProductDisabled
+		return remoteProductAdmission{}, ErrRemoteProductDisabled
 	}
+	admission := remoteProductAdmission{email: email, tool: requirement.tool}
 	if requirement.tool == "InSilicoResearchAgent" {
-		if _, err := ps.validatedResearchInputContract(ctx, nil); err != nil {
-			return ErrResearchInputIncompatible
+		contract, err := ps.validatedResearchInputContract(ctx, nil)
+		if err != nil {
+			return remoteProductAdmission{}, ErrResearchInputIncompatible
 		}
+		admission.researchInput = contract
 	}
-	return nil
+	return admission, nil
+}
+
+func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool string) error {
+	_, err := ps.checkRemoteProductAllowed(ctx, email, tool)
+	return err
 }
 
 // AdmitRemoteProduct performs the complete server-owned product gate and, on
@@ -223,30 +243,57 @@ func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool st
 // Gin string value; direct service callers without this context still run the
 // full check below.
 func (ps *Service) AdmitRemoteProduct(ctx context.Context, email, tool string) (context.Context, error) {
-	if err := ps.CheckRemoteProductAllowed(ctx, email, tool); err != nil {
+	admission, err := ps.checkRemoteProductAllowed(ctx, email, tool)
+	if err != nil {
 		return ctx, err
 	}
-	requirement := remoteProductRequirements[strings.TrimSpace(tool)]
-	return context.WithValue(ctx, remoteProductAdmissionContextKey{}, remoteProductAdmission{
-		email: email,
-		tool:  requirement.tool,
-	}), nil
+	return context.WithValue(ctx, remoteProductAdmissionContextKey{}, admission), nil
 }
 
-func hasRemoteProductAdmission(ctx context.Context, email, tool string) bool {
+func remoteProductAdmissionFromContext(ctx context.Context, email, tool string) (remoteProductAdmission, bool) {
 	requirement, ok := remoteProductRequirements[strings.TrimSpace(tool)]
 	if !ok {
-		return false
+		return remoteProductAdmission{}, false
 	}
 	admission, ok := ctx.Value(remoteProductAdmissionContextKey{}).(remoteProductAdmission)
-	return ok && admission.email == email && admission.tool == requirement.tool
+	if !ok || admission.email != email || admission.tool != requirement.tool {
+		return remoteProductAdmission{}, false
+	}
+	return admission, true
 }
 
-func (ps *Service) ensureRemoteProductAllowed(ctx context.Context, email, tool string) error {
-	if hasRemoteProductAdmission(ctx, email, tool) {
-		return nil
+func researchInputLimits(admission remoteProductAdmission) (maxQueryChars, maxAttachments int, ok bool) {
+	if admission.tool != "InSilicoResearchAgent" ||
+		admission.researchInput.MaxUserQueryChars < 1 ||
+		admission.researchInput.MaxAttachments < 1 {
+		return 0, 0, false
 	}
-	return ps.CheckRemoteProductAllowed(ctx, email, tool)
+	maxQueryChars = rxBot.ConfiguredMaxUserQueryChars()
+	if maxQueryChars < 1 {
+		maxQueryChars = rxBot.DefaultMaxUserQueryChars
+	}
+	if admission.researchInput.MaxUserQueryChars < maxQueryChars {
+		maxQueryChars = admission.researchInput.MaxUserQueryChars
+	}
+	return maxQueryChars, admission.researchInput.MaxAttachments, true
+}
+
+// ResearchInputLimitsFromAdmission returns only limits from a server-created
+// Research admission. Its private context key prevents browser-supplied values
+// from becoming authoritative at the HTTP boundary.
+func ResearchInputLimitsFromAdmission(ctx context.Context) (maxQueryChars, maxAttachments int, ok bool) {
+	admission, ok := ctx.Value(remoteProductAdmissionContextKey{}).(remoteProductAdmission)
+	if !ok {
+		return 0, 0, false
+	}
+	return researchInputLimits(admission)
+}
+
+func (ps *Service) ensureRemoteProductAllowed(ctx context.Context, email, tool string) (remoteProductAdmission, error) {
+	if admission, ok := remoteProductAdmissionFromContext(ctx, email, tool); ok {
+		return admission, nil
+	}
+	return ps.checkRemoteProductAllowed(ctx, email, tool)
 }
 
 func containsAgentTool(tools []string, target string) bool {

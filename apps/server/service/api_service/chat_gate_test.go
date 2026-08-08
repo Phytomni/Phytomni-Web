@@ -304,12 +304,16 @@ func serviceWithValidResearchCatalog() *Service {
 }
 
 type alternatingResearchCatalogReader struct {
-	calls int
+	calls    int
+	response *rxBot.AgentsListResponse
 }
 
 func (reader *alternatingResearchCatalogReader) GetAgents(context.Context) (*rxBot.AgentsListResponse, error) {
 	reader.calls++
 	if reader.calls == 1 {
+		if reader.response != nil {
+			return reader.response, nil
+		}
 		return validResearchCapabilityCatalog(), nil
 	}
 	return &rxBot.AgentsListResponse{}, nil
@@ -323,6 +327,25 @@ type countingResearchCatalogReader struct {
 func (reader *countingResearchCatalogReader) GetAgents(context.Context) (*rxBot.AgentsListResponse, error) {
 	reader.calls++
 	return reader.response, nil
+}
+
+func researchCatalogWithLimits(maxQueryChars, maxAttachments int) *rxBot.AgentsListResponse {
+	response := validResearchCapabilityCatalog()
+	response.ResearchInputResolution.MaxUserQueryChars = maxQueryChars
+	response.ResearchInputResolution.MaxAttachments = maxAttachments
+	response.ResearchInputResolution.MaxReferences = 128
+	if maxAttachments > response.ResearchInputResolution.MaxReferences {
+		response.ResearchInputResolution.MaxReferences = maxAttachments
+	}
+	for index := range response.Data {
+		if response.Data[index].Slug != "research" {
+			continue
+		}
+		dataset := response.Data[index].Capabilities.Attachments.Datasets
+		dataset.MaxFiles = maxAttachments
+		dataset.MaxTotalBytes = dataset.MaxFileBytes * int64(maxAttachments)
+	}
+	return response
 }
 
 func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *testing.T) {
@@ -418,12 +441,14 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 			name: "dedicated Research",
 			input: QueryInput{
 				Query: "research question", Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+				Attachments: distinctQueryAttachmentRefs(65),
 			},
 		},
 		{
 			name: "explicit Expert Research",
 			input: QueryInput{
 				Query: "research question", Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+				Attachments: distinctQueryAttachmentRefs(65),
 			},
 		},
 	} {
@@ -446,7 +471,9 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
-			reader := &alternatingResearchCatalogReader{}
+			reader := &alternatingResearchCatalogReader{
+				response: researchCatalogWithLimits(262_144, 128),
+			}
 			service := &Service{catalogReader: reader}
 
 			admittedCtx, err := service.AdmitRemoteProduct(
@@ -465,6 +492,89 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 				t.Fatalf("Research runs=%d, want 1", runs)
 			}
 		})
+	}
+}
+
+func TestDirectResearchEnforcesNegotiatedLimitsWithOneCatalogFetch(t *testing.T) {
+	surfaces := []struct {
+		name  string
+		input QueryInput
+	}{
+		{
+			name: "dedicated Research",
+			input: QueryInput{
+				Mode: "instant", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceAgentProduct,
+			},
+		},
+		{
+			name: "explicit Expert Research",
+			input: QueryInput{
+				Mode: "expert", Tool: "InSilicoResearchAgent", Surface: QuerySurfaceChat,
+			},
+		},
+	}
+	limits := []struct {
+		name               string
+		localQueryLimit    int
+		advertisedQueryMax int
+		advertisedFiles    int
+		query              string
+		attachments        []rxBot.AssetAttachmentRef
+		wantErr            error
+	}{
+		{
+			name:            "Bot query limit is authoritative when lower",
+			localQueryLimit: 8, advertisedQueryMax: 4, advertisedFiles: 128,
+			query: "12345", wantErr: ErrInvalidChatRouting,
+		},
+		{
+			name:            "Web query limit is authoritative when lower",
+			localQueryLimit: 4, advertisedQueryMax: 8, advertisedFiles: 128,
+			query: "12345", wantErr: ErrInvalidChatRouting,
+		},
+		{
+			name:            "Bot attachment limit is authoritative when lower",
+			localQueryLimit: 8, advertisedQueryMax: 8, advertisedFiles: 32,
+			query: "valid", attachments: distinctQueryAttachmentRefs(33), wantErr: ErrInvalidQueryAttachments,
+		},
+		{
+			name:            "Bot attachment limit rejects advertised plus one",
+			localQueryLimit: 8, advertisedQueryMax: 8, advertisedFiles: 128,
+			query: "valid", attachments: distinctQueryAttachmentRefs(129), wantErr: ErrInvalidQueryAttachments,
+		},
+	}
+
+	for _, surface := range surfaces {
+		for _, limit := range limits {
+			t.Run(surface.name+"/"+limit.name, func(t *testing.T) {
+				gdb := setupExpertTestDB(t)
+				seedExpertPermissionUser(t, gdb, "research-direct@example.com", "research-role")
+				seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+				previous := rxBot.BotConfig
+				rxBot.BotConfig = &rxBot.Config{
+					BaseURL: "http://127.0.0.1:1", ProxyEnabled: true,
+					ExpertEnabled: true, ResearchEnabled: true,
+					MaxQueryChars: limit.localQueryLimit,
+				}
+				t.Cleanup(func() { rxBot.BotConfig = previous })
+				reader := &countingResearchCatalogReader{
+					response: researchCatalogWithLimits(limit.advertisedQueryMax, limit.advertisedFiles),
+				}
+				service := &Service{catalogReader: reader}
+				input := surface.input
+				input.Query = limit.query
+				input.Attachments = limit.attachments
+
+				_, err := service.Query(context.Background(), "research-direct@example.com", input)
+
+				if !errors.Is(err, limit.wantErr) {
+					t.Fatalf("Query error=%v, want %v", err, limit.wantErr)
+				}
+				if reader.calls != 1 {
+					t.Fatalf("catalog calls=%d, want exactly 1", reader.calls)
+				}
+			})
+		}
 	}
 }
 

@@ -170,6 +170,10 @@ func validateV1CurrentMessage(value string) error {
 	if limit == 0 {
 		limit = rxBot.DefaultMaxUserQueryChars
 	}
+	return validateCurrentMessageWithin(value, limit)
+}
+
+func validateCurrentMessageWithin(value string, limit int) error {
 	if err := ValidateCurrentQuery(value, limit); err != nil {
 		return ErrInvalidChatRouting
 	}
@@ -177,7 +181,11 @@ func validateV1CurrentMessage(value string) error {
 }
 
 func validateQueryAttachments(refs []rxBot.AssetAttachmentRef) ([]rxBot.AssetAttachmentRef, error) {
-	validated, err := rxBot.ValidateAssetAttachmentRefsWithin(refs, rxBot.DefaultMaxAssetAttachmentRefs)
+	return validateQueryAttachmentsWithin(refs, rxBot.DefaultMaxAssetAttachmentRefs)
+}
+
+func validateQueryAttachmentsWithin(refs []rxBot.AssetAttachmentRef, limit int) ([]rxBot.AssetAttachmentRef, error) {
+	validated, err := rxBot.ValidateAssetAttachmentRefsWithin(refs, limit)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidQueryAttachments, err)
 	}
@@ -1514,7 +1522,14 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 // to parent N, and RefreshId!=0 re-answers an existing row in place.
 func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*QueryData, error) {
 	v1 := multiturnV1Enabled(in)
-	attachments, err := validateQueryAttachments(in.Attachments)
+	researchCandidate := isResearchProductTool(in.Tool) &&
+		(in.Surface == QuerySurfaceAgentProduct ||
+			in.Surface == QuerySurfaceChat && strings.EqualFold(strings.TrimSpace(in.Mode), "expert"))
+	attachmentLimit := rxBot.DefaultMaxAssetAttachmentRefs
+	if researchCandidate {
+		attachmentLimit = rxBot.HardMaxAssetAttachmentRefs
+	}
+	attachments, err := validateQueryAttachmentsWithin(in.Attachments, attachmentLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1524,9 +1539,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if in.Surface == QuerySurfaceChat {
 		if v1 {
 			if err := validateV1ClientTurnID(in.ClientTurnID); err != nil {
-				return nil, err
-			}
-			if err := validateV1CurrentMessage(in.Query); err != nil {
 				return nil, err
 			}
 			in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
@@ -1543,6 +1555,15 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	} else if in.Surface != QuerySurfaceAgentProduct || !IsDedicatedAgentProductTool(in.Tool) {
 		return nil, ErrRemoteProductForbidden
+	}
+	researchRequest := isResearchProductTool(in.Tool) &&
+		(in.Surface == QuerySurfaceAgentProduct || in.Mode == "expert")
+	if !researchRequest {
+		if v1 {
+			if err := validateV1CurrentMessage(in.Query); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
@@ -1561,6 +1582,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		in.Mode = target.mode
 	}
 	var permissions AgentPermissionResolution
+	var admission remoteProductAdmission
 	if in.Surface == QuerySurfaceChat {
 		permissions, err = ps.ResolveAgentPermissions(ctx, username)
 		if err != nil {
@@ -1571,7 +1593,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	// effective capability set from the resolution above, including forced Expert
 	// selections, rather than treating a browser hint as a product route.
 	if in.Surface == QuerySurfaceAgentProduct {
-		if err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+		if admission, err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 			return nil, err
 		}
 	}
@@ -1589,11 +1611,25 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			// A direct service caller has no handler-created admission context,
 			// so explicit Research still validates the live Bot catalog here.
 			if in.Tool == "InSilicoResearchAgent" {
-				if err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
+				if admission, err = ps.ensureRemoteProductAllowed(ctx, username, in.Tool); err != nil {
 					return nil, err
 				}
 			}
 		}
+	}
+	if researchRequest {
+		maxQueryChars, maxAttachments, ok := researchInputLimits(admission)
+		if !ok {
+			return nil, ErrResearchInputIncompatible
+		}
+		if err := validateCurrentMessageWithin(in.Query, maxQueryChars); err != nil {
+			return nil, err
+		}
+		attachments, err = validateQueryAttachmentsWithin(in.Attachments, maxAttachments)
+		if err != nil {
+			return nil, err
+		}
+		in.Attachments = attachments
 	}
 	// 1. Web-owned alias -> Bot slug. Empty tool defaults to the chat agent.
 	// A forced Expert selection resolves its own slug and dispatches directly,

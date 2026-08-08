@@ -390,6 +390,126 @@ func seedResearchHandlerPermission(t *testing.T) {
 	}
 }
 
+func handlerResearchCatalogWithQueryLimit(t *testing.T, maxQueryChars int) string {
+	t.Helper()
+	var response rxBot.AgentsListResponse
+	if err := json.Unmarshal([]byte(handlerCapabilityBody(t)), &response); err != nil {
+		t.Fatalf("decode handler Research catalog: %v", err)
+	}
+	response.ResearchInputResolution.MaxUserQueryChars = maxQueryChars
+	body, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("encode handler Research catalog: %v", err)
+	}
+	return string(body)
+}
+
+func newNegotiatedResearchRequest(
+	t *testing.T,
+	surface api_service.QuerySurface,
+	query string,
+) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("query", query); err != nil {
+		t.Fatalf("write query: %v", err)
+	}
+	path := "/api/v1/agent-products/InSilicoResearchAgent/runs"
+	if surface == api_service.QuerySurfaceChat {
+		path = "/api/v1/conversations/0/messages"
+		if err := writer.WriteField("mode", "expert"); err != nil {
+			t.Fatalf("write mode: %v", err)
+		}
+		if err := writer.WriteField("tool", "InSilicoResearchAgent"); err != nil {
+			t.Fatalf("write tool: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close Research request: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodPost, path, &body)
+	ctx.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	if surface == api_service.QuerySurfaceChat {
+		ctx.Request.Header.Set("X-Phyto-Research-Intent", "expert-research-v1")
+		ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+	} else {
+		ctx.Params = gin.Params{{Key: "tool", Value: "InSilicoResearchAgent"}}
+	}
+	ctx.Set("username", "research@example.com")
+	i18n.Localize()(ctx)
+	return ctx, w
+}
+
+func TestResearchHandlerUsesMinimumNegotiatedQueryLimit(t *testing.T) {
+	surfaces := []struct {
+		name    string
+		surface api_service.QuerySurface
+	}{
+		{name: "dedicated Research", surface: api_service.QuerySurfaceAgentProduct},
+		{name: "explicit Expert Research", surface: api_service.QuerySurfaceChat},
+	}
+	limits := []struct {
+		name       string
+		local      int
+		advertised int
+	}{
+		{name: "Bot lower", local: 8, advertised: 4},
+		{name: "Web lower", local: 4, advertised: 8},
+	}
+
+	for _, surface := range surfaces {
+		for _, limit := range limits {
+			t.Run(surface.name+"/"+limit.name, func(t *testing.T) {
+				seedResearchHandlerPermission(t)
+				catalogCalls := 0
+				runCalls := 0
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == "/v1/agents" {
+						catalogCalls++
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(handlerResearchCatalogWithQueryLimit(t, limit.advertised)))
+						return
+					}
+					runCalls++
+					http.Error(w, "must not dispatch", http.StatusInternalServerError)
+				}))
+				t.Cleanup(server.Close)
+				previousConfig := rxBot.BotConfig
+				rxBot.BotConfig = &rxBot.Config{
+					BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
+					ResearchEnabled: true, MaxQueryChars: limit.local,
+				}
+				t.Cleanup(func() { rxBot.BotConfig = previousConfig })
+				previousQuota := viper.Get("chatlimit.enforce")
+				viper.Set("chatlimit.enforce", false)
+				t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+				ctx, recorder := newNegotiatedResearchRequest(t, surface.surface, "12345")
+				if surface.surface == api_service.QuerySurfaceChat {
+					NewHandler().Query(ctx)
+				} else {
+					NewHandler().AgentProductRun(ctx)
+				}
+
+				if recorder.Code != http.StatusRequestEntityTooLarge {
+					t.Fatalf("status=%d body=%s, want 413", recorder.Code, recorder.Body.String())
+				}
+				if catalogCalls != 1 {
+					t.Fatalf("catalog calls=%d, want exactly 1", catalogCalls)
+				}
+				if runCalls != 0 {
+					t.Fatalf("Research runs=%d, want 0", runCalls)
+				}
+			})
+		}
+	}
+}
+
 func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testing.T) {
 	tests := []struct {
 		name     string

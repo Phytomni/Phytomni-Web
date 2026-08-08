@@ -94,6 +94,25 @@ func TestQuerySubmissionAttachmentRefsUseManagedLimit(t *testing.T) {
 	}
 }
 
+func TestQueryStreamRetainsDefaultAttachmentLimit(t *testing.T) {
+	_, err := NewService().QueryStream(
+		context.Background(),
+		"stream@example.com",
+		QueryInput{
+			Query:       "stream query",
+			Mode:        "instant",
+			Tool:        "ChatAgent",
+			Surface:     QuerySurfaceChat,
+			Attachments: distinctQueryAttachmentRefs(65),
+		},
+		nil,
+		nil,
+	)
+	if !errors.Is(err, ErrInvalidQueryAttachments) {
+		t.Fatalf("QueryStream error=%v, want ErrInvalidQueryAttachments", err)
+	}
+}
+
 func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	rawQuery := "\n\t  Rice root atlas   reproduction \n" + strings.Repeat("x", 500)
