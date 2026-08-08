@@ -35,6 +35,14 @@ vi.mock("@/api/chat", async (importOriginal) => {
   };
 });
 
+vi.mock("@/api/task", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/task")>();
+  return {
+    ...actual,
+    getTaskLifecycle: vi.fn(() => new Promise(() => undefined)),
+  };
+});
+
 vi.mock("vue-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("vue-router")>();
   return {
