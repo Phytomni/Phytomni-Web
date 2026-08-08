@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -2253,13 +2254,13 @@ func parseHistory(s string) []rxBot.ChatMessage {
 	}
 	const (
 		maxMessages     = 20
-		maxContentBytes = 32 * 1024
+		maxContentRunes = 32 * 1024
 	)
 	clean := make([]rxBot.ChatMessage, 0, len(msgs))
 	for _, msg := range msgs {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
 		content := strings.TrimSpace(msg.Content)
-		if (role != "user" && role != "assistant") || content == "" || len(content) > maxContentBytes {
+		if (role != "user" && role != "assistant") || content == "" || utf8.RuneCountInString(content) > maxContentRunes {
 			continue
 		}
 		clean = append(clean, rxBot.ChatMessage{Role: role, Content: content})

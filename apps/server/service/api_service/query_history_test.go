@@ -39,6 +39,34 @@ func TestParseHistoryDropsOversizedContent(t *testing.T) {
 	}
 }
 
+func TestParseHistoryBoundsContentByUnicodeCodePoints(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		unit string
+	}{
+		{name: "ASCII", unit: "x"},
+		{name: "Chinese", unit: "稻"},
+		{name: "emoji", unit: "🧬"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exact := strings.Repeat(tc.unit, 32*1024)
+			over := exact + tc.unit
+			raw, err := json.Marshal([]rxBot.ChatMessage{
+				{Role: "user", Content: exact},
+				{Role: "assistant", Content: over},
+			})
+			if err != nil {
+				t.Fatalf("marshal Unicode history: %v", err)
+			}
+
+			got := parseHistory(string(raw))
+			if len(got) != 1 || got[0].Role != "user" || got[0].Content != exact {
+				t.Fatalf("bounded Unicode history length=%d, want exact entry only", len(got))
+			}
+		})
+	}
+}
+
 func TestParseHistoryBoundsRolesAndContent(t *testing.T) {
 	input := make([]map[string]string, 0, 25)
 	input = append(input, map[string]string{"role": "system", "content": "untrusted system role"})
