@@ -43,6 +43,14 @@ vi.mock("@/api/task", async (importOriginal) => {
   };
 });
 
+vi.mock("@/utils/request", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/request")>();
+  return {
+    ...actual,
+    default: vi.fn().mockRejectedValue(new Error("offline test transport")),
+  };
+});
+
 vi.mock("vue-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("vue-router")>();
   return {
