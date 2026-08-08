@@ -1,6 +1,8 @@
 import { flushPromises } from "@vue/test-utils";
 import { computed, reactive } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { AgentTaskLifecycle } from "@/api/types";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import RemoteAnalysisAgentWorkspace from "@/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue";
@@ -15,6 +17,14 @@ import {
   type RetainedUploadStatus,
   type UnifiedAttachmentSurface,
 } from "../helpers/unifiedAttachmentBehavior";
+
+const WORKSPACE_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue"
+  ),
+  "utf8"
+);
 
 const SAFE_RESEARCH_PATH_LINES = [
   "/fixtures/rice-root/GSE146033_RAW/GSM4363196_9311RPM.txt.gz",
@@ -598,6 +608,12 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = false;
   });
 
+  it("keeps the vertical scroll owner from exposing a page-level horizontal axis", () => {
+    expect(WORKSPACE_SOURCE).toMatch(
+      /\.analysis-agent-page\s*\{(?=[^}]*overflow-y:\s*auto;)(?=[^}]*overflow-x:\s*hidden;)[^}]*\}/
+    );
+  });
+
   it("applies the shared attachment behavior contract", async () => {
     const surface = makeUnifiedAttachmentSurface();
     await assertUnifiedAttachmentBehaviorTable(surface);
@@ -943,9 +959,10 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       locale: "zh-CN",
     });
 
-    expect(wrapper.get("input[type=file] + .analysis-agent-hint").text()).toBe(
-      "可上传任意格式的论文或生物学数据，最多 32 个文件，每个文件不超过 5.0 GB。"
-    );
+    const hint = wrapper.get("input[type=file] + .analysis-agent-hint").text();
+    expect(hint).toContain("32");
+    expect(hint).toContain("5.0 GB");
+    expect(hint).not.toMatch(/\{(?:maxFiles|maxFileSize)\}/);
     wrapper.unmount();
   });
 

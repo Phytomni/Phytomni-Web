@@ -832,6 +832,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding: var(--phy-space-32) var(--phy-space-40) var(--phy-space-48);
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--phy-color-bg-page);
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
