@@ -22,7 +22,6 @@ const ARTIFACT_POLICY_BY_TOOL: Readonly<
 > = {
   DeepGenomeAgent: { kind: "deep-genome", autoOpen: true },
   KnowledgeAgent: { kind: "cited-report", autoOpen: false },
-  ReviewAgent: { kind: "cited-report", autoOpen: false },
   BriefGeneAgent: { kind: "cited-report", autoOpen: false },
   ...REMOTE_AGENT_ARTIFACT_POLICIES,
 };

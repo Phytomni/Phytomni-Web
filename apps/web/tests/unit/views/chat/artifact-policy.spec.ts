@@ -23,7 +23,7 @@ const artifactByTool: Record<
   ChatAgent: null,
   KnowledgeAgent: "cited-report",
   DataAgent: null,
-  ReviewAgent: "cited-report",
+  ReviewAgent: null,
   BriefGeneAgent: "cited-report",
   AnalystAgent: null,
   DeepGenomeAgent: "deep-genome",
@@ -159,6 +159,17 @@ describe("artifact policy", () => {
     expect(isCompletedResearchMessage(message)).toBe(true);
     expect(artifactKindForMessage(message)).toBe("research");
     expect(shouldAutoOpenArtifact(message)).toBe(true);
+  });
+
+  it("renders a completed Review result as a cited answer", () => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+    };
+
+    expect(artifactKindForMessage(message)).toBeNull();
+    expect(shouldAutoOpenArtifact(message)).toBe(false);
   });
 
   it.each(CANONICAL_AGENT_TOOLS)(
