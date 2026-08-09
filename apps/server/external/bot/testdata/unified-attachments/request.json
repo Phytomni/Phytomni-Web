@@ -1,0 +1,66 @@
+{
+  "protocol": "phytomni-unified-attachments-v1",
+  "scenarios": [
+    {
+      "attachments": [
+        {
+          "asset_id": "file_fixture_reads_fastq_gz_0001"
+        },
+        {
+          "asset_id": "file_fixture_reference_pdf_0002"
+        },
+        {
+          "asset_id": "file_fixture_archive_zip_0003"
+        }
+      ],
+      "id": "dual_pdf_fastq_archive",
+      "query": "Process the attached synthetic research assets."
+    },
+    {
+      "attachments": [
+        {
+          "asset_id": "file_fixture_matrix_h5ad_0004"
+        },
+        {
+          "asset_id": "file_fixture_annotations_gff3_0005"
+        }
+      ],
+      "id": "document_only_mixed_classes",
+      "query": "Process the attached synthetic research assets."
+    },
+    {
+      "attachments": [
+        {
+          "asset_id": "file_fixture_variants_vcf_bgz_0006"
+        },
+        {
+          "asset_id": "file_fixture_alignment_bam_0007"
+        }
+      ],
+      "id": "dataset_only_mixed_classes",
+      "query": "Process the attached synthetic research assets."
+    },
+    {
+      "attachments": [
+        {
+          "asset_id": "file_fixture_zero_pdf_0008"
+        }
+      ],
+      "id": "zero_channel_rejected",
+      "query": "Process the attached synthetic research assets."
+    },
+    {
+      "attachments": [
+        {
+          "asset_id": "file_fixture_expert_archive_0009"
+        },
+        {
+          "asset_id": "file_fixture_expert_pdf_0010"
+        }
+      ],
+      "id": "expert_authorized_capability_intersection",
+      "query": "Process the attached synthetic research assets."
+    }
+  ],
+  "version": 1
+}

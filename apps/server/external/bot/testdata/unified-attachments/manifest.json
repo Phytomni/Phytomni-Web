@@ -1,0 +1,22 @@
+{
+  "files": [
+    {
+      "path": "request.json",
+      "sha256": "0ce9a95c6294dc404761c58a126f07c0af36e0f5cd7e5788c02ab3dbc19f669a"
+    },
+    {
+      "path": "expected-channel-projection.json",
+      "sha256": "a1d65b1a4c05e605f3f28a40e3a01f34c3e2941fde9d24bbb5cbf0bb216fe1b4"
+    }
+  ],
+  "protocol": "phytomni-unified-attachments-v1",
+  "proving_test": "tests/server/test_unified_attachment_contract_fixtures.py::test_unified_attachment_contract_matches_real_projector",
+  "scenario_ids": [
+    "dual_pdf_fastq_archive",
+    "document_only_mixed_classes",
+    "dataset_only_mixed_classes",
+    "zero_channel_rejected",
+    "expert_authorized_capability_intersection"
+  ],
+  "version": 1
+}

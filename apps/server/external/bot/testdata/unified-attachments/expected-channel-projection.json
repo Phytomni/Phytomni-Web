@@ -1,0 +1,115 @@
+{
+  "protocol": "phytomni-unified-attachments-v1",
+  "scenarios": [
+    {
+      "capability_shape": "dual",
+      "data_asset_ids": [
+        "file_fixture_reads_fastq_gz_0001",
+        "file_fixture_archive_zip_0003"
+      ],
+      "eligible_tools": [],
+      "error_code": null,
+      "id": "dual_pdf_fastq_archive",
+      "obs_asset_ids": [
+        "file_fixture_reference_pdf_0002"
+      ],
+      "server_assets": [
+        {
+          "asset_id": "file_fixture_reads_fastq_gz_0001",
+          "server_class": "dataset"
+        },
+        {
+          "asset_id": "file_fixture_reference_pdf_0002",
+          "server_class": "document"
+        },
+        {
+          "asset_id": "file_fixture_archive_zip_0003",
+          "server_class": "dataset"
+        }
+      ]
+    },
+    {
+      "capability_shape": "document_only",
+      "data_asset_ids": [],
+      "eligible_tools": [],
+      "error_code": null,
+      "id": "document_only_mixed_classes",
+      "obs_asset_ids": [
+        "file_fixture_matrix_h5ad_0004",
+        "file_fixture_annotations_gff3_0005"
+      ],
+      "server_assets": [
+        {
+          "asset_id": "file_fixture_matrix_h5ad_0004",
+          "server_class": "dataset"
+        },
+        {
+          "asset_id": "file_fixture_annotations_gff3_0005",
+          "server_class": "document"
+        }
+      ]
+    },
+    {
+      "capability_shape": "dataset_only",
+      "data_asset_ids": [
+        "file_fixture_variants_vcf_bgz_0006",
+        "file_fixture_alignment_bam_0007"
+      ],
+      "eligible_tools": [],
+      "error_code": null,
+      "id": "dataset_only_mixed_classes",
+      "obs_asset_ids": [],
+      "server_assets": [
+        {
+          "asset_id": "file_fixture_variants_vcf_bgz_0006",
+          "server_class": "document"
+        },
+        {
+          "asset_id": "file_fixture_alignment_bam_0007",
+          "server_class": "dataset"
+        }
+      ]
+    },
+    {
+      "capability_shape": "zero",
+      "data_asset_ids": [],
+      "eligible_tools": [],
+      "error_code": "attachment_not_supported",
+      "id": "zero_channel_rejected",
+      "obs_asset_ids": [],
+      "server_assets": [
+        {
+          "asset_id": "file_fixture_zero_pdf_0008",
+          "server_class": "document"
+        }
+      ]
+    },
+    {
+      "capability_shape": "dual",
+      "data_asset_ids": [
+        "file_fixture_expert_archive_0009"
+      ],
+      "eligible_tools": [
+        "DigitalDesignAgent",
+        "AnalystAgent",
+        "ChatAgent"
+      ],
+      "error_code": null,
+      "id": "expert_authorized_capability_intersection",
+      "obs_asset_ids": [
+        "file_fixture_expert_pdf_0010"
+      ],
+      "server_assets": [
+        {
+          "asset_id": "file_fixture_expert_archive_0009",
+          "server_class": "dataset"
+        },
+        {
+          "asset_id": "file_fixture_expert_pdf_0010",
+          "server_class": "document"
+        }
+      ]
+    }
+  ],
+  "version": 1
+}
