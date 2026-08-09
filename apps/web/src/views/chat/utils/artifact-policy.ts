@@ -1,15 +1,15 @@
 import type { ArtifactKind, ChatMessage } from "../types";
 import type { RemoteAgentTool } from "@/constants/agents";
 
-/** Remote product artifacts stay explicit until each surface has a renderer. */
+/** Remote analysis artifacts share the result-archive renderer. */
 export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
   RemoteAgentTool,
   { kind: ArtifactKind; autoOpen: boolean }
 > = {
-  AnalystAgent: { kind: null, autoOpen: false },
+  AnalystAgent: { kind: "research", autoOpen: false },
   InSilicoResearchAgent: { kind: "research", autoOpen: true },
-  DigitalDesignAgent: { kind: null, autoOpen: false },
-  GeneNetworkAgent: { kind: null, autoOpen: false },
+  DigitalDesignAgent: { kind: "research", autoOpen: false },
+  GeneNetworkAgent: { kind: "research", autoOpen: false },
 };
 
 /**
@@ -28,8 +28,22 @@ const ARTIFACT_POLICY_BY_TOOL: Readonly<
 
 type ArtifactPolicyMessage = Pick<
   ChatMessage,
-  "role" | "content" | "id" | "streaming" | "tool_name" | "status"
+  | "role"
+  | "content"
+  | "id"
+  | "streaming"
+  | "tool_name"
+  | "status"
+  | "artifacts"
+  | "delivery"
 >;
+
+const REMOTE_ANALYSIS_TOOLS = new Set([
+  "AnalystAgent",
+  "InSilicoResearchAgent",
+  "DigitalDesignAgent",
+  "GeneNetworkAgent",
+]);
 
 const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
   /^Server task created:\s*.*$/iu,
@@ -58,13 +72,24 @@ export function isMeaningfulDeepGenomeReport(
 }
 
 function isArtifactMessageEligible(message: ArtifactPolicyMessage): boolean {
+  const hasResultContent =
+    typeof message.content === "string" && message.content.trim() !== "";
+  const hasResultDelivery =
+    (message.artifacts?.length ?? 0) > 0 || message.delivery != null;
   return !(
     message.role !== "assistant" ||
     message.streaming === true ||
     message.id == null ||
     String(message.id).trim() === "" ||
-    typeof message.content !== "string" ||
-    message.content.trim() === ""
+    (!hasResultContent && !hasResultDelivery)
+  );
+}
+
+function isSucceeded(message: ArtifactPolicyMessage): boolean {
+  return (
+    String(message.status || "")
+      .trim()
+      .toUpperCase() === "SUCCEEDED"
   );
 }
 
@@ -74,7 +99,7 @@ export function isCompletedResearchMessage(
   return (
     isArtifactMessageEligible(message) &&
     message.tool_name === "InSilicoResearchAgent" &&
-    message.status === "SUCCEEDED"
+    isSucceeded(message)
   );
 }
 
@@ -83,8 +108,9 @@ export function artifactKindForMessage(
 ): ArtifactKind {
   if (!isArtifactMessageEligible(message)) return null;
   if (
-    message.tool_name === "InSilicoResearchAgent" &&
-    !isCompletedResearchMessage(message)
+    message.tool_name &&
+    REMOTE_ANALYSIS_TOOLS.has(message.tool_name) &&
+    !isSucceeded(message)
   ) {
     return null;
   }

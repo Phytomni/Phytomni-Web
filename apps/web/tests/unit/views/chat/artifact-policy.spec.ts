@@ -25,11 +25,11 @@ const artifactByTool: Record<
   DataAgent: null,
   ReviewAgent: null,
   BriefGeneAgent: "cited-report",
-  AnalystAgent: null,
+  AnalystAgent: "research",
   DeepGenomeAgent: "deep-genome",
   InSilicoResearchAgent: "research",
-  GeneNetworkAgent: null,
-  DigitalDesignAgent: null,
+  GeneNetworkAgent: "research",
+  DigitalDesignAgent: "research",
 };
 
 const autoOpenByTool: Record<(typeof CANONICAL_AGENT_TOOLS)[number], boolean> =
@@ -135,8 +135,6 @@ describe("artifact policy", () => {
     "FAILED",
     "CANCELLED",
     "TIMED_OUT",
-    "succeeded",
-    " SUCCEEDED ",
   ])("does not expose Research artifact at %j", (status) => {
     const message = {
       ...ELIGIBLE_MESSAGE,
@@ -161,6 +159,19 @@ describe("artifact policy", () => {
     expect(shouldAutoOpenArtifact(message)).toBe(true);
   });
 
+  it.each(["succeeded", " SUCCEEDED "])(
+    "normalizes terminal status %j for remote analysis artifacts",
+    (status) => {
+      expect(
+        artifactKindForMessage({
+          ...ELIGIBLE_MESSAGE,
+          tool_name: "AnalystAgent",
+          status,
+        })
+      ).toBe("research");
+    }
+  );
+
   it("renders a completed Review result as a cited answer", () => {
     const message = {
       ...ELIGIBLE_MESSAGE,
@@ -179,7 +190,10 @@ describe("artifact policy", () => {
         ...ELIGIBLE_MESSAGE,
         tool_name: toolName,
         ...(toolName === "DeepGenomeAgent" ||
-        toolName === "InSilicoResearchAgent"
+        toolName === "InSilicoResearchAgent" ||
+        toolName === "AnalystAgent" ||
+        toolName === "DigitalDesignAgent" ||
+        toolName === "GeneNetworkAgent"
           ? { status: "SUCCEEDED" }
           : {}),
       };

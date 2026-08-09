@@ -491,13 +491,24 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 	in := queryInputForSurface(ctx, surface, routeTool)
+	attachments, ok := parseAssetAttachments(ctx.PostForm("attachments"))
+	if !ok {
+		status, message := queryErrorStatus(api_service.ErrInvalidQueryAttachments)
+		writeQueryError(ctx, status, message)
+		return
+	}
+	in.Attachments = attachments
 	if hasClientTurnID && in.ClientTurnID != clientTurnID {
 		status, message := queryErrorStatus(api_service.ErrInvalidClientTurnID)
 		writeQueryError(ctx, status, message)
 		return
 	}
 	if err := api_service.ValidateCurrentQuery(in.Query, maxQueryChars); err != nil {
-		if errors.Is(err, api_service.ErrQueryLimitExceeded) {
+		if errors.Is(err, api_service.ErrQueryEmpty) &&
+			api_service.AllowsEmptyQueryWithAttachments(in) {
+			// Analyst and Research can inspect managed attachments when the user
+			// intentionally leaves the query blank.
+		} else if errors.Is(err, api_service.ErrQueryLimitExceeded) {
 			ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": http.StatusRequestEntityTooLarge, "message": i18n.T(ctx, "query.upload_too_large")})
 			return
 		}
@@ -600,14 +611,6 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			}
 		}
 	}
-	attachments, ok := parseAssetAttachments(ctx.PostForm("attachments"))
-	if !ok {
-		status, message := queryErrorStatus(api_service.ErrInvalidQueryAttachments)
-		writeQueryError(ctx, status, message)
-		return
-	}
-	in.Attachments = attachments
-
 	// SSE branch (dark-launch). Taken when the caller accepts
 	// text/event-stream, the flag is on, and the turn is Instant. The
 	// stream-capability restriction is enforced downstream in QueryStream (via

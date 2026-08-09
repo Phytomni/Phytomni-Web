@@ -11,6 +11,7 @@ import (
 // the dedicated attachments field, never through native argument paths.
 type AgentArgumentInput struct {
 	UserQuery      string
+	HasAttachments bool
 	GeneID         string
 	ToID           string
 	SpeciesCode    string
@@ -77,7 +78,8 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	if _, ok := CanonicalAgentTool[slug]; !ok {
 		return nil, fmt.Errorf("unknown agent slug %q", slug)
 	}
-	if strings.TrimSpace(input.UserQuery) == "" {
+	if strings.TrimSpace(input.UserQuery) == "" &&
+		!(input.HasAttachments && (slug == "analyst" || slug == "research")) {
 		return nil, fmt.Errorf("user query is required")
 	}
 	interopMode, interopTargets, err := validateInterop(input.InteropMode, input.InteropTargets)

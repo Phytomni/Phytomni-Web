@@ -22,6 +22,18 @@ func TestBuildAgentArgumentsAnalystAndResearchUseCanonicalEmptyFiles(t *testing.
 	}
 }
 
+func TestBuildAgentArgumentsAllowsEmptyQueryForUploadedAnalysisInputs(t *testing.T) {
+	for _, slug := range []string{"analyst", "research"} {
+		t.Run(slug, func(t *testing.T) {
+			if _, err := BuildAgentArguments(slug, AgentArgumentInput{
+				HasAttachments: true,
+			}); err != nil {
+				t.Fatalf("uploaded %s input rejected: %v", slug, err)
+			}
+		})
+	}
+}
+
 func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	design, err := BuildAgentArguments("design", AgentArgumentInput{
 		UserQuery: "design", GeneID: "AT1G01010", SpeciesCode: "ath",
@@ -102,6 +114,7 @@ func TestBuildAgentArgumentsRejectsUntrustedInput(t *testing.T) {
 	}{
 		{name: "unknown slug", slug: "unknown", input: AgentArgumentInput{UserQuery: "q"}},
 		{name: "empty query", slug: "research", input: AgentArgumentInput{}},
+		{name: "empty query without attachments", slug: "analyst", input: AgentArgumentInput{}},
 		{name: "invalid interop mode", slug: "research", input: AgentArgumentInput{
 			UserQuery: "q", InteropMode: "always",
 		}},

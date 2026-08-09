@@ -15,6 +15,54 @@ import (
 	"phytomni-server/model"
 )
 
+func TestAllowsEmptyQueryWithAttachmentsOnlyForAnalysisTools(t *testing.T) {
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_counts"}}
+	cases := []struct {
+		name string
+		in   QueryInput
+		want bool
+	}{
+		{
+			name: "analyst product",
+			in: QueryInput{
+				Tool: "AnalystAgent", Surface: QuerySurfaceAgentProduct,
+				Attachments: refs,
+			},
+			want: true,
+		},
+		{
+			name: "research expert",
+			in: QueryInput{
+				Tool: "InSilicoResearchAgent", Mode: "expert",
+				Surface: QuerySurfaceChat, Attachments: refs,
+			},
+			want: true,
+		},
+		{
+			name: "design product",
+			in: QueryInput{
+				Tool: "DigitalDesignAgent", Surface: QuerySurfaceAgentProduct,
+				Attachments: refs,
+			},
+			want: false,
+		},
+		{
+			name: "analysis without attachments",
+			in: QueryInput{
+				Tool: "AnalystAgent", Surface: QuerySurfaceAgentProduct,
+			},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := AllowsEmptyQueryWithAttachments(tc.in); got != tc.want {
+				t.Fatalf("AllowsEmptyQueryWithAttachments() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestQueryPreservesAttachmentsAcrossBlockingAndStreamChat(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

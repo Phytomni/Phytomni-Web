@@ -55,7 +55,9 @@
     <!-- GeneNetworkAgent image display -->
     <div
       v-else-if="
-        message.role === 'assistant' && message.tool_name === 'GeneNetworkAgent'
+        message.role === 'assistant' &&
+        message.tool_name === 'GeneNetworkAgent' &&
+        !artifactPreview
       "
       class="gene-network-images"
     >
@@ -108,7 +110,8 @@
     <div
       v-else-if="
         message.role === 'assistant' &&
-        message.tool_name === 'DigitalDesignAgent'
+        message.tool_name === 'DigitalDesignAgent' &&
+        !artifactPreview
       "
       class="gene-network-images"
     >

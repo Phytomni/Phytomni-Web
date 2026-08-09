@@ -219,6 +219,37 @@ func validateCurrentMessageWithin(value string, limit int) error {
 	return nil
 }
 
+// AllowsEmptyQueryWithAttachments permits only the two remote analysis tools
+// to receive an empty query when managed assets are present. Every other
+// agent keeps the non-empty query contract.
+func AllowsEmptyQueryWithAttachments(in QueryInput) bool {
+	if len(in.Attachments) == 0 {
+		return false
+	}
+	if in.Surface == QuerySurfaceAgentProduct {
+		switch in.Tool {
+		case "AnalystAgent", "analyst", "InSilicoResearchAgent", "research":
+			return true
+		default:
+			return false
+		}
+	}
+	return in.Surface == QuerySurfaceChat && in.Mode == "expert" &&
+		(in.Tool == "AnalystAgent" || in.Tool == "analyst" ||
+			in.Tool == "InSilicoResearchAgent" || in.Tool == "research")
+}
+
+func validateResearchMessageWithin(
+	value string,
+	limit int,
+	allowEmpty bool,
+) error {
+	if allowEmpty && strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return validateCurrentMessageWithin(value, limit)
+}
+
 func validateQueryAttachments(refs []rxBot.AssetAttachmentRef) ([]rxBot.AssetAttachmentRef, error) {
 	return validateQueryAttachmentsWithin(refs, rxBot.DefaultMaxAssetAttachmentRefs)
 }
@@ -2306,7 +2337,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	if researchRequest {
-		if err := validateCurrentMessageWithin(in.Query, rxBot.HardMaxUserQueryChars); err != nil {
+		if err := validateResearchMessageWithin(
+			in.Query,
+			rxBot.HardMaxUserQueryChars,
+			AllowsEmptyQueryWithAttachments(in),
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -2409,7 +2444,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		if !ok {
 			return nil, ErrResearchInputIncompatible
 		}
-		if err := validateCurrentMessageWithin(in.Query, maxQueryChars); err != nil {
+		if err := validateResearchMessageWithin(
+			in.Query,
+			maxQueryChars,
+			AllowsEmptyQueryWithAttachments(in),
+		); err != nil {
 			if existing, lookupErr := findResearchRetry(); lookupErr != nil {
 				return existing, lookupErr
 			} else if existing != nil {
@@ -2762,10 +2801,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		// Branch on the returned status;
 		// never assume remote, or a sync agent's answer is silently dropped.
 		argumentInput := rxBot.AgentArgumentInput{
-			UserQuery:   in.Query,
-			GeneID:      in.GeneID,
-			ToID:        in.ToID,
-			SpeciesCode: in.SpeciesCode,
+			UserQuery:      in.Query,
+			HasAttachments: len(in.Attachments) > 0,
+			GeneID:         in.GeneID,
+			ToID:           in.ToID,
+			SpeciesCode:    in.SpeciesCode,
 		}
 		if interopAgent(slug) {
 			argumentInput.InteropMode = in.InteropMode
