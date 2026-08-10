@@ -265,9 +265,12 @@ func parseAgentProductResolver(ctx *gin.Context, surface api_service.QuerySurfac
 		}
 		return geneID, "", speciesCode, nil
 	case "GeneNetworkAgent":
-		if hasGeneID || !hasToID || !hasSpeciesCode ||
+		if hasGeneID || !hasToID ||
 			!agentResolverNetworkTraitPattern.MatchString(toID) {
 			return "", "", "", api_service.ErrInvalidAgentResolver
+		}
+		if speciesCode == "" {
+			speciesCode = "osa"
 		}
 		if _, ok := agentResolverNetworkTraits[toID]; !ok {
 			return "", "", "", api_service.ErrInvalidAgentResolver

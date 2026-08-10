@@ -113,12 +113,16 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 	case "network":
 		args["obs_file_list"] = []string{}
 		if input.ToID != "" || input.SpeciesCode != "" {
-			if input.ToID == "" || input.SpeciesCode == "" {
-				return nil, fmt.Errorf("network resolver values require to_id and species_code")
+			if input.ToID == "" {
+				return nil, fmt.Errorf("network resolver requires to_id")
+			}
+			speciesCode := strings.TrimSpace(input.SpeciesCode)
+			if speciesCode == "" {
+				speciesCode = "osa"
 			}
 			args["resolve_trait_id"] = true
 			args["to_id"] = input.ToID
-			args["species_code"] = input.SpeciesCode
+			args["species_code"] = speciesCode
 		} else {
 			args["resolve_to_id"] = true
 		}

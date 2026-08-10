@@ -318,20 +318,32 @@ describe("GeneNetworkAgentView", () => {
     wrapper.unmount();
   });
 
-  it("blocks missing and malformed resolver values before transport", async () => {
+  it("defaults a bare trait resolver to rice", async () => {
     const wrapper = mountView();
     await wrapper
       .get('[data-test="network-question"]')
       .setValue("Analyze traits");
+    await wrapper.get('[data-test="network-trait"]').setValue("TO:0000011");
     await wrapper.get("form.gene-network-form").trigger("submit");
-    expect(wrapper.get('[data-test="network-validation"]').text()).toContain(
-      "Trait Ontology"
-    );
-    expect(wrapper.get('[data-test="network-validation"]').text()).toContain(
-      "species"
-    );
-    expect(mocks.submit).not.toHaveBeenCalled();
 
+    expect(mocks.submit).toHaveBeenCalledWith({
+      query: "Analyze traits",
+      resolver: { toId: "TO:0000011", speciesCode: "osa" },
+    });
+    expect(
+      (
+        wrapper.get('[data-test="network-species"]')
+          .element as HTMLSelectElement
+      ).value
+    ).toBe("osa");
+    wrapper.unmount();
+  });
+
+  it("blocks malformed resolver values before transport", async () => {
+    const wrapper = mountView();
+    await wrapper
+      .get('[data-test="network-question"]')
+      .setValue("Analyze traits");
     const trait = wrapper.get('[data-test="network-trait"]');
     const species = wrapper.get('[data-test="network-species"]');
     (trait.element as HTMLSelectElement).value = "TO:9999999";

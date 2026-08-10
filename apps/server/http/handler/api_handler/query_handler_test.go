@@ -107,6 +107,8 @@ func TestAgentProductResolver(t *testing.T) {
 		{name: "design normalizes pair", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {" AT1G01010 "}, "species_code": {" ATH "}}, wantGeneID: "AT1G01010", wantSpecies: "ath"},
 		{name: "network absent", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent"},
 		{name: "network normalizes pair", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {" to:0000207 "}, "species_code": {" OSA "}}, wantToID: "TO:0000207", wantSpecies: "osa"},
+		{name: "network defaults bare trait to rice", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {"TO:0000207"}}, wantToID: "TO:0000207", wantSpecies: "osa"},
+		{name: "network defaults blank species to rice", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"to_id": {"TO:0000207"}, "species_code": {"  "}}, wantToID: "TO:0000207", wantSpecies: "osa"},
 		{name: "design missing species", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", fields: url.Values{"gene_id": {"AT1G01010"}}, wantErr: true},
 		{name: "network missing trait", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"species_code": {"ath"}}, wantErr: true},
 		{name: "network rejects gene", surface: api_service.QuerySurfaceAgentProduct, routeTool: "GeneNetworkAgent", fields: url.Values{"gene_id": {"AT1G01010"}, "species_code": {"ath"}}, wantErr: true},

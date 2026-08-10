@@ -383,7 +383,7 @@ const remoteLifecycle = useRemoteAgentLifecycle({
 
 const question = ref("");
 const toId = ref("");
-const speciesCode = ref("");
+const speciesCode = ref("osa");
 const validationMessages = ref<string[]>([]);
 const formError = ref("");
 const downloadError = ref("");
@@ -491,6 +491,7 @@ function normalizedTraitId(value: unknown): string | null {
 function normalizedSpeciesCode(value: unknown): string | null {
   const normalized =
     typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "") return "osa";
   return SPECIES_CODES.has(normalized) ? normalized : null;
 }
 
@@ -510,9 +511,6 @@ async function submitNetwork(): Promise<void> {
   }
   if (!normalizedToId) {
     validationMessages.value.push(t("agents.geneNetwork.traitValidation"));
-  }
-  if (!normalizedSpecies) {
-    validationMessages.value.push(t("agents.geneNetwork.speciesValidation"));
   }
   if (formError.value || validationMessages.value.length) return;
   if (!normalizedToId || !normalizedSpecies) return;
@@ -543,7 +541,7 @@ function resetNetwork(): void {
   run.reset();
   question.value = "";
   toId.value = "";
-  speciesCode.value = "";
+  speciesCode.value = "osa";
   validationMessages.value = [];
   formError.value = "";
   downloadError.value = "";

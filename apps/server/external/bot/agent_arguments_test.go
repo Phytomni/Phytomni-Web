@@ -72,6 +72,19 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	}
 }
 
+func TestBuildAgentArgumentsNetworkDefaultsBareTraitToRice(t *testing.T) {
+	got, err := BuildAgentArguments("network", AgentArgumentInput{
+		UserQuery: "network", ToID: "TO:0000207",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["resolve_trait_id"] != true || got["to_id"] != "TO:0000207" ||
+		got["species_code"] != "osa" {
+		t.Fatalf("network=%#v; want bare trait to default to osa", got)
+	}
+}
+
 func TestBuildAgentArgumentsCanonicalEmptyFilesAreFresh(t *testing.T) {
 	first, err := BuildAgentArguments("analyst", AgentArgumentInput{UserQuery: "first"})
 	if err != nil {
