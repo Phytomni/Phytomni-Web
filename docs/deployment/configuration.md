@@ -110,7 +110,24 @@ ratelimit:
 ```
 
 Leave `false` for zero behavior change. Redis down ⇒ always allow (auth never
-degrades). Flip after confirming limits suit your traffic.
+degrades). Flip after confirming limits suit your traffic. The durable MySQL
+registration floor below is independent of this switch.
+
+### `register.durable_floor` — persistent registration floor
+
+```yaml
+register:
+  durable_floor:
+    limit: 30
+    window: 1h
+```
+
+This floor counts recent `POST /api/v1/auth/registrations` operation-log rows
+for the caller IP. It is always active, independent of the Redis rate limiter,
+and rejects an over-limit registration with `429`. A database count error is
+fail-closed and returns `503`; an unidentifiable client IP is not throttled.
+The default is 30 registrations per hour. Tune it only with observed traffic
+and keep the operation-log retention and indexes healthy.
 
 ### `obscache` — gene-download listing cache (default ON; fail-open)
 

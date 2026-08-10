@@ -87,6 +87,14 @@ ratelimit:
     limit: 30
     window: 60s
 
+# Durable registration floor (MySQL operation-log count; always on). This is
+# the outage/abuse floor beneath the Redis limiter and fails closed on a count
+# error. Run the production DDL/backfill procedure separately; this block only
+# tunes the read window and threshold.
+register:
+  durable_floor:
+    limit: 30
+    window: 1h
 
 # OBS listing cache (Web→Bot→OBS directory-listing results for terminal-state
 # tasks, fail-open). Defaults to ON; caches only when Redis is available and the
