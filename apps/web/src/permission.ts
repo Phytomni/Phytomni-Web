@@ -13,7 +13,7 @@ import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
   type RemoteAgentTool,
 } from "@/constants/agents";
-import type { RouteLocationNormalized, NavigationGuardNext } from "vue-router";
+import type { RouteLocationNormalized } from "vue-router";
 
 NProgress.configure({ showSpinner: false });
 
@@ -112,11 +112,7 @@ export async function canEnterRemoteAgentRoute(
   }
 }
 
-export function beforeEachGuard(
-  to: RouteLocationNormalized,
-  from: RouteLocationNormalized,
-  next: NavigationGuardNext
-) {
+export async function beforeEachGuard(to: RouteLocationNormalized) {
   NProgress.start();
   // Brand title from locale packs (en Phytomni / zh brand string).
   document.title = i18n.global.t("chat.appTitle") as string;
@@ -140,8 +136,7 @@ export function beforeEachGuard(
       !FIRST_LOGIN_ALLOWED_ROUTE_NAMES.has(targetName)
     ) {
       showFirstLoginNotification();
-      next({ name: "changePassword" });
-      return;
+      return { name: "changePassword" };
     }
     // First-login users (login_status === "0") are gated server-side to
     // /api/v1/users/me/password only (apps/server/middleware/first_login_gate.go);
@@ -153,49 +148,46 @@ export function beforeEachGuard(
       loginStatus === "0" &&
       FIRST_LOGIN_ALLOWED_ROUTE_NAMES.has(targetName)
     ) {
-      next();
       return;
     }
     if (to.path === "/") {
-      next();
       NProgress.done();
-    } else if (
+      return;
+    }
+    if (
       to.path === "/login" ||
       to.path === "/register" ||
       to.path === "/forgot-password"
     ) {
-      next(safeRedirect(to.query.redirect, "/chat"));
-    } else {
-      const UserStore = userStore();
-      UserStore.getUserTools()
-        .then(async () => {
-          if (!(await canEnterRemoteAgentRoute(to, UserStore))) {
-            next({ name: "NotFound" });
-            return;
-          }
-          next();
-        })
-        .catch(() => {
-          // Stale-token break — clear token so the next beforeEach takes
-          // the unauthed branch, restoring /login as terminal and breaking
-          // the /chat ↔ /login redirect cycle.
-          // Use .finally so a FedLogOut rejection (storage SecurityError in
-          // privacy mode / sandboxed iframe / future logout API failure)
-          // still fires next() — otherwise router stays pending and the
-          // user sees a blank screen with NProgress hung at 80%.
-          UserStore.FedLogOut().finally(() => {
-            next({ path: "/login", query: { redirect: to.fullPath } });
-          });
-        });
+      return safeRedirect(to.query.redirect, "/chat");
+    }
+
+    const UserStore = userStore();
+    try {
+      await UserStore.getUserTools();
+      if (!(await canEnterRemoteAgentRoute(to, UserStore))) {
+        return { name: "NotFound" };
+      }
+    } catch {
+      // Stale-token break — clear token so the next beforeEach takes
+      // the unauthed branch, restoring /login as terminal and breaking
+      // the /chat ↔ /login redirect cycle.
+      // Redirect even when FedLogOut fails, so the router never stays pending
+      // with NProgress hung at 80% in a restricted storage environment.
+      try {
+        await UserStore.FedLogOut();
+      } catch {
+        // The redirect remains fail-closed when cleanup cannot complete.
+      }
+      return { path: "/login", query: { redirect: to.fullPath } };
     }
   } else {
     /* unauth whitelist branch (TW-D7 SSOT) */
     if ((WHITELIST as readonly string[]).includes(to.path)) {
-      next();
-    } else {
-      next(`/login?redirect=${to.fullPath}`);
-      NProgress.done();
+      return;
     }
+    NProgress.done();
+    return `/login?redirect=${to.fullPath}`;
   }
 }
 
