@@ -48,6 +48,15 @@ vi.mock("@/api/chat", async (importOriginal) => {
     ...actual,
     getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
     getAnswerCheck: testState.getAnswerCheck,
+    getUserTool: vi.fn(async () => ({
+      code: 200,
+      data: {
+        permission: "",
+        tool_list: [],
+        permission_list: [],
+        expert_enabled: false,
+      },
+    })),
   };
 });
 
