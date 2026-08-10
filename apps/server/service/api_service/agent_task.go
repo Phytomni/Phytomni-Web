@@ -101,7 +101,7 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 		return nil, err
 	}
 
-	var QADataList []*common.QueryListRequest
+	QADataList := make([]*common.QueryListRequest, 0, len(QuestionAgentLogList))
 	for _, v := range QuestionAgentLogList {
 		var DataList common.QueryListRequest // non-pointer: zero value is safe when GORM finds no record
 		createdAt := v.CreatedAt
@@ -637,7 +637,7 @@ func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name s
 
 func (ps *Service) QueryCollectList(ctx context.Context, name string) ([]*common.ApiQueryCollectListResponse, error) {
 
-	var CollectList []*common.ApiQueryCollectListResponse
+	CollectList := make([]*common.ApiQueryCollectListResponse, 0)
 	err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug().
 		Where("user_name = ? and collect_type =? and delete_at IS NULL", name, "1").
 		Order("created_at DESC").

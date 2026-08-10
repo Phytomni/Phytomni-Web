@@ -123,6 +123,44 @@ func TestApiAnswerCheck_NoHistory(t *testing.T) {
 	}
 }
 
+func TestQueryList_EmptyResultIsJSONArray(t *testing.T) {
+	setupTestDB(t)
+
+	got, err := NewService().QueryList(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("QueryList returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("QueryList returned nil slice")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal QueryList result: %v", err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("QueryList JSON = %s, want []", encoded)
+	}
+}
+
+func TestQueryCollectList_EmptyResultIsJSONArray(t *testing.T) {
+	setupTestDB(t)
+
+	got, err := NewService().QueryCollectList(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("QueryCollectList returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("QueryCollectList returned nil slice")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal QueryCollectList result: %v", err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("QueryCollectList JSON = %s, want []", encoded)
+	}
+}
+
 // TestApiAnswerCheck_HappyPath verifies the normal path: 1 parent + 2 children
 // returns 3 rows with the parent at index 0.
 func TestApiAnswerCheck_HappyPath(t *testing.T) {
