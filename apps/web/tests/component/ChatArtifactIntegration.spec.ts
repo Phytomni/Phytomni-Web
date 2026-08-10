@@ -51,6 +51,29 @@ vi.mock("@/api/chat", async (importOriginal) => {
   };
 });
 
+vi.mock(
+  "@/views/chat/composables/useBotCapabilities",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/views/chat/composables/useBotCapabilities")
+      >();
+    return {
+      ...actual,
+      useBotCapabilities: (caller?: string) => {
+        const state = actual.useBotCapabilities(caller);
+        return {
+          ...state,
+          load: async () => {
+            state.loaded.value = true;
+            return state.capabilities.value;
+          },
+        };
+      },
+    };
+  }
+);
+
 vi.mock("vue-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("vue-router")>();
   return {
