@@ -6,13 +6,12 @@
  */
 import { createApp, nextTick } from "vue";
 import { createPinia } from "pinia";
-import { createMemoryHistory, createRouter } from "vue-router";
 import ElementPlus from "element-plus";
 import i18n, { setLanguage } from "@/locales";
 import { useThemeStore } from "@/stores";
-import { CANONICAL_AGENT_ROUTES } from "@/constants/agents";
 import ChatVisualFixtureApp from "./ChatVisualFixtureApp.vue";
 import { resolveChatVisualFixture } from "./fixture-registry";
+import { createChatVisualFixtureRouter } from "./fixture-router";
 
 import "@fontsource/inter/400";
 import "@fontsource/inter/600";
@@ -28,18 +27,7 @@ const resolved = resolveChatVisualFixture(
   params.get("theme")
 );
 
-const EmptyFixtureRoute = { template: "<div />" };
-const fixtureRouter = createRouter({
-  history: createMemoryHistory(),
-  routes: [
-    { path: "/", component: EmptyFixtureRoute },
-    ...Object.entries(CANONICAL_AGENT_ROUTES).map(([tool, path]) => ({
-      path,
-      name: `fixture-${tool}`,
-      component: EmptyFixtureRoute,
-    })),
-  ],
-});
+const fixtureRouter = createChatVisualFixtureRouter();
 
 async function boot() {
   const app = createApp(ChatVisualFixtureApp, {
