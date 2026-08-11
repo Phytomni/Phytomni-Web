@@ -239,19 +239,3 @@ bot:
   research_enabled: false   # dark-launch: Research product surface remains unavailable until external acceptance
   design_enabled: false     # dark-launch: Design product surface remains unavailable until external acceptance
   network_enabled: false    # dark-launch: Network product surface remains unavailable until external acceptance
-# ---------------------------------------------------------------------
-# Outbound notification email — common/email/email_send.go.
-# `web_base_url` / `api_base_url` are stitched into the link bodies of
-# the notification email (chat page + OBS file download). `from_*` are
-# the QQ-SMTP credentials used to actually send. The auth code is a
-# real production credential previously inlined as a literal; rotating
-# requires updating config/app.yml + restarting the Go service.
-# ---------------------------------------------------------------------
-email:
-  web_base_url: "http://your-web-host"
-  api_base_url: "http://your-api-host:8080"
-  smtp_server: "smtp.qq.com"
-  smtp_port: 587
-  from_display: "nky_email <your-sender@qq.com>"
-  from_address: "your-sender@qq.com"
-  from_auth_code: "your-qq-smtp-auth-code"
