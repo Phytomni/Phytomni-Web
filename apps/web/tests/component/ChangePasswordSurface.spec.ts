@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   warning: vi.fn(),
+  validationRejects: false,
   store: undefined as
     | {
         name: string;
@@ -86,6 +87,12 @@ const ElFormStub = defineComponent({
     const errors = ref<Record<string, string>>({});
     provide(formErrorsKey, errors);
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (mocks.validationRejects) {
+        mocks.validationRejects = false;
+        errors.value = { oldPassword: "Validation failed" };
+        throw new Error("validation failed");
+      }
+
       const nextErrors: Record<string, string> = {};
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
@@ -257,6 +264,7 @@ describe("Change Password surface", () => {
     vi.clearAllMocks();
     mocks.changePassword.mockResolvedValue({ code: 200 });
     mocks.store = undefined;
+    mocks.validationRejects = false;
     sessionStorage.clear();
   });
 
@@ -299,6 +307,20 @@ describe("Change Password surface", () => {
     ).toEqual(["researcher@example.test", "", "", ""]);
     expect(wrapper.findAll(".el-form-item__error")).toHaveLength(0);
     expect(mocks.changePassword).not.toHaveBeenCalled();
+  });
+
+  it("handles rejected form validation without invoking the password API", async () => {
+    mocks.validationRejects = true;
+    const wrapper = mountView("1");
+    await fillForm(wrapper);
+
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(mocks.warning).toHaveBeenCalledTimes(1);
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+    expect(mocks.store?.FedLogOut).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("shows Back for returning users and uses router.back", async () => {

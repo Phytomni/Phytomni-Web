@@ -289,7 +289,12 @@ const submitForm = async () => {
 
   submitting.value = true;
   try {
-    const valid = await passwordFormRef.value.validate();
+    let valid = false;
+    try {
+      valid = await passwordFormRef.value.validate();
+    } catch {
+      valid = false;
+    }
     if (!valid) {
       ElMessage.warning(t("changePassword.formValidationFailed"));
       return;
