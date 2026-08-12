@@ -145,7 +145,7 @@ func TestChatCompletionClientsDropObsoleteDatasetDescriptionAcrossRequestPaths(t
 	if _, err := client.ChatCompletion(context.Background(), chat); err != nil {
 		t.Fatalf("ChatCompletion: %v", err)
 	}
-	stream, err := client.ChatCompletionStream(context.Background(), chat)
+	stream, _, err := client.ChatCompletionStreamWithMeta(context.Background(), chat)
 	if err != nil {
 		t.Fatalf("ChatCompletionStream: %v", err)
 	}
