@@ -47,14 +47,21 @@ const resources = [
   },
 ];
 
+const resizeObservers: TestResizeObserver[] = [];
+
 class TestResizeObserver {
   observe = vi.fn();
   disconnect = vi.fn();
+
+  constructor() {
+    resizeObservers.push(this);
+  }
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
   createViewer.mockClear();
+  resizeObservers.length = 0;
 });
 
 describe("ScientificMarkdown resources", () => {
@@ -145,6 +152,27 @@ describe("ScientificMarkdown resources", () => {
     resolveFetch?.({ ok: true, text: async () => "data_cif" });
   });
 
+  it("releases CIF resources before rendering a failed request fallback", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: { source: "![structure](structures/one.cif)", resources },
+    });
+
+    await vi.dynamicImportSettled();
+    await Promise.resolve();
+    await Promise.resolve();
+    const viewer = createViewer.mock.results[0]?.value;
+    expect(viewer.stopAnimate).toHaveBeenCalled();
+    expect(viewer.clear).toHaveBeenCalled();
+    expect(resizeObservers[0]?.disconnect).toHaveBeenCalled();
+    expect(wrapper.text()).toContain("Structure unavailable");
+  });
+
   it("emits only opaque resource identifiers for authorized actions", async () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
       props: {
@@ -183,6 +211,55 @@ describe("ScientificMarkdown resources", () => {
     );
     expect(wrapper.findAll(".scientific-resource-link")).toHaveLength(0);
     expect(wrapper.get('a[href="unknown.md"]').text()).toBe("missing");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves every duplicate authorization candidate inert", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const duplicateResources = [
+      {
+        id: "duplicate-cif",
+        name: "One",
+        kind: "cif" as const,
+        markdownHref: "structures/one.cif",
+        displayUrl: "/authorized/one.cif",
+      },
+      {
+        id: " duplicate-cif ",
+        name: "Two",
+        kind: "cif" as const,
+        markdownHref: "structures/two.cif",
+        displayUrl: "/authorized/two.cif",
+      },
+      {
+        id: "attachment-1",
+        name: "One",
+        kind: "attachment" as const,
+        markdownHref: "attachments/duplicate.pdf",
+      },
+      {
+        id: "attachment-2",
+        name: "Two",
+        kind: "attachment" as const,
+        markdownHref: " attachments/duplicate.pdf ",
+      },
+    ];
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source:
+          "![one](structures/one.cif) ![two](structures/two.cif) [attachment](attachments/duplicate.pdf)",
+        resources: duplicateResources,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    expect(wrapper.findAll(".scientific-resource--unavailable")).toHaveLength(
+      2
+    );
+    expect(wrapper.findAll(".scientific-resource-link")).toHaveLength(0);
+    await wrapper.get('a[href="attachments/duplicate.pdf"]').trigger("click");
+    expect(wrapper.emitted("resource-activate")).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

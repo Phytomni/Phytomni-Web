@@ -44,11 +44,23 @@ describe("scientific Markdown resources", () => {
       },
     ]);
 
-    expect([...resources.keys()]).toEqual(["figures/one.png"]);
-    expect(resourceFor(resources, "figures/one.png", "image")?.id).toBe(
+    expect([...resources.keys()]).toEqual([]);
+    expect(resourceFor(resources, "figures/one.png", "image")).toBeUndefined();
+    expect(resourceFor(resources, "figures/two.png", "image")).toBeUndefined();
+
+    const unique = indexScientificResources([
+      {
+        id: "figure-1",
+        name: "Figure 1",
+        kind: "image",
+        markdownHref: "figures/one.png",
+        displayUrl: "/safe/one.png",
+      },
+    ]);
+    expect(resourceFor(unique, "figures/one.png", "image")?.id).toBe(
       "figure-1"
     );
-    expect(resourceFor(resources, "figures/one.png", "cif")).toBeUndefined();
+    expect(resourceFor(unique, "figures/one.png", "cif")).toBeUndefined();
   });
 
   it("does not infer authorization from a report path or a suffix", () => {

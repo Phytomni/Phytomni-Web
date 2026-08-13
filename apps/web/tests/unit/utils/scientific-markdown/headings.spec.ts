@@ -67,4 +67,26 @@ describe("scientific Markdown headings", () => {
       { id: "gene-network-1", level: 2, text: "Gene network [1]" },
     ]);
   });
+
+  it("does not let the host locale change heading IDs", () => {
+    const localeLower = vi
+      .spyOn(String.prototype, "toLocaleLowerCase")
+      .mockImplementation(() => "locale-sensitive");
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "h2",
+          properties: {},
+          children: [{ type: "text", value: "Istanbul" }],
+        },
+      ],
+    };
+
+    expect(collectAndAssignHeadings(tree)).toEqual([
+      { id: "istanbul", level: 2, text: "Istanbul" },
+    ]);
+    expect(localeLower).not.toHaveBeenCalled();
+  });
 });

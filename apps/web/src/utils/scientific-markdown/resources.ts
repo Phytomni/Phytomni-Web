@@ -8,22 +8,30 @@ export function indexScientificResources(
   resources: readonly AuthorizedScientificResource[]
 ): ReadonlyMap<string, AuthorizedScientificResource> {
   const byHref = new Map<string, AuthorizedScientificResource>();
-  const ids = new Set<string>();
+  const candidates = resources.map((resource) => ({
+    resource,
+    id: resource.id.trim(),
+    href: resource.markdownHref.trim(),
+  }));
+  const idCounts = new Map<string, number>();
+  const hrefCounts = new Map<string, number>();
 
-  for (const resource of resources) {
-    const id = resource.id.trim();
-    const href = resource.markdownHref.trim();
+  for (const { id, href } of candidates) {
+    if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    if (href) hrefCounts.set(href, (hrefCounts.get(href) ?? 0) + 1);
+  }
+
+  for (const { resource, id, href } of candidates) {
     if (
       !id ||
       !href ||
-      ids.has(id) ||
-      byHref.has(href) ||
+      idCounts.get(id) !== 1 ||
+      hrefCounts.get(href) !== 1 ||
       safeHrefValue(href) === null ||
       (resource.displayUrl && safeHrefValue(resource.displayUrl) === null)
     ) {
       continue;
     }
-    ids.add(id);
     byHref.set(href, { ...resource, id, markdownHref: href });
   }
 

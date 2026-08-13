@@ -18,7 +18,7 @@ function slugify(text: string): string {
   return (
     text
       .normalize("NFKD")
-      .toLocaleLowerCase()
+      .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, "-")
       .replace(/^-+|-+$/g, "") || "section"
   );

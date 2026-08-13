@@ -29,8 +29,7 @@ let viewer: ThreeDMolViewer | undefined;
 let resizeObserver: ResizeObserver | undefined;
 let disposed = false;
 
-function cleanup(): void {
-  disposed = true;
+function releaseResources(): void {
   controller?.abort();
   controller = undefined;
   resizeObserver?.disconnect();
@@ -38,6 +37,11 @@ function cleanup(): void {
   viewer?.stopAnimate?.();
   viewer?.clear?.();
   viewer = undefined;
+}
+
+function cleanup(): void {
+  disposed = true;
+  releaseResources();
 }
 
 async function renderStructure(): Promise<void> {
@@ -68,11 +72,11 @@ async function renderStructure(): Promise<void> {
     viewer.render();
     viewer.animate();
   } catch {
-    if (!disposed && !controller?.signal.aborted && target) {
+    const aborted = controller?.signal.aborted ?? false;
+    releaseResources();
+    if (!disposed && !aborted && target) {
       target.textContent = "Structure unavailable";
     }
-  } finally {
-    controller = undefined;
   }
 }
 
