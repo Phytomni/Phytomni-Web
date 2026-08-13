@@ -12,10 +12,12 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"phytomni-server/db"
 	"phytomni-server/model"
 )
 
@@ -86,6 +88,7 @@ func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open first development pool: %v", err)
 	}
+	db.Set("phytomni-server", firstDB)
 	secondDB, err := openPool()
 	if err != nil {
 		_ = closeGormSQLDB(firstDB)
@@ -97,13 +100,25 @@ func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 	})
 
 	owner := fmt.Sprintf("ctxv1-owner-%d", time.Now().UnixNano())
-	dialogueID := fmt.Sprintf("ctxv1-dialogue-%d", time.Now().UnixNano())
+	dialogueID := uuid.NewString()
 	oldClientTurnID := fmt.Sprintf("ctxv1-old-client-%d", time.Now().UnixNano())
+	oldInput := QueryInput{
+		Query:        "old query",
+		Mode:         "instant",
+		ClientTurnID: oldClientTurnID,
+		Surface:      QuerySurfaceChat,
+	}
+	oldTarget := v1SubmissionTarget{
+		dialogueID: dialogueID,
+		mode:       "instant",
+		operation:  "append",
+	}
 	oldProjection, err := marshalPersistedProjectionWithContext(
 		BotRunProjection{ReportRevision: -1},
 		&persistedConversationContext{
-			ClientTurnID:    oldClientTurnID,
-			SettlementState: "submission_append",
+			ClientTurnID:       oldClientTurnID,
+			RequestFingerprint: submissionRequestFingerprint(oldInput, oldTarget, true),
+			SettlementState:    "submission_append",
 		},
 	)
 	if err != nil {
@@ -135,19 +150,13 @@ func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 			t.Fatalf("create filler row %d: %v", index, err)
 		}
 	}
-
 	permissions := AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}}
-	target := v1SubmissionTarget{
-		dialogueID: dialogueID,
-		mode:       "instant",
-		operation:  "append",
-	}
 	oldSubmission, err := NewService().allocateV1SubmissionWithDB(
 		context.Background(),
 		firstDB,
 		owner,
-		QueryInput{Query: "old query", Mode: "instant", ClientTurnID: oldClientTurnID},
-		target,
+		oldInput,
+		oldTarget,
 		permissions,
 		false,
 	)
@@ -160,7 +169,7 @@ func TestLongResearchConversationContextMySQLIntegration(t *testing.T) {
 
 	clientTurnID := fmt.Sprintf("ctxv1-client-%d", time.Now().UnixNano())
 	concurrentTarget := v1SubmissionTarget{
-		dialogueID: fmt.Sprintf("ctxv1-concurrent-dialogue-%d", time.Now().UnixNano()),
+		dialogueID: uuid.NewString(),
 		mode:       "instant",
 		operation:  "append",
 	}

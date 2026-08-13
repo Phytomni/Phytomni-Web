@@ -365,7 +365,21 @@ func SaveBotConversationContext(ctx context.Context, username string, rowID int6
 // owner predicate as the public projection. An existing row without the
 // extension returns the zero context rather than a not-found error.
 func LoadBotConversationContext(ctx context.Context, username string, rowID int64) (persistedConversationContext, error) {
-	_, privateContext, _, _, err := loadPersistedBotProjectionRow(ctx, username, rowID)
+	return loadBotConversationContextWithDB(ctx, model.DB(ctx), username, rowID)
+}
+
+func loadBotConversationContextWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	rowID int64,
+) (persistedConversationContext, error) {
+	_, privateContext, _, _, err := loadPersistedBotProjectionRowWithDB(
+		ctx,
+		gdb,
+		username,
+		rowID,
+	)
 	if err != nil {
 		return persistedConversationContext{}, err
 	}
@@ -381,8 +395,17 @@ func loadBotRunProjectionRow(ctx context.Context, username string, rowID int64) 
 }
 
 func loadPersistedBotProjectionRow(ctx context.Context, username string, rowID int64) (BotRunProjection, *persistedConversationContext, string, int64, error) {
+	return loadPersistedBotProjectionRowWithDB(ctx, model.DB(ctx), username, rowID)
+}
+
+func loadPersistedBotProjectionRowWithDB(
+	ctx context.Context,
+	gdb *gorm.DB,
+	username string,
+	rowID int64,
+) (BotRunProjection, *persistedConversationContext, string, int64, error) {
 	var row botProjectionRow
-	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+	result := gdb.WithContext(ctx).Model(&model.QuestionAgentLog{}).
 		Select("bot_projection_json, bot_report_revision").
 		Where("id = ? AND user_name = ?", rowID, username).
 		Take(&row)

@@ -782,7 +782,7 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 		TaskId:            row.TaskId,
 		ReportRevision:    row.BotReportRevision,
 	}
-	private, err := LoadBotConversationContext(ctx, username, row.Id)
+	private, err := loadBotConversationContextWithDB(ctx, gdb, username, row.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -1275,12 +1275,12 @@ func applyConversationRebuildEnvelope(
 	envelope.LedgerVersion = rebuild.Version
 	history := append([]rxBot.LedgerEntryV1(nil), rebuild.History...)
 	// Bot's rebuild projection removes the trailing current-user slot before
-	// dispatch. Include it here so the previous accepted user turn remains in
-	// the native model history after a rebuild.
+	// dispatch. Include its bounded form so a hard-limit current message cannot
+	// exceed Bot's smaller history-entry limit during rebuild.
 	history = append(history, rxBot.LedgerEntryV1{
 		TurnID:  envelope.TurnID,
 		Role:    "user",
-		Content: envelope.CurrentMessage.Content,
+		Content: boundConversationLedgerText(envelope.CurrentMessage.Content),
 	})
 	if len(history) > maxConversationLedgerHistoryEntries {
 		history = history[len(history)-maxConversationLedgerHistoryEntries:]
