@@ -54,6 +54,39 @@ describe("chat attachment reference decoding", () => {
   });
 });
 
+describe("nested formatted chat answer decoding", () => {
+  it("promotes a complete nested Review answer without copying the raw result", () => {
+    const completeAnswer = `REVIEW-START\n${"review ".repeat(900)}\nREVIEW-END`;
+    const decoded = decodeQueryData({
+      id: 44,
+      tool_name: "ReviewAgent",
+      status: "INPUT_REQUIRED",
+      answer: "",
+      result: { formatted: { answer: completeAnswer } },
+      a2ui: {
+        widget: "confirm",
+        props: { body: completeAnswer.slice(0, 500) },
+      },
+    });
+
+    expect(decoded.answer).toBe(completeAnswer);
+    expect(decoded.answer.length).toBeGreaterThan(4096);
+    expect("result" in decoded).toBe(false);
+  });
+
+  it("keeps a non-empty top-level answer ahead of nested formatted data", () => {
+    const decoded = decodeQueryData({
+      id: 45,
+      answer: "top-level answer",
+      final_answer: "top-level final answer",
+      result: { formatted: { answer: "nested answer" } },
+    });
+
+    expect(decoded.answer).toBe("top-level answer");
+    expect(decoded.final_answer).toBe("top-level final answer");
+  });
+});
+
 describe("agent lifecycle decoding", () => {
   const lifecycle = {
     id: 42,

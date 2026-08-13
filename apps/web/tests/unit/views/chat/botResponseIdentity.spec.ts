@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ref, type Ref } from "vue";
+import { decodeQueryData } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
 import { buildChatState } from "../../../helpers/chatBuilders";
 import { mustGet } from "../../../helpers/mockFactories";
@@ -195,6 +196,49 @@ describe("blocking Bot response identity", () => {
     expect(assistant.content).toBe(completeReviewAnswer);
     expect(assistant.doc_list).toEqual([{ title: "Review source" }]);
     expect(assistant.status).toBe("SUCCEEDED");
+    expect(assistant.blocks).toBeUndefined();
+    expect(assistant.a2uiRuntime).toBeUndefined();
+  });
+
+  it("renders a complete nested formatted Review answer without an A2UI prompt", async () => {
+    const completeReviewContent = `NESTED-START\n${"review ".repeat(
+      900
+    )}\nNESTED-END`;
+    const completeReviewAnswer = JSON.stringify({
+      content: completeReviewContent,
+      doc_list: [{ title: "Nested Review source" }],
+    });
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: decodeQueryData({
+        id: 47,
+        bot_run_id: "run-review-nested",
+        dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
+        answer: "",
+        status: "INPUT_REQUIRED",
+        result: { formatted: { answer: completeReviewAnswer } },
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: "surface-nested",
+          widget: "confirm",
+          props: {
+            title: "Review approval",
+            body: completeReviewContent.slice(0, 500),
+          },
+        },
+      }),
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessage(state, "nested formatted Review response");
+    expect(assistant).toMatchObject({
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      doc_list: [{ title: "Nested Review source" }],
+    });
+    expect(assistant.content).toBe(completeReviewContent);
     expect(assistant.blocks).toBeUndefined();
     expect(assistant.a2uiRuntime).toBeUndefined();
   });

@@ -1083,6 +1083,17 @@ function decodeInterop(value: unknown): BotInteropPayload | null {
   return result;
 }
 
+function nestedFormattedAnswer(
+  value: Record<string, unknown>
+): string | undefined {
+  const nestedResult = value.result;
+  if (!isRecord(nestedResult) || !isRecord(nestedResult.formatted)) {
+    return undefined;
+  }
+  const answer = nestedResult.formatted.answer;
+  return typeof answer === "string" ? answer : undefined;
+}
+
 export function decodeQueryData(value: unknown): DecodedQueryData {
   if (!isRecord(value)) invalid("chat response");
   const rawId = value.id;
@@ -1117,6 +1128,13 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     const field = optionalStringField(value, key, "chat response");
     if (field !== undefined) decodedFields[key] = field;
   });
+  if (
+    result.answer.trim() === "" &&
+    (result.final_answer === undefined || result.final_answer.trim() === "")
+  ) {
+    const answer = nestedFormattedAnswer(value);
+    if (answer !== undefined && answer.trim() !== "") result.answer = answer;
+  }
   const botRunId = optionalNullableStringField(
     value,
     "bot_run_id",
