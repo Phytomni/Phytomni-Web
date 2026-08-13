@@ -102,7 +102,18 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 		dialogue_id TEXT,
 		f_id INTEGER DEFAULT 0,
 		bot_run_id TEXT,
+		bot_projection_json TEXT,
+		bot_report_revision INTEGER DEFAULT -1,
 		user_name TEXT,
+		query TEXT,
+		answer TEXT,
+		follow_up_questions TEXT,
+		tool_name TEXT,
+		status TEXT,
+		download_path TEXT,
+		image_paths TEXT,
+		created_at DATETIME,
+		updated_at DATETIME,
 		delete_at DATETIME
 	)`).Error; err != nil {
 		t.Fatalf("create question_agent_logs: %v", err)

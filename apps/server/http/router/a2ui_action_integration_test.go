@@ -20,6 +20,8 @@ import (
 
 const e2eA2uiSucceededBody = `{"status":"succeeded","run_id":"run-1","result":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"status":"submitted","accepted":true}}}}`
 
+const e2eA2uiAuthoritativeRunBody = `{"run_id":"run-1","agent":"review","status":"succeeded","result":{"formatted":{"answer":"A2UI action completed","references":[]}}}`
+
 const e2eA2uiInputRequiredBody = `{"status":"input_required","run_id":"run-1","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-2","widget":"choice","props":{"title":"Choose","options":[{"id":"a","label":"A"}],"multiple":false}}}}}`
 
 const e2eA2uiConfirmBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
@@ -55,6 +57,12 @@ func startA2uiFakeBot(t *testing.T, status int, contentType string, body []byte,
 	t.Helper()
 	calls := new(atomic.Int64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/runs/run-1" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(e2eA2uiAuthoritativeRunBody))
+			return
+		}
 		calls.Add(1)
 		if r.URL.Path != "/v1/runs/run-1/a2ui-actions" {
 			t.Errorf("Bot path = %q, want /v1/runs/run-1/a2ui-actions", r.URL.Path)
