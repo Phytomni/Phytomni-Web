@@ -66,6 +66,7 @@ const emit = defineEmits<{
 const renderedSource = ref(props.source);
 const showFallback = ref(false);
 let pendingFrame: number | undefined;
+let pendingSource = props.source;
 
 const safeNamespace = computed(() =>
   props.citationNamespace.replace(/[^A-Za-z0-9-]/g, "")
@@ -153,13 +154,15 @@ function cancelPendingFrame(): void {
 
 function updateRenderedSource(source: string): void {
   showFallback.value = false;
-  cancelPendingFrame();
   if (!props.streaming) {
+    cancelPendingFrame();
     renderedSource.value = source;
     return;
   }
+  pendingSource = source;
+  if (pendingFrame !== undefined) return;
   pendingFrame = requestAnimationFrame(() => {
-    renderedSource.value = source;
+    renderedSource.value = pendingSource;
     pendingFrame = undefined;
   });
 }

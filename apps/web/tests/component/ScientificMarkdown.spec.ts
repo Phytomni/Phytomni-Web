@@ -159,19 +159,19 @@ describe("ScientificMarkdown", () => {
     await wrapper.setProps({ streaming: true, source: "first" });
     await wrapper.setProps({ source: "latest" });
 
-    expect(requestFrame).toHaveBeenCalledTimes(2);
-    expect(cancelFrame).toHaveBeenCalledWith(1);
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+    expect(cancelFrame).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain("initial");
 
-    frames.get(2)?.(0);
+    frames.get(1)?.(0);
     await nextTick();
     expect(wrapper.text()).toContain("latest");
 
     await wrapper.setProps({ source: "after-unmount" });
-    expect(requestFrame).toHaveBeenCalledTimes(3);
+    expect(requestFrame).toHaveBeenCalledTimes(2);
     wrapper.unmount();
-    expect(cancelFrame).toHaveBeenCalledWith(3);
-    frames.get(3)?.(0);
+    expect(cancelFrame).toHaveBeenCalledWith(2);
+    frames.get(2)?.(0);
     await nextTick();
     expect(document.body.textContent).not.toContain("after-unmount");
   });
