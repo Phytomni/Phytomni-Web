@@ -320,6 +320,41 @@ as documented in [`upgrading.md`](upgrading.md). The local
 operations, staging, or live acceptance. Keep all flags false on the initial
 deploy unless a separately authorized acceptance packet says otherwise.
 
+### 11.9 Canonical agent names and local verification
+
+The Bot `/v1/agents` registry is the source of truth for the English tool names
+used by `tool_names`, Web Go, persisted projections, and the frontend. The
+current registry is:
+
+| Slug          | Canonical tool name     |
+| ------------- | ----------------------- |
+| `chat`        | `ChatAgent`             |
+| `knowledge`   | `KnowledgeAgent`        |
+| `data`        | `DataAgent`             |
+| `review`      | `ReviewAgent`           |
+| `brief_gene`  | `BriefGeneAgent`        |
+| `analyst`     | `AnalystAgent`          |
+| `deep_genome` | `DeepGenomeAgent`       |
+| `research`    | `InSilicoResearchAgent` |
+| `design`      | `DigitalDesignAgent`    |
+| `network`     | `GeneNetworkAgent`      |
+
+The one-time clean-break migrations are idempotent and must run before the Go
+binary and frontend are switched together:
+
+```bash
+go run main.go migrate rename-tool-names
+go run main.go migrate backfill-agent-tool-names
+```
+
+Before a development smoke test, inspect rather than blindly re-seed the local
+database. It must contain one row for each canonical name and no legacy alias;
+the `user_tool_names` grants remain an explicit product permission decision and
+must not be bulk-granted merely to satisfy this check. Production operators
+must run the migrations against a verified backup and follow the rollback
+procedure for the deployed release. Never apply these statements to production
+from a developer workstation.
+
 ## 12. Extended Research input rollout
 
 This rollout does not add a hidden switch, cohort, path field, or description
