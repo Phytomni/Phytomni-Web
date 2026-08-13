@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -46,7 +47,8 @@ func (ps *Service) A2uiAction(
 	if err != nil {
 		return nil, err
 	}
-	authorized := false
+	var authorizedRow *model.QuestionAgentLog
+	privateReplacement := false
 	for index := range rows {
 		_, private, decodeErr := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
 		if decodeErr != nil {
@@ -56,7 +58,8 @@ func (ps *Service) A2uiAction(
 			replacement := private.Replacement
 			if replacement.ActiveStatus == "INPUT_REQUIRED" &&
 				replacement.ActiveBotRunID == env.RunID {
-				authorized = true
+				authorizedRow = &rows[index]
+				privateReplacement = true
 				break
 			}
 			// While a private replacement is active, the old public run is no
@@ -64,11 +67,11 @@ func (ps *Service) A2uiAction(
 			continue
 		}
 		if rows[index].BotRunId == env.RunID {
-			authorized = true
+			authorizedRow = &rows[index]
 			break
 		}
 	}
-	if !authorized {
+	if authorizedRow == nil {
 		return nil, ErrA2uiActionNotFound
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
@@ -78,12 +81,49 @@ func (ps *Service) A2uiAction(
 		return nil, ErrGatewayDisabled
 	}
 
-	result, err := rxBot.NewClient().PostA2uiAction(ctx, env.RunID, rawBody)
+	client := rxBot.NewClient()
+	result, err := client.PostA2uiAction(ctx, env.RunID, rawBody)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil || validateA2uiUpstreamResponse(result.Status, result.ContentType, result.Body) != nil {
 		return nil, ErrA2uiUpstreamProtocol
+	}
+	if result.Status >= 200 && result.Status < 300 {
+		var actionResponse struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(result.Body, &actionResponse); err != nil {
+			return nil, ErrA2uiUpstreamProtocol
+		}
+		if actionResponse.Status == "succeeded" {
+			record, meta, err := client.GetRunWithMeta(ctx, env.RunID)
+			if err != nil {
+				return nil, err
+			}
+			projection, err := DecodeRunProjection(record)
+			if err != nil {
+				return nil, err
+			}
+			if projection.Status != statusSucceeded {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			if privateReplacement {
+				err = ps.applyPrivateReplacementRunProjection(
+					ctx,
+					authorizedRow.Id,
+					authorizedRow.UserName,
+					env.RunID,
+					record,
+					meta,
+				)
+			} else {
+				err = ps.applyBotRunProjection(ctx, authorizedRow, record, meta)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return &A2uiActionOutcome{
 		Status:      result.Status,

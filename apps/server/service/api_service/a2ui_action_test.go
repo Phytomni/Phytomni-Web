@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
@@ -267,6 +268,364 @@ func setupA2uiActionTest(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
+const terminalReviewReferenceTitle = "OsDREB1C coordinates rice growth and stress adaptation"
+
+func terminalReviewAnswerFixture(t *testing.T) string {
+	t.Helper()
+	answer := strings.Repeat("水", 3390) + strings.Repeat("A", 8727)
+	if got := utf8.RuneCountInString(answer); got != 12117 {
+		t.Fatalf("terminal Review fixture chars=%d, want 12117", got)
+	}
+	if got := len(answer); got != 18897 {
+		t.Fatalf("terminal Review fixture bytes=%d, want 18897", got)
+	}
+	return answer
+}
+
+func terminalReviewFormattedFixture(answer string) map[string]interface{} {
+	return map[string]interface{}{
+		"answer":              answer,
+		"follow_up_questions": []string{},
+		"metadata":            map[string]interface{}{},
+		"references": []map[string]interface{}{
+			{
+				"doi_missing":        true,
+				"file_id":            "review-reference-1",
+				"formatted_citation": "Li et al. OsDREB1C coordinates rice growth and stress adaptation.",
+				"title":              terminalReviewReferenceTitle,
+			},
+		},
+		"tabular": map[string]interface{}{},
+	}
+}
+
+func terminalReviewActionResponse(t *testing.T, answer string) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]interface{}{
+		"status": "succeeded",
+		"result": map[string]interface{}{
+			"a2ui":      map[string]interface{}{},
+			"formatted": terminalReviewFormattedFixture(answer),
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal terminal Review action response: %v", err)
+	}
+	return string(raw)
+}
+
+func terminalReviewRunRecord(t *testing.T, runID, answer string) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]interface{}{
+		"run_id":      runID,
+		"agent":       "review",
+		"status":      "succeeded",
+		"task_ids":    []string{},
+		"dialogue_id": "dlg-1",
+		"tool_name":   "ReviewAgent",
+		"answer":      answer,
+		"result": map[string]interface{}{
+			"report_revision": 1,
+			"formatted":       terminalReviewFormattedFixture(answer),
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal terminal Review run record: %v", err)
+	}
+	return string(raw)
+}
+
+func configureA2uiActionRunServer(
+	t *testing.T,
+	runID string,
+	actionBody string,
+	runStatus int,
+	runBody string,
+) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/"+runID+"/a2ui-actions":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(actionBody))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
+			if runStatus >= 400 {
+				w.Header().Set("Content-Type", "application/problem+json")
+			} else {
+				w.Header().Set("Content-Type", "application/json")
+			}
+			w.WriteHeader(runStatus)
+			_, _ = w.Write([]byte(runBody))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, A2uiActionsEnabled: true,
+		UserAPIKey: "test-user-key", TimeoutSeconds: 5,
+	}
+}
+
+func seedPublicReviewPause(t *testing.T) {
+	t.Helper()
+	if err := model.Default().Model(&model.QuestionAgentLog{}).
+		Where("dialogue_id = ? AND user_name = ?", "dlg-1", "alice@x.com").
+		Updates(map[string]interface{}{
+			"answer":              "pending Review approval",
+			"bot_projection_json": `{"run_id":"run-1","agent":"review","status":"INPUT_REQUIRED","report_revision":0}`,
+			"bot_report_revision": 0,
+			"status":              "INPUT_REQUIRED",
+			"tool_name":           "ReviewAgent",
+		}).Error; err != nil {
+		t.Fatalf("seed public Review pause: %v", err)
+	}
+}
+
+func seedPrivateReviewReplacementPause(t *testing.T) {
+	t.Helper()
+	raw := `{"run_id":"run-1","agent":"review","status":"SUCCEEDED","report_revision":0,"final_report":"accepted public review","conversation_context":{"client_turn_id":"a2ui-base-key","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","replacement":{"client_turn_id":"a2ui-replacement-key","request_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","query":"replacement review","tool_name":"ReviewAgent","mode":"expert","active_status":"INPUT_REQUIRED","active_bot_run_id":"run-private-a2ui","active_report_revision":0,"active_a2ui":{"catalog_version":"v1.0","surface_id":"surface-private","widget":"confirm","props":{"title":"Approve replacement"}}}}}`
+	if err := model.Default().Model(&model.QuestionAgentLog{}).
+		Where("dialogue_id = ? AND user_name = ?", "dlg-1", "alice@x.com").
+		Updates(map[string]interface{}{
+			"answer":              "accepted public review",
+			"bot_projection_json": raw,
+			"bot_report_revision": 0,
+			"query":               "accepted base query",
+			"status":              "SUCCEEDED",
+			"tool_name":           "ReviewAgent",
+		}).Error; err != nil {
+		t.Fatalf("seed private Review replacement pause: %v", err)
+	}
+}
+
+func loadA2uiActionRow(t *testing.T) model.QuestionAgentLog {
+	t.Helper()
+	var row model.QuestionAgentLog
+	if err := model.Default().
+		Where("dialogue_id = ? AND user_name = ?", "dlg-1", "alice@x.com").
+		First(&row).Error; err != nil {
+		t.Fatalf("load A2UI action row: %v", err)
+	}
+	return row
+}
+
+func assertDurableReviewAnswer(t *testing.T, raw, wantContent string) {
+	t.Helper()
+	var cited struct {
+		Content string `json:"content"`
+		DocList []struct {
+			Title string `json:"title"`
+		} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(raw), &cited); err != nil {
+		t.Fatalf("durable Review answer is not cited JSON: %v", err)
+	}
+	if cited.Content != wantContent {
+		t.Fatalf("durable Review content chars=%d, want %d", utf8.RuneCountInString(cited.Content), utf8.RuneCountInString(wantContent))
+	}
+	if len(cited.DocList) != 1 || cited.DocList[0].Title != terminalReviewReferenceTitle {
+		t.Fatalf("durable Review doc_list=%#v, want one preserved reference", cited.DocList)
+	}
+}
+
+func assertReviewReload(t *testing.T, row model.QuestionAgentLog, wantContent string) {
+	t.Helper()
+	reloaded, err := NewService().queryDataFromStoredRowWithDB(
+		context.Background(), model.Default(), "alice@x.com", row,
+	)
+	if err != nil {
+		t.Fatalf("reload Review row: %v", err)
+	}
+	if reloaded.Status != "SUCCEEDED" || reloaded.A2UI != nil {
+		t.Fatalf("reloaded Review status=%q a2ui=%#v", reloaded.Status, reloaded.A2UI)
+	}
+	assertDurableReviewAnswer(t, reloaded.Answer, wantContent)
+}
+
+func TestA2uiAction_TerminalReviewPersistsPublicRunBeforeReturn(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPublicReviewPause(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-1",
+		terminalReviewActionResponse(t, answer),
+		http.StatusOK,
+		terminalReviewRunRecord(t, "run-1", answer),
+	)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+	)
+	if err != nil || outcome == nil || outcome.Status != http.StatusOK {
+		t.Fatalf("terminal public Review outcome=%+v error=%v", outcome, err)
+	}
+
+	row := loadA2uiActionRow(t)
+	if row.Status != "SUCCEEDED" || row.BotRunId != "run-1" || row.BotReportRevision != 1 {
+		t.Fatalf("durable public Review status=%q run=%q revision=%d", row.Status, row.BotRunId, row.BotReportRevision)
+	}
+	assertDurableReviewAnswer(t, row.Answer, answer)
+	assertReviewReload(t, row, answer)
+}
+
+func TestA2uiAction_TerminalReviewPersistsPrivateReplacementBeforeReturn(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPrivateReviewReplacementPause(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-private-a2ui",
+		terminalReviewActionResponse(t, answer),
+		http.StatusOK,
+		terminalReviewRunRecord(t, "run-private-a2ui", answer),
+	)
+	actionBody := []byte(`{"surface_id":"surface-private","widget":"confirm","action_id":"submit","run_id":"run-private-a2ui","payload":{"accepted":true}}`)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", actionBody,
+	)
+	if err != nil || outcome == nil || outcome.Status != http.StatusOK {
+		t.Fatalf("terminal private Review outcome=%+v error=%v", outcome, err)
+	}
+
+	row := loadA2uiActionRow(t)
+	if row.Status != "SUCCEEDED" || row.BotRunId != "run-private-a2ui" || row.Query != "replacement review" {
+		t.Fatalf("durable private Review status=%q run=%q query=%q", row.Status, row.BotRunId, row.Query)
+	}
+	_, private, err := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
+	if err != nil {
+		t.Fatalf("decode promoted private Review projection: %v", err)
+	}
+	if private == nil || private.Replacement != nil {
+		t.Fatalf("private replacement remained active after terminal projection: %#v", private)
+	}
+	assertDurableReviewAnswer(t, row.Answer, answer)
+	assertReviewReload(t, row, answer)
+}
+
+func TestA2uiAction_TerminalReviewFetchFailureDoesNotMutatePublicPause(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPublicReviewPause(t)
+	before := loadA2uiActionRow(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-1",
+		terminalReviewActionResponse(t, answer),
+		http.StatusBadGateway,
+		`{"error":"run unavailable"}`,
+	)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+	)
+	if outcome != nil || err == nil {
+		status := 0
+		if outcome != nil {
+			status = outcome.Status
+		}
+		t.Fatalf("fetch failure outcome status=%d error=%v, want error without outcome", status, err)
+	}
+	after := loadA2uiActionRow(t)
+	if after.Status != before.Status || after.Answer != before.Answer ||
+		after.BotRunId != before.BotRunId || after.BotProjectionJSON != before.BotProjectionJSON {
+		t.Fatalf("fetch failure mutated public pause: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestA2uiAction_TerminalReviewRunMismatchDoesNotMutatePublicPause(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPublicReviewPause(t)
+	before := loadA2uiActionRow(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-1",
+		terminalReviewActionResponse(t, answer),
+		http.StatusOK,
+		terminalReviewRunRecord(t, "run-other", answer),
+	)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+	)
+	if outcome != nil || err == nil {
+		status := 0
+		if outcome != nil {
+			status = outcome.Status
+		}
+		t.Fatalf("public run mismatch outcome status=%d error=%v, want error without outcome", status, err)
+	}
+	after := loadA2uiActionRow(t)
+	if after.Status != before.Status || after.Answer != before.Answer ||
+		after.BotRunId != before.BotRunId || after.BotProjectionJSON != before.BotProjectionJSON {
+		t.Fatalf("run mismatch mutated public pause: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestA2uiAction_TerminalReviewRunMismatchDoesNotMutatePrivateReplacement(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPrivateReviewReplacementPause(t)
+	before := loadA2uiActionRow(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-private-a2ui",
+		terminalReviewActionResponse(t, answer),
+		http.StatusOK,
+		terminalReviewRunRecord(t, "run-other", answer),
+	)
+	actionBody := []byte(`{"surface_id":"surface-private","widget":"confirm","action_id":"submit","run_id":"run-private-a2ui","payload":{"accepted":true}}`)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", actionBody,
+	)
+	if outcome != nil || !errors.Is(err, ErrBotProjectionConflict) {
+		status := 0
+		if outcome != nil {
+			status = outcome.Status
+		}
+		t.Fatalf("run mismatch outcome status=%d error=%v, want projection conflict", status, err)
+	}
+	after := loadA2uiActionRow(t)
+	if after.Status != before.Status || after.Answer != before.Answer ||
+		after.BotRunId != before.BotRunId || after.BotProjectionJSON != before.BotProjectionJSON {
+		t.Fatalf("run mismatch mutated private replacement: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestA2uiAction_TerminalReviewRejectsNonterminalAuthoritativeRun(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPublicReviewPause(t)
+	before := loadA2uiActionRow(t)
+	answer := terminalReviewAnswerFixture(t)
+	configureA2uiActionRunServer(
+		t,
+		"run-1",
+		terminalReviewActionResponse(t, answer),
+		http.StatusOK,
+		`{"run_id":"run-1","agent":"review","status":"input_required","task_ids":[],"result":{"report_revision":1}}`,
+	)
+
+	outcome, err := NewService().A2uiAction(
+		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
+	)
+	if outcome != nil || !errors.Is(err, ErrA2uiUpstreamProtocol) {
+		status := 0
+		if outcome != nil {
+			status = outcome.Status
+		}
+		t.Fatalf("nonterminal run outcome status=%d error=%v, want upstream protocol error", status, err)
+	}
+	after := loadA2uiActionRow(t)
+	if after.Status != before.Status || after.Answer != before.Answer ||
+		after.BotRunId != before.BotRunId || after.BotProjectionJSON != before.BotProjectionJSON {
+		t.Fatalf("nonterminal run mutated public pause: before=%#v after=%#v", before, after)
+	}
+}
+
 func TestA2uiAction_PrivateReplacementRunIsAuthorizedAndOldPublicRunIsRetired(t *testing.T) {
 	setupA2uiActionTest(t)
 	gdb := model.Default()
@@ -429,6 +788,7 @@ func TestA2uiAction_ProxyDisabled503(t *testing.T) {
 
 func TestA2uiAction_FlagOnPassthrough(t *testing.T) {
 	setupA2uiActionTest(t)
+	before := loadA2uiActionRow(t)
 	var receivedPath string
 	var receivedBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -476,6 +836,11 @@ func TestA2uiAction_FlagOnPassthrough(t *testing.T) {
 	if receivedBody != validA2uiActionBody {
 		t.Fatalf("forwarded body = %q, want raw body %q", receivedBody, validA2uiActionBody)
 	}
+	after := loadA2uiActionRow(t)
+	if after.Status != before.Status || after.Answer != before.Answer ||
+		after.BotRunId != before.BotRunId || after.BotProjectionJSON != before.BotProjectionJSON {
+		t.Fatalf("non-2xx passthrough mutated durable row: before=%#v after=%#v", before, after)
+	}
 }
 
 func TestA2uiAction_UpstreamValidation(t *testing.T) {
@@ -483,15 +848,17 @@ func TestA2uiAction_UpstreamValidation(t *testing.T) {
 	const inputRequired = `{"status":"input_required","interrupt":{"draft":{"a2ui":{}}}}`
 
 	tests := []struct {
-		name        string
-		status      int
-		contentType string
-		body        string
-		wantErr     error
-		wantBody    string
-		wantType    string
+		name         string
+		status       int
+		contentType  string
+		body         string
+		wantErr      error
+		wantBody     string
+		wantType     string
+		runBody      string
+		wantRunFetch bool
 	}{
-		{name: "application json succeeded", status: http.StatusOK, contentType: "application/json", body: succeeded, wantBody: succeeded, wantType: "application/json"},
+		{name: "application json succeeded", status: http.StatusOK, contentType: "application/json", body: succeeded, wantBody: succeeded, wantType: "application/json", runBody: terminalReviewRunRecord(t, "run-1", "durable Review answer"), wantRunFetch: true},
 		{name: "vendor json input required", status: http.StatusAccepted, contentType: "application/vnd.phytomni+json", body: inputRequired, wantBody: inputRequired, wantType: "application/vnd.phytomni+json"},
 		{name: "missing content type", status: http.StatusOK, body: succeeded, wantErr: ErrA2uiUpstreamProtocol},
 		{name: "invalid content type", status: http.StatusOK, contentType: "application/json; charset=\"", body: succeeded, wantErr: ErrA2uiUpstreamProtocol},
@@ -514,7 +881,19 @@ func TestA2uiAction_UpstreamValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setupA2uiActionTest(t)
+			var runFetches atomic.Int32
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					runFetches.Add(1)
+					if tt.runBody == "" {
+						t.Errorf("unexpected authoritative run fetch for %s", tt.name)
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(tt.runBody))
+					return
+				}
 				if tt.contentType != "" {
 					w.Header().Set("Content-Type", tt.contentType)
 				}
@@ -530,6 +909,13 @@ func TestA2uiAction_UpstreamValidation(t *testing.T) {
 			outcome, err := (&Service{}).A2uiAction(
 				context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
 			)
+			wantRunFetches := int32(0)
+			if tt.wantRunFetch {
+				wantRunFetches = 1
+			}
+			if got := runFetches.Load(); got != wantRunFetches {
+				t.Fatalf("authoritative run fetches=%d, want %d", got, wantRunFetches)
+			}
 			if tt.wantErr != nil {
 				if outcome != nil {
 					t.Fatalf("outcome = %#v, want nil", outcome)
