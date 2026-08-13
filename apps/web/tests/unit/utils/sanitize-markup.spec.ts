@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizeAnchorAttributes,
   sanitizeHref,
+  safeHrefValue,
   escapeHtml,
   sanitizeEscapedHref,
 } from "@/utils/sanitize-markup";
@@ -191,6 +192,29 @@ describe("sanitizeHref — scheme allow-list for interpolated href URLs", () => 
 
   it("returns # for an empty URL", () => {
     expect(sanitizeHref("")).toBe("#");
+  });
+});
+
+describe("safeHrefValue — Vue-bound href values", () => {
+  it.each([
+    "/attachments/report.md",
+    "#ref-3",
+    "http://example.org/report",
+    "https://example.org/report",
+    "mailto:research@example.org",
+  ])("keeps safe URL values unchanged: %s", (url) => {
+    expect(safeHrefValue(url)).toBe(url);
+  });
+
+  it.each([
+    "",
+    "javascript:alert(1)",
+    "data:text/html,nope",
+    "vbscript:msgbox(1)",
+    "java&Tab;script:alert(1)",
+    "java\nscript:alert(1)",
+  ])("rejects unsafe URL values: %s", (url) => {
+    expect(safeHrefValue(url)).toBeNull();
   });
 });
 

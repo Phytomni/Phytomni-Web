@@ -181,6 +181,16 @@ export function sanitizeHref(url: string): string {
 }
 
 /**
+ * Validate a URL before passing it to a Vue-bound href attribute. Unlike
+ * sanitizeHref this returns the original value, because Vue performs the
+ * attribute serialization and must not receive an HTML-escaped URL.
+ */
+export function safeHrefValue(rawValue: string): string | null {
+  if (!rawValue) return null;
+  return isSafeHref(rawValue) ? rawValue : null;
+}
+
+/**
  * HTML-entity-encode arbitrary text headed for a v-html sink. Use to neutralize
  * agent-influenced strings interpolated straight into innerHTML — the
  * MarkdownViewer source body, the DeepGenome reference text fields — so any raw

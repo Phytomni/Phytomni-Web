@@ -89,4 +89,9 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  // XMarkdown's installed ESM entry imports package CSS. Keep the package in
+  // Vite's SSR transform pipeline instead of handing CSS to Node's loader.
+  ssr: {
+    noExternal: ["vue-element-plus-x"],
+  },
 });

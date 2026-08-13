@@ -452,6 +452,35 @@
   font-family: var(--phy-font-shell);
 }
 
+.phy-markdown .elx-xmarkdown-container {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.phy-markdown table {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.phy-markdown .scientific-citation {
+  vertical-align: super;
+  font-size: 0.78em;
+  line-height: 0;
+}
+
+.phy-markdown .scientific-citation__link {
+  color: var(--phy-color-action-text);
+}
+
+.phy-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* The static renderer preserves source newlines as <br>. As on Chat, CSS owns
    block-boundary rhythm without changing the generated safe HTML. */
 :is(.phy-markdown--artifact, .phy-markdown--document) .markdown-content br {
