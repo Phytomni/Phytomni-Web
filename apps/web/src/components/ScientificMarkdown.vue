@@ -1,24 +1,28 @@
 <template>
-  <pre v-if="showFallback" class="scientific-markdown__fallback">{{
-    renderedSource
-  }}</pre>
-  <XMarkdown
-    v-else
-    :markdown="renderedSource"
-    :allow-html="false"
-    :enable-latex="true"
-    :enable-breaks="true"
-    :sanitize="true"
-    :sanitize-options="sanitizeOptions"
-    :need-view-code-btn="false"
-    :secure-view-code="true"
-    :remark-plugins="remarkPlugins"
-    :custom-attrs="customAttrs"
-  >
-    <template #block-code="{ content, language }">
-      <pre><code :class="language ? `language-${language}` : undefined">{{ content }}</code></pre>
-    </template>
-  </XMarkdown>
+  <div :class="['phy-markdown', `phy-markdown--${surface}`]">
+    <pre v-if="showFallback" class="scientific-markdown__fallback">{{
+      renderedSource
+    }}</pre>
+    <XMarkdown
+      v-else
+      :markdown="renderedSource"
+      :allow-html="false"
+      :enable-latex="true"
+      :enable-breaks="true"
+      :sanitize="true"
+      :sanitize-options="sanitizeOptions"
+      :need-view-code-btn="false"
+      :secure-view-code="true"
+      :remark-plugins="remarkPlugins"
+      :custom-attrs="customAttrs"
+    >
+      <template #block-code="{ content, language }">
+        <slot name="block-code" :content="content" :language="language">
+          <pre><code :class="language ? `language-${language}` : undefined">{{ content }}</code></pre>
+        </slot>
+      </template>
+    </XMarkdown>
+  </div>
 </template>
 
 <script setup lang="ts">
