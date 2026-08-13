@@ -382,6 +382,145 @@ func TestAnswerCheckPrefersProjectionAndFallsBackToLegacy(t *testing.T) {
 	}
 }
 
+func useOfflineLegacyHistoryMode(t *testing.T) {
+	t.Helper()
+	previousBotConfig := rxBot.BotConfig
+	previousDualRead := viper.Get("bot.history_dual_read")
+	rxBot.BotConfig = nil
+	viper.Set("bot.history_dual_read", false)
+	t.Cleanup(func() {
+		rxBot.BotConfig = previousBotConfig
+		viper.Set("bot.history_dual_read", previousDualRead)
+	})
+}
+
+func TestAnswerCheckPreservesReviewReferencesWhenProjectionContentMatches(t *testing.T) {
+	gdb := setupTestDB(t)
+	useOfflineLegacyHistoryMode(t)
+
+	const report = "# Durable Review\n\nCitation-backed synthesis."
+	durableAnswer, err := json.Marshal(map[string]interface{}{
+		"content": report,
+		"doc_list": []map[string]interface{}{
+			{
+				"title": "Reference One",
+				"di":    "10.1000/review.1",
+				"dl":    "https://example.test/review-1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal durable answer: %v", err)
+	}
+	projection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:          "run-review-durable",
+		Agent:          "review",
+		Status:         "SUCCEEDED",
+		ReportRevision: 3,
+		FinalReport:    report,
+	})
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(103, 'dlg-review-durable', 0, 'alice', 'review-q', ?, 'ChatAgent', 'run-review-durable', ?, 3, 'RUNNING', '2026-01-01 00:00:00')`, string(durableAnswer), projection).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-review-durable")
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("rows=%d, want 1", len(got))
+	}
+	var answer struct {
+		Content string `json:"content"`
+		DocList []struct {
+			Title string `json:"title"`
+			DI    string `json:"di"`
+			DL    string `json:"dl"`
+		} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	if answer.Content != report {
+		t.Fatalf("content=%q, want %q", answer.Content, report)
+	}
+	if len(answer.DocList) != 1 || answer.DocList[0].Title != "Reference One" ||
+		answer.DocList[0].DI != "10.1000/review.1" || answer.DocList[0].DL != "https://example.test/review-1" {
+		t.Fatalf("doc_list=%#v, want durable reference", answer.DocList)
+	}
+	if got[0].Status != "SUCCEEDED" || got[0].ToolName != "ReviewAgent" {
+		t.Fatalf("projection status/tool not authoritative: status=%q tool=%q", got[0].Status, got[0].ToolName)
+	}
+}
+
+func TestAnswerCheckReviewProjectionReplacesStaleOrMalformedAnswer(t *testing.T) {
+	staleAnswer, err := json.Marshal(map[string]interface{}{
+		"content": "# Stale Review",
+		"doc_list": []map[string]interface{}{
+			{"title": "Stale Reference"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal stale answer: %v", err)
+	}
+	projection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:          "run-review-fresh",
+		Agent:          "review",
+		Status:         "SUCCEEDED",
+		ReportRevision: 4,
+		FinalReport:    "# Fresh Review",
+	})
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	emptyReferencesAnswer := `{"content":"# Fresh Review","doc_list":[],"marker":"must-be-replaced"}`
+
+	for _, tc := range []struct {
+		name   string
+		answer string
+	}{
+		{name: "stale shaped answer", answer: string(staleAnswer)},
+		{name: "malformed answer", answer: "{not-json"},
+		{name: "matching content with empty references", answer: emptyReferencesAnswer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupTestDB(t)
+			useOfflineLegacyHistoryMode(t)
+			if err := gdb.Exec(`INSERT INTO question_agent_logs
+				(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+				(104, 'dlg-review-fresh', 0, 'alice', 'review-q', ?, 'ChatAgent', 'run-review-fresh', ?, 4, 'RUNNING', '2026-01-01 00:00:00')`, tc.answer, projection).Error; err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+
+			got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-review-fresh")
+			if err != nil {
+				t.Fatalf("AnswerCheck: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("rows=%d, want 1", len(got))
+			}
+			var answer struct {
+				Content string            `json:"content"`
+				DocList []json.RawMessage `json:"doc_list"`
+			}
+			if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+				t.Fatalf("decode answer: %v", err)
+			}
+			if answer.Content != "# Fresh Review" || len(answer.DocList) != 0 {
+				t.Fatalf("answer=%#v, want fresh projection content without legacy references", answer)
+			}
+			if strings.Contains(got[0].Answer, "must-be-replaced") {
+				t.Fatalf("answer retained durable marker without references: %s", got[0].Answer)
+			}
+		})
+	}
+}
+
 func historyObservationCount(t *testing.T, source string) uint64 {
 	t.Helper()
 	for _, observation := range HistoryReadObservations() {

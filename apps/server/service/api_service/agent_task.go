@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"sort"
@@ -517,12 +518,27 @@ func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotR
 	return applyBotProjectionToHistoryRowWithFormatted(row, projection, nil)
 }
 
+func persistedReviewAnswerMatchesReport(answer string, report string) bool {
+	var shaped struct {
+		Content string            `json:"content"`
+		DocList []json.RawMessage `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(answer), &shaped); err != nil {
+		return false
+	}
+	return shaped.Content == report && len(shaped.DocList) > 0
+}
+
 func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) bool {
 	if row == nil || strings.TrimSpace(projection.RunID) == "" {
 		return false
 	}
-	if report := strings.TrimSpace(projection.VisibleReport()); report != "" {
-		row.Answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
+	if report := projection.VisibleReport(); strings.TrimSpace(report) != "" {
+		preserveDurableReview := formatted == nil && projection.Agent == "review" &&
+			persistedReviewAnswerMatchesReport(row.Answer, report)
+		if !preserveDurableReview {
+			row.Answer = rxBot.ShapeAnswer(projection.Agent, report, formatted)
+		}
 	}
 	if strings.TrimSpace(projection.Status) != "" {
 		row.Status = projection.Status
