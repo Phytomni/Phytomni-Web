@@ -481,6 +481,79 @@
   overflow-y: hidden;
 }
 
+.phy-markdown .scientific-resource {
+  color: var(--phy-color-text-secondary);
+  font-family: var(--phy-font-shell);
+  font-size: 0.92em;
+}
+
+.phy-markdown .scientific-resource--unavailable {
+  display: inline-block;
+  padding: var(--phy-space-4) var(--phy-space-8);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-fill-subtle);
+}
+
+.phy-markdown .scientific-resource-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--phy-color-action-text);
+  background: transparent;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+.phy-markdown .scientific-resource-link:focus-visible,
+.phy-markdown .scientific-image__thumbnail:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
+}
+
+.phy-markdown .scientific-image {
+  display: block;
+  max-width: 100%;
+  margin: var(--phy-space-12) 0;
+}
+
+.phy-markdown .scientific-image__thumbnail {
+  display: block;
+  max-width: 100%;
+  max-height: var(--phy-layout-scientific-media-max-height);
+  height: auto;
+  border-radius: var(--phy-radius-sm);
+  cursor: zoom-in;
+}
+
+.scientific-image__dialog-container {
+  display: flex;
+  max-height: var(--phy-layout-scientific-media-max-height);
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: var(--phy-color-fill-subtle);
+}
+
+.scientific-image__dialog-image {
+  display: block;
+  max-width: 100%;
+  max-height: var(--phy-layout-scientific-media-max-height);
+  height: auto;
+}
+
+.phy-markdown .scientific-cif-viewer {
+  width: 100%;
+  min-height: 18rem;
+  margin: var(--phy-space-12) 0;
+  overflow: hidden;
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-fill-subtle);
+}
+
 /* The static renderer preserves source newlines as <br>. As on Chat, CSS owns
    block-boundary rhythm without changing the generated safe HTML. */
 :is(.phy-markdown--artifact, .phy-markdown--document) .markdown-content br {
