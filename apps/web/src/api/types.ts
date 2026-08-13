@@ -1094,6 +1094,18 @@ function nestedFormattedAnswer(
   return typeof answer === "string" ? answer : undefined;
 }
 
+function nestedA2uiSurface(
+  value: Record<string, unknown>
+): unknown | undefined {
+  const nestedResult = value.result;
+  if (!isRecord(nestedResult)) return undefined;
+  if (hasOwn(nestedResult, "a2ui")) return nestedResult.a2ui;
+
+  const interrupt = nestedResult.interrupt;
+  if (!isRecord(interrupt) || !isRecord(interrupt.draft)) return undefined;
+  return hasOwn(interrupt.draft, "a2ui") ? interrupt.draft.a2ui : undefined;
+}
+
 export function decodeQueryData(value: unknown): DecodedQueryData {
   if (!isRecord(value)) invalid("chat response");
   const rawId = value.id;
@@ -1172,7 +1184,12 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     result.steps = value.steps;
   }
   if (hasOwn(value, "interop")) result.interop = decodeInterop(value.interop);
-  if (hasOwn(value, "a2ui")) result.a2ui = value.a2ui;
+  if (hasOwn(value, "a2ui")) {
+    result.a2ui = value.a2ui;
+  } else {
+    const a2ui = nestedA2uiSurface(value);
+    if (a2ui !== undefined) result.a2ui = a2ui;
+  }
   if (hasOwn(value, "artifacts")) {
     result.artifacts = decodeConversationArtifacts(value.artifacts);
   }

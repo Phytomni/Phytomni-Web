@@ -85,6 +85,21 @@ describe("nested formatted chat answer decoding", () => {
     expect(decoded.answer).toBe("top-level answer");
     expect(decoded.final_answer).toBe("top-level final answer");
   });
+
+  it("promotes an input-required A2UI draft without copying the raw result", () => {
+    const a2ui = {
+      widget: "confirm",
+      props: { body: "Continue the review?" },
+    };
+    const decoded = decodeQueryData({
+      id: 46,
+      status: "INPUT_REQUIRED",
+      result: { interrupt: { draft: { a2ui } } },
+    });
+
+    expect(decoded.a2ui).toEqual(a2ui);
+    expect("result" in decoded).toBe(false);
+  });
 });
 
 describe("agent lifecycle decoding", () => {
