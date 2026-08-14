@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
@@ -6,7 +6,7 @@ import type { ContentBlock } from "@/views/chat/types";
 import { mountWithApp } from "../helpers/test-app-context";
 
 describe("StreamMessage", () => {
-  it("renders a markdown block's text through v-html", () => {
+  it("renders a markdown block through ScientificMarkdown", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
@@ -14,16 +14,18 @@ describe("StreamMessage", () => {
     expect(w.html()).toContain("<strong>hi</strong>");
   });
 
-  it("skins the streaming markdown wrapper with chat classes without MarkdownViewer", () => {
+  it("skins the streaming markdown wrapper with chat classes without MarkdownViewer", async () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
     const w = mountWithApp(StreamMessage, { props: { blocks } });
+    await vi.dynamicImportSettled();
     const md = w.find(".md-block.phy-markdown.phy-markdown--chat");
     expect(md.exists()).toBe(true);
     expect(md.html()).toContain("<strong>hi</strong>");
     // Streaming stays on MarkdownBlock — no MarkdownViewer handoff.
     expect(w.find(".markdown-viewer").exists()).toBe(false);
+    expect(w.findComponent({ name: "ScientificMarkdown" }).exists()).toBe(true);
   });
 
   it("skips an unregistered block type without throwing", () => {
@@ -136,7 +138,9 @@ describe("StreamMessage", () => {
 
     // Streaming path: processInlineMarkdown emits #ns-ref-N anchors (not citation-ref).
     expect(w.html()).toContain('href="#m2-ref-1"');
-    expect(w.html()).toMatch(/<a href="#m2-ref-1"[^>]*>\[1\]<\/a>/);
+    expect(w.get(".scientific-citation__link").attributes("href")).toBe(
+      "#m2-ref-1"
+    );
     const row = w.find(".doc-list-item");
     expect(row.exists()).toBe(true);
     expect(row.attributes("id")).toBe("m2-ref-1");
@@ -222,6 +226,10 @@ describe("StreamMessage", () => {
         },
       ],
     ]);
+    expect(
+      w.find(".a2ui-confirm").attributes("reference-count")
+    ).toBeUndefined();
+    expect(w.find(".a2ui-confirm").attributes("ns")).toBeUndefined();
   });
 
   it("groups consecutive activity blocks and keeps markdown/A2UI outside ChatActivity", () => {

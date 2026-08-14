@@ -10,6 +10,8 @@
               v-if="renderer(block.type)"
               :block="block"
               :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
               :within-activity="block.type === 'reasoning'"
             />
           </template>
@@ -54,6 +56,8 @@
               v-if="renderer(block.type)"
               :block="block"
               :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
               :within-activity="block.type === 'reasoning'"
             />
           </template>
@@ -79,6 +83,7 @@ const props = withDefaults(
     expanded?: boolean;
     streaming?: boolean;
     ns?: string;
+    referenceCount?: number;
     /** Optional disclosure label override (e.g. analyst execution log). */
     label?: string;
     /** Hide the block-count chip (slot-driven bodies such as analyst logs). */
@@ -92,6 +97,7 @@ const props = withDefaults(
     expanded: false,
     streaming: false,
     ns: "",
+    referenceCount: 0,
     hideCount: false,
   }
 );

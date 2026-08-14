@@ -4,6 +4,7 @@ import { nextTick, reactive } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import type { ContentBlock } from "@/views/chat/types";
 import type { AgentTaskLifecycle } from "@/api/types";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
@@ -137,6 +138,7 @@ describe("ChatActivity", () => {
     expect(w.find("details").exists()).toBe(false);
     expect(w.find(".reasoning-toggle").exists()).toBe(false);
     expect(w.find(".reasoning-body").exists()).toBe(true);
+    expect(w.findComponent(ScientificMarkdown).exists()).toBe(true);
   });
 
   it("supports label override, hideCount, and default slot body content", async () => {

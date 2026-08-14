@@ -8,7 +8,22 @@
         :expanded="isActivityExpanded(item.startIndex)"
         :streaming="streaming"
         :ns="citationNs"
+        :reference-count="references?.length ?? 0"
         @update:expanded="(v) => onActivityExpanded(item.startIndex, v)"
+      />
+      <MarkdownBlock
+        v-else-if="item.block.type === 'markdown'"
+        :block="item.block"
+        :ns="citationNs"
+        :reference-count="references?.length ?? 0"
+        :streaming="streaming"
+      />
+      <ReasoningBlock
+        v-else-if="item.block.type === 'reasoning'"
+        :block="item.block"
+        :ns="citationNs"
+        :reference-count="references?.length ?? 0"
+        :streaming="streaming"
       />
       <component
         :is="renderer(item.block.type)"
@@ -38,6 +53,8 @@
 import { computed } from "vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import ChatActivity from "./ChatActivity.vue";
+import MarkdownBlock from "./blocks/MarkdownBlock.vue";
+import ReasoningBlock from "./blocks/ReasoningBlock.vue";
 import type { ContentBlock } from "../types";
 import type { A2uiActionIntent } from "../streaming/a2uiContract";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
