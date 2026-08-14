@@ -18,12 +18,13 @@ const DeepGenomeResultViewerStub = defineComponent({
     showActions: { type: Boolean, default: true },
     showReferences: { type: Boolean, default: true },
   },
+  emits: ["citation-activate"],
   setup(props, { expose }) {
     expose({ download });
     return { props };
   },
   template:
-    '<article data-test="deep-genome-renderer" :data-markdown="props.markdown" :data-ns="props.ns" :data-actions="String(props.showActions)" :data-references="String(props.showReferences)"><a href="#artifactunder-ref-2" style="display:inline-block">[2]</a></article>',
+    '<article data-test="deep-genome-renderer" :data-markdown="props.markdown" :data-ns="props.ns" :data-actions="String(props.showActions)" :data-references="String(props.showReferences)"><button data-test="deep-genome-citation" @click="$emit(\'citation-activate\', { namespace: props.ns, indices: [2] })">[2]</button></article>',
 });
 
 const referenceList = [
@@ -75,7 +76,7 @@ describe("DeepGenomeArtifact", () => {
     expect(wrapper.findAll(".research-evidence-panel__item")).toHaveLength(2);
     expect(
       wrapper.find(".research-evidence-panel__item").attributes("id")
-    ).toBe("artifactunder-ref-1");
+    ).toBe("artifact_under-ref-1");
     expect(
       wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
@@ -131,7 +132,7 @@ describe("DeepGenomeArtifact", () => {
     });
     const focus = vi.spyOn(row.element as HTMLElement, "focus");
 
-    await wrapper.get('a[href="#artifactunder-ref-2"]').trigger("click");
+    await wrapper.get('[data-test="deep-genome-citation"]').trigger("click");
     await nextTick();
 
     expect(
@@ -139,5 +140,6 @@ describe("DeepGenomeArtifact", () => {
     ).toBe("true");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
+    expect(row.classes()).toContain("research-evidence-panel__item--active");
   });
 });

@@ -1,10 +1,5 @@
 <template>
-  <div
-    ref="artifactRoot"
-    class="deep-genome-artifact"
-    data-testid="deep-genome-artifact"
-    @click="handleArtifactClick"
-  >
+  <div class="deep-genome-artifact" data-testid="deep-genome-artifact">
     <ResearchArtifactShell
       :title="title"
       :metadata="metadata"
@@ -65,14 +60,15 @@
           :ns="ns"
           :show-actions="false"
           :show-references="false"
+          @citation-activate="activateEvidence"
         />
       </template>
 
       <template #evidence>
         <ResearchEvidencePanel
+          ref="evidencePanelRef"
           :references="references"
           :ns="ns"
-          @activate="handleTab('evidence')"
         />
       </template>
 
@@ -83,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import type {
   DeepGenomeDownloadFormat,
@@ -92,6 +88,7 @@ import type {
 import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 
 type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ArtifactTabLabels = Partial<Record<ArtifactTab, string>>;
@@ -128,10 +125,11 @@ const emit = defineEmits<{
   (event: "tab", tab: ArtifactTab): void;
 }>();
 
-const artifactRoot = ref<HTMLElement | null>(null);
 const viewerRef = ref<DeepGenomeViewerHandle | null>(null);
+const evidencePanelRef = ref<{
+  focusReferences(indices: readonly number[]): boolean;
+} | null>(null);
 const selectedTab = ref<ArtifactTab>(props.tab);
-const safeNamespace = computed(() => props.ns.replace(/[^A-Za-z0-9-]/g, ""));
 
 watch(
   () => props.tab,
@@ -145,6 +143,15 @@ function handleTab(tab: ArtifactTab): void {
   emit("tab", tab);
 }
 
+async function activateEvidence(
+  activation: ScientificCitationActivation
+): Promise<void> {
+  if (activation.namespace !== props.ns) return;
+  handleTab("evidence");
+  await nextTick();
+  evidencePanelRef.value?.focusReferences(activation.indices);
+}
+
 async function delegateDownload(
   format: DeepGenomeDownloadFormat
 ): Promise<void> {
@@ -155,52 +162,6 @@ async function delegateDownload(
   } catch {
     // The embedded viewer owns its download error surface.
   }
-}
-
-function findEvidenceRow(targetId: string): HTMLElement | null {
-  const prefix = safeNamespace.value ? `${safeNamespace.value}-ref-` : "ref-";
-  if (!targetId.startsWith(prefix)) return null;
-
-  return (
-    Array.from(
-      artifactRoot.value?.querySelectorAll<HTMLElement>(
-        ".research-evidence-panel__item"
-      ) ?? []
-    ).find((row) => row.id === targetId) ?? null
-  );
-}
-
-async function handleArtifactClick(event: MouseEvent): Promise<void> {
-  if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
-
-  const target = event.target;
-  if (!(target instanceof Element) || !artifactRoot.value) return;
-
-  const anchor = target.closest<HTMLAnchorElement>("a[href]");
-  if (!anchor || !artifactRoot.value.contains(anchor)) return;
-  if (!anchor.closest('[data-panel-id="content"]')) return;
-
-  const href = anchor.getAttribute("href");
-  if (!href || !href.startsWith("#") || href.length === 1) return;
-  const targetId = href.slice(1);
-  if (!findEvidenceRow(targetId)) return;
-
-  event.preventDefault();
-  handleTab("evidence");
-  await nextTick();
-  const row = findEvidenceRow(targetId);
-  if (!row) return;
-  row.scrollIntoView({ block: "nearest" });
-  row.focus();
 }
 </script>
 

@@ -17,21 +17,38 @@
         v-for="ref in displayReferences"
         :id="ref.id"
         :key="ref.id"
-        class="research-evidence-panel__item"
+        :class="[
+          'research-evidence-panel__item',
+          {
+            'research-evidence-panel__item--active': activeReferenceIds.has(
+              ref.id
+            ),
+          },
+        ]"
         role="listitem"
         tabindex="-1"
+        :aria-current="activeReferenceIds.has(ref.id) ? 'true' : undefined"
         v-html="ref.html"
       ></div>
     </div>
     <p v-else class="research-evidence-panel__empty">
       {{ $t("common.noData") }}
     </p>
+    <span
+      v-if="activeAnnouncement"
+      :key="announcementNonce"
+      class="sr-only"
+      aria-live="polite"
+      >{{ activeAnnouncement }}</span
+    >
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 
 // Agent-influenced references cross the v-html boundary only after the existing
 // canonical helper escapes text and sanitizes external URLs.
@@ -40,80 +57,46 @@ const props = defineProps<{
   ns: string;
 }>();
 
-const emit = defineEmits<{
-  (event: "activate"): void;
-}>();
-
 const displayReferences = computed(() =>
   buildDisplayReferences(props.references || [], props.ns)
 );
 
+const { t } = useI18n();
 const panelRef = ref<HTMLElement | null>(null);
-let artifactRoot: HTMLElement | null = null;
+const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const activeAnnouncement = ref("");
+const announcementNonce = ref(0);
 
-function findEvidenceRow(href: string | null): HTMLElement | null {
-  if (!href || !href.startsWith("#") || href.length === 1 || !panelRef.value) {
-    return null;
+function focusReferences(indices: readonly number[]): boolean {
+  const ids = indices.map((index) => displayReferences.value[index - 1]?.id);
+  if (!panelRef.value || indices.length === 0 || ids.some((id) => !id)) {
+    return false;
   }
 
-  const targetId = href.slice(1);
-  if (!displayReferences.value.some((reference) => reference.id === targetId)) {
-    return null;
-  }
-
-  return (
-    Array.from(
-      panelRef.value.querySelectorAll<HTMLElement>(
-        ".research-evidence-panel__item"
-      )
-    ).find((row) => row.id === targetId) || null
-  );
-}
-
-async function handleArtifactClick(event: MouseEvent): Promise<void> {
-  const eventTarget = event.target;
   if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    event.altKey ||
-    !(eventTarget instanceof Element) ||
-    !artifactRoot
+    !focusReferenceRows({
+      root: panelRef.value,
+      namespace: props.ns,
+      indices,
+    })
   ) {
-    return;
+    return false;
   }
 
-  const citation = eventTarget.closest<HTMLAnchorElement>("a.citation-ref");
-  if (!citation || !artifactRoot.contains(citation)) return;
-  if (!findEvidenceRow(citation.getAttribute("href"))) return;
-
-  event.preventDefault();
-  emit("activate");
-  await nextTick();
-
-  const row = findEvidenceRow(citation.getAttribute("href"));
-  if (!row) return;
-  row.scrollIntoView({ block: "nearest" });
-  row.focus();
+  activeReferenceIds.value = new Set(
+    ids.filter((id): id is string => typeof id === "string")
+  );
+  activeAnnouncement.value = `${t("chat.relatedDocuments")}: ${indices.join(", ")}`;
+  announcementNonce.value += 1;
+  return true;
 }
 
-const handleArtifactClickEvent = (event: Event): void => {
-  handleArtifactClick(event as MouseEvent).catch(() => undefined);
-};
-
-onMounted(() => {
-  const closestArtifact = panelRef.value?.closest(".research-artifact-shell");
-  artifactRoot =
-    closestArtifact instanceof HTMLElement ? closestArtifact : null;
-  artifactRoot?.addEventListener("click", handleArtifactClickEvent);
+watch(displayReferences, () => {
+  activeReferenceIds.value = new Set();
+  activeAnnouncement.value = "";
 });
 
-onUnmounted(() => {
-  artifactRoot?.removeEventListener("click", handleArtifactClickEvent);
-  artifactRoot = null;
-});
+defineExpose({ focusReferences });
 </script>
 
 <style scoped>
@@ -145,6 +128,16 @@ onUnmounted(() => {
   line-height: 1.6;
   overflow-wrap: anywhere;
   scroll-margin-block: var(--phy-space-16);
+}
+
+.research-evidence-panel__item--active {
+  background: var(--phy-color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--phy-color-accent);
+}
+
+.research-evidence-panel__item.is-citation-target {
+  background: var(--phy-color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--phy-color-accent);
 }
 
 .research-evidence-panel__item:focus-visible,

@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { defineComponent } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -15,19 +16,21 @@ const CITED_ANSWER_SOURCE = readFileSync(
 // CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
   mountWithApp(CitedAnswer, {
-    props,
+    props: { ns: "cited-test", ...props },
     global: {
       stubs: {
-        ScientificMarkdown: {
-          template:
-            '<div class="sm-stub">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</div>',
+        ScientificMarkdown: defineComponent({
           props: ["source", "citationNamespace", "referenceCount", "surface"],
-        },
-        ScientificMarkdownTypewriter: {
+          emits: ["citation-activate"],
           template:
-            '<div class="smt-stub">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</div>',
+            '<button class="sm-stub" @click="$emit(\'citation-activate\', { namespace: citationNamespace, indices: [1, 2] })">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</button>',
+        }),
+        ScientificMarkdownTypewriter: defineComponent({
           props: ["source", "citationNamespace", "referenceCount", "surface"],
-        },
+          emits: ["citation-activate"],
+          template:
+            '<button class="smt-stub" @click="$emit(\'citation-activate\', { namespace: citationNamespace, indices: [1, 2] })">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</button>',
+        }),
       },
       mocks: {
         $t: (key: string) => key,
@@ -45,12 +48,13 @@ describe("CitedAnswer", () => {
   it("renders one reference row per doc with ref-N ids from buildDisplayReferences", () => {
     const wrapper = mountCited({
       content: "body",
+      ns: "cited-rows",
       references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],
     });
     const rows = wrapper.findAll(".doc-list-item");
     expect(rows).toHaveLength(2);
-    expect(rows[0].attributes("id")).toBe("ref-1");
-    expect(rows[1].attributes("id")).toBe("ref-2");
+    expect(rows[0].attributes("id")).toBe("cited-rows-ref-1");
+    expect(rows[1].attributes("id")).toBe("cited-rows-ref-2");
     expect(wrapper.html()).toContain("Doc A");
     expect(wrapper.html()).toContain("Smith");
   });
@@ -134,5 +138,44 @@ describe("CitedAnswer", () => {
 
     const readingDefault = mountCited({ content: "hi", references: [] });
     expect(readingDefault.find(".sm-stub").text()).toContain("reading");
+  });
+
+  it("focuses its own inline reference list for grouped citations", async () => {
+    const wrapper = mountCited({
+      content: "Evidence [1-2]",
+      references: [{ title: "First source" }, { title: "Second source" }],
+      ns: "inline-cited",
+    });
+    const rows = wrapper.findAll(".doc-list-item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    await wrapper.get(".sm-stub").trigger("click");
+
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted("citation-activate")).toBeUndefined();
+  });
+
+  it("re-emits citation activation when references are presented externally", async () => {
+    const wrapper = mountCited({
+      content: "Evidence [1-2]",
+      references: [{ title: "First source" }, { title: "Second source" }],
+      ns: "external-cited",
+      referencePresentation: "external",
+    });
+
+    await wrapper.get(".sm-stub").trigger("click");
+
+    expect(wrapper.emitted("citation-activate")).toEqual([
+      [{ namespace: "external-cited", indices: [1, 2] }],
+    ]);
   });
 });

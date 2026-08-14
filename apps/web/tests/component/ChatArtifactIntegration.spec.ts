@@ -1150,9 +1150,9 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("<CitedAnswer");
     expect(CHAT_SOURCE).toContain('reference-presentation="external"');
     expect(CHAT_SOURCE).toContain("<ResearchEvidencePanel");
-    expect(CHAT_SOURCE).toContain(
-      "@activate=\"selectArtifactTab('evidence')\""
-    );
+    expect(CHAT_SOURCE).toContain('@citation-activate="activateEvidence"');
+    expect(CHAT_SOURCE).toContain("evidencePanelRef");
+    expect(CHAT_SOURCE).toContain("focusReferences(activation.indices)");
     expect(CHAT_SOURCE).not.toContain("<CitationReferenceList");
     expect(CHAT_SOURCE).toContain("artifactPreviewForMessage(message)");
     expect(CONTENT_SOURCE).toContain("<ResearchArtifactPreview");

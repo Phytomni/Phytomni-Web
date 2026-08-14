@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -80,5 +80,47 @@ describe("CitationReferenceList", () => {
     const b = mountList({ references: [{ title: "B" }], ns: "m1" });
     expect(a.find(".doc-list-item").attributes("id")).toBe("m0-ref-1");
     expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
+  });
+
+  it("exposes namespace-safe grouped focus and clears the previous target set", () => {
+    const wrapper = mountList({
+      references: [
+        { title: "First source" },
+        { title: "Second source" },
+        { title: "Third source" },
+        { title: "Fourth source" },
+        { title: "Fifth source" },
+      ],
+      ns: "report_under",
+    });
+    const rows = wrapper.findAll(".doc-list-item");
+    const firstScroll = vi.fn();
+    const firstFocus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: firstScroll,
+    });
+
+    const focusReferences = (
+      wrapper.vm as unknown as {
+        focusReferences(indices: readonly number[]): boolean;
+      }
+    ).focusReferences;
+
+    expect(focusReferences([1, 2, 3, 5])).toBe(true);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true, true, false, true]);
+    expect(firstScroll).toHaveBeenCalledWith({ block: "nearest" });
+    expect(firstFocus).toHaveBeenCalledTimes(1);
+
+    expect(focusReferences([4])).toBe(true);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([false, false, false, true, false]);
+    expect(focusReferences([99])).toBe(false);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([false, false, false, true, false]);
   });
 });

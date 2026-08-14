@@ -30,8 +30,10 @@
       v-if="reportText"
       :source="reportText"
       :citation-namespace="ns"
+      :reference-count="referenceCount"
       surface="artifact"
       data-test="bot-report-content"
+      @citation-activate="emit('citation-activate', $event)"
     />
     <p
       v-else-if="state.status !== 'TIMED_OUT' && !activeReportHidden"
@@ -58,6 +60,7 @@ import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 
 type BotReportStatus = "loading" | "degraded" | "complete" | "failed";
 
@@ -93,6 +96,7 @@ const props = withDefaults(
     progress?: BotProgress | null;
     updatedAt?: string | number | Date | null;
     ns: string;
+    referenceCount?: number;
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
     failureLabel?: string;
@@ -101,10 +105,15 @@ const props = withDefaults(
   {
     progress: null,
     updatedAt: null,
+    referenceCount: 0,
     labels: () => ({}),
     hideActiveReport: false,
   }
 );
+
+const emit = defineEmits<{
+  "citation-activate": [activation: ScientificCitationActivation];
+}>();
 
 const { t, d } = useI18n();
 const lifecycleMetadata = computed(() => props.state as LifecycleMetadata);

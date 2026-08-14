@@ -531,6 +531,8 @@ export function removeDeletedChat(options: {
               :labels="currentArtifactBotReportLabels"
               :empty-report-label="currentArtifactEmptyReportLabel"
               :ns="artifactNamespace"
+              :reference-count="currentArtifactMessage.doc_list?.length ?? 0"
+              @citation-activate="activateEvidence"
             />
             <CitedAnswer
               v-else
@@ -539,13 +541,14 @@ export function removeDeletedChat(options: {
               :ns="artifactNamespace"
               surface="artifact"
               reference-presentation="external"
+              @citation-activate="activateEvidence"
             />
           </template>
           <template #evidence>
             <ResearchEvidencePanel
+              ref="evidencePanelRef"
               :references="currentArtifactMessage.doc_list"
               :ns="artifactNamespace"
-              @activate="selectArtifactTab('evidence')"
             />
           </template>
           <template #activity>{{ t("chat.log.noData") }}</template>
@@ -706,6 +709,7 @@ import type {
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import type { BotRunProjection } from "./botProjection";
 import {
   cloneBotInterop,
@@ -1161,12 +1165,24 @@ const artifactId = computed(() => {
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const evidencePanelRef = ref<{
+  focusReferences(indices: readonly number[]): boolean;
+} | null>(null);
 const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
   downloads: t("chat.actions.downloadAttachments"),
 }));
+
+async function activateEvidence(
+  activation: ScientificCitationActivation
+): Promise<void> {
+  if (activation.namespace !== artifactNamespace.value) return;
+  selectArtifactTab("evidence");
+  await nextTick();
+  evidencePanelRef.value?.focusReferences(activation.indices);
+}
 
 type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";
 type ChatArtifactLifecycleState = BotLifecycleState &

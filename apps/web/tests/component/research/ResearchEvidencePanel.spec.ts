@@ -7,7 +7,8 @@ import ResearchEvidencePanel from "@/components/research/ResearchEvidencePanel.v
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 
-vi.mock("vue-element-plus-x", () => ({
+vi.mock("vue-element-plus-x", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("vue-element-plus-x")>()),
   Typewriter: { name: "Typewriter", template: "<div></div>" },
 }));
 
@@ -32,9 +33,12 @@ function mountPanel(references: unknown[] = [], ns = "artifact-a") {
   });
 }
 
-function mountArtifactHarness() {
+function mountArtifactHarness(content = "Namespaced finding [2].") {
   const tab = ref<"content" | "evidence">("content");
   const order: string[] = [];
+  const panelRef = ref<{
+    focusReferences(indices: readonly number[]): boolean;
+  } | null>(null);
   const references = [
     {
       au: "A. Author",
@@ -45,9 +49,11 @@ function mountArtifactHarness() {
     },
     { title: "Exact target reference" },
   ];
-  const handleActivate = () => {
+  const handleActivate = async (activation: { indices: readonly number[] }) => {
     order.push("activate");
     tab.value = "evidence";
+    await nextTick();
+    panelRef.value?.focusReferences(activation.indices);
   };
   const Harness = defineComponent({
     components: {
@@ -55,7 +61,7 @@ function mountArtifactHarness() {
       ResearchArtifactShell,
       ResearchEvidencePanel,
     },
-    setup: () => ({ handleActivate, references, tab }),
+    setup: () => ({ content, handleActivate, panelRef, references, tab }),
     template: `
       <ResearchArtifactShell
         title="Evidence harness"
@@ -67,20 +73,26 @@ function mountArtifactHarness() {
       >
         <template #content>
           <CitedAnswer
-            content="Namespaced finding [2]."
+            :content="content"
             :references="references"
             ns="artifact_under"
             surface="artifact"
             reference-presentation="external"
+            @citation-activate="handleActivate"
           />
+          <a
+            data-test="modified-citation"
+            class="scientific-citation__link"
+            href="#artifact_under-ref-1"
+          >modified</a>
           <a data-test="foreign-citation" class="citation-ref" href="#foreign-ref-1">foreign</a>
           <a data-test="external-link">external</a>
         </template>
         <template #evidence>
           <ResearchEvidencePanel
+            ref="panelRef"
             :references="references"
             ns="artifact_under"
-            @activate="handleActivate"
           />
         </template>
       </ResearchArtifactShell>
@@ -169,9 +181,50 @@ describe("ResearchEvidencePanel", () => {
     expect(wrapper.find(".research-evidence-panel__item").exists()).toBe(false);
   });
 
+  it("exposes grouped namespace-safe focus and clears prior highlights", () => {
+    const wrapper = mountPanel(
+      [
+        { title: "First source" },
+        { title: "Second source" },
+        { title: "Third source" },
+        { title: "Fourth source" },
+        { title: "Fifth source" },
+      ],
+      "artifact_under"
+    );
+    const rows = wrapper.findAll(".research-evidence-panel__item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+    const focusReferences = (
+      wrapper.vm as unknown as {
+        focusReferences(indices: readonly number[]): boolean;
+      }
+    ).focusReferences;
+
+    expect(focusReferences([1, 2, 3, 5])).toBe(true);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true, true, false, true]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    expect(focusReferences([4])).toBe(true);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([false, false, false, true, false]);
+    expect(focusReferences([100])).toBe(false);
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([false, false, false, true, false]);
+  });
+
   it("activates Evidence before scrolling and focusing the exact namespaced row", async () => {
     const { wrapper, tab, order } = mountArtifactHarness();
-    const citation = wrapper.get("a.citation-ref:not([data-test])");
+    const citation = wrapper.get("a.scientific-citation__link");
     const rows = wrapper.findAll(".research-evidence-panel__item");
     const row = rows[1];
     const evidenceTabPanel = wrapper.get('[data-panel-id="evidence"]');
@@ -195,24 +248,62 @@ describe("ResearchEvidencePanel", () => {
 
     expect(evidenceTabPanel.attributes("hidden")).toBe("");
     expect(citation.attributes("href")).toBe(`#${row.attributes("id")}`);
-    expect(citation.attributes("href")).not.toContain("_");
+    expect(citation.attributes("href")).toBe("#artifact_under-ref-2");
     const event = new MouseEvent("click", { bubbles: true, cancelable: true });
     citation.element.dispatchEvent(event);
     await nextTick();
     await nextTick();
 
-    expect(event.defaultPrevented).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(order).toEqual(["activate", "scroll", "focus"]);
     expect(focus).toHaveBeenCalledTimes(1);
+    expect(row.classes()).toContain("research-evidence-panel__item--active");
+    expect(row.attributes("aria-current")).toBe("true");
     expect(firstRowScroll).not.toHaveBeenCalled();
     expect(firstRowFocus).not.toHaveBeenCalled();
+  });
+
+  it("highlights every row in a grouped citation and focuses the first", async () => {
+    const { wrapper, tab } = mountArtifactHarness("Namespaced finding [1-2].");
+    const citation = wrapper.get("a.scientific-citation__link");
+    const rows = wrapper.findAll(".research-evidence-panel__item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const firstFocus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+    const secondFocus = vi.spyOn(rows[1].element as HTMLElement, "focus");
+
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    citation.element.dispatchEvent(event);
+    await nextTick();
+    await nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(tab.value).toBe("evidence");
+    expect(
+      rows.every((row) =>
+        row.classes().includes("research-evidence-panel__item--active")
+      )
+    ).toBe(true);
+    expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
+      "true",
+      "true",
+    ]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(firstFocus).toHaveBeenCalledTimes(1);
+    expect(secondFocus).not.toHaveBeenCalled();
+    expect(wrapper.get(".research-evidence-panel .sr-only").text()).toContain(
+      "1, 2"
+    );
   });
 
   it("leaves modified, foreign, external, DOI, and PMID links untouched", async () => {
     const { wrapper, tab, order } = mountArtifactHarness();
     const cases = [
-      [wrapper.get("a.citation-ref:not([data-test])"), { ctrlKey: true }],
+      [wrapper.get("[data-test=modified-citation]"), { ctrlKey: true }],
       [wrapper.get("[data-test=foreign-citation]"), {}],
       [wrapper.get("[data-test=external-link]"), {}],
       [wrapper.get("a.doi-link"), {}],
@@ -231,7 +322,10 @@ describe("ResearchEvidencePanel", () => {
       link.element.dispatchEvent(event);
       await nextTick();
 
-      expect(event.defaultPrevented).toBe(false);
+      expect(
+        event.defaultPrevented,
+        link.attributes("data-test") || link.classes().join(" ")
+      ).toBe(false);
       expect(tab.value).toBe("content");
       expect(order).toEqual([]);
     }
