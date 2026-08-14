@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import hashlib
 import io
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
@@ -172,6 +174,173 @@ def replace_source_once(
     source = path.read_text(encoding="utf-8")
     assert source.count(accepted) == 1
     path.write_text(source.replace(accepted, replacement), encoding="utf-8")
+
+
+def replace_go_const_value(
+    root: Path, relative: Path, name: str, value: str | int
+) -> None:
+    path = root / relative
+    source = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"(?m)^(?P<prefix>[ \t]*{re.escape(name)}"
+        r"(?:[ \t]+[A-Za-z_][A-Za-z0-9_]*)?[ \t]*=[ \t]*)"
+        r"(?P<value>[^\r\n]+?)"
+        r"(?P<suffix>[ \t]*)$"
+    )
+    matches = list(pattern.finditer(source))
+    assert len(matches) == 1
+    rendered = json.dumps(value) if isinstance(value, str) else str(value)
+    match = matches[0]
+    path.write_text(
+        source[: match.start("value")]
+        + rendered
+        + source[match.end("value") :],
+        encoding="utf-8",
+    )
+
+
+def accepted_go_contract_values(
+    root: Path,
+) -> tuple[dict[str, int], dict[str, str | int], set[str]]:
+    limit_names = tuple(
+        name
+        for names in checker._RESEARCH_INPUT_LIMIT_DECLARATIONS.values()
+        for name in names
+    )
+    limit_values = checker._parse_go_named_const_literals(
+        (root / RESEARCH_LIMIT_SOURCE_PATH).read_text(encoding="utf-8"),
+        limit_names,
+    )
+    contract_values = checker._parse_go_named_const_literals(
+        (root / RESEARCH_CONTRACT_SOURCE_PATH).read_text(encoding="utf-8"),
+        (
+            "ResearchInputProtocol",
+            "ResearchInputProtocolVersion",
+            "maxResearchDatasetFormats",
+            "maxResearchDatasetFormatSize",
+        ),
+    )
+    archive_formats = checker._parse_go_string_set_map(
+        (root / RESEARCH_CONTRACT_SOURCE_PATH).read_text(encoding="utf-8"),
+        "acceptedResearchArchiveFormats",
+    )
+    assert limit_values is not None
+    assert contract_values is not None
+    assert archive_formats is not None
+    assert all(isinstance(value, int) for value in limit_values.values())
+    return (
+        {name: int(value) for name, value in limit_values.items()},
+        contract_values,
+        archive_formats,
+    )
+
+
+_UNSUPPORTED_AST_VALUE = object()
+
+
+def _static_ast_value(node: ast.AST) -> object:
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, (ast.List, ast.Set, ast.Tuple)):
+        values = [_static_ast_value(item) for item in node.elts]
+        if _UNSUPPORTED_AST_VALUE in values:
+            return _UNSUPPORTED_AST_VALUE
+        if isinstance(node, ast.List):
+            return values
+        if isinstance(node, ast.Set):
+            return set(values)
+        return tuple(values)
+    if isinstance(node, ast.Dict):
+        keys = [_static_ast_value(item) for item in node.keys]
+        values = [_static_ast_value(item) for item in node.values]
+        if _UNSUPPORTED_AST_VALUE in (*keys, *values):
+            return _UNSUPPORTED_AST_VALUE
+        return dict(zip(keys, values, strict=True))
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "frozenset"
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        value = _static_ast_value(node.args[0])
+        if isinstance(value, (list, set, tuple)):
+            return frozenset(value)
+    if isinstance(node, ast.BinOp):
+        left = _static_ast_value(node.left)
+        right = _static_ast_value(node.right)
+        if isinstance(left, int) and isinstance(right, int):
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.LShift):
+                return left << right
+    return _UNSUPPORTED_AST_VALUE
+
+
+def _static_scalar_values(value: object) -> set[str | int]:
+    if isinstance(value, bool):
+        return set()
+    if isinstance(value, (str, int)):
+        return {value}
+    if isinstance(value, dict):
+        scalars: set[str | int] = set()
+        for key, item in value.items():
+            scalars.update(_static_scalar_values(key))
+            scalars.update(_static_scalar_values(item))
+        return scalars
+    if isinstance(value, (list, set, tuple, frozenset)):
+        scalars = set()
+        for item in value:
+            scalars.update(_static_scalar_values(item))
+        return scalars
+    return set()
+
+
+def _authoritative_assignment_mirrors(
+    source: str, authoritative_values: set[str | int]
+) -> set[str]:
+    allowed_web_collisions = {"MAX_MATRIX_JSON_DEPTH"}
+    prohibited_names = {
+        "RESEARCH_INPUT_PROTOCOL",
+        "RESEARCH_INPUT_PROTOCOL_VERSION",
+        "_RESEARCH_INPUT_LIMIT_SOURCES",
+        "RESEARCH_ARCHIVE_FORMATS",
+        "MAX_RESEARCH_DATASET_FORMATS",
+        "MAX_RESEARCH_DATASET_FORMAT_SIZE",
+        "RESEARCH_INPUT_FIXTURE_SHA256",
+        "CANONICAL_AGENT_TOOLS",
+        "MAX_BOT_AGENT_DESCRIPTORS",
+        "MAX_RESEARCH_DATASET_FILE_BYTES",
+    }
+    tree = ast.parse(source)
+    mirrors = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id in prohibited_names
+    }
+    for statement in ast.walk(tree):
+        if isinstance(statement, ast.Assign):
+            names = [
+                target.id
+                for target in statement.targets
+                if isinstance(target, ast.Name)
+            ]
+            value_node = statement.value
+        elif isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            names = [statement.target.id]
+            value_node = statement.value
+        else:
+            continue
+        if value_node is None:
+            continue
+        value = _static_ast_value(value_node)
+        if value is _UNSUPPORTED_AST_VALUE:
+            continue
+        if _static_scalar_values(value) & authoritative_values:
+            mirrors.update(name for name in names if name not in allowed_web_collisions)
+    return mirrors
 
 
 def local_readiness_matrix_value() -> MatrixValue:
@@ -512,91 +681,120 @@ def test_checker_does_not_accept_commented_go_format(tmp_path: Path) -> None:
     assert any("Research format maps" in error for error in errors)
 
 
+def test_checker_derives_authoritative_research_values_from_web_go(
+    tmp_path: Path,
+) -> None:
+    root = local_readiness_tree(tmp_path)
+    limit_values, contract_values, _ = accepted_go_contract_values(root)
+
+    for _, hard_name in checker._RESEARCH_INPUT_LIMIT_DECLARATIONS.values():
+        replace_go_const_value(
+            root,
+            RESEARCH_LIMIT_SOURCE_PATH,
+            hard_name,
+            limit_values[hard_name] + 1,
+        )
+
+    protocol = contract_values["ResearchInputProtocol"]
+    protocol_version = contract_values["ResearchInputProtocolVersion"]
+    max_formats = contract_values["maxResearchDatasetFormats"]
+    max_format_size = contract_values["maxResearchDatasetFormatSize"]
+    assert isinstance(protocol, str)
+    assert isinstance(protocol_version, int)
+    assert isinstance(max_formats, int)
+    assert isinstance(max_format_size, int)
+    next_protocol = f"{protocol}_next"
+    replace_go_const_value(
+        root, RESEARCH_CONTRACT_SOURCE_PATH, "ResearchInputProtocol", next_protocol
+    )
+    replace_go_const_value(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "ResearchInputProtocolVersion",
+        protocol_version + 1,
+    )
+    replace_go_const_value(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "maxResearchDatasetFormats",
+        max_formats + 1,
+    )
+    replace_go_const_value(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "maxResearchDatasetFormatSize",
+        max_format_size + 1,
+    )
+
+    future_archive = "futurearchive"
+    contract_path = root / RESEARCH_CONTRACT_SOURCE_PATH
+    contract_source = contract_path.read_text(encoding="utf-8")
+    archive_opening = (
+        "var acceptedResearchArchiveFormats = map[string]struct{}{\n"
+    )
+    assert contract_source.count(archive_opening) == 1
+    contract_path.write_text(
+        contract_source.replace(
+            archive_opening,
+            archive_opening + f'\t"{future_archive}": {{}},\n',
+        ),
+        encoding="utf-8",
+    )
+    format_path = root / RESEARCH_FORMAT_SOURCE_PATH
+    format_source = format_path.read_text(encoding="utf-8")
+    format_opening = "var archiveAttachmentSuffixes = map[string]struct{}{\n"
+    assert format_source.count(format_opening) == 1
+    format_path.write_text(
+        format_source.replace(
+            format_opening,
+            format_opening + f'    ".{future_archive}": {{}},\n',
+        ),
+        encoding="utf-8",
+    )
+
+    fixture_path = root / RESEARCH_INPUT_FIXTURE_PATH
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    payload["protocols"][next_protocol] = [protocol_version + 1]
+    del payload["protocols"][protocol]
+    research_datasets(payload)["formats"].append(future_archive)
+    write(root, RESEARCH_INPUT_FIXTURE_PATH.as_posix(), payload)
+    replace_go_const_value(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "acceptedResearchInputFixtureSHA256",
+        hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+    )
+
+    assert checker.check(root) == []
+
+
 @pytest.mark.parametrize(
-    ("relative", "accepted", "drifted"),
+    ("relative", "name", "invalid_kind"),
     [
         (
             RESEARCH_LIMIT_SOURCE_PATH,
-            "DefaultMaxUserQueryChars          = 131_072",
-            "DefaultMaxUserQueryChars = 131_073",
+            "DefaultMaxUserQueryChars",
+            "above_hard",
         ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "HardMaxUserQueryChars             = 1_048_576",
-            "HardMaxUserQueryChars = 1_048_577",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "DefaultMaxAssetAttachmentRefs     = 64",
-            "DefaultMaxAssetAttachmentRefs = 65",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "HardMaxAssetAttachmentRefs        = 256",
-            "HardMaxAssetAttachmentRefs = 257",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "DefaultMaxResearchDatasetPaths    = 64",
-            "DefaultMaxResearchDatasetPaths = 65",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "HardMaxResearchDatasetPaths       = 256",
-            "HardMaxResearchDatasetPaths = 257",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "DefaultMaxResearchInputReferences = 128",
-            "DefaultMaxResearchInputReferences = 129",
-        ),
-        (
-            RESEARCH_LIMIT_SOURCE_PATH,
-            "HardMaxResearchInputReferences    = 256",
-            "HardMaxResearchInputReferences = 257",
-        ),
-        (
-            RESEARCH_CONTRACT_SOURCE_PATH,
-            'ResearchInputProtocol        = "research_input_resolution_v1"',
-            'ResearchInputProtocol = "research_input_resolution_v2"',
-        ),
-        (
-            RESEARCH_CONTRACT_SOURCE_PATH,
-            "ResearchInputProtocolVersion = 1",
-            "ResearchInputProtocolVersion = 2",
-        ),
-        (
-            RESEARCH_CONTRACT_SOURCE_PATH,
-            "maxResearchDatasetFormats    = 256",
-            "maxResearchDatasetFormats = 257",
-        ),
-        (
-            RESEARCH_CONTRACT_SOURCE_PATH,
-            "maxResearchDatasetFormatSize = 64",
-            "maxResearchDatasetFormatSize = 65",
-        ),
-        (
-            RESEARCH_CONTRACT_SOURCE_PATH,
-            '"rar": {},',
-            '// "rar": {},',
-        ),
+        (RESEARCH_LIMIT_SOURCE_PATH, "HardMaxAssetAttachmentRefs", "zero"),
+        (RESEARCH_CONTRACT_SOURCE_PATH, "ResearchInputProtocol", "empty"),
+        (RESEARCH_CONTRACT_SOURCE_PATH, "ResearchInputProtocolVersion", "zero"),
+        (RESEARCH_CONTRACT_SOURCE_PATH, "maxResearchDatasetFormats", "zero"),
+        (RESEARCH_CONTRACT_SOURCE_PATH, "maxResearchDatasetFormatSize", "zero"),
     ],
 )
-def test_checker_rejects_web_research_go_contract_source_drift(
-    tmp_path: Path, relative: Path, accepted: str, drifted: str
+def test_checker_rejects_malformed_web_research_go_relationships(
+    tmp_path: Path, relative: Path, name: str, invalid_kind: str
 ) -> None:
     root = minimal_tree(tmp_path)
-    path = root / relative
-    source = path.read_text(encoding="utf-8")
-    pattern = re.compile(r"[ \t]+".join(re.escape(part) for part in accepted.split()))
-    matches = list(pattern.finditer(source))
-    assert len(matches) == 1
-    match = matches[0]
-    replacement = f"// accepted spelling: {match.group()}\n\t{drifted}"
-    path.write_text(
-        source[: match.start()] + replacement + source[match.end() :],
-        encoding="utf-8",
-    )
+    limit_values, _, _ = accepted_go_contract_values(root)
+    if invalid_kind == "above_hard":
+        value: str | int = limit_values["HardMaxUserQueryChars"] + 1
+    elif invalid_kind == "empty":
+        value = ""
+    else:
+        value = 0
+    replace_go_const_value(root, relative, name, value)
 
     errors = checker.check(root)
     assert any("Research Go contract" in error for error in errors)
@@ -616,11 +814,34 @@ def test_checker_rejects_semantically_equivalent_research_fixture_bytes(
     assert any("Research fixture SHA-256" in error for error in errors)
 
 
-def test_checker_has_no_python_duplicates_for_authoritative_go_values() -> None:
-    assert not hasattr(checker, "RESEARCH_INPUT_FIXTURE_SHA256")
-    assert not hasattr(checker, "CANONICAL_AGENT_TOOLS")
-    assert not hasattr(checker, "MAX_BOT_AGENT_DESCRIPTORS")
-    assert not hasattr(checker, "MAX_RESEARCH_DATASET_FILE_BYTES")
+def test_checker_has_no_python_mirrors_of_authoritative_go_values() -> None:
+    limit_values, contract_values, archive_formats = accepted_go_contract_values(
+        checker.ROOT
+    )
+    authoritative_values = {
+        *limit_values.values(),
+        contract_values["ResearchInputProtocol"],
+        contract_values["ResearchInputProtocolVersion"],
+        contract_values["maxResearchDatasetFormats"],
+        contract_values["maxResearchDatasetFormatSize"],
+        *archive_formats,
+    }
+    source = Path(checker.__file__).read_text(encoding="utf-8")
+    assert _authoritative_assignment_mirrors(source, authoritative_values) == set()
+
+    protocol = contract_values["ResearchInputProtocol"]
+    assert isinstance(protocol, str)
+    mutations = {
+        "HIDDEN_PROTOCOL_MIRROR": repr(protocol),
+        "HIDDEN_LIMIT_MIRROR": repr(max(limit_values.values())),
+        "HIDDEN_ARCHIVE_MIRROR": repr(sorted(archive_formats)),
+        "RESEARCH_INPUT_PROTOCOL": repr("renamed-value"),
+    }
+    for name, value in mutations.items():
+        mutated = source + f"\ndef hidden_mirror():\n    {name} = {value}\n"
+        assert _authoritative_assignment_mirrors(
+            mutated, authoritative_values
+        ) == {name}
 
 
 def test_checker_rejects_canonical_agent_tool_drift(tmp_path: Path) -> None:
@@ -756,6 +977,119 @@ def test_checker_rejects_missing_fixture_digest_declaration(tmp_path: Path) -> N
 
     errors = checker.check(root)
     assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize("run_gofmt", (False, True), ids=("raw", "gofmt"))
+@pytest.mark.parametrize(
+    ("kind", "relative", "name"),
+    [
+        ("const", AGENT_MAP_SOURCE_PATH, "maxBotAgentDescriptors"),
+        ("map", AGENT_CANONICAL_SOURCE_PATH, "CanonicalAgentTool"),
+        (
+            "set",
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            "acceptedResearchArchiveFormats",
+        ),
+    ],
+)
+def test_checker_rejects_function_local_authoritative_go_decoys(
+    tmp_path: Path,
+    run_gofmt: bool,
+    kind: str,
+    relative: Path,
+    name: str,
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / relative
+    source = path.read_text(encoding="utf-8")
+    if kind == "const":
+        values = checker._parse_go_named_const_literals(source, (name,))
+        assert values is not None
+        declaration = f"const {name} = {values[name]}"
+    elif kind == "map":
+        values = checker._parse_go_string_map(source, name)
+        assert values is not None
+        entries = "\n".join(
+            f"{json.dumps(key)}: {json.dumps(value)},"
+            for key, value in values.items()
+        )
+        declaration = f"var {name} = map[string]string{{\n{entries}\n}}"
+    else:
+        values = checker._parse_go_string_set_map(source, name)
+        assert values is not None
+        entries = "\n".join(f'{json.dumps(value)}: {{}},' for value in values)
+        declaration = f"var {name} = map[string]struct{{}}{{\n{entries}\n}}"
+
+    runtime_name = f"runtime{name[0].upper()}{name[1:]}"
+    assert name in source
+    source = source.replace(name, runtime_name)
+    source += (
+        "\nfunc activationLocalDeclarationDecoy(){\n"
+        f"{declaration}\n"
+        f"_={name}\n"
+        "}\n"
+    )
+    if run_gofmt:
+        source = subprocess.run(
+            ["gofmt"],
+            input=source,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+    path.write_text(source, encoding="utf-8")
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "unterminated",
+    (
+        'var activationBroken = "unterminated',
+        "var activationBroken = 'unterminated",
+        "var activationBroken = `unterminated",
+        "/* unterminated",
+    ),
+    ids=("string", "rune", "raw-string", "block-comment"),
+)
+def test_checker_fails_closed_for_unterminated_go_lexical_contexts(
+    tmp_path: Path, unterminated: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / RESEARCH_CONTRACT_SOURCE_PATH
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n" + unterminated,
+        encoding="utf-8",
+    )
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("relative", "marker"),
+    (
+        (RESEARCH_LIMIT_SOURCE_PATH, "Research Go contract"),
+        (RESEARCH_CONTRACT_SOURCE_PATH, "Research Go contract"),
+        (AGENT_CANONICAL_SOURCE_PATH, "Research Go contract"),
+        (AGENT_MAP_SOURCE_PATH, "Research Go contract"),
+        (UPLOAD_CONTRACT_SOURCE_PATH, "Research Go contract"),
+        (RESEARCH_FORMAT_SOURCE_PATH, "Research format maps"),
+    ),
+)
+def test_each_authoritative_go_source_fails_closed_for_unterminated_context(
+    tmp_path: Path, relative: Path, marker: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / relative
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n/* unterminated",
+        encoding="utf-8",
+    )
+
+    errors = checker.check(root)
+    assert any(marker in error for error in errors)
 
 
 @pytest.mark.parametrize(
