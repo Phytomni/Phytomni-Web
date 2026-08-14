@@ -17,7 +17,12 @@ import type {
 import type { AguiEvent } from "./aguiEvents";
 
 export type BotLifecycleStatus =
-  "RUNNING" | "INPUT_REQUIRED" | "SUCCEEDED" | "FAILED" | "TIMED_OUT";
+  | "RUNNING"
+  | "INPUT_REQUIRED"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "TIMED_OUT"
+  | "CANCELLED";
 
 export interface BotLifecycleState {
   runId: string | null;
@@ -39,6 +44,7 @@ const TERMINAL_STATUSES = new Set<BotLifecycleStatus>([
   "SUCCEEDED",
   "FAILED",
   "TIMED_OUT",
+  "CANCELLED",
 ]);
 
 export function reduceContextStagedNotice(
@@ -228,8 +234,9 @@ function mapStatus(status: BotRunStatus): BotLifecycleStatus {
     case "SUCCEEDED":
       return "SUCCEEDED";
     case "FAILED":
-    case "CANCELLED":
       return "FAILED";
+    case "CANCELLED":
+      return "CANCELLED";
     case "TIMED_OUT":
       return "TIMED_OUT";
     case "RUNNING":
@@ -456,9 +463,10 @@ export function reduceBotFailure(
 ): BotLifecycleState {
   const safeMessage = safeFailureMessage(failure);
   const terminal = isTerminal(state.status);
+  const cancelled = safeMessage === SAFE_FAILURE_MESSAGES.cancelled;
   return {
     runId: state.runId,
-    status: terminal ? state.status : "FAILED",
+    status: terminal ? state.status : cancelled ? "CANCELLED" : "FAILED",
     reportRevision: normalizedRevision(state.reportRevision),
     intermediateReport: state.intermediateReport,
     finalReport: state.finalReport,

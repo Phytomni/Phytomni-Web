@@ -36,7 +36,11 @@
       @citation-activate="emit('citation-activate', $event)"
     />
     <p
-      v-else-if="state.status !== 'TIMED_OUT' && !activeReportHidden"
+      v-else-if="
+        state.status !== 'TIMED_OUT' &&
+        state.status !== 'CANCELLED' &&
+        !activeReportHidden
+      "
       class="bot-report-state__empty"
       data-test="bot-report-empty"
     >
@@ -74,7 +78,11 @@ function reportStatusForLifecycle(
   lifecycle: BotLifecycleState
 ): BotReportStatus {
   const state = lifecycle as LifecycleMetadata;
-  if (state.status === "FAILED" || state.status === "TIMED_OUT") {
+  if (
+    state.status === "FAILED" ||
+    state.status === "TIMED_OUT" ||
+    state.status === "CANCELLED"
+  ) {
     return "failed";
   }
   if (state.reportStage === "waiting_for_brief_gene") return "loading";
@@ -148,6 +156,9 @@ const reportText = computed(() => {
 });
 
 const statusLabel = computed(() => {
+  if (props.state.status === "CANCELLED") {
+    return t("chat.lifecycle.cancelled");
+  }
   if (props.state.status === "TIMED_OUT") {
     return t("chat.lifecycle.timed_out");
   }
@@ -175,6 +186,9 @@ const emptyReportLabel = computed(() => {
     : t("common.loading");
 });
 const resolvedFailureLabel = computed(() => {
+  if (props.state.status === "CANCELLED") {
+    return t("chat.lifecycle.cancelled");
+  }
   if (props.failureLabel) return props.failureLabel;
   return props.state.status === "TIMED_OUT"
     ? t("chat.lifecycle.timed_out")

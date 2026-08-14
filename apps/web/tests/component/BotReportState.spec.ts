@@ -207,6 +207,38 @@ describe("BotReportState", () => {
     );
     expect(wrapper.text()).not.toContain(enUS.common.failed);
   });
+
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])("keeps cancellation distinct %s", (_name, report) => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "CANCELLED",
+        visibleReport: report,
+        finalReport: report,
+        failures: ["analysis task cancelled"],
+      })
+    );
+
+    expect(wrapper.attributes("data-report-status")).toBe("failed");
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      enUS.chat.lifecycle.cancelled
+    );
+    expect(wrapper.get('[data-test="bot-report-failure"]').text()).toBe(
+      enUS.chat.lifecycle.cancelled
+    );
+    if (report) {
+      expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+        report
+      );
+    } else {
+      expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(
+        false
+      );
+    }
+    expect(wrapper.text()).not.toContain(enUS.common.failed);
+  });
 });
 
 describe("BotArtifactList", () => {

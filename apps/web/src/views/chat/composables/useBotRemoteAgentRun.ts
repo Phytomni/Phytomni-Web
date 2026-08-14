@@ -323,6 +323,8 @@ function committedPhase(
       return "failed";
     case "TIMED_OUT":
       return "timed_out";
+    case "CANCELLED":
+      return "cancelled";
     default:
       return null;
   }
@@ -332,9 +334,6 @@ function initialPhase(
   status: BotLifecycleStatus,
   projection: BotRunProjection | null
 ): RemoteAgentRunPhase {
-  if (projection?.status === "CANCELLED" && status === "FAILED") {
-    return "cancelled";
-  }
   return (
     committedPhase(status) ??
     (projection ? phaseFor(projection.status) : "idle")

@@ -217,6 +217,7 @@ describe("Bot lifecycle locale contract", () => {
     ["degraded", "RUNNING", "intermediate", true, "degraded"],
     ["failed", "FAILED", "final", false, "failed"],
     ["timed-out", "TIMED_OUT", "final", false, "timed_out"],
+    ["cancelled", "CANCELLED", "final", false, "cancelled"],
     ["input-required", "INPUT_REQUIRED", null, false, "inputRequired"],
     ["complete", "SUCCEEDED", "final", false, "complete"],
   ] as const)(
@@ -227,8 +228,8 @@ describe("Bot lifecycle locale contract", () => {
         const wrapper = mountReport(locale, state);
         const expected = valueAt(
           localePack(locale),
-          key === "timed_out"
-            ? "chat.lifecycle.timed_out"
+          key === "timed_out" || key === "cancelled"
+            ? `chat.lifecycle.${key}`
             : `chat.botReport.${key}`
         );
 

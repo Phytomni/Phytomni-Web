@@ -329,13 +329,36 @@ describe("bot lifecycle reducer", () => {
         projection({ status: "INPUT_REQUIRED" })
       ).status
     ).toBe("INPUT_REQUIRED");
-    expect(
-      reduceBotProjection(
-        initBotLifecycleState(),
-        projection({ status: "CANCELLED" })
-      ).status
-    ).toBe("FAILED");
   });
+
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])(
+    "preserves cancellation %s as a sticky terminal state",
+    (_name, report) => {
+      const cancelled = reduceBotProjection(
+        initBotLifecycleState(),
+        projection({
+          status: "CANCELLED",
+          reportRevision: 2,
+          finalReport: report,
+        })
+      );
+
+      expect(cancelled.status).toBe("CANCELLED");
+      expect(cancelled.visibleReport).toBe(report);
+      expect(
+        reduceBotProjection(
+          cancelled,
+          projection({ status: "RUNNING", reportRevision: 3 })
+        ).status
+      ).toBe("CANCELLED");
+      expect(
+        reduceBotFailure(cancelled, new Error("late transport")).status
+      ).toBe("CANCELLED");
+    }
+  );
 
   it("preserves a timed-out run as its own sticky terminal state", () => {
     const timedOut = reduceBotProjection(

@@ -308,36 +308,37 @@ describe("useAgentRunLifecycle", () => {
     poller.dispose();
   });
 
-  it("stops terminal rows permanently", async () => {
-    vi.useFakeTimers();
-    const onSnapshot = vi.fn();
-    const fetchLifecycle = vi
-      .fn()
-      .mockResolvedValue(
-        response(lifecycle({ phase: "SUCCEEDED", terminal: true }))
+  it.each(["SUCCEEDED", "CANCELLED"] as const)(
+    "stops %s rows permanently",
+    async (phase) => {
+      vi.useFakeTimers();
+      const onSnapshot = vi.fn();
+      const fetchLifecycle = vi
+        .fn()
+        .mockResolvedValue(response(lifecycle({ phase, terminal: true })));
+      const poller = useAgentRunLifecycle({
+        scope: "chat:1",
+        fetchLifecycle,
+        onSnapshot,
+        jitter: () => 0,
+        scheduler: testScheduler(),
+      });
+
+      poller.watchRow("42");
+      await flush();
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(fetchLifecycle).toHaveBeenCalledOnce();
+      expect(poller.snapshots.value["42"].terminal).toBe(true);
+      expect(onSnapshot).toHaveBeenCalledTimes(1);
+      expect(onSnapshot).toHaveBeenCalledWith(
+        "42",
+        expect.objectContaining({ phase, terminal: true }),
+        undefined
       );
-    const poller = useAgentRunLifecycle({
-      scope: "chat:1",
-      fetchLifecycle,
-      onSnapshot,
-      jitter: () => 0,
-      scheduler: testScheduler(),
-    });
-
-    poller.watchRow("42");
-    await flush();
-    await vi.advanceTimersByTimeAsync(60000);
-
-    expect(fetchLifecycle).toHaveBeenCalledOnce();
-    expect(poller.snapshots.value["42"].terminal).toBe(true);
-    expect(onSnapshot).toHaveBeenCalledTimes(1);
-    expect(onSnapshot).toHaveBeenCalledWith(
-      "42",
-      expect.objectContaining({ phase: "SUCCEEDED", terminal: true }),
-      undefined
-    );
-    poller.dispose();
-  });
+      poller.dispose();
+    }
+  );
 
   it("preserves prior progress through failures and degraded reconciliation", async () => {
     vi.useFakeTimers();

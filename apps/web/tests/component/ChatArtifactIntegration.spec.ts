@@ -684,6 +684,15 @@ describe("Chat artifact shell integration", () => {
       expectOpen: true,
     },
     {
+      name: "cancelled result with a retained report",
+      message: {
+        ...deepGenomeMessage,
+        id: "cancelled-deep",
+        status: "CANCELLED",
+      },
+      expectOpen: true,
+    },
+    {
       name: "running server task placeholder",
       message: {
         ...deepGenomeMessage,

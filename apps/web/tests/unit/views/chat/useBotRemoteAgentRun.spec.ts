@@ -829,6 +829,33 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.status).toBe("TIMED_OUT");
   });
 
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])(
+    "hydrates cancellation %s without changing its lifecycle",
+    (_name, report) => {
+      const owned = makeState();
+      const run = useBotRemoteAgentRun({
+        tool: "InSilicoResearchAgent",
+        dialogueId: "d-cancelled-hydration",
+        getChatState: () => owned,
+        capabilities: makeCapabilities("InSilicoResearchAgent"),
+      });
+
+      run.hydrate({
+        ...runProjection("CANCELLED", 2),
+        reportStage: report ? "final" : "intermediate",
+        finalReport: report,
+      });
+
+      expect(run.state.value.status).toBe("CANCELLED");
+      expect(run.state.value.phase).toBe("cancelled");
+      expect(run.state.value.visibleReport).toBe(report);
+      expect(owned.botLifecycle?.status).toBe("CANCELLED");
+    }
+  );
+
   it("canonicalizes a raw TIMEOUT response before it enters owned state", async () => {
     mockQuery.mockResolvedValueOnce({
       data: {
@@ -1091,9 +1118,18 @@ describe("useBotRemoteAgentRun", () => {
     expect(state.uploadTransfer).toBeNull();
     expect(state.activeRequestId).toBe("");
     expect(state.activeAgentName).toBe("");
-    expect(state.botLifecycle?.status).toBe("FAILED");
+    expect(state.botLifecycle?.status).toBe("CANCELLED");
     expect(state.botLifecycle?.failures).toContain("analysis task cancelled");
     expect(run.state.value.phase).toBe("cancelled");
+
+    const restored = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "d2",
+      getChatState: () => state,
+      capabilities: makeCapabilities("DigitalDesignAgent"),
+    });
+    expect(restored.state.value.status).toBe("CANCELLED");
+    expect(restored.state.value.phase).toBe("cancelled");
   });
 
   it.each(remoteTools)(
