@@ -187,7 +187,81 @@ _MANIFEST_FIELDS = {
     "result_archive_v1",
 }
 _FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
-_SOURCE_PUNCTUATION = frozenset("[]{}:,=;")
+_SOURCE_PUNCTUATION = frozenset("[]{}():,=;")
+_TS_VALID_REGEX_FLAGS = frozenset("dgimsuvy")
+_TS_CONTROL_PAREN_KEYWORDS = frozenset(
+    {"catch", "for", "if", "switch", "while", "with"}
+)
+_TS_EXPRESSION_PREFIX_KEYWORDS = frozenset(
+    {
+        "await",
+        "case",
+        "default",
+        "delete",
+        "in",
+        "instanceof",
+        "new",
+        "of",
+        "return",
+        "throw",
+        "typeof",
+        "void",
+        "yield",
+    }
+)
+_TS_STATEMENT_MODIFIER_KEYWORDS = frozenset(
+    {"abstract", "async", "declare", "default", "export"}
+)
+_TS_STATEMENT_PREFIX_KEYWORDS = frozenset({"do", "else", "finally", "try"})
+_TS_OPERATORS = (
+    ">>>=",
+    "===",
+    "!==",
+    "**=",
+    "<<=",
+    ">>=",
+    "&&=",
+    "||=",
+    "??=",
+    ">>>",
+    "...",
+    "=>",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "++",
+    "--",
+    "&&",
+    "||",
+    "??",
+    "**",
+    "<<",
+    ">>",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&=",
+    "|=",
+    "^=",
+    "?.",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "&",
+    "|",
+    "^",
+    "!",
+    "~",
+    "?",
+    "<",
+    ">",
+    ".",
+)
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -340,6 +414,153 @@ class SourceToken(NamedTuple):
 TokenPattern = tuple[str, str]
 
 
+class _TypeScriptLexicalState:
+    def __init__(self) -> None:
+        self.regex_allowed = True
+        self.statement_expected = True
+        self.pending_control_paren = False
+        self.awaiting_function_paren = False
+        self.function_closure_allows_regex = False
+        self.pending_brace_closure: bool | None = None
+        self.pending_brace_is_immediate = False
+        self.member_property_expected = False
+        self.paren_contexts: list[str] = []
+        self.brace_closure_allows_regex: list[bool] = []
+
+    def _discard_immediate_brace(self) -> None:
+        if self.pending_brace_is_immediate:
+            self.pending_brace_closure = None
+            self.pending_brace_is_immediate = False
+
+    def observe_identifier(self, value: str) -> None:
+        self._discard_immediate_brace()
+        if self.member_property_expected:
+            self.member_property_expected = False
+            self.pending_control_paren = False
+            self.awaiting_function_paren = False
+            self.regex_allowed = False
+            self.statement_expected = False
+            return
+        if value == "function":
+            self.awaiting_function_paren = True
+            self.function_closure_allows_regex = self.statement_expected
+            self.pending_control_paren = False
+            self.regex_allowed = True
+            self.statement_expected = False
+            return
+        if value in _TS_CONTROL_PAREN_KEYWORDS:
+            self.pending_control_paren = True
+            self.awaiting_function_paren = False
+            self.regex_allowed = True
+            self.statement_expected = False
+            return
+        if self.awaiting_function_paren:
+            self.pending_control_paren = False
+            self.regex_allowed = False
+            self.statement_expected = False
+            return
+        if value in _TS_STATEMENT_MODIFIER_KEYWORDS:
+            self.pending_control_paren = False
+            self.awaiting_function_paren = False
+            self.regex_allowed = value in _TS_EXPRESSION_PREFIX_KEYWORDS
+            return
+
+        self.member_property_expected = False
+        self.pending_control_paren = False
+        self.awaiting_function_paren = False
+        self.regex_allowed = (
+            value in _TS_EXPRESSION_PREFIX_KEYWORDS
+            or value in _TS_STATEMENT_PREFIX_KEYWORDS
+        )
+        self.statement_expected = value in _TS_STATEMENT_PREFIX_KEYWORDS
+
+    def observe_literal(self) -> None:
+        self._discard_immediate_brace()
+        self.member_property_expected = False
+        self.pending_control_paren = False
+        self.awaiting_function_paren = False
+        self.regex_allowed = False
+        self.statement_expected = False
+
+    def observe_punctuation(self, value: str) -> None:
+        if value != "{":
+            self._discard_immediate_brace()
+        if value == "(":
+            if self.pending_control_paren:
+                context = "control"
+            elif self.awaiting_function_paren:
+                context = (
+                    "function_declaration"
+                    if self.function_closure_allows_regex
+                    else "function_expression"
+                )
+            else:
+                context = "normal"
+            self.paren_contexts.append(context)
+            self.regex_allowed = True
+            self.statement_expected = False
+        elif value == ")":
+            context = self.paren_contexts.pop() if self.paren_contexts else "normal"
+            is_function = context.startswith("function_")
+            if is_function:
+                self.pending_brace_closure = context == "function_declaration"
+                self.pending_brace_is_immediate = False
+            self.regex_allowed = context == "control" or is_function
+            self.statement_expected = context == "control" or is_function
+        elif value == "{":
+            closes_as_statement = (
+                self.statement_expected
+                if self.pending_brace_closure is None
+                else self.pending_brace_closure
+            )
+            self.pending_brace_closure = None
+            self.pending_brace_is_immediate = False
+            self.brace_closure_allows_regex.append(closes_as_statement)
+            self.regex_allowed = True
+            self.statement_expected = True
+        elif value == "}":
+            allows_regex = (
+                self.brace_closure_allows_regex.pop()
+                if self.brace_closure_allows_regex
+                else False
+            )
+            self.regex_allowed = allows_regex
+            self.statement_expected = allows_regex
+        elif value == "]":
+            self.regex_allowed = False
+            self.statement_expected = False
+        elif value == ";":
+            self.regex_allowed = True
+            self.statement_expected = True
+        else:
+            self.regex_allowed = True
+            self.statement_expected = False
+        self.pending_control_paren = False
+        self.awaiting_function_paren = False
+        self.member_property_expected = False
+
+    def observe_operator(self, value: str) -> None:
+        self._discard_immediate_brace()
+        expression_was_expected = self.regex_allowed
+        if value in {"++", "--"}:
+            self.regex_allowed = expression_was_expected
+        elif value == "!" and not expression_was_expected:
+            self.regex_allowed = False
+        elif value in {".", "?."}:
+            self.regex_allowed = False
+            self.member_property_expected = True
+        else:
+            self.regex_allowed = True
+            self.member_property_expected = False
+        self.statement_expected = value == "=>"
+        if value == "=>":
+            self.pending_brace_closure = False
+            self.pending_brace_is_immediate = True
+        self.pending_control_paren = False
+        if value != "*":
+            self.awaiting_function_paren = False
+
+
 def _scan_quoted_literal(
     text: str,
     start: int,
@@ -353,8 +574,15 @@ def _scan_quoted_literal(
         if char == "\\":
             if index + 1 >= len(text):
                 return None
-            if text[index + 1] in "\r\n" and not allow_escaped_newline:
-                return None
+            escaped = text[index + 1]
+            if escaped in "\r\n":
+                if not allow_escaped_newline:
+                    return None
+                if escaped == "\r" and text.startswith("\r\n", index + 1):
+                    index += 3
+                else:
+                    index += 2
+                continue
             index += 2
             continue
         if char == quote:
@@ -370,9 +598,79 @@ def _scan_block_comment(text: str, start: int) -> int | None:
     return None if end < 0 else end + 2
 
 
+def _scan_ts_regex_literal(text: str, start: int) -> int | None:
+    index = start + 1
+    in_character_class = False
+    while index < len(text):
+        char = text[index]
+        if char in "\r\n":
+            return None
+        if char == "\\":
+            if index + 1 >= len(text) or text[index + 1] in "\r\n":
+                return None
+            index += 2
+            continue
+        if in_character_class:
+            if char == "]":
+                in_character_class = False
+            index += 1
+            continue
+        if char == "[":
+            in_character_class = True
+            index += 1
+            continue
+        if char == "/":
+            index += 1
+            break
+        index += 1
+    else:
+        return None
+    if in_character_class:
+        return None
+
+    flags_start = index
+    while index < len(text) and (
+        text[index].isalnum() or text[index] in {"_", "$"}
+    ):
+        index += 1
+    flags = text[flags_start:index]
+    if (
+        any(flag not in _TS_VALID_REGEX_FLAGS for flag in flags)
+        or len(flags) != len(set(flags))
+        or ("u" in flags and "v" in flags)
+    ):
+        return None
+    return index
+
+
+def _scan_ts_number(text: str, start: int) -> int:
+    index = start + 1
+    while index < len(text) and (
+        text[index].isalnum() or text[index] in {"_", "."}
+    ):
+        index += 1
+    if index < len(text) and text[index] in {"+", "-"}:
+        previous = text[index - 1]
+        if previous in {"e", "E"}:
+            index += 1
+            while index < len(text) and (
+                text[index].isdigit() or text[index] == "_"
+            ):
+                index += 1
+    return index
+
+
+def _match_ts_operator(text: str, start: int) -> str | None:
+    return next(
+        (operator for operator in _TS_OPERATORS if text.startswith(operator, start)),
+        None,
+    )
+
+
 def _scan_ts_template_expression(text: str, start: int) -> int | None:
     depth = 1
     index = start
+    state = _TypeScriptLexicalState()
     while index < len(text):
         if text.startswith("//", index):
             newline = text.find("\n", index + 2)
@@ -391,19 +689,53 @@ def _scan_ts_template_expression(text: str, start: int) -> int | None:
             )
             if index is None:
                 return None
+            state.observe_literal()
             continue
         if char == "`":
             template = _scan_ts_template(text, index)
             if template is None:
                 return None
             index = template[0]
+            state.observe_literal()
+            continue
+        if char == "/" and state.regex_allowed:
+            regex_end = _scan_ts_regex_literal(text, index)
+            if regex_end is None:
+                return None
+            index = regex_end
+            state.observe_literal()
+            continue
+        if char.isalpha() or char in {"_", "$"}:
+            end = index + 1
+            while end < len(text) and (
+                text[end].isalnum() or text[end] in {"_", "$"}
+            ):
+                end += 1
+            state.observe_identifier(text[index:end])
+            index = end
+            continue
+        if char.isdigit() or (
+            char == "." and index + 1 < len(text) and text[index + 1].isdigit()
+        ):
+            index = _scan_ts_number(text, index)
+            state.observe_literal()
             continue
         if char == "{":
             depth += 1
+            state.observe_punctuation(char)
         elif char == "}":
             depth -= 1
             if depth == 0:
                 return index + 1
+            state.observe_punctuation(char)
+        else:
+            operator = _match_ts_operator(text, index)
+            if operator is not None:
+                state.observe_operator(operator)
+                index += len(operator)
+                continue
+            if char in _SOURCE_PUNCTUATION:
+                state.observe_punctuation(char)
         index += 1
     return None
 
@@ -434,6 +766,7 @@ def _source_tokens(text: str, dialect: str) -> list[SourceToken] | None:
     tokens: list[SourceToken] = []
     brace_depth = 0
     index = 0
+    ts_state = _TypeScriptLexicalState() if dialect == "typescript" else None
     while index < len(text):
         char = text[index]
         if char.isspace():
@@ -461,6 +794,14 @@ def _source_tokens(text: str, dialect: str) -> list[SourceToken] | None:
             if template is not None:
                 token_end, interpolated = template
                 token_kind = "unsupported" if interpolated else "string"
+        elif (
+            dialect == "typescript"
+            and char == "/"
+            and ts_state is not None
+            and ts_state.regex_allowed
+        ):
+            token_end = _scan_ts_regex_literal(text, index)
+            token_kind = "regex"
         elif dialect == "go" and char == '"':
             token_end = _scan_quoted_literal(
                 text, index, char, allow_escaped_newline=False
@@ -476,22 +817,58 @@ def _source_tokens(text: str, dialect: str) -> list[SourceToken] | None:
             )
             token_kind = "rune"
 
+        if (
+            dialect == "typescript"
+            and char == "/"
+            and ts_state is not None
+            and ts_state.regex_allowed
+            and token_end is None
+        ):
+            return None
         if char in {'"', "'", "`"} and token_end is None:
             return None
         if token_end is not None:
-            literal_value = text[slice(index + 1, token_end - 1)]
+            literal_value = (
+                "" if token_kind == "regex" else text[slice(index + 1, token_end - 1)]
+            )
             tokens.append(
                 SourceToken(token_kind, literal_value, brace_depth)
             )
             index = token_end
+            if ts_state is not None:
+                ts_state.observe_literal()
             continue
-        if char.isalpha() or char == "_":
+        if dialect == "typescript" and (
+            char.isdigit()
+            or (char == "." and index + 1 < len(text) and text[index + 1].isdigit())
+        ):
+            end = _scan_ts_number(text, index)
+            tokens.append(SourceToken("number", text[index:end], brace_depth))
+            index = end
+            if ts_state is not None:
+                ts_state.observe_literal()
+            continue
+        if char.isalpha() or char == "_" or (dialect == "typescript" and char == "$"):
             end = index + 1
-            while end < len(text) and (text[end].isalnum() or text[end] == "_"):
+            while end < len(text) and (
+                text[end].isalnum()
+                or text[end] == "_"
+                or (dialect == "typescript" and text[end] == "$")
+            ):
                 end += 1
             tokens.append(SourceToken("identifier", text[index:end], brace_depth))
+            if ts_state is not None:
+                ts_state.observe_identifier(text[index:end])
             index = end
             continue
+        if dialect == "typescript":
+            operator = _match_ts_operator(text, index)
+            if operator is not None:
+                tokens.append(SourceToken("unsupported", operator, brace_depth))
+                if ts_state is not None:
+                    ts_state.observe_operator(operator)
+                index += len(operator)
+                continue
         if char in _SOURCE_PUNCTUATION:
             if char == "}" and brace_depth == 0:
                 return None
@@ -500,6 +877,8 @@ def _source_tokens(text: str, dialect: str) -> list[SourceToken] | None:
                 brace_depth += 1
             elif char == "}":
                 brace_depth -= 1
+            if ts_state is not None:
+                ts_state.observe_punctuation(char)
             index += 1
             continue
         tokens.append(SourceToken("unsupported", char, brace_depth))

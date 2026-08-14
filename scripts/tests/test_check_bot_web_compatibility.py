@@ -413,6 +413,27 @@ def typescript_string_decoy(kind: str, declaration: str) -> str:
     raise AssertionError(f"unsupported TypeScript decoy kind: {kind}")
 
 
+def typescript_regex_decoy(declaration: str) -> str:
+    return (
+        "const parserAuthorityDecoy = /"
+        + " ".join(declaration.splitlines())
+        + "/;"
+    )
+
+
+def typescript_frozen_runtime_drift(tools: list[str]) -> str:
+    runtime_tools = [tool for tool in tools if tool != "GeneNetworkAgent"]
+    runtime_entries = "\n".join(f'  "{tool}",' for tool in runtime_tools)
+    asserted_entries = "\n".join(f'  "{tool}",' for tool in tools)
+    return (
+        "export const CANONICAL_AGENT_TOOLS = Object.freeze([\n"
+        + runtime_entries
+        + "\n]) as unknown as readonly [\n"
+        + asserted_entries
+        + "\n];"
+    )
+
+
 def go_string_decoy(kind: str, declaration: str) -> str:
     if kind == "interpreted":
         return "var parserDecoy = " + json.dumps(" ".join(declaration.splitlines()))
@@ -567,6 +588,181 @@ def test_interpolated_nested_template_decoy_is_opaque(tmp_path: Path):
         + "\nsuffix`;\n"
     )
     path.write_text(decoy + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+def test_typescript_regex_declaration_decoy_does_not_duplicate_real_authority(
+    tmp_path: Path,
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    path.write_text(
+        typescript_regex_decoy(declaration) + "\n" + source,
+        encoding="utf-8",
+    )
+    assert checker.check(root) == []
+
+
+def test_typescript_export_default_regex_decoy_is_opaque(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    path.write_text(
+        "export default /" + " ".join(declaration.splitlines()) + "/;\n" + source,
+        encoding="utf-8",
+    )
+    assert checker.check(root) == []
+
+
+def test_typescript_regex_only_declaration_decoy_fails_closed(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    path.write_text(
+        source.replace(declaration, typescript_regex_decoy(declaration), 1),
+        encoding="utf-8",
+    )
+    assert checker.check(root) == [
+        "Web canonical agent list is missing or malformed"
+    ]
+
+
+def test_typescript_regex_decoy_cannot_hide_frozen_runtime_drift(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    tools = checker._parse_web_tools(source)
+    assert tools is not None
+    drifted = source.replace(
+        declaration, typescript_frozen_runtime_drift(tools), 1
+    )
+    path.write_text(
+        typescript_regex_decoy(declaration) + "\n" + drifted,
+        encoding="utf-8",
+    )
+    assert checker.check(root) == [
+        "Web canonical agent list is missing or malformed"
+    ]
+
+
+def test_typescript_regex_body_classes_escapes_flags_and_comments_are_opaque(
+    tmp_path: Path,
+):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    regexes = (
+        "const closingBrace = /}/;\n"
+        r"const characterClass = /[{}\[\]/*]+\/tail/gi;" "\n"
+        r"const commentMarkers = /\/\*not-comment\*\/|\/\/not-comment/m;" "\n"
+    )
+    path.write_text(regexes + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+def test_typescript_regex_inside_template_expression_is_opaque(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    template = (
+        r"const templateRegex = `${/[}\]]+\/\/marker/gi.test(value)}`;" "\n"
+    )
+    path.write_text(template + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "const malformed = /unterminated",
+        "const malformed = /[unterminated/;",
+        "const malformed = /trailing\\",
+        "const malformed = /line\nbreak/;",
+        "const malformed = /duplicate/gg;",
+        "const malformed = /unsupported/z;",
+        "const malformed = /unicode/uv;",
+    ],
+)
+def test_malformed_typescript_regex_fails_closed(
+    tmp_path: Path, malformed: str
+):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    path.write_text(
+        malformed + "\n" + path.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    assert checker.check(root) == [
+        "Web canonical agent list is missing or malformed"
+    ]
+
+
+def test_typescript_regex_and_division_contexts_remain_distinct(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    ambiguous = (
+        "const quotient = numerator / denominator / scale;\n"
+        "const fractional = 10 / 2;\n"
+        "let assigned = numerator;\n"
+        "assigned /= denominator;\n"
+        "const post = counter++ / denominator;\n"
+        "const grouped = (numerator + 1) / denominator;\n"
+        "const indexed = values[0] / denominator;\n"
+        "const keywordProperty = holder.return / denominator;\n"
+        "const functionValue = function () {} / denominator;\n"
+        "const arrowValue = (() => {}) / denominator;\n"
+        "const regexThenDivision = /value/.source.length / denominator;\n"
+        "const divisionByRegex = numerator / /[}]/.test(value);\n"
+        "if (enabled) /[}]/.test(value);\n"
+        "else /[}]/.test(fallback);\n"
+        "do /[}]/.test(value); while (enabled);\n"
+        "function noOp() {}\n"
+        "/[}]/.test(afterFunction);\n"
+        "export function exportedNoOp() {}\n"
+        "/[}]/.test(afterExportedFunction);\n"
+        "const regexFactory = () => /value/;\n"
+        "{ const blockValue = 1; }\n"
+        "/[}]/.test(afterArrowAndBlock);\n"
+        "function matches(value: string) {\n"
+        "  return /[}\\]]+/.test(value);\n"
+        "}\n"
+    )
+    path.write_text(ambiguous + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+@pytest.mark.parametrize("quote", ["'", '"'])
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
+def test_typescript_escaped_string_line_continuation_is_opaque(
+    tmp_path: Path, quote: str, line_ending: str
+):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    continued = (
+        "const continued = "
+        + quote
+        + "prefix\\"
+        + line_ending
+        + "suffix"
+        + quote
+        + ";\n"
+    )
+    path.write_text(continued + source, encoding="utf-8")
     assert checker.check(root) == []
 
 
