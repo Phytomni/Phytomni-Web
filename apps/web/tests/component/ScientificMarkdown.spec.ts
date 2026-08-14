@@ -112,6 +112,51 @@ describe("ScientificMarkdown", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("leaves modified and non-primary citation clicks to the browser", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source: "Evidence [1]",
+        citationNamespace: "report",
+        referenceCount: 1,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    const link = wrapper.get(".scientific-citation__link");
+    for (const init of [{ ctrlKey: true }, { metaKey: true }, { button: 1 }]) {
+      link.element.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, ...init })
+      );
+    }
+
+    expect(wrapper.emitted("citation-activate")).toBeUndefined();
+  });
+
+  it("keeps escaped and reference-link citation text inert", async () => {
+    const source = [
+      String.raw`Entity &amp; escaped \[document:1].`,
+      "[Evidence [document:2]][source].",
+      "Active [3].",
+      "",
+      "[source]: https://example.org/report",
+    ].join("\n");
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source,
+        citationNamespace: "report",
+        referenceCount: 3,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    expect(
+      wrapper.findAll(".scientific-citation__link").map((link) => link.text())
+    ).toEqual(["[3]"]);
+    expect(wrapper.findAll("a a")).toHaveLength(0);
+    expect(wrapper.text()).toContain("Entity & escaped [document:1]");
+    expect(wrapper.text()).toContain("Evidence [document:2]");
+  });
+
   it("renders and activates Bot document citation markers", async () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
       props: {

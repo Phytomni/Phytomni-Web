@@ -5,11 +5,8 @@ export interface DeepGenomeCaseReference {
   title: string;
 }
 
-// Preserve the complete checked-in report while translating the agent's
-// document citation tokens into the viewer's native [N] anchor syntax.
-export const DEEP_GENOME_CASE_MARKDOWN = rawDeepGenomeCase
-  .trimEnd()
-  .replace(/\[document:(\d{1,3})\]/g, "[$1]");
+// Preserve the complete checked-in report and its Bot-authored citation tokens.
+export const DEEP_GENOME_CASE_MARKDOWN = rawDeepGenomeCase.trimEnd();
 
 const referenceSection = DEEP_GENOME_CASE_MARKDOWN.slice(
   DEEP_GENOME_CASE_MARKDOWN.indexOf("\n## Reference:\n")

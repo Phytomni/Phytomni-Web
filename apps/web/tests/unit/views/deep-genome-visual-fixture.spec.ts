@@ -55,6 +55,7 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
+    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("[document:5]");
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain("## Reference:");
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "[256] Physiological and Transcriptome Analyses"

@@ -181,7 +181,7 @@ describe("ResearchEvidencePanel", () => {
     expect(wrapper.find(".research-evidence-panel__item").exists()).toBe(false);
   });
 
-  it("exposes grouped namespace-safe focus and clears prior highlights", () => {
+  it("exposes grouped namespace-safe focus and clears prior highlights", async () => {
     const wrapper = mountPanel(
       [
         { title: "First source" },
@@ -206,9 +206,17 @@ describe("ResearchEvidencePanel", () => {
     ).focusReferences;
 
     expect(focusReferences([1, 2, 3, 5])).toBe(true);
+    await nextTick();
     expect(
       rows.map((row) => row.classes().includes("is-citation-target"))
     ).toEqual([true, true, true, false, true]);
+    expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
+      "true",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
 
@@ -290,7 +298,7 @@ describe("ResearchEvidencePanel", () => {
     ).toBe(true);
     expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
       "true",
-      "true",
+      undefined,
     ]);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(firstFocus).toHaveBeenCalledTimes(1);

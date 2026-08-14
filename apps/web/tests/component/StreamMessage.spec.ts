@@ -181,7 +181,7 @@ describe("StreamMessage", () => {
     ).toEqual([true, true]);
     expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
       "true",
-      "true",
+      undefined,
     ]);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);

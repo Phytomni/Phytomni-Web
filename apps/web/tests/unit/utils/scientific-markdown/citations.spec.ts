@@ -155,7 +155,9 @@ describe("transformScientificCitations", () => {
       "inlineCode",
       "code",
       "link",
+      "linkReference",
       "image",
+      "imageReference",
       "inlineMath",
       "math",
     ];
@@ -165,7 +167,10 @@ describe("transformScientificCitations", () => {
         type,
         value: "[1-3]",
         children:
-          type === "link" || type === "image"
+          type === "link" ||
+          type === "linkReference" ||
+          type === "image" ||
+          type === "imageReference"
             ? [{ type: "text", value: "[1-3]" }]
             : undefined,
       })),
@@ -174,6 +179,35 @@ describe("transformScientificCitations", () => {
     transformScientificCitations(tree, options);
 
     expect(JSON.stringify(tree)).not.toContain("scientificCitation");
+  });
+
+  it("keeps escaped citation markers inert while rewriting later markers", () => {
+    const source = String.raw`Escaped \[document:1] and active [2].`;
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "paragraph",
+          children: [
+            {
+              type: "text",
+              value: "Escaped [document:1] and active [2].",
+              position: {
+                start: { offset: 0 },
+                end: { offset: source.length },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    transformScientificCitations(tree, options, source);
+
+    const serialized = JSON.stringify(tree);
+    expect(serialized.match(/scientificCitation/g)).toHaveLength(1);
+    expect(serialized).toContain("Escaped [document:1] and active ");
+    expect(serialized).toContain("Citation 2");
   });
 
   it("rewrites citations next to escaped raw HTML without touching the HTML", () => {

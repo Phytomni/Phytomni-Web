@@ -40,7 +40,7 @@
             class="scientific-citation__link"
             :href="safeAnchorHref(slotHref(slotProps)) ?? '#'"
             :aria-label="citationLabel(slotProps)"
-            @click="emit('citation-activate', citationFor(slotProps)!)"
+            @click="handleCitationClick($event, citationFor(slotProps)!)"
           >
             <component :is="slotProps.children" />
           </a>
@@ -128,9 +128,9 @@ import ScientificRenderBoundary from "@/components/scientific/ScientificRenderBo
 import ScientificResourceLink from "@/components/scientific/ScientificResourceLink.vue";
 import { safeHrefValue } from "@/utils/sanitize-markup";
 import {
+  createScientificCitationRemarkPlugin,
   parseCitationBody,
   requireCitationNamespace,
-  scientificCitationRemarkPlugin,
 } from "@/utils/scientific-markdown/citations";
 import { rehypeScientificHeadings } from "@/utils/scientific-markdown/headings";
 import {
@@ -187,7 +187,7 @@ let headingSignature = "";
 
 const remarkPlugins = computed<PluggableList>(() => [
   [
-    scientificCitationRemarkPlugin,
+    createScientificCitationRemarkPlugin(renderedSource.value),
     {
       namespace: safeNamespace.value,
       referenceCount: props.referenceCount,
@@ -255,6 +255,23 @@ function citationFor(
 function citationLabel(slotProps: Record<string, unknown>): string | undefined {
   const label = slotProps.ariaLabel ?? slotProps["aria-label"];
   return typeof label === "string" ? label : undefined;
+}
+
+function handleCitationClick(
+  event: MouseEvent,
+  activation: ScientificCitationActivation
+): void {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
+  }
+  emit("citation-activate", activation);
 }
 
 function slotHref(slotProps: Record<string, unknown>): string {

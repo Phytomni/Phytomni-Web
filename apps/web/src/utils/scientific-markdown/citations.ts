@@ -15,6 +15,10 @@ interface MdNode {
   value?: string;
   children?: MdNode[];
   data?: Record<string, unknown>;
+  position?: {
+    start?: { offset?: number };
+    end?: { offset?: number };
+  };
   [key: string]: unknown;
 }
 
@@ -34,7 +38,9 @@ const PROTECTED_NODE_TYPES = new Set([
   "inlineCode",
   "code",
   "link",
+  "linkReference",
   "image",
+  "imageReference",
   "inlineMath",
   "math",
 ]);
@@ -193,10 +199,37 @@ function rewriteSupTriplets(parent: MdParent, options: CitationOptions): void {
 
 function rewriteTextCitations(
   parent: MdParent,
-  options: CitationOptions
+  options: CitationOptions,
+  source?: string
 ): void {
+  const parentSourceStart = parent.position?.start?.offset;
+  const parentSourceEnd = parent.position?.end?.offset;
+  const rawParentSource =
+    typeof source === "string" &&
+    typeof parentSourceStart === "number" &&
+    typeof parentSourceEnd === "number"
+      ? source.slice(parentSourceStart, parentSourceEnd)
+      : undefined;
+  let parentRawOffset = 0;
+
   for (let index = 0; index < parent.children.length; index += 1) {
     const node = parent.children[index];
+    const sourceStart = node.position?.start?.offset;
+    const sourceEnd = node.position?.end?.offset;
+    let rawNodeSource: string | undefined;
+    if (
+      typeof source === "string" &&
+      typeof sourceStart === "number" &&
+      typeof sourceEnd === "number"
+    ) {
+      rawNodeSource = source.slice(sourceStart, sourceEnd);
+      if (typeof parentSourceStart === "number") {
+        parentRawOffset = Math.max(
+          parentRawOffset,
+          sourceEnd - parentSourceStart
+        );
+      }
+    }
     if (
       node.type !== "text" ||
       !node.value ||
@@ -208,12 +241,29 @@ function rewriteTextCitations(
 
     const parts: MdNode[] = [];
     let offset = 0;
+    const rawCitationSource = rawNodeSource ?? rawParentSource;
+    let rawOffset = rawNodeSource ? 0 : parentRawOffset;
     const matcher =
       /\[(?:document(?:\s*:\s*|\s+))?\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*\]/gi;
     for (const match of node.value.matchAll(matcher)) {
       const matchIndex = match.index ?? 0;
       const parsed = parseCitationBody(match[0]);
       if (!parsed) continue;
+      if (rawCitationSource !== undefined) {
+        const rawMatchIndex = rawCitationSource.indexOf(match[0], rawOffset);
+        if (rawMatchIndex < 0) continue;
+        rawOffset = rawMatchIndex + match[0].length;
+        if (!rawNodeSource) parentRawOffset = rawOffset;
+        let backslashCount = 0;
+        for (
+          let cursor = rawMatchIndex - 1;
+          cursor >= 0 && rawCitationSource[cursor] === "\\";
+          cursor -= 1
+        ) {
+          backslashCount += 1;
+        }
+        if (backslashCount % 2 === 1) continue;
+      }
       if (matchIndex > offset) {
         parts.push({
           type: "text",
@@ -296,7 +346,8 @@ function rewriteHtmlNodes(parent: MdParent): void {
 function visit(
   parent: MdParent,
   options: CitationOptions,
-  protectedByAncestor = false
+  protectedByAncestor = false,
+  source?: string
 ): void {
   const protectedHere =
     protectedByAncestor ||
@@ -305,17 +356,19 @@ function visit(
   if (!protectedHere) {
     rewriteSupTriplets(parent, options);
     rewriteHtmlNodes(parent);
-    rewriteTextCitations(parent, options);
+    rewriteTextCitations(parent, options, source);
   }
 
   for (const child of parent.children) {
-    if (child.children) visit(child as MdParent, options, protectedHere);
+    if (child.children)
+      visit(child as MdParent, options, protectedHere, source);
   }
 }
 
 export function transformScientificCitations(
   tree: MdNode,
-  options: CitationOptions
+  options: CitationOptions,
+  source?: string
 ): void {
   if (!options.namespace && options.referenceCount > 0) {
     throw new TypeError("citation namespace is invalid");
@@ -326,10 +379,14 @@ export function transformScientificCitations(
       ? requireCitationNamespace(options.namespace)
       : "",
   };
-  if (tree.children) visit(tree as MdParent, validatedOptions);
+  if (tree.children) visit(tree as MdParent, validatedOptions, false, source);
 }
 
-export const scientificCitationRemarkPlugin: Plugin<[CitationOptions]> =
-  function (options) {
-    return (tree) => transformScientificCitations(tree as MdNode, options);
+export function createScientificCitationRemarkPlugin(
+  source: string
+): Plugin<[CitationOptions]> {
+  return function (options) {
+    return (tree) =>
+      transformScientificCitations(tree as MdNode, options, source);
   };
+}

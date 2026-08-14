@@ -14,7 +14,7 @@
         { 'is-citation-target': activeReferenceIds.has(ref.id) },
       ]"
       tabindex="-1"
-      :aria-current="activeReferenceIds.has(ref.id) ? 'true' : undefined"
+      :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
       v-html="ref.html"
     ></div>
   </div>
@@ -39,6 +39,7 @@ const displayReferences = computed(() =>
 );
 const listRef = ref<HTMLElement | null>(null);
 const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const currentReferenceId = ref<string>();
 
 function focusReferences(indices: readonly number[]): boolean {
   const ids = indices.map((index) => displayReferences.value[index - 1]?.id);
@@ -59,11 +60,13 @@ function focusReferences(indices: readonly number[]): boolean {
   activeReferenceIds.value = new Set(
     ids.filter((id): id is string => typeof id === "string")
   );
+  currentReferenceId.value = ids[0];
   return true;
 }
 
 watch(displayReferences, () => {
   activeReferenceIds.value = new Set();
+  currentReferenceId.value = undefined;
 });
 
 defineExpose({ focusReferences });

@@ -23,11 +23,12 @@
             'research-evidence-panel__item--active': activeReferenceIds.has(
               ref.id
             ),
+            'is-citation-target': activeReferenceIds.has(ref.id),
           },
         ]"
         role="listitem"
         tabindex="-1"
-        :aria-current="activeReferenceIds.has(ref.id) ? 'true' : undefined"
+        :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
         v-html="ref.html"
       ></div>
     </div>
@@ -64,6 +65,7 @@ const displayReferences = computed(() =>
 const { t } = useI18n();
 const panelRef = ref<HTMLElement | null>(null);
 const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const currentReferenceId = ref<string>();
 const activeAnnouncement = ref("");
 const announcementNonce = ref(0);
 
@@ -86,6 +88,7 @@ function focusReferences(indices: readonly number[]): boolean {
   activeReferenceIds.value = new Set(
     ids.filter((id): id is string => typeof id === "string")
   );
+  currentReferenceId.value = ids[0];
   activeAnnouncement.value = `${t("chat.relatedDocuments")}: ${indices.join(", ")}`;
   announcementNonce.value += 1;
   return true;
@@ -93,6 +96,7 @@ function focusReferences(indices: readonly number[]): boolean {
 
 watch(displayReferences, () => {
   activeReferenceIds.value = new Set();
+  currentReferenceId.value = undefined;
   activeAnnouncement.value = "";
 });
 
