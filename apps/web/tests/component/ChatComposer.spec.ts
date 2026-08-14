@@ -224,10 +224,20 @@ describe("ChatComposer", () => {
     expect(wrapper.findAll("input")).toHaveLength(0);
   });
 
-  it("binds the existing upload action to the negotiated attachment limit", () => {
+  it("binds the upload action and copy to the negotiated attachment limit", async () => {
     const wrapper = mountComposer({ maxAttachments: 64 });
 
     expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(64);
+    expect(
+      wrapper.findComponent(".composer-tool-button").props("ariaLabel")
+    ).toContain("64 files");
+
+    await wrapper.setProps({ maxAttachments: 10 });
+
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(10);
+    expect(
+      wrapper.findComponent(".composer-tool-button").props("ariaLabel")
+    ).toContain("10 files");
   });
 
   it("keeps compact DOM order without legacy wrappers", () => {

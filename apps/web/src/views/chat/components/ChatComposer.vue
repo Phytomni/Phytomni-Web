@@ -99,12 +99,12 @@
               action="#"
             >
               <template #trigger>
-                <el-tooltip :content="t('chat.uploadFile')" placement="top">
+                <el-tooltip :content="uploadActionLabel" placement="top">
                   <el-button
                     circle
                     class="composer-tool-button"
                     :disabled="!canQueueFiles"
-                    :aria-label="t('chat.uploadFile')"
+                    :aria-label="uploadActionLabel"
                   >
                     <el-icon><Paperclip /></el-icon>
                   </el-button>
@@ -276,6 +276,9 @@ const canEdit = computed(
 );
 const canQueueFiles = computed(
   () => canEdit.value && props.attachmentTargetAvailable
+);
+const uploadActionLabel = computed(() =>
+  t("chat.uploadFile", { maxFiles: props.maxAttachments ?? 10 })
 );
 const permissionUnavailable = computed(
   () => !props.rolesLoading && !props.modeUsable
