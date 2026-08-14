@@ -11,8 +11,8 @@ const (
 	ResearchInputProtocolVersion = 1
 
 	acceptedResearchInputFixtureSHA256 = "0885a3dfc606e9ed03f572a26886404badf9dde8bb2983bcf6e2384d8345e300"
-	maxResearchDatasetFormats    = 256
-	maxResearchDatasetFormatSize = 64
+	maxResearchDatasetFormats          = 256
+	maxResearchDatasetFormatSize       = 64
 )
 
 var acceptedResearchArchiveFormats = map[string]struct{}{
