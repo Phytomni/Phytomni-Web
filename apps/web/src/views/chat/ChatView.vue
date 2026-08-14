@@ -1310,11 +1310,13 @@ function lifecycleFromMessage(
       status:
         status === "FAILED"
           ? "FAILED"
-          : status === "TIMED_OUT" || status === "TIMEOUT"
-            ? "TIMED_OUT"
-            : status === "INPUT_REQUIRED"
-              ? "INPUT_REQUIRED"
-              : "SUCCEEDED",
+          : status === "CANCELLED" || status === "CANCELED"
+            ? "CANCELLED"
+            : status === "TIMED_OUT" || status === "TIMEOUT"
+              ? "TIMED_OUT"
+              : status === "INPUT_REQUIRED"
+                ? "INPUT_REQUIRED"
+                : "SUCCEEDED",
       reportRevision: 0,
       visibleReport: "",
       intermediateReport: "",
@@ -1334,8 +1336,10 @@ function lifecycleFromMessage(
       status = "SUCCEEDED";
       break;
     case "FAILED":
-    case "CANCELLED":
       status = "FAILED";
+      break;
+    case "CANCELLED":
+      status = "CANCELLED";
       break;
     case "TIMED_OUT":
       status = "TIMED_OUT";

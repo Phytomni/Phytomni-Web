@@ -1192,6 +1192,63 @@ describe("Chat artifact shell integration", () => {
     });
   });
 
+  it("hydrates projection-only cancellation as CANCELLED when a report is retained", async () => {
+    const retainedReport = "# Retained projection report";
+    const message: ChatMessage = {
+      ...researchMessage,
+      id: "research-projection-cancelled",
+      status: "CANCELLED",
+      content: retainedReport,
+      botProjection: {
+        ...partialResearchProjection,
+        status: "CANCELLED",
+        reportStage: "final",
+        reportCompleteness: "complete",
+        intermediateReport: "",
+        finalReport: retainedReport,
+      },
+    };
+    const { wrapper } = await mountProductionChat(1440, {
+      messagesA: [message],
+    });
+
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    const report = wrapper.findComponent(BotReportState);
+    expect(report.exists()).toBe(true);
+    expect(report.props("state")).toMatchObject({
+      status: "CANCELLED",
+    });
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+      retainedReport
+    );
+  });
+
+  it.each(["CANCELLED", "CANCELED"])(
+    "hydrates status-only %s as CANCELLED when a report is retained",
+    async (status) => {
+      const retainedReport = `# Retained ${status} report`;
+      const message: ChatMessage = {
+        ...researchMessage,
+        id: `research-status-${status.toLowerCase()}`,
+        status,
+        content: retainedReport,
+      };
+      const { wrapper } = await mountProductionChat(1440, {
+        messagesA: [message],
+      });
+
+      await wrapper.get("[data-test=artifact-open]").trigger("click");
+      const report = wrapper.findComponent(BotReportState);
+      expect(report.exists()).toBe(true);
+      expect(report.props("state")).toMatchObject({
+        status: "CANCELLED",
+      });
+      expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+        retainedReport
+      );
+    }
+  );
+
   it("renders cited Knowledge answers outside the report lifecycle", async () => {
     const { wrapper } = await mountProductionChat(1440, {
       messagesA: [knowledgeZeroReferenceMessage],
