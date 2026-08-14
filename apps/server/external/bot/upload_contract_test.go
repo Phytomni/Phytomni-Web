@@ -431,6 +431,12 @@ func TestCreateUploadUsesMetadataOnlyJSONAndPurpose(t *testing.T) {
 				t.Errorf("create request exposed forbidden storage field %q", forbidden)
 			}
 		}
+		if _, exists := fields["content_type"]; !exists {
+			t.Error("create request must use Bot's canonical content_type field")
+		}
+		if _, exists := fields["content_type_hint"]; exists {
+			t.Error("create request must not use the obsolete content_type_hint field")
+		}
 		_, response := uploadCreateFixture(srv.URL)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)

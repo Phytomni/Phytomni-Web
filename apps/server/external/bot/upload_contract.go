@@ -36,7 +36,7 @@ type UploadCreateRequest struct {
 	OwnerSubject   string `json:"owner_subject"`
 	Filename       string `json:"filename"`
 	SizeBytes      int64  `json:"size_bytes"`
-	ContentType    string `json:"content_type_hint,omitempty"`
+	ContentType    string `json:"content_type,omitempty"`
 	LastModified   int64  `json:"last_modified_ms,omitempty"`
 	Purpose        string `json:"purpose"`
 	IdempotencyKey string `json:"idempotency_key"`
