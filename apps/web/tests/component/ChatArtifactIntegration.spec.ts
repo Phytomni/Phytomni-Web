@@ -400,7 +400,7 @@ async function mountProductionChat(
   // This fixture represents a history refresh whose DeepGenome id was already
   // observed; dedicated auto-open tests cover a genuinely new foreground row.
   if (options.markDeepSeen !== false) {
-    state.getChatState("A").autoOpenedArtifactMessageIds.push("deep-1");
+    state.getChatState("A").autoOpenedArtifactMessageIds.push("message:deep-1");
   }
   state.getChatState("A").messageInput = "draft A";
   state.getChatState("B").renderedChat = {
@@ -577,10 +577,12 @@ describe("Chat artifact shell integration", () => {
     await nextTick();
     await nextTick();
 
-    expect(state.getChatState("A").activeArtifactMessageId).toBe("deep-1");
+    expect(state.getChatState("A").activeArtifactMessageId).toBe(
+      "message:deep-1"
+    );
     expect(state.getChatState("A").artifactOpen).toBe(true);
     expect(state.getChatState("A").autoOpenedArtifactMessageIds).toContain(
-      "deep-1"
+      "message:deep-1"
     );
 
     await wrapper.get("[data-test=artifact-close]").trigger("click");
@@ -612,36 +614,43 @@ describe("Chat artifact shell integration", () => {
       message: { ...deepGenomeMessage, id: undefined },
     },
     {
-      name: "failed result",
+      name: "failed result with a retained report",
       message: { ...deepGenomeMessage, id: "failed-deep", status: "FAILED" },
+      expectOpen: true,
     },
     {
-      name: "running server task",
+      name: "running server task placeholder",
       message: {
         ...deepGenomeMessage,
         id: "running-deep",
         status: "RUNNING",
         content: "Server task created: task-123",
       },
+      expectOpen: false,
     },
-  ])("does not auto-open a $name", async ({ name, message }) => {
-    const { wrapper, state } = await mountProductionChat(1440, {
-      markDeepSeen: false,
-      messagesA: [message],
-    });
-    await nextTick();
-    await nextTick();
+  ])(
+    "handles a $name report according to usable content",
+    async ({ name, message, expectOpen = false }) => {
+      const { wrapper, state } = await mountProductionChat(1440, {
+        markDeepSeen: false,
+        messagesA: [message],
+      });
+      await nextTick();
+      await nextTick();
 
-    expect(state.getChatState("A").artifactOpen).toBe(false);
-    expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
-    if (name === "running server task") {
-      expect(wrapper.text()).not.toContain("Server task created");
-      expect(wrapper.find('[data-test="deep-genome-inline"]').exists()).toBe(
-        false
+      expect(state.getChatState("A").artifactOpen).toBe(expectOpen);
+      expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual(
+        expectOpen ? [`message:${message.id}`] : []
       );
-      expect(wrapper.text()).not.toContain("No references available.");
+      if (name === "running server task placeholder") {
+        expect(wrapper.text()).not.toContain("Server task created");
+        expect(wrapper.find('[data-test="deep-genome-inline"]').exists()).toBe(
+          false
+        );
+        expect(wrapper.text()).not.toContain("No references available.");
+      }
     }
-  });
+  );
 
   it.each([
     ["RUNNING", enUS.chat.lifecycle.running],
@@ -708,10 +717,10 @@ describe("Chat artifact shell integration", () => {
         content: "# Synthetic revision report",
       } satisfies ChatMessage,
       lifecycleCopy: enUS.chat.lifecycle.running,
-      inlineReport: "Synthetic revision report",
-      previewCount: 0,
-      neutralPreviewCount: 0,
-      showActions: "false",
+      inlineReport: null,
+      previewCount: 1,
+      neutralPreviewCount: 1,
+      showActions: null,
     },
     {
       name: "failed revision Markdown",
@@ -723,10 +732,10 @@ describe("Chat artifact shell integration", () => {
         content: "# Synthetic retained report",
       } satisfies ChatMessage,
       lifecycleCopy: enUS.chat.lifecycle.failed,
-      inlineReport: "Synthetic retained report",
-      previewCount: 0,
-      neutralPreviewCount: 0,
-      showActions: "false",
+      inlineReport: null,
+      previewCount: 1,
+      neutralPreviewCount: 1,
+      showActions: null,
     },
     {
       name: "successful final Markdown",
@@ -758,7 +767,7 @@ describe("Chat artifact shell integration", () => {
       });
       state
         .getChatState("A")
-        .autoOpenedArtifactMessageIds.push(String(message.id));
+        .autoOpenedArtifactMessageIds.push(`message:${message.id}`);
       await nextTick();
       await nextTick();
 
@@ -799,7 +808,7 @@ describe("Chat artifact shell integration", () => {
     await nextTick();
     expect(state.getChatState("B").artifactOpen).toBe(false);
     expect(state.getChatState("B").autoOpenedArtifactMessageIds).toEqual([
-      "background-deep",
+      "message:background-deep",
     ]);
   });
 
@@ -959,7 +968,7 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.findAll("[data-test=artifact-open]")).toHaveLength(1);
 
     await wrapper.get("[data-test=artifact-open]").trigger("click");
-    expect(wrapper.get("[data-test=markdown-body]").text()).toContain(
+    expect(wrapper.get("[data-test=bot-report-content]").text()).toContain(
       "Full research report"
     );
 
@@ -976,7 +985,7 @@ describe("Chat artifact shell integration", () => {
 
     state.currentChatId.value = "B";
     await nextTick();
-    expect(wrapper.get("[data-test=markdown-body]").text()).toContain(
+    expect(wrapper.get("[data-test=bot-report-content]").text()).toContain(
       "Full research report"
     );
   });

@@ -625,7 +625,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     "short-generic": "markdown",
     "long-generic": "markdown",
     cited: "cited",
-    "deep-genome": "deep-genome",
+    "deep-genome": "artifact-preview",
     table: "table",
     steps: "legacy",
     image: "gene-network",
@@ -739,7 +739,9 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
   it("passes DeepGenome Markdown newlines and literal backslashes unchanged", () => {
     const content = String.raw`line1
 line2\nline3`;
-    const wrapper = mountContent(deepGenomeMessage({ content }));
+    const wrapper = mountContent(deepGenomeMessage({ content }), {
+      artifactPreview: null,
+    });
 
     expect(
       wrapper
@@ -769,7 +771,7 @@ line2\nline3`;
     expect(wrapper.text()).not.toContain("No references available.");
   });
 
-  it("renders a running partial report without final actions or references", () => {
+  it("renders a running partial report as a View candidate", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -777,13 +779,12 @@ line2\nline3`;
       })
     );
 
-    const viewer = wrapper.get('[data-testid="deep-genome"]');
     expect(wrapper.text()).toContain("Running");
-    expect(viewer.attributes("data-show-actions")).toBe("false");
-    expect(viewer.attributes("data-show-references")).toBe("false");
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
 
-  it("shows references for a running partial report when references exist", () => {
+  it("keeps a running partial report in the View path when references exist", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -792,31 +793,22 @@ line2\nline3`;
       })
     );
 
-    expect(
-      wrapper
-        .get('[data-testid="deep-genome"]')
-        .attributes("data-show-references")
-    ).toBe("true");
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
 
   it.each([
     ["FAILED", "Failed"],
     ["CANCELLED", "Cancelled"],
-  ])(
-    "renders a %s partial report with terminal status and no final actions",
-    (status, label) => {
-      const wrapper = mountContent(
-        deepGenomeMessage({ status, content: "# Partial report" })
-      );
+  ])("renders a %s partial report as a View candidate", (status, label) => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ status, content: "# Partial report" })
+    );
 
-      expect(wrapper.text()).toContain(label);
-      expect(
-        wrapper
-          .get('[data-testid="deep-genome"]')
-          .attributes("data-show-actions")
-      ).toBe("false");
-    }
-  );
+    expect(wrapper.text()).toContain(label);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
 
   it.each([
     ["FAILED", "Failed"],
@@ -869,7 +861,7 @@ line2\nline3`;
       structure: {
         tableHeaders: [{ prop: "gene", label: "Gene" }],
       },
-      hasViewer: true,
+      hasViewer: false,
     },
     {
       name: "terminal row with steps",
@@ -877,7 +869,7 @@ line2\nline3`;
       label: "Failed",
       content: "# Partial failed report",
       structure: { steps: ["internal terminal step"] },
-      hasViewer: true,
+      hasViewer: false,
     },
     {
       name: "terminal row with table headers",

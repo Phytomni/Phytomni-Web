@@ -1,32 +1,15 @@
 import type { ArtifactKind, ChatMessage } from "../types";
-import type { RemoteAgentTool } from "@/constants/agents";
 
-/** Remote analysis artifacts share the result-archive renderer. */
-export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
-  RemoteAgentTool,
-  { kind: ArtifactKind; autoOpen: boolean }
-> = {
-  AnalystAgent: { kind: "research", autoOpen: false },
-  InSilicoResearchAgent: { kind: "research", autoOpen: true },
-  DigitalDesignAgent: { kind: "research", autoOpen: false },
-  GeneNetworkAgent: { kind: "research", autoOpen: false },
-};
+export type ReportSource = "final" | "intermediate" | "message";
 
-/**
- * Chat artifact behavior is intentionally independent from product-route
- * liveness: existing InSilicoResearch chat rows retain their tested
- * research-artifact behavior while dark product routes remain unavailable.
- */
-const ARTIFACT_POLICY_BY_TOOL: Readonly<
-  Record<string, { kind: ArtifactKind; autoOpen: boolean }>
-> = {
-  DeepGenomeAgent: { kind: "deep-genome", autoOpen: true },
-  KnowledgeAgent: { kind: "cited-report", autoOpen: false },
-  BriefGeneAgent: { kind: "cited-report", autoOpen: false },
-  ...REMOTE_AGENT_ARTIFACT_POLICIES,
-};
+export interface ArtifactPresentation {
+  kind: Exclude<ArtifactKind, null>;
+  report: string;
+  source: ReportSource;
+  identity: string;
+}
 
-type ArtifactPolicyMessage = Pick<
+export type ArtifactPolicyMessage = Pick<
   ChatMessage,
   | "role"
   | "content"
@@ -36,14 +19,22 @@ type ArtifactPolicyMessage = Pick<
   | "status"
   | "artifacts"
   | "delivery"
+  | "streamPresentationKey"
+  | "botLifecycle"
+  | "botProjection"
 >;
 
-const REMOTE_ANALYSIS_TOOLS = new Set([
-  "AnalystAgent",
-  "InSilicoResearchAgent",
-  "DigitalDesignAgent",
-  "GeneNetworkAgent",
-]);
+/** The only tools whose report text is promoted to the Chat View surface. */
+export const REPORT_AGENT_POLICIES = Object.freeze({
+  KnowledgeAgent: "cited-report",
+  BriefGeneAgent: "cited-report",
+  ReviewAgent: "cited-report",
+  AnalystAgent: "research",
+  DeepGenomeAgent: "deep-genome",
+  InSilicoResearchAgent: "research",
+  DigitalDesignAgent: "research",
+  GeneNetworkAgent: "research",
+} as const satisfies Record<string, Exclude<ArtifactKind, null>>);
 
 const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
   /^Server task created:\s*.*$/iu,
@@ -51,6 +42,40 @@ const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
   /^File content is empty or failed to load$/iu,
   /^Failed to load file/iu,
 ] as const;
+
+const STATUS_ONLY_REPORTS = new Set([
+  "PENDING",
+  "QUEUED",
+  "RUNNING",
+  "INPUT_REQUIRED",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+  "CANCELED",
+  "TIMED_OUT",
+  "TIMEOUT",
+]);
+
+function normalizeIdentity(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const normalized = String(value).trim();
+  return normalized === "" ? null : normalized;
+}
+
+export function artifactIdentityForMessage(
+  message: ArtifactPolicyMessage
+): string | null {
+  const stream = normalizeIdentity(message.streamPresentationKey);
+  if (stream) return `stream:${stream}`;
+
+  const row = normalizeIdentity(message.id);
+  if (row) return `message:${row}`;
+
+  const run = normalizeIdentity(
+    message.botLifecycle?.runId ?? message.botProjection?.runId
+  );
+  return run ? `run:${run}` : null;
+}
 
 export function isDeepGenomeTransportPlaceholder(
   content: ChatMessage["content"]
@@ -63,88 +88,77 @@ export function isDeepGenomeTransportPlaceholder(
   );
 }
 
+function isReportTextValid(toolName: string, value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim();
+  if (normalized === "" || STATUS_ONLY_REPORTS.has(normalized.toUpperCase())) {
+    return false;
+  }
+  return (
+    toolName !== "DeepGenomeAgent" || !isDeepGenomeTransportPlaceholder(value)
+  );
+}
+
+function reportCandidates(
+  message: ArtifactPolicyMessage
+): readonly [ReportSource, unknown][] {
+  return [
+    ["final", message.botLifecycle?.finalReport],
+    ["final", message.botProjection?.finalReport],
+    ["intermediate", message.botLifecycle?.intermediateReport],
+    ["intermediate", message.botProjection?.intermediateReport],
+    ["message", typeof message.content === "string" ? message.content : ""],
+  ];
+}
+
+/** Select one stable, report-backed View presentation for a Chat row. */
+export function artifactPresentationForMessage(
+  message: ArtifactPolicyMessage
+): ArtifactPresentation | null {
+  if (message.role !== "assistant" || message.streaming === true) return null;
+
+  const toolName = message.tool_name ?? "";
+  if (!Object.prototype.hasOwnProperty.call(REPORT_AGENT_POLICIES, toolName)) {
+    return null;
+  }
+  const kind =
+    REPORT_AGENT_POLICIES[toolName as keyof typeof REPORT_AGENT_POLICIES];
+  if (!kind) return null;
+
+  const identity = artifactIdentityForMessage(message);
+  if (!identity) return null;
+
+  for (const [source, candidate] of reportCandidates(message)) {
+    if (isReportTextValid(toolName, candidate)) {
+      return { kind, report: candidate, source, identity };
+    }
+  }
+  return null;
+}
+
 export function isMeaningfulDeepGenomeReport(
   content: ChatMessage["content"]
 ): boolean {
-  if (typeof content !== "string") return false;
-  const normalized = content.trim();
-  return normalized !== "" && !isDeepGenomeTransportPlaceholder(normalized);
+  return isReportTextValid("DeepGenomeAgent", content);
 }
 
-function isArtifactMessageEligible(message: ArtifactPolicyMessage): boolean {
-  const hasResultContent =
-    typeof message.content === "string" && message.content.trim() !== "";
-  const hasResultDelivery =
-    (message.artifacts?.length ?? 0) > 0 || message.delivery != null;
-  return !(
-    message.role !== "assistant" ||
-    message.streaming === true ||
-    message.id == null ||
-    String(message.id).trim() === "" ||
-    (!hasResultContent && !hasResultDelivery)
-  );
-}
-
-function isSucceeded(message: ArtifactPolicyMessage): boolean {
-  return (
-    String(message.status || "")
-      .trim()
-      .toUpperCase() === "SUCCEEDED"
-  );
-}
-
-export function isCompletedResearchMessage(
-  message: ArtifactPolicyMessage
-): boolean {
-  return (
-    isArtifactMessageEligible(message) &&
-    message.tool_name === "InSilicoResearchAgent" &&
-    isSucceeded(message)
-  );
-}
-
+/** Report-backed artifact kind; generic file artifacts are handled by the panel. */
 export function artifactKindForMessage(
   message: ArtifactPolicyMessage
 ): ArtifactKind {
-  if (!isArtifactMessageEligible(message)) return null;
-  if (
-    message.tool_name &&
-    REMOTE_ANALYSIS_TOOLS.has(message.tool_name) &&
-    !isSucceeded(message)
-  ) {
-    return null;
-  }
-  if (
-    message.tool_name === "DeepGenomeAgent" &&
-    !isCompletedDeepGenomeMessage(message)
-  ) {
-    return null;
-  }
-
-  return message.tool_name
-    ? (ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.kind ?? null)
-    : null;
+  return artifactPresentationForMessage(message)?.kind ?? null;
 }
 
-export function shouldAutoOpenArtifact(
+/** Retained as a report-backed predicate for existing lifecycle call sites. */
+export function isCompletedResearchMessage(
   message: ArtifactPolicyMessage
 ): boolean {
-  return (
-    artifactKindForMessage(message) !== null &&
-    !!message.tool_name &&
-    ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.autoOpen === true
-  );
+  return artifactPresentationForMessage(message)?.kind === "research";
 }
 
+/** Retained as a report-backed predicate for existing DeepGenome call sites. */
 export function isCompletedDeepGenomeMessage(
   message: ArtifactPolicyMessage
 ): boolean {
-  return (
-    isArtifactMessageEligible(message) &&
-    message.tool_name === "DeepGenomeAgent" &&
-    String(message.status || "")
-      .trim()
-      .toUpperCase() === "SUCCEEDED" &&
-    isMeaningfulDeepGenomeReport(message.content)
-  );
+  return artifactPresentationForMessage(message)?.kind === "deep-genome";
 }

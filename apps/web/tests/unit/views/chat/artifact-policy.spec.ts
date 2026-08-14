@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
+  artifactIdentityForMessage,
+  artifactPresentationForMessage,
   artifactKindForMessage,
   isCompletedDeepGenomeMessage,
   isCompletedResearchMessage,
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
-  shouldAutoOpenArtifact,
 } from "@/views/chat/utils/artifact-policy";
 import type { ArtifactKind, ChatMessage } from "@/views/chat/types";
 
@@ -23,7 +24,7 @@ const artifactByTool: Record<
   ChatAgent: null,
   KnowledgeAgent: "cited-report",
   DataAgent: null,
-  ReviewAgent: null,
+  ReviewAgent: "cited-report",
   BriefGeneAgent: "cited-report",
   AnalystAgent: "research",
   DeepGenomeAgent: "deep-genome",
@@ -32,21 +33,233 @@ const artifactByTool: Record<
   DigitalDesignAgent: "research",
 };
 
-const autoOpenByTool: Record<(typeof CANONICAL_AGENT_TOOLS)[number], boolean> =
-  {
-    ChatAgent: false,
-    KnowledgeAgent: false,
-    DataAgent: false,
-    ReviewAgent: false,
-    BriefGeneAgent: false,
-    AnalystAgent: false,
-    DeepGenomeAgent: true,
-    InSilicoResearchAgent: true,
-    GeneNetworkAgent: false,
-    DigitalDesignAgent: false,
-  };
-
 describe("artifact policy", () => {
+  const reportTools = [
+    "KnowledgeAgent",
+    "BriefGeneAgent",
+    "ReviewAgent",
+    "AnalystAgent",
+    "DeepGenomeAgent",
+    "InSilicoResearchAgent",
+    "DigitalDesignAgent",
+    "GeneNetworkAgent",
+  ] as const;
+
+  const reportMessage = (
+    tool_name: string,
+    overrides: Partial<ChatMessage> = {}
+  ): ChatMessage => ({
+    ...ELIGIBLE_MESSAGE,
+    id: `${tool_name}-42`,
+    tool_name,
+    status: "FAILED",
+    ...overrides,
+  });
+
+  it.each(reportTools)(
+    "%s selects final, intermediate, then message content without lifecycle gates",
+    (tool_name) => {
+      const final = "  # Final report\n\nPreserve bytes.  ";
+      const intermediate = "# Intermediate report";
+      const message = "# Message report";
+      expect(
+        artifactPresentationForMessage(
+          reportMessage(tool_name, {
+            content: message,
+            botLifecycle: {
+              runId: "run-42",
+              status: "FAILED",
+              reportRevision: 3,
+              visibleReport: final,
+              finalReport: final,
+              intermediateReport: intermediate,
+              degraded: true,
+              failures: ["analysis failed"],
+              artifacts: [],
+            },
+          })
+        )
+      ).toMatchObject({
+        kind:
+          tool_name === "DeepGenomeAgent"
+            ? "deep-genome"
+            : tool_name === "AnalystAgent" ||
+                tool_name === "InSilicoResearchAgent" ||
+                tool_name === "DigitalDesignAgent" ||
+                tool_name === "GeneNetworkAgent"
+              ? "research"
+              : "cited-report",
+        report: final,
+        source: "final",
+        identity: `message:${tool_name}-42`,
+      });
+
+      expect(
+        artifactPresentationForMessage(
+          reportMessage(tool_name, {
+            content: message,
+            botProjection: {
+              runId: "run-42",
+              agent: tool_name,
+              status: "INPUT_REQUIRED",
+              workStage: null,
+              reportPresentation: true,
+              reportStage: "intermediate",
+              reportCompleteness: "partial",
+              reportRevision: 2,
+              reportUpdatedAt: null,
+              intermediateReport: intermediate,
+              finalReport: "",
+              progress: {
+                completed: 0,
+                total: 1,
+                failed: 0,
+                pending: 1,
+                briefGeneStatus: "",
+              },
+              degraded: false,
+              degradedReason: null,
+              failures: [],
+              artifacts: [],
+              resultArchiveV1: false,
+              requestId: null,
+              trackingDegraded: false,
+            },
+          })
+        )?.report
+      ).toBe(intermediate);
+
+      expect(
+        artifactPresentationForMessage(
+          reportMessage(tool_name, { content: message })
+        )?.report
+      ).toBe(message);
+    }
+  );
+
+  it.each([
+    "RUNNING",
+    "INPUT_REQUIRED",
+    "SUCCEEDED",
+    "FAILED",
+    "CANCELLED",
+    "TIMED_OUT",
+  ])(
+    "keeps a substantive %s report eligible for every report tool",
+    (status) => {
+      for (const tool_name of reportTools) {
+        const presentation = artifactPresentationForMessage(
+          reportMessage(tool_name, {
+            status,
+            content:
+              tool_name === "DeepGenomeAgent"
+                ? "# Partial scientific report\n\nThe run retained evidence."
+                : "# Retained report\n\nThe run retained evidence.",
+          })
+        );
+        expect(presentation?.report).toContain("retained");
+      }
+    }
+  );
+
+  it("maps Review to cited-report and leaves Chat/Data inline", () => {
+    expect(
+      artifactPresentationForMessage(reportMessage("ReviewAgent"))?.kind
+    ).toBe("cited-report");
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("ChatAgent", { content: "# Chat Markdown" })
+      )
+    ).toBeNull();
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("DataAgent", { content: "# Data Markdown" })
+      )
+    ).toBeNull();
+  });
+
+  it.each(["", "   ", "RUNNING", "FAILED", "SUCCEEDED"])(
+    "does not create a View from status-only content %j",
+    (content) => {
+      expect(
+        artifactPresentationForMessage(
+          reportMessage("KnowledgeAgent", { content })
+        )
+      ).toBeNull();
+    }
+  );
+
+  it("rejects DeepGenome transport placeholders but accepts failed partial text", () => {
+    for (const content of [
+      "Server task created: child-task-123",
+      "Loading file content...",
+      "File content is empty or failed to load",
+      "Failed to load file, please try again later",
+    ]) {
+      expect(
+        artifactPresentationForMessage(
+          reportMessage("DeepGenomeAgent", { content })
+        )
+      ).toBeNull();
+    }
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("DeepGenomeAgent", {
+          content:
+            "# Partial report\n\nFailure occurred after evidence collection.",
+        })
+      )?.report
+    ).toContain("Failure occurred");
+  });
+
+  it("does not create an empty View from image or artifact metadata", () => {
+    for (const tool_name of reportTools) {
+      expect(
+        artifactPresentationForMessage(
+          reportMessage(tool_name, {
+            content: "",
+            artifacts: [{ id: "image-1", name: "result.png", kind: "image" }],
+            download_path: "result.png",
+          })
+        )
+      ).toBeNull();
+    }
+  });
+
+  it("prefers stream identity, then row id, then Bot run id", () => {
+    expect(
+      artifactIdentityForMessage(
+        reportMessage("KnowledgeAgent", {
+          streamPresentationKey: " stream-1 ",
+          id: "row-1",
+          botLifecycle: { runId: "run-1" } as ChatMessage["botLifecycle"],
+        })
+      )
+    ).toBe("stream:stream-1");
+    expect(
+      artifactIdentityForMessage(
+        reportMessage("KnowledgeAgent", {
+          streamPresentationKey: "",
+          id: "row-1",
+          botLifecycle: { runId: "run-1" } as ChatMessage["botLifecycle"],
+        })
+      )
+    ).toBe("message:row-1");
+    expect(
+      artifactIdentityForMessage(
+        reportMessage("KnowledgeAgent", {
+          id: undefined,
+          botLifecycle: { runId: "run-1" } as ChatMessage["botLifecycle"],
+        })
+      )
+    ).toBe("run:run-1");
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", { id: undefined })
+      )
+    ).toBeNull();
+  });
+
   it.each([
     "",
     "   ",
@@ -80,8 +293,8 @@ describe("artifact policy", () => {
     ).toBe(true);
   });
 
-  it.each(["RUNNING", "FAILED", "CANCELLED"])(
-    "does not mark %s DeepGenome content complete",
+  it.each(["RUNNING", "FAILED", "CANCELLED", "TIMED_OUT"])(
+    "marks a substantive %s DeepGenome report as View-eligible",
     (status) => {
       expect(
         isCompletedDeepGenomeMessage({
@@ -89,7 +302,7 @@ describe("artifact policy", () => {
           tool_name: "DeepGenomeAgent",
           status,
         })
-      ).toBe(false);
+      ).toBe(true);
     }
   );
 
@@ -127,36 +340,21 @@ describe("artifact policy", () => {
   });
 
   it.each([
-    undefined,
-    "",
-    "PENDING",
-    "QUEUED",
     "RUNNING",
+    "INPUT_REQUIRED",
+    "SUCCEEDED",
     "FAILED",
     "CANCELLED",
     "TIMED_OUT",
-  ])("does not expose Research artifact at %j", (status) => {
+  ])("exposes a report-backed Research artifact at %j", (status) => {
     const message = {
       ...ELIGIBLE_MESSAGE,
       tool_name: "InSilicoResearchAgent",
       status,
     };
 
-    expect(isCompletedResearchMessage(message)).toBe(false);
-    expect(artifactKindForMessage(message)).toBeNull();
-    expect(shouldAutoOpenArtifact(message)).toBe(false);
-  });
-
-  it("exposes only a succeeded durable Research report", () => {
-    const message = {
-      ...ELIGIBLE_MESSAGE,
-      tool_name: "InSilicoResearchAgent",
-      status: "SUCCEEDED",
-    };
-
     expect(isCompletedResearchMessage(message)).toBe(true);
     expect(artifactKindForMessage(message)).toBe("research");
-    expect(shouldAutoOpenArtifact(message)).toBe(true);
   });
 
   it.each(["succeeded", " SUCCEEDED "])(
@@ -172,15 +370,14 @@ describe("artifact policy", () => {
     }
   );
 
-  it("renders a completed Review result as a cited answer", () => {
+  it("renders a substantive Review result as a cited report View", () => {
     const message = {
       ...ELIGIBLE_MESSAGE,
       tool_name: "ReviewAgent",
       status: "SUCCEEDED",
     };
 
-    expect(artifactKindForMessage(message)).toBeNull();
-    expect(shouldAutoOpenArtifact(message)).toBe(false);
+    expect(artifactKindForMessage(message)).toBe("cited-report");
   });
 
   it.each(CANONICAL_AGENT_TOOLS)(
@@ -199,7 +396,6 @@ describe("artifact policy", () => {
       };
 
       expect(artifactKindForMessage(message)).toBe(artifactByTool[toolName]);
-      expect(shouldAutoOpenArtifact(message)).toBe(autoOpenByTool[toolName]);
     }
   );
 
@@ -282,7 +478,6 @@ describe("artifact policy", () => {
     },
   ])("rejects $name", ({ message }) => {
     expect(artifactKindForMessage(message)).toBeNull();
-    expect(shouldAutoOpenArtifact(message)).toBe(false);
   });
 
   it.each([
@@ -296,6 +491,5 @@ describe("artifact policy", () => {
     const message = { ...ELIGIBLE_MESSAGE, tool_name: toolName };
 
     expect(artifactKindForMessage(message)).toBeNull();
-    expect(shouldAutoOpenArtifact(message)).toBe(false);
   });
 });

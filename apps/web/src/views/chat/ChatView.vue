@@ -213,7 +213,7 @@ export function removeDeletedChat(options: {
                         "
                         :lifecycle="agentRunLifecycleForMessage(message)"
                         @finish="() => handleMarkdownFinish(index)"
-                        @open-artifact="openArtifact(String(message.id))"
+                        @open-artifact="openArtifactForMessage(message)"
                         @update:activity-expanded="
                           (key, open) =>
                             (getChatState(
@@ -486,7 +486,10 @@ export function removeDeletedChat(options: {
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
           :status="currentArtifactStatusLabel"
-          :markdown="String(currentArtifactMessage.content)"
+          :markdown="
+            currentArtifactPresentation?.report ??
+            String(currentArtifactMessage.content)
+          "
           :references="currentArtifactMessage.doc_list"
           :resources="currentArtifactResources"
           :ns="artifactNamespace"
@@ -526,6 +529,11 @@ export function removeDeletedChat(options: {
             <BotReportState
               v-if="currentArtifactLifecycle"
               :state="currentArtifactLifecycle"
+              :report="
+                currentArtifactPresentation?.kind === 'research'
+                  ? currentArtifactPresentation.report
+                  : null
+              "
               :progress="currentArtifactProjection?.progress"
               :updated-at="currentArtifactProjection?.reportUpdatedAt"
               :labels="currentArtifactBotReportLabels"
@@ -536,7 +544,10 @@ export function removeDeletedChat(options: {
             />
             <CitedAnswer
               v-else
-              :content="String(currentArtifactMessage.content)"
+              :content="
+                currentArtifactPresentation?.report ??
+                String(currentArtifactMessage.content)
+              "
               :references="currentArtifactMessage.doc_list"
               :ns="artifactNamespace"
               surface="artifact"
@@ -699,8 +710,8 @@ import { chatContentToText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import {
-  artifactKindForMessage,
-  isCompletedDeepGenomeMessage,
+  artifactIdentityForMessage,
+  artifactPresentationForMessage,
 } from "./utils/artifact-policy";
 import type {
   Chat,
@@ -1150,9 +1161,14 @@ function artifactAgentLabel(message: ChatMessage): string {
     : CANONICAL_AGENT_DISPLAY_NAMES[tool];
 }
 
+const currentArtifactPresentation = computed(() => {
+  const message = currentArtifactMessage.value;
+  return message ? artifactPresentationForMessage(message) : null;
+});
+
 function artifactPreviewForMessage(message: ChatMessage) {
-  const artifactKind = artifactKindForMessage(message);
-  if (artifactKind === null) return null;
+  const presentation = artifactPresentationForMessage(message);
+  if (presentation === null) return null;
 
   const tool = canonicalAgentTool(message.tool_name);
   if (!tool) return null;
@@ -1162,6 +1178,11 @@ function artifactPreviewForMessage(message: ChatMessage) {
     summary: t(CANONICAL_AGENT_I18N_KEYS[tool]),
     openLabel: t("common.view"),
   };
+}
+
+function openArtifactForMessage(message: ChatMessage): void {
+  const identity = artifactIdentityForMessage(message);
+  if (identity) openArtifact(identity);
 }
 
 const artifactId = computed(() => {
@@ -1174,7 +1195,9 @@ const currentArtifactResources = computed<
 >(() => {
   const message = currentArtifactMessage.value;
   if (!message || message.tool_name !== "DeepGenomeAgent") return [];
-  const source = typeof message.content === "string" ? message.content : "";
+  const source =
+    currentArtifactPresentation.value?.report ??
+    (typeof message.content === "string" ? message.content : "");
 
   return currentArtifactLinks.value.flatMap((artifact) => {
     const escapedName = artifact.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1234,10 +1257,12 @@ function lifecycleFromMessage(
   message: ChatMessage
 ): ChatArtifactLifecycleState | null {
   const projection = message.botProjection;
+  const presentation = artifactPresentationForMessage(message);
   if (
     !message.botLifecycle &&
     projection &&
-    projection.reportPresentation !== true
+    projection.reportPresentation !== true &&
+    presentation?.kind !== "research"
   ) {
     return null;
   }
@@ -1258,7 +1283,30 @@ function lifecycleFromMessage(
       progress: projection.progress,
     };
   }
-  if (!projection) return null;
+  if (!projection) {
+    if (presentation?.kind !== "research") return null;
+    const status = String(message.status ?? "")
+      .trim()
+      .toUpperCase();
+    return {
+      runId: null,
+      status:
+        status === "FAILED"
+          ? "FAILED"
+          : status === "TIMED_OUT" || status === "TIMEOUT"
+            ? "TIMED_OUT"
+            : status === "INPUT_REQUIRED"
+              ? "INPUT_REQUIRED"
+              : "SUCCEEDED",
+      reportRevision: 0,
+      visibleReport: "",
+      intermediateReport: "",
+      finalReport: "",
+      degraded: false,
+      failures: [],
+      artifacts: [],
+    };
+  }
 
   let status: BotLifecycleState["status"] = "RUNNING";
   switch (projection.status) {
@@ -1661,12 +1709,9 @@ const observeDeepGenomeArtifacts = () => {
 
   Object.entries(chatStates.value).forEach(([dialogueId, state]) => {
     (state.renderedChat?.messages ?? []).forEach((message) => {
-      if (!isCompletedDeepGenomeMessage(message)) return;
-      if (typeof message.id !== "string" && typeof message.id !== "number") {
-        return;
-      }
-      const normalizedId = String(message.id).trim();
-      if (!normalizedId) return;
+      const presentation = artifactPresentationForMessage(message);
+      if (presentation?.kind !== "deep-genome") return;
+      const normalizedId = presentation.identity;
 
       if (hasAutoOpened(normalizedId, dialogueId)) return;
 

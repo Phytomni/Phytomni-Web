@@ -14,7 +14,10 @@ import {
 import { createTransferTracker } from "@/utils/transfer-progress";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
 import type { ConversationArtifactLink } from "@/api/types";
-import { artifactKindForMessage } from "../utils/artifact-policy";
+import {
+  artifactIdentityForMessage,
+  artifactPresentationForMessage,
+} from "../utils/artifact-policy";
 import { useResultArchiveDelivery } from "./useResultArchiveDelivery";
 
 let artifactDownloadSequence = 0;
@@ -55,11 +58,13 @@ export function useArtifactPanel(opts: {
 
   const findEligibleMessage = (messageId: string): ChatMessage | null => {
     const matches = (currentChat.value?.messages ?? []).filter(
-      (message) => normalizeServerMessageId(message.id) === messageId
+      (message) =>
+        artifactIdentityForMessage(message) === messageId ||
+        normalizeServerMessageId(message.id) === messageId
     );
     if (matches.length !== 1) return null;
     const message = matches[0];
-    return artifactKindForMessage(message) === null &&
+    return artifactPresentationForMessage(message) === null &&
       (message.artifacts?.length ?? 0) === 0
       ? null
       : message;

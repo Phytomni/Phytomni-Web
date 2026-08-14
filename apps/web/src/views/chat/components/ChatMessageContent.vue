@@ -10,6 +10,7 @@
   <div
     v-if="
       message.role === 'user' ||
+      hasArtifactPresentation ||
       isDeepGenomeMessage ||
       isResearchNonterminal ||
       (!message.steps && !message.tableHeaders)
@@ -35,7 +36,7 @@
     >
       {{ $t(lifecycleLabel) }}
     </div>
-    <template v-if="isResearchNonterminal" />
+    <template v-if="isResearchNonterminal && !hasArtifactPresentation" />
     <StreamMessage
       v-else-if="
         message.role === 'assistant' &&
@@ -174,7 +175,7 @@
       </div>
     </div>
     <ResearchArtifactPreview
-      v-else-if="artifactPreview && effectiveLifecyclePhase !== 'TIMED_OUT'"
+      v-else-if="hasArtifactPresentation && artifactPreview"
       :title="artifactPreview.title"
       :kind="artifactPreview.kind"
       :summary="artifactPreview.summary"
@@ -187,7 +188,9 @@
     <template v-else-if="isDeepGenomeMessage">
       <DeepGenomeResultViewer
         v-if="hasMeaningfulDeepGenomeReport"
-        :markdown="chatContentToText(message.content)"
+        :markdown="
+          artifactPresentation?.report ?? chatContentToText(message.content)
+        "
         :references="message.doc_list || []"
         :ns="'m' + index"
         :show-actions="showDeepGenomeFinalActions"
@@ -298,6 +301,7 @@ import type { ScientificCitationActivation } from "@/utils/scientific-markdown/t
 import { chatContentToRows, chatContentToText } from "../messageTypes";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import {
+  artifactPresentationForMessage,
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
 } from "../utils/artifact-policy";
@@ -344,10 +348,17 @@ const isResearchMessage = computed(
     props.message.role === "assistant" &&
     props.message.tool_name === "InSilicoResearchAgent"
 );
+const artifactPresentation = computed(() =>
+  artifactPresentationForMessage(props.message)
+);
+const hasArtifactPresentation = computed(
+  () => artifactPresentation.value !== null
+);
 const hasMeaningfulDeepGenomeReport = computed(
   () =>
     isDeepGenomeMessage.value &&
-    isMeaningfulDeepGenomeReport(props.message.content)
+    (artifactPresentation.value?.kind === "deep-genome" ||
+      isMeaningfulDeepGenomeReport(props.message.content))
 );
 const hasDeepGenomeReferences = computed(
   () => isDeepGenomeMessage.value && (props.message.doc_list?.length ?? 0) > 0

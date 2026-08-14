@@ -95,6 +95,8 @@ const props = withDefaults(
     state: BotLifecycleState;
     progress?: BotProgress | null;
     updatedAt?: string | number | Date | null;
+    /** Selected report text from the shared Chat artifact policy. */
+    report?: string | null;
     ns: string;
     referenceCount?: number;
     labels?: Partial<Record<BotReportStatus, string>>;
@@ -105,6 +107,7 @@ const props = withDefaults(
   {
     progress: null,
     updatedAt: null,
+    report: null,
     referenceCount: 0,
     labels: () => ({}),
     hideActiveReport: false,
@@ -128,6 +131,9 @@ const reportStatus = computed(() => {
   return activeReportHidden.value && status === "complete" ? "loading" : status;
 });
 const reportText = computed(() => {
+  if (typeof props.report === "string" && props.report.trim()) {
+    return props.report;
+  }
   if (activeReportHidden.value) return "";
   const state = props.state;
   if (typeof state.visibleReport === "string" && state.visibleReport.trim()) {
