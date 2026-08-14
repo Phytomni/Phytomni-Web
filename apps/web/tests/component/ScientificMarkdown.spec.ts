@@ -112,6 +112,28 @@ describe("ScientificMarkdown", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("renders and activates Bot document citation markers", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source: "Evidence [document:1] and [document 3, 4].",
+        citationNamespace: "report",
+        referenceCount: 4,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    const links = wrapper.findAll(".scientific-citation__link");
+    expect(links.map((link) => link.text())).toEqual([
+      "[document:1]",
+      "[document 3, 4]",
+    ]);
+
+    await links[1].trigger("click");
+    expect(wrapper.emitted("citation-activate")).toEqual([
+      [{ namespace: "report", indices: [3, 4] }],
+    ]);
+  });
+
   it("falls back only the failed child node and preserves the rest of the report", async () => {
     const source = [
       '<span data-secret="do-not-emit">Whole report</span>',

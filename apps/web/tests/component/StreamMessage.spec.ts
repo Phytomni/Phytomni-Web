@@ -151,20 +151,42 @@ describe("StreamMessage", () => {
     expect(md.html()).toContain('href="#m2-ref-1"');
   });
 
-  it("relays a streamed citation activation alongside its reference list", async () => {
+  it("activates its grouped reference rows before relaying the citation", async () => {
     const w = mountWithApp(StreamMessage, {
       props: {
-        blocks: [{ type: "markdown", authority: "web", text: "Evidence [1]." }],
+        blocks: [
+          { type: "markdown", authority: "web", text: "Evidence [1-2]." },
+        ],
         ns: "m-citation",
-        references: [{ title: "Reference one" }],
+        references: [{ title: "Reference one" }, { title: "Reference two" }],
       },
     });
     await vi.dynamicImportSettled();
 
-    expect(w.get(".doc-list-item").attributes("id")).toBe("m-citation-ref-1");
+    const rows = w.findAll(".doc-list-item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    expect(rows.map((row) => row.attributes("id"))).toEqual([
+      "m-citation-ref-1",
+      "m-citation-ref-2",
+    ]);
     await w.get(".scientific-citation__link").trigger("click");
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true]);
+    expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
+      "true",
+      "true",
+    ]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(w.emitted("citation-activate")).toEqual([
-      [{ namespace: "m-citation", indices: [1] }],
+      [{ namespace: "m-citation", indices: [1, 2] }],
     ]);
   });
 

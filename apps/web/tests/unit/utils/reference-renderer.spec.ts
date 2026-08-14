@@ -8,6 +8,8 @@ const REFERENCE_SOURCE = readFileSync(
   resolve(__dirname, "../../../src/utils/reference-renderer.ts"),
   "utf8"
 );
+const buildReferences = (references: readonly unknown[]) =>
+  buildDisplayReferences(references, "test");
 
 // Direct unit tests for the reference renderer extracted from
 // DeepGenomeResultViewer. references come from the Bot `formatted.references`
@@ -22,25 +24,23 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("returns [] for empty / runtime-invalid nullish input", () => {
-    expect(buildDisplayReferences([])).toEqual([]);
+    expect(buildReferences([])).toEqual([]);
+    expect(buildReferences(invalidInput<readonly unknown[]>(null))).toEqual([]);
     expect(
-      buildDisplayReferences(invalidInput<readonly unknown[]>(null))
-    ).toEqual([]);
-    expect(
-      buildDisplayReferences(invalidInput<readonly unknown[]>(undefined))
+      buildReferences(invalidInput<readonly unknown[]>(undefined))
     ).toEqual([]);
   });
 
   it("escapes a raw tag in the title-only branch", () => {
-    const [ref] = buildDisplayReferences([{ title: "<img onerror=x>foo" }]);
-    expect(ref.id).toBe("ref-1");
+    const [ref] = buildReferences([{ title: "<img onerror=x>foo" }]);
+    expect(ref.id).toBe("test-ref-1");
     // tag is inert text, not a live element
     expect(ref.html).toContain("&lt;img onerror=x&gt;foo");
     expect(ref.html).not.toContain("<img");
   });
 
   it("escapes a raw tag smuggled through the citation author field", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         au: "<img src=x onerror=alert(1)>",
         ti: "Title",
@@ -48,7 +48,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
         py: 2020,
       },
     ]);
-    expect(ref.id).toBe("ref-1");
+    expect(ref.id).toBe("test-ref-1");
     // the citation branch wraps in .doc-citation; the raw tag must be escaped
     expect(ref.html).toContain('<div class="doc-citation">');
     expect(ref.html).toContain("&lt;img src=x onerror=alert(1)&gt;");
@@ -56,7 +56,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("renders a real scheme-checked DOI anchor for a benign citation", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         au: "Smith J",
         ti: "Gene study",
@@ -71,7 +71,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("neutralizes a malicious DOI href (javascript:) while escaping its text", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         au: "Smith J",
         ti: "T",
@@ -89,7 +89,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("renders a real PubMed anchor for a benign pm id", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       { au: "Smith J", ti: "T", so: "S", pm: "12345" },
     ]);
     expect(ref.html).toContain(
@@ -98,7 +98,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("escapes a malicious pm value in both href and text", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       { au: "Smith J", ti: "T", so: "S", pm: '"><img onerror=x>' },
     ]);
     // the pm is concatenated onto the pubmed base, which keeps the http(s)
@@ -108,7 +108,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("renders both DOI and PubMed with a separator", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         au: "Smith J",
         ti: "T",
@@ -123,28 +123,32 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("escapes a plain-string reference", () => {
-    const [ref] = buildDisplayReferences(["<svg onload=alert(3)>"]);
-    expect(ref.id).toBe("ref-1");
+    const [ref] = buildReferences(["<svg onload=alert(3)>"]);
+    expect(ref.id).toBe("test-ref-1");
     expect(ref.html).toContain("&lt;svg onload=alert(3)&gt;");
     expect(ref.html).not.toContain("<svg");
   });
 
   it("escapes the JSON fallback for an object with no recognized fields", () => {
-    const [ref] = buildDisplayReferences([{ foo: "<b>x</b>" }]);
-    expect(ref.id).toBe("ref-1");
+    const [ref] = buildReferences([{ foo: "<b>x</b>" }]);
+    expect(ref.id).toBe("test-ref-1");
     // serialized then escaped — no live tag
     expect(ref.html).toContain("&lt;b&gt;x&lt;/b&gt;");
     expect(ref.html).not.toContain("<b>");
   });
 
   it("indexes entries 1-based and preserves shape across a mixed list", () => {
-    const out = buildDisplayReferences([
+    const out = buildReferences([
       { title: "A" },
       "plain",
       { au: "X", ti: "Y", so: "Z" },
     ]);
     expect(out).toHaveLength(3);
-    expect(out.map((r) => r.id)).toEqual(["ref-1", "ref-2", "ref-3"]);
+    expect(out.map((r) => r.id)).toEqual([
+      "test-ref-1",
+      "test-ref-2",
+      "test-ref-3",
+    ]);
     out.forEach((r) => {
       expect(typeof r.html).toBe("string");
       expect(typeof r.id).toBe("string");
@@ -155,7 +159,7 @@ describe("buildDisplayReferences — XSS invariant", () => {
   });
 
   it("renders the rich branch when a doc carries BOTH title and au/ti (flip)", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         title: "file.pdf",
         au: "Smith J",
@@ -168,11 +172,11 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(ref.html).toContain('<div class="doc-citation">');
     expect(ref.html).toContain("Smith J");
     expect(ref.html).not.toContain("file.pdf");
-    expect(ref.id).toBe("ref-1");
+    expect(ref.id).toBe("test-ref-1");
   });
 
   it("neutralizes a javascript: DOI even when the enriched doc also has a title", () => {
-    const [ref] = buildDisplayReferences([
+    const [ref] = buildReferences([
       {
         title: "file.pdf",
         au: "A",
@@ -193,17 +197,20 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(out.map((r) => r.id)).toEqual(["m3-ref-1", "m3-ref-2"]);
   });
 
-  it("falls back to bare ref-N when ns is empty or absent (back-compat)", () => {
-    expect(buildDisplayReferences([{ title: "A" }]).map((r) => r.id)).toEqual([
-      "ref-1",
-    ]);
-    expect(
-      buildDisplayReferences([{ title: "A" }], "").map((r) => r.id)
-    ).toEqual(["ref-1"]);
+  it("rejects a missing namespace when reference rows exist", () => {
+    expect(() => buildDisplayReferences([{ title: "A" }], "")).toThrowError(
+      "citation namespace is invalid"
+    );
   });
 
-  it("sanitizes illegal characters out of ns before building the id", () => {
-    const [ref] = buildDisplayReferences([{ title: "A" }], 'a b"<x');
-    expect(ref.id).toBe("abx-ref-1");
+  it("preserves valid namespace characters without rewriting", () => {
+    const [ref] = buildDisplayReferences([{ title: "A" }], "artifact_under");
+    expect(ref.id).toBe("artifact_under-ref-1");
+  });
+
+  it("rejects namespaces that would require lossy rewriting", () => {
+    expect(() =>
+      buildDisplayReferences([{ title: "A" }], 'a b"<x')
+    ).toThrowError("citation namespace is invalid");
   });
 });

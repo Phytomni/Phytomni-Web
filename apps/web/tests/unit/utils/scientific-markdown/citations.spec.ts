@@ -15,17 +15,33 @@ describe("parseCitationBody", () => {
     ["1-4", [1, 2, 3, 4]],
     ["[1-4]", [1, 2, 3, 4]],
     ["1-3,7,9-10", [1, 2, 3, 7, 9, 10]],
+    ["[document:21]", [21]],
+    ["[document 3, 4, 21, 23]", [3, 4, 21, 23]],
   ])("parses %s", (source, indices) => {
+    const display = source
+      .replace(/^\[|\]$/g, "")
+      .replace(/^document(?:\s*:\s*|\s+)/i, "")
+      .replace(/\s+/g, "");
     expect(parseCitationBody(source)).toEqual({
-      display: source.replace(/^\[|\]$/g, "").replace(/\s+/g, ""),
+      display,
       indices,
     });
   });
 
-  it.each(["", "0", "4-1", "1,,2", "2024", "1-9999", "1,a", "1,1", "1 2"])(
-    "rejects %s",
-    (source) => expect(parseCitationBody(source)).toBeNull()
-  );
+  it.each([
+    "",
+    "0",
+    "4-1",
+    "1,,2",
+    "2024",
+    "1-9999",
+    "1,a",
+    "1,1",
+    "1 2",
+    "document",
+    "documented:1",
+    "document:1,a",
+  ])("rejects %s", (source) => expect(parseCitationBody(source)).toBeNull());
 });
 
 describe("requireCitationNamespace", () => {
@@ -218,6 +234,31 @@ describe("transformScientificCitations", () => {
     expect(serialized).toContain("Citation 3");
   });
 
+  it("does not let a mismatched closing tag escape raw HTML protection", () => {
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "html", value: "<span>" },
+            { type: "html", value: "</em>" },
+            { type: "text", value: "raw [1]" },
+            { type: "html", value: "</span>" },
+            { type: "text", value: " Evidence [2]" },
+          ],
+        },
+      ],
+    };
+
+    transformScientificCitations(tree, options);
+
+    const serialized = JSON.stringify(tree);
+    expect(serialized.match(/scientificCitation/g)).toHaveLength(1);
+    expect(serialized).toContain("raw [1]");
+    expect(serialized).toContain("Citation 2");
+  });
+
   it("keeps exact superscript triplets inert inside nested raw HTML", () => {
     const tree = {
       type: "root",
@@ -273,5 +314,46 @@ describe("transformScientificCitations", () => {
     expect(tree.children[0].children[0].type).toBe("link");
     expect(citation?.type).toBe("scientificCitation");
     expect(citation?.data?.hChildren[0].type).toBe("text");
+  });
+
+  it("rewrites Bot document markers and preserves their source spelling", () => {
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "paragraph",
+          children: [
+            {
+              type: "text",
+              value: "Evidence [document:1] and [document 3, 4].",
+            },
+          ],
+        },
+      ],
+    };
+
+    transformScientificCitations(tree, {
+      namespace: "report",
+      referenceCount: 4,
+    });
+
+    const citations = tree.children[0].children.filter(
+      (node: { type: string }) => node.type === "scientificCitation"
+    );
+    expect(citations).toHaveLength(2);
+    expect(citations[0]?.data?.hChildren[0]).toMatchObject({
+      properties: {
+        href: "#report-ref-1",
+        ariaLabel: "Citation 1",
+      },
+      children: [{ type: "text", value: "[document:1]" }],
+    });
+    expect(citations[1]?.data?.hChildren[0]).toMatchObject({
+      properties: {
+        href: "#report-ref-3",
+        ariaLabel: "Citation 3,4",
+      },
+      children: [{ type: "text", value: "[document 3, 4]" }],
+    });
   });
 });

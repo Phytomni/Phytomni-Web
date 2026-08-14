@@ -126,6 +126,7 @@ function mountReport(
   return createTestAppContext({ locale }).mount(BotReportState, {
     props: {
       state,
+      ns: `bot-report-${locale}`,
       labels: reportLabels(pack, state),
       emptyReportLabel: reportLabels(pack, state).loading,
     },

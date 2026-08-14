@@ -9,21 +9,15 @@ const testSource = (relativePath: string): string =>
   readFileSync(resolve(__dirname, "../../..", relativePath), "utf8");
 
 describe("no-misused-promises callback contracts", () => {
-  it("owns the research evidence event listener with a synchronous rejecting wrapper", () => {
+  it("keeps research evidence focus synchronous without a native async listener", () => {
     const panel = source("components/research/ResearchEvidencePanel.vue");
 
     expect(panel).toContain(
-      "const handleArtifactClickEvent = (event: Event): void => {"
+      "function focusReferences(indices: readonly number[]): boolean {"
     );
-    expect(panel).toContain(
-      "handleArtifactClick(event as MouseEvent).catch(() => undefined);"
-    );
-    expect(panel).toContain(
-      'artifactRoot?.addEventListener("click", handleArtifactClickEvent);'
-    );
-    expect(panel).toContain(
-      'artifactRoot?.removeEventListener("click", handleArtifactClickEvent);'
-    );
+    expect(panel).toContain("defineExpose({ focusReferences });");
+    expect(panel).not.toContain('addEventListener("click"');
+    expect(panel).not.toContain("async function focusReferences");
   });
 
   it("keeps logout and password handlers synchronous at void-return boundaries", () => {

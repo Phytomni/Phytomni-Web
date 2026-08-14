@@ -68,11 +68,12 @@ export function requireCitationNamespace(namespace: string): string {
 function normalizeCitationSource(source: string): string | null {
   const trimmed = source.trim();
   if (!trimmed) return null;
+  let body = trimmed;
   if (trimmed.startsWith("[") || trimmed.endsWith("]")) {
     if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
-    return trimmed.slice(1, -1).trim();
+    body = trimmed.slice(1, -1).trim();
   }
-  return trimmed;
+  return body.replace(/^document(?:\s*:\s*|\s+)/i, "");
 }
 
 export function parseCitationBody(source: string): ParsedCitation | null {
@@ -208,7 +209,7 @@ function rewriteTextCitations(
     const parts: MdNode[] = [];
     let offset = 0;
     const matcher =
-      /\[(\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*)\]/g;
+      /\[(?:document(?:\s*:\s*|\s+))?\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*\]/gi;
     for (const match of node.value.matchAll(matcher)) {
       const matchIndex = match.index ?? 0;
       const parsed = parseCitationBody(match[0]);
@@ -219,7 +220,7 @@ function rewriteTextCitations(
           value: node.value.slice(offset, matchIndex),
         });
       }
-      parts.push(citationNode(parsed, options));
+      parts.push(citationNode(parsed, options, match[0]));
       offset = matchIndex + match[0].length;
     }
     if (!parts.length) continue;

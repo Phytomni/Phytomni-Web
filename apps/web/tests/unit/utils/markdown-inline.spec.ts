@@ -109,8 +109,10 @@ describe("processInlineMarkdown — markdown rendering", () => {
   });
 
   it("converts a bracketed numeric reference into an anchor", () => {
-    const out = processInlineMarkdown("see [3]");
-    expect(out).toContain('href="#ref-3"');
+    const out = processInlineMarkdown("see [3]", "report", 3);
+    expect(out).toContain('href="#report-ref-3"');
+    expect(out).toContain('class="citation-ref"');
+    expect(out).toContain('aria-label="Citation 3"');
     expect(out).toContain(">[3]</a>");
   });
 
@@ -153,30 +155,57 @@ describe("convertFilePath", () => {
 
 describe("processInlineMarkdown citation namespacing", () => {
   it("namespaces the [N] anchor with ns when provided", () => {
-    const out = processInlineMarkdown("see [1] and [2]", "m4");
+    const out = processInlineMarkdown("see [1] and [2]", "m4", 2);
     expect(out).toContain('href="#m4-ref-1"');
     expect(out).toContain('href="#m4-ref-2"');
   });
 
-  it("falls back to #ref-N when ns is absent (back-compat)", () => {
+  it("keeps the citation literal when ns is absent", () => {
     const out = processInlineMarkdown("see [1]");
-    expect(out).toContain('href="#ref-1"');
+    expect(out).toBe("see [1]");
+    expect(out).not.toContain("href=");
   });
 
   it("widens the citation match to three digits", () => {
-    const out = processInlineMarkdown("see [123]", "m4");
+    const out = processInlineMarkdown("see [123]", "m4", 123);
     expect(out).toContain('href="#m4-ref-123"');
   });
 
+  it("emits one namespaced anchor for grouped and ranged citations", () => {
+    const out = processInlineMarkdown("see [1, 2-4]", "m4", 4);
+    expect(out).toContain('href="#m4-ref-1"');
+    expect(out).toContain('aria-label="Citation 1,2-4"');
+    expect(out).toContain(">[1,2-4]</a>");
+    expect(out.match(/class="citation-ref"/g)).toHaveLength(1);
+  });
+
+  it("keeps an out-of-range citation literal", () => {
+    const out = processInlineMarkdown("see [1-3]", "m4", 2);
+    expect(out).toBe("see [1-3]");
+    expect(out).not.toContain("href=");
+  });
+
+  it("keeps citation syntax inside inline code inert", () => {
+    const out = processInlineMarkdown("code `[1-3]`", "m4", 3);
+    expect(out).toContain("<code>[1-3]</code>");
+    expect(out).not.toContain("citation-ref");
+  });
+
   it("does not emit the inert @click attribute", () => {
-    const out = processInlineMarkdown("see [1]", "m4");
+    const out = processInlineMarkdown("see [1]", "m4", 1);
     expect(out).not.toContain("@click");
     expect(out).not.toContain("jumpTo");
   });
 
-  it("sanitizes illegal characters out of ns", () => {
-    const out = processInlineMarkdown("see [1]", 'a b"<x');
-    expect(out).toContain('href="#abx-ref-1"');
+  it("preserves valid namespace characters without rewriting", () => {
+    const out = processInlineMarkdown("see [1]", "artifact_under", 1);
+    expect(out).toContain('href="#artifact_under-ref-1"');
+  });
+
+  it("rejects namespaces that would require lossy rewriting", () => {
+    expect(() => processInlineMarkdown("see [1]", 'a b"<x', 1)).toThrowError(
+      "citation namespace is invalid"
+    );
   });
 });
 
@@ -188,8 +217,8 @@ describe("processInlineMarkdown citation namespacing", () => {
 // executable XSS at the v-html sink). The sink escapes first, so these mirror
 // the real pipeline: escapeHtml -> processInlineMarkdown.
 describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
-  const renderInline = (raw: string, ns = ""): string =>
-    processInlineMarkdown(escapeHtml(raw), ns);
+  const renderInline = (raw: string, ns = "", referenceCount = 0): string =>
+    processInlineMarkdown(escapeHtml(raw), ns, referenceCount);
 
   it("does not break out of a resurrected href via image-markdown (onclick)", () => {
     const out = renderInline(
@@ -214,6 +243,22 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
     expect((out.match(/<a\s/g) ?? []).length).toBe(1);
   });
 
+  it("keeps an escaped anchor inside inline code inert", () => {
+    const out = renderInline('`<a href="/x">link</a>`');
+
+    expect(out).toContain("<code>&lt;a");
+    expect(out).toContain("link&lt;/a&gt;</code>");
+    expect(out).not.toContain("<a ");
+  });
+
+  it("keeps an escaped anchor crossing an inline-code boundary inert", () => {
+    const out = renderInline('`<a href="/x">link`</a>');
+
+    expect(out).not.toContain("<a ");
+    expect(out).toContain("&lt;a");
+    expect(out).toContain("&lt;/a&gt;");
+  });
+
   // Regression: legitimate markdown outside any resurrected tag still renders.
   it("still renders a standalone image", () => {
     const out = renderInline("![photo](/attachments/pic.png)");
@@ -223,7 +268,7 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
   });
 
   it("still renders a standalone citation and a resurrected anchor together", () => {
-    const out = renderInline('<a href="/docs/x.pdf">doc</a> see [3]', "m4");
+    const out = renderInline('<a href="/docs/x.pdf">doc</a> see [3]', "m4", 4);
     expect(out).toContain('href="/docs/x.pdf"');
     expect(out).toContain(">doc</a>");
     expect(out).toContain('href="#m4-ref-3"');
@@ -244,7 +289,7 @@ describe("processInlineMarkdown — regex-reentrancy XSS guard", () => {
   it("leaves no vault sentinel or token in the output (nested)", () => {
     // Nested constructs (image inside link) are the case that can leak; a
     // flat sibling input cannot, so this must exercise nesting.
-    const out = renderInline("[![i](/b.png)](/c.md) and [1] **bold**", "m1");
+    const out = renderInline("[![i](/b.png)](/c.md) and [1] **bold**", "m1", 1);
     expect(out).not.toContain(String.fromCharCode(0xe000));
     expect(out).not.toMatch(/MD\d+/);
   });

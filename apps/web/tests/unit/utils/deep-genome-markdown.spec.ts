@@ -255,20 +255,32 @@ describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespa
   // assertion could not reach the inline-markdown output).
   it("threads ns into inline [N] citation anchors (#m5-ref-1)", () => {
     const md = join("## Sec", "Some text with a citation [1] here.");
-    const parsed = parseDeepGenomeMarkdown(md, "m5");
+    const parsed = parseDeepGenomeMarkdown(md, "m5", 1);
     const body =
       findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
     expect(body).toContain("#m5-ref-1");
+    expect(body).toContain('class="citation-ref"');
+    expect(body).toContain('aria-label="Citation 1"');
     expect(body).not.toContain('"#ref-1"');
   });
 
-  it("keeps the bare #ref-N anchor when ns is empty (back-compat)", () => {
+  it("keeps citation markers literal when ns is empty", () => {
     const md = join("## Sec", "Some text with a citation [1] here.");
     const parsed = parseDeepGenomeMarkdown(md);
     const body =
       findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
-    expect(body).toContain("#ref-1");
-    expect(body).not.toContain("#m5-ref-1");
+    expect(body).toContain("citation [1] here");
+    expect(body).not.toContain("href=");
+  });
+
+  it("emits one real anchor for grouped and ranged citations", () => {
+    const md = join("## Sec", "Evidence [1, 2-3].");
+    const parsed = parseDeepGenomeMarkdown(md, "m5", 3);
+    const body =
+      findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    expect(body).toContain('href="#m5-ref-1"');
+    expect(body).toContain('aria-label="Citation 1,2-3"');
+    expect(body.match(/class="citation-ref"/g)).toHaveLength(1);
   });
 
   it("threads ns into table-cell citation anchors", () => {
@@ -278,9 +290,20 @@ describe("parseDeepGenomeMarkdown — ns threading (per-message citation namespa
       "| --- | --- |",
       "| BRCA1 | see [2] |"
     );
-    const parsed = parseDeepGenomeMarkdown(md, "m9");
+    const parsed = parseDeepGenomeMarkdown(md, "m9", 2);
     const body =
       findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
     expect(body).toContain("#m9-ref-2");
+  });
+
+  it("preserves valid namespace characters and rejects lossy rewriting", () => {
+    const md = join("## Sec", "Evidence [1].");
+    const parsed = parseDeepGenomeMarkdown(md, "artifact_under", 1);
+    const body =
+      findType(parsed.contentBlocks, "standalone-content")?.content ?? "";
+    expect(body).toContain("#artifact_under-ref-1");
+    expect(() => parseDeepGenomeMarkdown(md, "artifact:under", 1)).toThrowError(
+      "citation namespace is invalid"
+    );
   });
 });

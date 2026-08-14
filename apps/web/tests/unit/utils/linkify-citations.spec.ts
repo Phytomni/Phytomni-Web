@@ -36,8 +36,16 @@ describe("linkifyCitations", () => {
     expect(linkifyCitations("see [1] here", "")).toBe("see [1] here");
   });
 
-  it("sanitizes illegal characters out of ns before building the href", () => {
-    const out = linkifyCitations("see [1]", 'a b"<x');
-    expect(out).toContain('<a href="#abx-ref-1" class="citation-ref">1</a>');
+  it("preserves valid namespace characters without rewriting", () => {
+    const out = linkifyCitations("see [1]", "artifact_under");
+    expect(out).toContain(
+      '<a href="#artifact_under-ref-1" class="citation-ref">1</a>'
+    );
+  });
+
+  it("rejects namespaces that would require lossy rewriting", () => {
+    expect(() => linkifyCitations("see [1]", 'a b"<x')).toThrowError(
+      "citation namespace is invalid"
+    );
   });
 });

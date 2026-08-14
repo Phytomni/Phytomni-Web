@@ -9,13 +9,6 @@ import {
   mountWithApp,
 } from "../helpers/test-app-context";
 
-vi.mock("@/components/ScientificMarkdown.vue", () => ({
-  default: {
-    props: ["source"],
-    template: '<article data-test="report-markdown">{{ source }}</article>',
-  },
-}));
-
 type ReportStage = "waiting_for_brief_gene" | "intermediate" | "final";
 
 function lifecycle(
@@ -42,12 +35,13 @@ function mountReport(
   return mountWithApp(BotReportState, {
     props: {
       state,
+      ns: "bot-report-test",
       ...(hideActiveReport === undefined ? {} : { hideActiveReport }),
     },
     global: {
       stubs: {
         ScientificMarkdown: {
-          props: ["source"],
+          props: ["source", "citationNamespace", "referenceCount"],
           template:
             '<article data-test="report-markdown">{{ source }}</article>',
         },
@@ -134,6 +128,25 @@ describe("BotReportState", () => {
     );
   });
 
+  it("renders lifecycle citations against the supplied reference rows", async () => {
+    const wrapper = mountWithApp(BotReportState, {
+      props: {
+        state: lifecycle({
+          status: "SUCCEEDED",
+          visibleReport: "Evidence [1-2]",
+          finalReport: "Evidence [1-2]",
+        }),
+        ns: "bot-report-citations",
+        referenceCount: 2,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    const citation = wrapper.get(".scientific-citation__link");
+    expect(citation.attributes("href")).toBe("#bot-report-citations-ref-1");
+    expect(citation.attributes("aria-label")).toBe("Citation 1-2");
+  });
+
   it("formats report timestamps through the locale-aware datetime preset", () => {
     const updatedAt = "2026-07-16T08:30:00";
     const wrapper = createTestAppContext({ locale: "en-US" }).mount(
@@ -145,12 +158,13 @@ describe("BotReportState", () => {
             visibleReport: "# Final report",
             finalReport: "# Final report",
           }),
+          ns: "bot-report-timestamp",
           updatedAt,
         },
         global: {
           stubs: {
             ScientificMarkdown: {
-              props: ["source"],
+              props: ["source", "citationNamespace", "referenceCount"],
               template:
                 '<article data-test="report-markdown">{{ source }}</article>',
             },
