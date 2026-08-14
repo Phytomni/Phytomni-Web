@@ -21,6 +21,38 @@ ROOT = Path(__file__).resolve().parents[1]
 MATRIX_REL = Path("docs/reference/bot-web-activation-matrix.md")
 MATRIX_JSON_START = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_START -->"
 MATRIX_JSON_END = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_END -->"
+RESEARCH_INPUT_FIXTURE_REL = Path(
+    "apps/server/external/bot/testdata/head/research_input_resolution_v1.json"
+)
+RESEARCH_FORMAT_SOURCE_REL = Path(
+    "apps/server/service/api_service/attachment_classifier.go"
+)
+RESEARCH_INPUT_PROTOCOL = "research_input_resolution_v1"
+RESEARCH_INPUT_PROTOCOL_VERSION = 1
+RESEARCH_INPUT_LIMIT_BOUNDS = {
+    "max_user_query_chars": (131_072, 1_048_576),
+    "max_attachments_per_request": (64, 256),
+    "max_research_dataset_paths": (64, 256),
+    "max_research_input_references": (128, 256),
+}
+RESEARCH_ARCHIVE_FORMATS = frozenset(
+    {"zip", "tar", "tgz", "gz", "bgzf", "bz2", "xz", "zst", "7z", "rar"}
+)
+CANONICAL_AGENT_TOOLS = {
+    "chat": "ChatAgent",
+    "knowledge": "KnowledgeAgent",
+    "data": "DataAgent",
+    "review": "ReviewAgent",
+    "brief_gene": "BriefGeneAgent",
+    "analyst": "AnalystAgent",
+    "deep_genome": "DeepGenomeAgent",
+    "research": "InSilicoResearchAgent",
+    "design": "DigitalDesignAgent",
+    "network": "GeneNetworkAgent",
+}
+MAX_BOT_AGENT_DESCRIPTORS = 32
+MAX_RESEARCH_DATASET_FILE_BYTES = 10 << 30
+MAX_RESEARCH_DATASET_TOTAL_BYTES = MAX_RESEARCH_DATASET_FILE_BYTES * 256
 
 ROW_IDS = (
     "RC-WEB-001",
@@ -108,6 +140,8 @@ MAX_FAILURE_LINES = 32
 MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
+MAX_RESEARCH_INPUT_FIXTURE_BYTES = 256 * 1024
+MAX_RESEARCH_DATASET_FORMATS = 256
 
 _MATRIX_FIELDS = {
     "schema_version",
@@ -121,6 +155,7 @@ _LOCAL_READINESS_FIELDS = {"rc_web_004"}
 _RC_WEB_004_READINESS_FIELDS = {"fixture_ids", "shared_report_surface_test"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_RESEARCH_FORMAT_RE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,63}$")
 _EXPERT_DEFAULT_RE = re.compile(
     r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
@@ -209,6 +244,214 @@ def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
         return None
 
 
+def _parse_go_suffix_map(source: str, name: str) -> set[str] | None:
+    declaration = re.compile(
+        rf"\bvar\s+{re.escape(name)}\s*=\s*"
+        r"map\s*\[\s*string\s*\]\s*struct\s*\{\s*\}\s*\{"
+    )
+    masked = _mask_go_non_code(source)
+    matches = list(declaration.finditer(masked))
+    if len(matches) != 1:
+        return None
+    opening = matches[0].end() - 1
+    depth = 0
+    closing = None
+    for index in range(opening, len(masked)):
+        if masked[index] == "{":
+            depth += 1
+        elif masked[index] == "}":
+            depth -= 1
+            if depth == 0:
+                closing = index
+                break
+    if closing is None:
+        return None
+
+    body = _strip_go_comments(source[opening + 1 : closing])
+    entry = re.compile(r'\s*"(?P<suffix>\.[a-z0-9.]+)"\s*:\s*\{\s*\}\s*,?')
+    formats: set[str] = set()
+    position = 0
+    while position < len(body):
+        if not body[position:].strip():
+            break
+        match = entry.match(body, position)
+        if match is None:
+            return None
+        token = match.group("suffix").removeprefix(".")
+        if token in formats:
+            return None
+        formats.add(token)
+        position = match.end()
+    return formats or None
+
+
+def _parse_research_input_fixture(text: str) -> Mapping[str, Any] | None:
+    if len(text.encode("utf-8")) > MAX_RESEARCH_INPUT_FIXTURE_BYTES:
+        return None
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate key")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(text, object_pairs_hook=reject_duplicate_keys)
+    except (RecursionError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def _normalized_research_formats(value: Any) -> set[str] | None:
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_RESEARCH_DATASET_FORMATS:
+        return None
+    normalized: set[str] = set()
+    for item in value:
+        if (
+            not isinstance(item, str)
+            or item != item.strip().lower()
+            or _RESEARCH_FORMAT_RE.fullmatch(item) is None
+            or item in normalized
+        ):
+            return None
+        normalized.add(item)
+    return normalized
+
+
+def _bounded_integer(value: Any, floor: int, ceiling: int) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and floor <= value <= ceiling
+    )
+
+
+def _check_research_input_contract(
+    root: Path,
+    format_source: str | None,
+    violations: list[str],
+) -> None:
+    fixture_text = _read_text(root, RESEARCH_INPUT_FIXTURE_REL, violations)
+    if fixture_text is None:
+        violations.append("research_input_resolution_v1.json is missing")
+        return
+    fixture = _parse_research_input_fixture(fixture_text)
+    if fixture is None:
+        violations.append("research_input_resolution_v1.json is malformed")
+        return
+
+    protocols = fixture.get("protocols")
+    versions = protocols.get(RESEARCH_INPUT_PROTOCOL) if isinstance(protocols, Mapping) else None
+    if versions != [RESEARCH_INPUT_PROTOCOL_VERSION]:
+        violations.append("research input protocol is incompatible")
+
+    descriptor = fixture.get("research_input_resolution")
+    if not isinstance(descriptor, Mapping):
+        violations.append("research_input_resolution descriptor is missing")
+    else:
+        valid_limits: dict[str, int] = {}
+        for field, (floor, ceiling) in RESEARCH_INPUT_LIMIT_BOUNDS.items():
+            value = descriptor.get(field)
+            if not _bounded_integer(value, floor, ceiling):
+                violations.append(
+                    f"research_input_resolution.{field} is outside Web bounds"
+                )
+            else:
+                valid_limits[field] = value
+        references = valid_limits.get("max_research_input_references")
+        attachments_limit = valid_limits.get("max_attachments_per_request")
+        dataset_paths = valid_limits.get("max_research_dataset_paths")
+        if references is not None and (
+            (attachments_limit is not None and references < attachments_limit)
+            or (dataset_paths is not None and references < dataset_paths)
+        ):
+            violations.append("research input reference limit is below an input lane")
+
+    data = fixture.get("data")
+    if not isinstance(data, list) or len(data) > MAX_BOT_AGENT_DESCRIPTORS:
+        violations.append("agent descriptor catalog is malformed")
+        return
+    research_rows: list[Mapping[str, Any]] = []
+    seen_slugs: set[str] = set()
+    for row in data:
+        if not isinstance(row, Mapping):
+            violations.append("agent descriptor catalog is malformed")
+            continue
+        slug = row.get("slug")
+        tool = row.get("tool")
+        if (
+            not isinstance(slug, str)
+            or not isinstance(tool, str)
+            or slug != slug.strip()
+            or tool != tool.strip()
+            or CANONICAL_AGENT_TOOLS.get(slug) != tool
+            or slug in seen_slugs
+        ):
+            violations.append("agent descriptor catalog is malformed")
+        else:
+            seen_slugs.add(slug)
+        if slug == "research":
+            research_rows.append(row)
+    if len(research_rows) != 1:
+        violations.append("research capability row count must be one")
+        return
+    capabilities = research_rows[0].get("capabilities")
+    attachments = capabilities.get("attachments") if isinstance(capabilities, Mapping) else None
+    document_context = (
+        attachments.get("document_context") if isinstance(attachments, Mapping) else None
+    )
+    datasets = attachments.get("datasets") if isinstance(attachments, Mapping) else None
+    if not isinstance(document_context, Mapping) or not _bounded_integer(
+        document_context.get("max_files"), 64, 256
+    ):
+        violations.append("research document_context.max_files is outside Web bounds")
+    if not isinstance(datasets, Mapping) or not _bounded_integer(
+        datasets.get("max_files"), 64, 256
+    ):
+        violations.append("research datasets.max_files is outside Web bounds")
+        return
+
+    max_files = datasets["max_files"]
+    max_file_bytes = datasets.get("max_file_bytes")
+    max_total_bytes = datasets.get("max_total_bytes")
+    if not _bounded_integer(max_file_bytes, 1, MAX_RESEARCH_DATASET_FILE_BYTES):
+        violations.append("research datasets.max_file_bytes is outside Web bounds")
+    if (
+        not isinstance(max_total_bytes, int)
+        or isinstance(max_total_bytes, bool)
+        or not isinstance(max_file_bytes, int)
+        or isinstance(max_file_bytes, bool)
+        or max_total_bytes < max_file_bytes
+        or max_total_bytes > MAX_RESEARCH_DATASET_TOTAL_BYTES
+        or max_total_bytes > max_file_bytes * max_files
+    ):
+        violations.append("research datasets.max_total_bytes is outside Web bounds")
+
+    advertised_formats = _normalized_research_formats(datasets.get("formats"))
+    archive_formats = (
+        _parse_go_suffix_map(format_source, "archiveAttachmentSuffixes")
+        if format_source is not None
+        else None
+    )
+    dataset_formats = (
+        _parse_go_suffix_map(format_source, "datasetAttachmentSuffixes")
+        if format_source is not None
+        else None
+    )
+    if (
+        archive_formats != RESEARCH_ARCHIVE_FORMATS
+        or dataset_formats is None
+        or "mtx" not in dataset_formats
+    ):
+        violations.append("attachment_classifier.go Research format maps are malformed")
+        return
+    required_formats = archive_formats | dataset_formats
+    if advertised_formats is None or not required_formats.issubset(advertised_formats):
+        violations.append("research datasets.formats do not cover Web formats")
+
+
 def _extract_json_block(text: str) -> str | None:
     """Return only the explicitly delimited JSON block, never surrounding prose."""
 
@@ -286,7 +529,6 @@ def _row_statuses(rows: Any) -> dict[str, str]:
 
 
 def _requirement_label(flag: str) -> str:
-    required = FEATURE_REQUIREMENTS[flag]
     if flag == "stream":
         return "RC-WEB-001 through RC-WEB-006"
     if flag == "expert":
@@ -906,6 +1148,8 @@ def check(root: Path) -> list[str]:
         text = _read_text(root, relative, violations)
         if text is not None:
             source[relative] = text
+    format_source = _read_text(root, RESEARCH_FORMAT_SOURCE_REL, violations)
+    _check_research_input_contract(root, format_source, violations)
     _check_defaults(source, violations)
     return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
 

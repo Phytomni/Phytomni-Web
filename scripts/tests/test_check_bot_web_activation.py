@@ -23,6 +23,26 @@ ROW_IDS = (
     "RC-WEB-007",
     "RC-LIVE-001",
 )
+RESEARCH_INPUT_FIXTURE_PATH = Path(
+    "apps/server/external/bot/testdata/head/research_input_resolution_v1.json"
+)
+RESEARCH_FORMAT_SOURCE_PATH = Path(
+    "apps/server/service/api_service/attachment_classifier.go"
+)
+RESEARCH_DATASET_FORMATS = (
+    "7z",
+    "bgzf",
+    "bz2",
+    "csv",
+    "gz",
+    "mtx",
+    "rar",
+    "tar",
+    "tgz",
+    "xz",
+    "zip",
+    "zst",
+)
 
 
 class MatrixValue(TypedDict):
@@ -88,6 +108,48 @@ def write(root: Path, relative: str, value: object) -> None:
         path.write_text(json.dumps(value), encoding="utf-8")
 
 
+def research_input_fixture_payload() -> dict[str, object]:
+    return {
+        "object": "list",
+        "protocols": {"research_input_resolution_v1": [1]},
+        "research_input_resolution": {
+            "max_user_query_chars": 131_072,
+            "max_attachments_per_request": 64,
+            "max_research_dataset_paths": 64,
+            "max_research_input_references": 128,
+        },
+        "data": [
+            {
+                "slug": "research",
+                "tool": "InSilicoResearchAgent",
+                "capabilities": {
+                    "attachments": {
+                        "document_context": {"max_files": 64},
+                        "datasets": {
+                            "max_file_bytes": 26_214_400,
+                            "max_files": 64,
+                            "max_total_bytes": 52_428_800,
+                            "formats": list(RESEARCH_DATASET_FORMATS),
+                        },
+                    }
+                },
+            }
+        ],
+    }
+
+
+def research_format_source() -> str:
+    return """
+var archiveAttachmentSuffixes = map[string]struct{}{
+    ".zip": {}, ".tar": {}, ".tgz": {}, ".gz": {}, ".bgzf": {},
+    ".bz2": {}, ".xz": {}, ".zst": {}, ".7z": {}, ".rar": {},
+}
+var datasetAttachmentSuffixes = map[string]struct{}{
+    ".csv": {}, ".mtx": {},
+}
+"""
+
+
 def minimal_tree(tmp_path: Path, value: MatrixValue | None = None) -> Path:
     root = tmp_path
     write(
@@ -97,6 +159,8 @@ def minimal_tree(tmp_path: Path, value: MatrixValue | None = None) -> Path:
     )
     for relative, content in checker.DEFAULT_CHECK_FILES.items():
         write(root, relative.as_posix(), content)
+    write(root, RESEARCH_INPUT_FIXTURE_PATH.as_posix(), research_input_fixture_payload())
+    write(root, RESEARCH_FORMAT_SOURCE_PATH.as_posix(), research_format_source())
     return root
 
 
@@ -152,6 +216,12 @@ def local_readiness_tree(tmp_path: Path) -> Path:
     )
     for relative, content in checker.DEFAULT_CHECK_FILES.items():
         write(tmp_path, relative.as_posix(), content)
+    write(
+        tmp_path,
+        RESEARCH_INPUT_FIXTURE_PATH.as_posix(),
+        research_input_fixture_payload(),
+    )
+    write(tmp_path, RESEARCH_FORMAT_SOURCE_PATH.as_posix(), research_format_source())
     for fixture_id, relative in checker.PRODUCT_FIXTURE_PATHS.items():
         write(tmp_path, relative.as_posix(), product_fixture_payload(fixture_id))
     write(
@@ -244,6 +314,204 @@ def test_committed_matrix_is_dark_and_cli_has_one_stable_pass_line() -> None:
     with contextlib.redirect_stdout(output):
         assert checker.main([]) == 0
     assert output.getvalue().strip() == checker.PASS_LINE
+
+
+@pytest.mark.parametrize(
+    ("mutate", "marker"),
+    [
+        (
+            lambda payload: payload["protocols"].pop(
+                "research_input_resolution_v1"
+            ),
+            "research input protocol",
+        ),
+        (
+            lambda payload: payload["protocols"].__setitem__(
+                "research_input_resolution_v1", [1, 2]
+            ),
+            "research input protocol",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_user_query_chars", 131_071
+            ),
+            "max_user_query_chars",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_attachments_per_request", 63
+            ),
+            "max_attachments_per_request",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_research_dataset_paths", 63
+            ),
+            "max_research_dataset_paths",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_research_input_references", 127
+            ),
+            "max_research_input_references",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_user_query_chars", 1_048_577
+            ),
+            "max_user_query_chars",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_attachments_per_request", 257
+            ),
+            "max_attachments_per_request",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_research_dataset_paths", 257
+            ),
+            "max_research_dataset_paths",
+        ),
+        (
+            lambda payload: payload["research_input_resolution"].__setitem__(
+                "max_research_input_references", 257
+            ),
+            "max_research_input_references",
+        ),
+        (
+            lambda payload: (
+                payload["research_input_resolution"].__setitem__(
+                    "max_attachments_per_request", 129
+                ),
+                payload["research_input_resolution"].__setitem__(
+                    "max_research_input_references", 128
+                ),
+            ),
+            "reference limit",
+        ),
+        (
+            lambda payload: (
+                payload["research_input_resolution"].__setitem__(
+                    "max_research_dataset_paths", 129
+                ),
+                payload["research_input_resolution"].__setitem__(
+                    "max_research_input_references", 128
+                ),
+            ),
+            "reference limit",
+        ),
+        (
+            lambda payload: payload["data"][0].__setitem__(
+                "tool", "AnalystAgent"
+            ),
+            "agent descriptor",
+        ),
+        (
+            lambda payload: payload["data"].append(
+                {"slug": "future", "tool": "FutureAgent"}
+            ),
+            "agent descriptor",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "document_context"
+            ].__setitem__("max_files", 10),
+            "document_context.max_files",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("max_files", 10),
+            "datasets.max_files",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("max_files", 257),
+            "datasets.max_files",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("max_file_bytes", 0),
+            "datasets.max_file_bytes",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("max_file_bytes", (10 << 30) + 1),
+            "datasets.max_file_bytes",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("max_total_bytes", 26_214_399),
+            "datasets.max_total_bytes",
+        ),
+        (
+            lambda payload: (
+                payload["data"][0]["capabilities"]["attachments"][
+                    "datasets"
+                ].__setitem__("max_file_bytes", 1),
+                payload["data"][0]["capabilities"]["attachments"][
+                    "datasets"
+                ].__setitem__("max_total_bytes", 65),
+            ),
+            "datasets.max_total_bytes",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ]["formats"].remove("mtx"),
+            "datasets.formats",
+        ),
+        (
+            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+                "datasets"
+            ].__setitem__("formats", ["csv", "mtx"]),
+            "datasets.formats",
+        ),
+    ],
+)
+def test_checker_rejects_research_input_contract_drift(
+    tmp_path: Path, mutate, marker: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / RESEARCH_INPUT_FIXTURE_PATH
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutate(payload)
+    write(root, RESEARCH_INPUT_FIXTURE_PATH.as_posix(), payload)
+
+    errors = checker.check(root)
+    assert any(marker in error for error in errors)
+
+
+def test_checker_compares_fixture_formats_with_web_source(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    write(
+        root,
+        RESEARCH_FORMAT_SOURCE_PATH.as_posix(),
+        research_format_source().replace('".mtx": {},', '".mtx": {}, ".vcf": {},'),
+    )
+
+    errors = checker.check(root)
+    assert any("datasets.formats" in error for error in errors)
+
+
+def test_checker_does_not_accept_commented_go_format(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    write(
+        root,
+        RESEARCH_FORMAT_SOURCE_PATH.as_posix(),
+        research_format_source().replace(
+            '".csv": {}, ".mtx": {},',
+            '".csv": {}, // ".mtx": {},',
+        ),
+    )
+
+    errors = checker.check(root)
+    assert any("Research format maps" in error for error in errors)
 
 
 @pytest.mark.parametrize(
