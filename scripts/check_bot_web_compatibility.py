@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -187,18 +187,7 @@ _MANIFEST_FIELDS = {
     "result_archive_v1",
 }
 _FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
-_SOURCE_TOKEN_RE = re.compile(
-    r"""
-    (?P<whitespace>\s+)
-    |(?P<line_comment>//[^\r\n]*)
-    |(?P<block_comment>/\*.*?\*/)
-    |(?P<string>"[A-Za-z0-9_.-]+")
-    |(?P<identifier>[A-Za-z][A-Za-z0-9_]*)
-    |(?P<punctuation>[\[\]{}:,=;])
-    |(?P<unsupported>.)
-    """,
-    re.DOTALL | re.VERBOSE,
-)
+_SOURCE_PUNCTUATION = frozenset("[]{}:,=;")
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -342,45 +331,232 @@ def _load_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
         return None
 
 
-SourceToken = tuple[str, str]
+class SourceToken(NamedTuple):
+    kind: str
+    value: str
+    brace_depth: int
 
 
-def _source_tokens(text: str) -> list[SourceToken]:
-    tokens: list[SourceToken] = []
-    for match in _SOURCE_TOKEN_RE.finditer(text):
-        kind = match.lastgroup
-        if kind in {"whitespace", "line_comment", "block_comment"}:
+TokenPattern = tuple[str, str]
+
+
+def _scan_quoted_literal(
+    text: str,
+    start: int,
+    quote: str,
+    *,
+    allow_escaped_newline: bool,
+) -> int | None:
+    index = start + 1
+    while index < len(text):
+        char = text[index]
+        if char == "\\":
+            if index + 1 >= len(text):
+                return None
+            if text[index + 1] in "\r\n" and not allow_escaped_newline:
+                return None
+            index += 2
             continue
-        value = match.group(0)
-        tokens.append((kind or "unsupported", value.strip('"') if kind == "string" else value))
-    return tokens
+        if char == quote:
+            return index + 1
+        if char in "\r\n":
+            return None
+        index += 1
+    return None
+
+
+def _scan_block_comment(text: str, start: int) -> int | None:
+    end = text.find("*/", start + 2)
+    return None if end < 0 else end + 2
+
+
+def _scan_ts_template_expression(text: str, start: int) -> int | None:
+    depth = 1
+    index = start
+    while index < len(text):
+        if text.startswith("//", index):
+            newline = text.find("\n", index + 2)
+            index = len(text) if newline < 0 else newline + 1
+            continue
+        if text.startswith("/*", index):
+            index = _scan_block_comment(text, index)
+            if index is None:
+                return None
+            continue
+
+        char = text[index]
+        if char in {'"', "'"}:
+            index = _scan_quoted_literal(
+                text, index, char, allow_escaped_newline=True
+            )
+            if index is None:
+                return None
+            continue
+        if char == "`":
+            template = _scan_ts_template(text, index)
+            if template is None:
+                return None
+            index = template[0]
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
+    return None
+
+
+def _scan_ts_template(text: str, start: int) -> tuple[int, bool] | None:
+    interpolated = False
+    index = start + 1
+    while index < len(text):
+        char = text[index]
+        if char == "\\":
+            if index + 1 >= len(text):
+                return None
+            index += 2
+            continue
+        if char == "`":
+            return index + 1, interpolated
+        if char == "$" and index + 1 < len(text) and text[index + 1] == "{":
+            interpolated = True
+            index = _scan_ts_template_expression(text, index + 2)
+            if index is None:
+                return None
+            continue
+        index += 1
+    return None
+
+
+def _source_tokens(text: str, dialect: str) -> list[SourceToken] | None:
+    tokens: list[SourceToken] = []
+    brace_depth = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char.isspace():
+            index += 1
+            continue
+        if text.startswith("//", index):
+            newline = text.find("\n", index + 2)
+            index = len(text) if newline < 0 else newline + 1
+            continue
+        if text.startswith("/*", index):
+            index = _scan_block_comment(text, index)
+            if index is None:
+                return None
+            continue
+
+        token_end: int | None = None
+        token_kind = "unsupported"
+        if dialect == "typescript" and char in {'"', "'"}:
+            token_end = _scan_quoted_literal(
+                text, index, char, allow_escaped_newline=True
+            )
+            token_kind = "string"
+        elif dialect == "typescript" and char == "`":
+            template = _scan_ts_template(text, index)
+            if template is not None:
+                token_end, interpolated = template
+                token_kind = "unsupported" if interpolated else "string"
+        elif dialect == "go" and char == '"':
+            token_end = _scan_quoted_literal(
+                text, index, char, allow_escaped_newline=False
+            )
+            token_kind = "string"
+        elif dialect == "go" and char == "`":
+            raw_end = text.find("`", index + 1)
+            token_end = None if raw_end < 0 else raw_end + 1
+            token_kind = "string"
+        elif dialect == "go" and char == "'":
+            token_end = _scan_quoted_literal(
+                text, index, char, allow_escaped_newline=False
+            )
+            token_kind = "rune"
+
+        if char in {'"', "'", "`"} and token_end is None:
+            return None
+        if token_end is not None:
+            literal_value = text[slice(index + 1, token_end - 1)]
+            tokens.append(
+                SourceToken(token_kind, literal_value, brace_depth)
+            )
+            index = token_end
+            continue
+        if char.isalpha() or char == "_":
+            end = index + 1
+            while end < len(text) and (text[end].isalnum() or text[end] == "_"):
+                end += 1
+            tokens.append(SourceToken("identifier", text[index:end], brace_depth))
+            index = end
+            continue
+        if char in _SOURCE_PUNCTUATION:
+            if char == "}" and brace_depth == 0:
+                return None
+            tokens.append(SourceToken("punctuation", char, brace_depth))
+            if char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth -= 1
+            index += 1
+            continue
+        tokens.append(SourceToken("unsupported", char, brace_depth))
+        index += 1
+    return tokens if brace_depth == 0 else None
+
+
+def _matches(token: SourceToken, pattern: TokenPattern) -> bool:
+    return (token.kind, token.value) == pattern
+
+
+def _matches_sequence(
+    tokens: list[SourceToken], start: int, patterns: tuple[TokenPattern, ...]
+) -> bool:
+    if start < 0 or start + len(patterns) > len(tokens):
+        return False
+    return all(
+        _matches(tokens[start + offset], pattern)
+        for offset, pattern in enumerate(patterns)
+    )
 
 
 def _literal_tokens(
     text: str,
-    prefix: tuple[SourceToken, ...],
+    prefix: tuple[TokenPattern, ...],
     opening: str,
     closing: str,
-    suffix: tuple[SourceToken, ...] = (),
+    suffix: tuple[TokenPattern, ...] = (),
+    *,
+    dialect: str,
+    alternate_prefixes: tuple[tuple[TokenPattern, ...], ...] = (),
 ) -> list[SourceToken] | None:
-    tokens = _source_tokens(text)
-    starts = [
-        index
-        for index in range(len(tokens) - len(prefix) + 1)
-        if tuple(tokens[index : index + len(prefix)]) == prefix
-    ]
+    tokens = _source_tokens(text, dialect)
+    if tokens is None:
+        return None
+
+    starts: list[tuple[int, int]] = []
+    for candidate in (prefix, *alternate_prefixes):
+        starts.extend(
+            (index, len(candidate))
+            for index in range(len(tokens) - len(candidate) + 1)
+            if tokens[index].brace_depth == 0
+            and _matches_sequence(tokens, index, candidate)
+        )
+    starts = list(dict.fromkeys(starts))
     if len(starts) != 1:
         return None
 
-    body_start = starts[0] + len(prefix)
+    body_start = starts[0][0] + starts[0][1]
     depth = 1
     for index in range(body_start, len(tokens)):
-        if tokens[index] == ("punctuation", opening):
+        if _matches(tokens[index], ("punctuation", opening)):
             depth += 1
-        elif tokens[index] == ("punctuation", closing):
+        elif _matches(tokens[index], ("punctuation", closing)):
             depth -= 1
             if depth == 0:
-                if tuple(tokens[index + 1 : index + 1 + len(suffix)]) != suffix:
+                if not _matches_sequence(tokens, index + 1, suffix):
                     return None
                 return tokens[body_start:index]
     return None
@@ -390,14 +566,14 @@ def _comma_separated_strings(tokens: list[SourceToken]) -> list[str] | None:
     values: list[str] = []
     index = 0
     while index < len(tokens):
-        kind, value = tokens[index]
-        if kind != "string":
+        token = tokens[index]
+        if token.kind != "string":
             return None
-        values.append(value)
+        values.append(token.value)
         index += 1
         if index == len(tokens):
             break
-        if tokens[index] != ("punctuation", ","):
+        if not _matches(tokens[index], ("punctuation", ",")):
             return None
         index += 1
     return values
@@ -409,20 +585,20 @@ def _string_map(tokens: list[SourceToken]) -> dict[str, str] | None:
     while index < len(tokens):
         if index + 2 >= len(tokens):
             return None
-        key_kind, key = tokens[index]
-        value_kind, value = tokens[index + 2]
+        key_token = tokens[index]
+        value_token = tokens[index + 2]
         if (
-            key_kind != "string"
-            or tokens[index + 1] != ("punctuation", ":")
-            or value_kind != "string"
-            or key in values
+            key_token.kind != "string"
+            or not _matches(tokens[index + 1], ("punctuation", ":"))
+            or value_token.kind != "string"
+            or key_token.value in values
         ):
             return None
-        values[key] = value
+        values[key_token.value] = value_token.value
         index += 3
         if index == len(tokens):
             break
-        if tokens[index] != ("punctuation", ","):
+        if not _matches(tokens[index], ("punctuation", ",")):
             return None
         index += 1
     return values
@@ -432,27 +608,33 @@ def _record_list(tokens: list[SourceToken]) -> list[dict[str, str]] | None:
     records: list[dict[str, str]] = []
     index = 0
     while index < len(tokens):
-        if tokens[index] != ("punctuation", "{"):
+        if not _matches(tokens[index], ("punctuation", "{")):
             return None
         index += 1
         fields: dict[str, str] = {}
-        while index < len(tokens) and tokens[index] != ("punctuation", "}"):
+        while index < len(tokens) and not _matches(
+            tokens[index], ("punctuation", "}")
+        ):
             if index + 2 >= len(tokens):
                 return None
-            field_kind, field = tokens[index]
-            value_kind, value = tokens[index + 2]
+            field_token = tokens[index]
+            value_token = tokens[index + 2]
             if (
-                field_kind != "identifier"
-                or tokens[index + 1] != ("punctuation", ":")
-                or value_kind != "string"
-                or field in fields
+                field_token.kind != "identifier"
+                or not _matches(tokens[index + 1], ("punctuation", ":"))
+                or value_token.kind != "string"
+                or field_token.value in fields
             ):
                 return None
-            fields[field] = value
+            fields[field_token.value] = value_token.value
             index += 3
-            if index < len(tokens) and tokens[index] == ("punctuation", ","):
+            if index < len(tokens) and _matches(
+                tokens[index], ("punctuation", ",")
+            ):
                 index += 1
-            elif index >= len(tokens) or tokens[index] != ("punctuation", "}"):
+            elif index >= len(tokens) or not _matches(
+                tokens[index], ("punctuation", "}")
+            ):
                 return None
         if index >= len(tokens) or set(fields) != {"Tool", "Slug", "Execution"}:
             return None
@@ -460,7 +642,7 @@ def _record_list(tokens: list[SourceToken]) -> list[dict[str, str]] | None:
         index += 1
         if index == len(tokens):
             break
-        if tokens[index] != ("punctuation", ","):
+        if not _matches(tokens[index], ("punctuation", ",")):
             return None
         index += 1
     return records
@@ -482,6 +664,7 @@ def _parse_go_map(text: str, marker: str) -> dict[str, str] | None:
         ),
         "{",
         "}",
+        dialect="go",
     )
     if tokens is None:
         return None
@@ -505,6 +688,21 @@ def _parse_web_tools(text: str) -> list[str] | None:
             ("identifier", "const"),
             ("punctuation", ";"),
         ),
+        dialect="typescript",
+        alternate_prefixes=(
+            (
+                ("identifier", "export"),
+                ("identifier", "const"),
+                ("identifier", "CANONICAL_AGENT_TOOLS"),
+                ("punctuation", ":"),
+                ("identifier", "readonly"),
+                ("identifier", "string"),
+                ("punctuation", "["),
+                ("punctuation", "]"),
+                ("punctuation", "="),
+                ("punctuation", "["),
+            ),
+        ),
     )
     if tokens is None:
         return None
@@ -525,6 +723,7 @@ def _parse_web_agent_definitions(text: str) -> list[dict[str, str]] | None:
         ),
         "{",
         "}",
+        dialect="go",
     )
     if tokens is None:
         return None

@@ -380,6 +380,47 @@ def mutate_scoped_source(
     path.write_text(source.replace(old, new, 1), encoding="utf-8")
 
 
+def scoped_declaration(
+    root: Path,
+    source_name: str,
+    marker: str,
+    terminator: str = ";",
+) -> str:
+    source = (root / checker.SCOPED_FILES[source_name]).read_text(encoding="utf-8")
+    marker_index = source.index(marker)
+    start = source.rfind("\n", 0, marker_index) + 1
+    if terminator == ";":
+        end = source.index(terminator, marker_index) + 1
+    else:
+        opening = source.index("{", marker_index)
+        end = source.index("\n}", opening) + 2
+    return source[start:end]
+
+
+def write_scoped_source(root: Path, source_name: str, source: str) -> None:
+    (root / checker.SCOPED_FILES[source_name]).write_text(source, encoding="utf-8")
+
+
+def typescript_string_decoy(kind: str, declaration: str) -> str:
+    inline = " ".join(declaration.splitlines())
+    if kind == "single":
+        value = "escaped ' prefix " + inline
+        return "const parserDecoy = '" + value.replace("\\", "\\\\").replace("'", "\\'") + "';"
+    if kind == "double":
+        return "const parserDecoy = " + json.dumps('escaped " prefix ' + inline) + ";"
+    if kind == "template":
+        return "const parserDecoy = `escaped \\` prefix\n" + declaration + "\n`;"
+    raise AssertionError(f"unsupported TypeScript decoy kind: {kind}")
+
+
+def go_string_decoy(kind: str, declaration: str) -> str:
+    if kind == "interpreted":
+        return "var parserDecoy = " + json.dumps(" ".join(declaration.splitlines()))
+    if kind == "raw":
+        return "var parserDecoy = `\n" + declaration + "\n`"
+    raise AssertionError(f"unsupported Go decoy kind: {kind}")
+
+
 @pytest.mark.parametrize("agent", checker.RESULT_ARCHIVE_AGENT_SLUGS)
 def test_archive_fixture_and_manifest_cannot_drift_together(
     tmp_path: Path, agent: str
@@ -466,6 +507,344 @@ def test_archive_integer_fields_reject_booleans(
             field_violation,
         ],
     )
+
+
+@pytest.mark.parametrize("kind", ["single", "double", "template"])
+@pytest.mark.parametrize("keep_real", [True, False])
+def test_typescript_string_declarations_are_opaque_to_full_checker(
+    tmp_path: Path, kind: str, keep_real: bool
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    decoy = typescript_string_decoy(kind, declaration)
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    if keep_real:
+        write_scoped_source(root, "web_agents", decoy + "\n" + source)
+        assert checker.check(root) == []
+    else:
+        write_scoped_source(root, "web_agents", source.replace(declaration, decoy, 1))
+        assert checker.check(root) == [
+            "Web canonical agent list is missing or malformed"
+        ]
+
+
+def test_multiline_template_decoy_exposes_typed_runtime_drift(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    source = source.replace(
+        "export const CANONICAL_AGENT_TOOLS = [",
+        "export const CANONICAL_AGENT_TOOLS: readonly string[] = [",
+        1,
+    ).replace('  "GeneNetworkAgent",\n', "", 1)
+    write_scoped_source(
+        root,
+        "web_agents",
+        typescript_string_decoy("template", declaration) + "\n" + source,
+    )
+
+    violations = checker.check(root)
+    assert violations[0] == "Web canonical agent tools missing: GeneNetworkAgent"
+    assert "Web canonical agent list is missing or malformed" not in violations
+
+
+def test_interpolated_nested_template_decoy_is_opaque(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    decoy = (
+        "const parserDecoy = `prefix ${(() => `nested ${value}`)()}\n"
+        + declaration
+        + "\nsuffix`;\n"
+    )
+    path.write_text(decoy + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+@pytest.mark.parametrize("kind", ["interpreted", "raw"])
+@pytest.mark.parametrize("keep_real", [True, False])
+def test_go_string_declarations_are_opaque_to_full_checker(
+    tmp_path: Path, kind: str, keep_real: bool
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "go_agents", "var CanonicalAgentTool", "\n}"
+    )
+    decoy = go_string_decoy(kind, declaration)
+    path = root / checker.SCOPED_FILES["go_agents"]
+    source = path.read_text(encoding="utf-8")
+    if keep_real:
+        source = source.replace("package bot\n", "package bot\n\n" + decoy + "\n", 1)
+        write_scoped_source(root, "go_agents", source)
+        assert checker.check(root) == []
+    else:
+        write_scoped_source(root, "go_agents", source.replace(declaration, decoy, 1))
+        assert checker.check(root) == [
+            "Go canonical agent map is missing or malformed"
+        ]
+
+
+@pytest.mark.parametrize("keep_real", [True, False])
+def test_go_rune_literals_are_opaque_to_full_checker(
+    tmp_path: Path, keep_real: bool
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "go_agents", "var CanonicalAgentTool", "\n}"
+    )
+    rune_decoy = "var parserRuneDecoys = []rune{'}', '\\'', '\\\\'}"
+    path = root / checker.SCOPED_FILES["go_agents"]
+    source = path.read_text(encoding="utf-8")
+    if keep_real:
+        source = source.replace(
+            "package bot\n", "package bot\n\n" + rune_decoy + "\n", 1
+        )
+        write_scoped_source(root, "go_agents", source)
+        assert checker.check(root) == []
+    else:
+        write_scoped_source(
+            root, "go_agents", source.replace(declaration, "var parserDecoy = 'C'", 1)
+        )
+        assert checker.check(root) == [
+            "Go canonical agent map is missing or malformed"
+        ]
+
+
+@pytest.mark.parametrize("kind", ["interpreted", "raw"])
+@pytest.mark.parametrize("keep_real", [True, False])
+def test_go_record_list_string_declarations_are_opaque_to_full_checker(
+    tmp_path: Path, kind: str, keep_real: bool
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "go_aliases", "var WebAgentDefinitions", "\n}"
+    )
+    decoy = go_string_decoy(kind, declaration)
+    path = root / checker.SCOPED_FILES["go_aliases"]
+    source = path.read_text(encoding="utf-8")
+    if keep_real:
+        source = source.replace("package bot\n", "package bot\n\n" + decoy + "\n", 1)
+        write_scoped_source(root, "go_aliases", source)
+        assert checker.check(root) == []
+    else:
+        write_scoped_source(root, "go_aliases", source.replace(declaration, decoy, 1))
+        assert "Web agent definitions are missing or malformed" in checker.check(root)
+
+
+def test_function_local_go_decoy_cannot_hide_global_runtime_drift(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "go_agents", "var CanonicalAgentTool", "\n}"
+    )
+    local_decoy = (
+        "func parserDecoy() {\n"
+        + "\n".join("\t" + line for line in declaration.splitlines())
+        + "\n\t_ = CanonicalAgentTool\n}\n"
+    )
+    path = root / checker.SCOPED_FILES["go_agents"]
+    source = path.read_text(encoding="utf-8")
+    source = source.replace('\t"network":     "GeneNetworkAgent",\n', "", 1)
+    source = source.replace("package bot\n", "package bot\n\n" + local_decoy, 1)
+    write_scoped_source(root, "go_agents", source)
+
+    violations = checker.check(root)
+    assert violations[0] == "Go canonical agent slugs missing: network"
+    assert "Go canonical agent map is missing or malformed" not in violations
+
+
+@pytest.mark.parametrize(
+    ("source_name", "marker", "terminator", "expected"),
+    [
+        (
+            "web_agents",
+            "export const CANONICAL_AGENT_TOOLS",
+            ";",
+            "Web canonical agent list is missing or malformed",
+        ),
+        (
+            "go_agents",
+            "var CanonicalAgentTool",
+            "\n}",
+            "Go canonical agent map is missing or malformed",
+        ),
+        (
+            "go_aliases",
+            "var WebAgentDefinitions",
+            "\n}",
+            "Web agent definitions are missing or malformed",
+        ),
+        (
+            "go_aliases",
+            "var aliasToSlug",
+            "\n}",
+            "Go alias-to-slug map is missing or malformed",
+        ),
+        (
+            "go_query_map",
+            "var slugToToolName",
+            "\n}",
+            "Go query slug-to-tool map is missing or malformed",
+        ),
+    ],
+)
+def test_duplicate_top_level_declarations_fail_closed(
+    tmp_path: Path,
+    source_name: str,
+    marker: str,
+    terminator: str,
+    expected: str,
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(root, source_name, marker, terminator)
+    path = root / checker.SCOPED_FILES[source_name]
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n" + declaration + "\n",
+        encoding="utf-8",
+    )
+    assert expected in checker.check(root)
+
+
+def test_duplicate_go_map_key_fails_closed_in_full_checker(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    mutate_scoped_source(
+        root,
+        "go_agents",
+        '\t"network":     "GeneNetworkAgent",',
+        (
+            '\t"network":     "GeneNetworkAgent",\n'
+            '\t"network":     "GeneNetworkAgent",'
+        ),
+    )
+    assert checker.check(root)[0] == "Go canonical agent map is missing or malformed"
+
+
+def test_duplicate_go_record_field_fails_closed_in_full_checker(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    mutate_scoped_source(
+        root,
+        "go_aliases",
+        'Tool: "InSilicoResearchAgent", Slug: "research"',
+        (
+            'Tool: "InSilicoResearchAgent", Tool: "InSilicoResearchAgent", '
+            'Slug: "research"'
+        ),
+    )
+    assert "Web agent definitions are missing or malformed" in checker.check(root)
+
+
+@pytest.mark.parametrize(
+    ("source_name", "suffix", "expected"),
+    [
+        ("web_agents", "\nconst broken = 'unterminated", "Web canonical agent list"),
+        ("web_agents", '\nconst broken = "unterminated', "Web canonical agent list"),
+        ("web_agents", "\nconst broken = `unterminated", "Web canonical agent list"),
+        ("web_agents", "\n/* unterminated", "Web canonical agent list"),
+        ("go_agents", '\nvar broken = "unterminated', "Go canonical agent map"),
+        ("go_agents", "\nvar broken = `unterminated", "Go canonical agent map"),
+        ("go_agents", "\nvar broken = 'x", "Go canonical agent map"),
+        ("go_agents", "\n/* unterminated", "Go canonical agent map"),
+    ],
+)
+def test_unclosed_lexical_context_fails_closed(
+    tmp_path: Path, source_name: str, suffix: str, expected: str
+):
+    root = contract_tree(tmp_path)
+    path = root / checker.SCOPED_FILES[source_name]
+    path.write_text(path.read_text(encoding="utf-8") + suffix, encoding="utf-8")
+    violations = checker.check(root)
+    assert any(expected in violation and "malformed" in violation for violation in violations)
+
+
+def test_string_comment_and_rune_braces_do_not_change_nesting(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    web_path = root / checker.SCOPED_FILES["web_agents"]
+    web = web_path.read_text(encoding="utf-8")
+    web_path.write_text(
+        "const single = '} ] {';\n"
+        'const double = "} ] { // not a comment";\n'
+        "const template = `} ] { /* not a comment */`;\n"
+        + web,
+        encoding="utf-8",
+    )
+    go_path = root / checker.SCOPED_FILES["go_agents"]
+    go = go_path.read_text(encoding="utf-8")
+    go_path.write_text(
+        go.replace(
+            "package bot\n",
+            "package bot\n\n"
+            "var interpreted = \"} { /* not a comment */\"\n"
+            "var raw = `} { // not a comment`\n"
+            "var rune = '}'\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    assert checker.check(root) == []
+
+
+def test_commented_declaration_is_opaque_but_real_declaration_still_counts(
+    tmp_path: Path,
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    path.write_text("/*\n" + declaration + "\n*/\n" + source, encoding="utf-8")
+    assert checker.check(root) == []
+
+
+@pytest.mark.parametrize("comment_kind", ["line", "block"])
+def test_declaration_only_in_comment_fails_closed(
+    tmp_path: Path, comment_kind: str
+):
+    root = contract_tree(tmp_path)
+    declaration = scoped_declaration(
+        root, "web_agents", "export const CANONICAL_AGENT_TOOLS"
+    )
+    if comment_kind == "line":
+        decoy = "\n".join("// " + line for line in declaration.splitlines())
+    else:
+        decoy = "/*\n" + declaration + "\n*/"
+    path = root / checker.SCOPED_FILES["web_agents"]
+    source = path.read_text(encoding="utf-8")
+    path.write_text(source.replace(declaration, decoy, 1), encoding="utf-8")
+    assert checker.check(root) == [
+        "Web canonical agent list is missing or malformed"
+    ]
+
+
+def test_typescript_declaration_suffix_is_required(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    mutate_scoped_source(root, "web_agents", "] as const;", "];")
+    assert checker.check(root) == [
+        "Web canonical agent list is missing or malformed"
+    ]
+
+
+def test_root_confinement_output_is_deterministic_and_bounded(tmp_path: Path):
+    root = contract_tree(tmp_path / "root")
+    scoped = root / checker.SCOPED_FILES["web_agents"]
+    outside = tmp_path / "outside-agents.ts"
+    outside.write_bytes(scoped.read_bytes())
+    scoped.unlink()
+    scoped.symlink_to(outside)
+
+    first = checker.check(root)
+    assert first[0].startswith("refusing to read out-of-scope path:")
+    assert all(checker.check(root) == first for _ in range(20))
+    assert len(first) <= checker.MAX_FAILURE_LINES
+    assert all(len(violation) <= checker.MAX_FAILURE_LENGTH for violation in first)
 
 
 @pytest.mark.parametrize(
