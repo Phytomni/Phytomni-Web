@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
@@ -587,9 +588,15 @@ def test_checker_rejects_web_research_go_contract_source_drift(
     root = minimal_tree(tmp_path)
     path = root / relative
     source = path.read_text(encoding="utf-8")
-    assert source.count(accepted) == 1
-    replacement = f"// accepted spelling: {accepted}\n\t{drifted}"
-    path.write_text(source.replace(accepted, replacement), encoding="utf-8")
+    pattern = re.compile(r"[ \t]+".join(re.escape(part) for part in accepted.split()))
+    matches = list(pattern.finditer(source))
+    assert len(matches) == 1
+    match = matches[0]
+    replacement = f"// accepted spelling: {match.group()}\n\t{drifted}"
+    path.write_text(
+        source[: match.start()] + replacement + source[match.end() :],
+        encoding="utf-8",
+    )
 
     errors = checker.check(root)
     assert any("Research Go contract" in error for error in errors)
