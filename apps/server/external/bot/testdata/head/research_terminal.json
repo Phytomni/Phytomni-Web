@@ -10,7 +10,6 @@
   "expires_at": "2026-08-12T01:00:00+00:00",
   "model": null,
   "origin": "remote",
-  "query": null,
   "request_id": null,
   "result": {
     "execution": {
@@ -82,6 +81,7 @@
     }
   },
   "run_id": "run-synthetic-research",
+  "stage": null,
   "status": "succeeded",
   "task_ids": [
     "task-synthetic-research-001"

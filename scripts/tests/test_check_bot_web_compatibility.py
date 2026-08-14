@@ -15,7 +15,7 @@ import pytest
 import check_bot_web_compatibility as checker
 
 
-RELEASE_SHA = "e6727d561efa8b0d933e9ca7a2706806638ffbea"
+RELEASE_SHA = "38349aab1f6e2d65c286723beb3e5a426027e77a"
 RELEASE_AGENTS = [
     "chat",
     "knowledge",
@@ -37,7 +37,7 @@ REQUIRED_FIXTURES = [
 ]
 ARCHIVE_FIXTURE_HASHES = {
     "analyst": "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
-    "research": "80199a81f713589511301052ba3f1f78f0529c460a80cc703dae2e7a98150052",
+    "research": "9655b1e1b677b36b75a46ced3169456f2ef0db0a457205896803b1a9da5d8d26",
     "network": "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
     "design": "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2",
 }
@@ -68,6 +68,13 @@ def release_manifest() -> dict[str, object]:
 
 def test_manifest_has_release_pins_and_required_cases():
     assert checker.validate_manifest(release_manifest()) == []
+
+
+def test_release_sha_pins_agree():
+    manifest_path = checker.ROOT / checker.MANIFEST_REL
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert RELEASE_SHA == checker.RELEASE_BOT_COMMIT == manifest["bot_commit"]
 
 
 @pytest.mark.parametrize(
@@ -150,6 +157,16 @@ def test_result_archive_contract_rejects_one_mutation_at_a_time(
     assert any(marker in violation for violation in violations), name
     assert all("not-for-output" not in violation for violation in violations)
     assert all(len(violation) <= checker.MAX_FAILURE_LENGTH for violation in violations)
+
+
+def test_research_fixture_byte_drift_fails(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    fixture = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS["research"]
+    fixture.write_bytes(fixture.read_bytes() + b" ")
+
+    violations = checker.check(root)
+
+    assert "result archive fixture sha256 does not match manifest" in violations
 
 
 def archive_fixture(root: Path, agent: str) -> tuple[Path, dict[str, Any]]:

@@ -21,7 +21,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
 
-RELEASE_BOT_COMMIT = "cc3699dd01ff16eece570aefabf24302d31b991d"
+RELEASE_BOT_COMMIT = "38349aab1f6e2d65c286723beb3e5a426027e77a"
 REQUIRED_AGENT_SLUGS = (
     "chat",
     "knowledge",

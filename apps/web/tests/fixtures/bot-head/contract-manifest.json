@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "bot_commit": "cc3699dd01ff16eece570aefabf24302d31b991d",
+  "bot_commit": "38349aab1f6e2d65c286723beb3e5a426027e77a",
   "required_agents": [
     "chat",
     "knowledge",
@@ -29,7 +29,7 @@
       },
       "research": {
         "path": "apps/server/external/bot/testdata/head/research_terminal.json",
-        "sha256": "80199a81f713589511301052ba3f1f78f0529c460a80cc703dae2e7a98150052"
+        "sha256": "9655b1e1b677b36b75a46ced3169456f2ef0db0a457205896803b1a9da5d8d26"
       },
       "network": {
         "path": "apps/server/external/bot/testdata/head/network_terminal.json",
