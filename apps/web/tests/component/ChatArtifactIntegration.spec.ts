@@ -1129,6 +1129,40 @@ describe("Chat artifact shell integration", () => {
     expect(testState.getAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
+  it("loads and caches Research Activity while the current dialogue is sending", async () => {
+    const message = { ...researchMessage, id: "66" };
+    const { wrapper, state } = await mountProductionChat(1440, {
+      messagesA: [message],
+    });
+    await nextTick();
+    await nextTick();
+
+    const chatState = state.getChatState("A");
+    if (!chatState.artifactOpen) {
+      await wrapper.get('[data-test="artifact-open"]').trigger("click");
+    }
+    chatState.isSending = true;
+    await nextTick();
+
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    await flushPromises();
+
+    expect(chatState.artifactTab).toBe("activity");
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledTimes(1);
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledWith({ id: "66" });
+    expect(chatState.logData["66"]?.text).toBe(
+      "Synthetic Research execution log"
+    );
+
+    chatState.isSending = false;
+    await nextTick();
+    await wrapper.get('[data-tab-id="content"]').trigger("click");
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    await flushPromises();
+
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves interop provenance when the artifact has only a projection", async () => {
     const { wrapper } = await mountProductionChat(1440, {
       messagesA: [interopProjectionOnlyResearchMessage],

@@ -1,5 +1,5 @@
 import { nextTick, watch } from "vue";
-import type { Ref, WritableComputedRef } from "vue";
+import type { Ref } from "vue";
 import type { AnalystAgentLog } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import { ElMessage } from "element-plus";
@@ -43,19 +43,12 @@ function mergeLogResponse(
 }
 
 export function useLogView(opts: {
-  isSending: WritableComputedRef<boolean>;
   currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
   scrollToBottom: () => Promise<void>;
 }) {
-  const {
-    isSending,
-    currentChat,
-    currentChatId,
-    getChatState,
-    scrollToBottom,
-  } = opts;
+  const { currentChat, currentChatId, getChatState, scrollToBottom } = opts;
 
   const fetchLogIfNeeded = async (
     rowId: string,
@@ -119,7 +112,6 @@ export function useLogView(opts: {
   );
 
   const setLogExpanded = async (message: ChatMessage, expanded: boolean) => {
-    if (isSending.value) return;
     if (!currentChatId.value) return;
 
     const rowId = deriveAnalystLogRowId(message);

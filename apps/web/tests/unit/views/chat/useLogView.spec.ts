@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  computed,
-  ref,
-  nextTick,
-  type Ref,
-  type WritableComputedRef,
-} from "vue";
+import { ref, nextTick, type Ref } from "vue";
 import type { AnalystAgentLog, ApiEnvelope, MutationData } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
 import { buildApiEnvelope } from "../../../helpers/apiBuilders";
@@ -99,7 +93,6 @@ describe("deriveAnalystLogRowId / deriveAnalystLogTaskId", () => {
 
 describe("useLogView", () => {
   let stateMap: Map<string, ChatUIState>;
-  let isSending: Ref<boolean>;
   let currentChatId: Ref<string>;
   let currentChat: Ref<ChatView | null>;
   let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
@@ -129,20 +122,10 @@ describe("useLogView", () => {
       return mustGet(stateMap.get(id), `chat state ${id}`);
     };
 
-    isSending = ref(false);
     currentChatId = ref("A");
     currentChat = ref({ messages: [] });
     scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
   });
-
-  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
-    return computed({
-      get: () => source.value,
-      set: (value: T) => {
-        source.value = value;
-      },
-    });
-  }
 
   function logResponse(text: string, code = 200): ApiEnvelope<AnalystAgentLog> {
     return buildApiEnvelope(
@@ -179,7 +162,6 @@ describe("useLogView", () => {
 
   function makeComposable() {
     return useLogView({
-      isSending: writableRef(isSending),
       currentChat,
       currentChatId,
       getChatState,
@@ -423,15 +405,6 @@ describe("useLogView", () => {
     expect(getChatState("A").updatingLog["41"]).toBe(false);
     expect(getChatState("B").updatingLog["41"]).toBeUndefined();
     expect(ElMessage.success).toHaveBeenCalled();
-  });
-
-  it("toggle gate: returns early when isSending is true", async () => {
-    isSending.value = true;
-    const message = msg({ id: "51" });
-    const { setLogExpanded } = makeComposable();
-    await setLogExpanded(message, true);
-    expect(mockGetAnalystAgentLog).not.toHaveBeenCalled();
-    expect(getChatState("A").activityExpandedByMessage).toEqual({});
   });
 
   it("legacy initialization ignores absent log rows instead of throwing", async () => {

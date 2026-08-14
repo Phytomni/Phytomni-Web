@@ -1807,7 +1807,6 @@ const {
   authorizedAgentTools,
 });
 const { setLogExpanded, updateLog, retryLog, refreshModernLog } = useLogView({
-  isSending,
   currentChat,
   currentChatId,
   getChatState,
