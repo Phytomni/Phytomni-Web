@@ -17,64 +17,101 @@
       :rehype-plugins="rehypePlugins"
     >
       <template #a="slotProps">
-        <ScientificImage
-          v-if="imageResourceFor(slotHref(slotProps))"
-          :resource="imageResourceFor(slotHref(slotProps))!"
-          :alt="resourceAlt(slotProps)"
-        />
-        <ScientificCifViewer
-          v-else-if="cifResourceFor(slotHref(slotProps))"
-          :resource="cifResourceFor(slotHref(slotProps))!"
-        />
-        <ScientificResourceLink
-          v-else-if="activatableResourceFor(slotHref(slotProps))"
-          :resource="activatableResourceFor(slotHref(slotProps))!"
-          @activate="emit('resource-activate', $event)"
-        />
-        <a
-          v-else-if="citationFor(slotProps)"
-          class="scientific-citation__link"
-          :href="safeAnchorHref(slotHref(slotProps)) ?? '#'"
-          @click.prevent="emit('citation-activate', citationFor(slotProps)!)"
+        <ScientificRenderBoundary
+          :reset-key="renderRevision"
+          @error="handleNodeRenderError"
         >
-          <component :is="slotProps.children" />
-        </a>
-        <a
-          v-else-if="safeAnchorHref(slotHref(slotProps))"
-          :href="safeAnchorHref(slotHref(slotProps))!"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <component :is="slotProps.children" />
-        </a>
-        <span
-          v-else
-          class="scientific-resource scientific-resource--unavailable"
-        >
-          {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
-        </span>
+          <ScientificImage
+            v-if="imageResourceFor(slotHref(slotProps))"
+            :resource="imageResourceFor(slotHref(slotProps))!"
+            :alt="resourceAlt(slotProps)"
+          />
+          <ScientificCifViewer
+            v-else-if="cifResourceFor(slotHref(slotProps))"
+            :resource="cifResourceFor(slotHref(slotProps))!"
+          />
+          <ScientificResourceLink
+            v-else-if="activatableResourceFor(slotHref(slotProps))"
+            :resource="activatableResourceFor(slotHref(slotProps))!"
+            @activate="emit('resource-activate', $event)"
+          />
+          <a
+            v-else-if="citationFor(slotProps)"
+            class="scientific-citation__link"
+            :href="safeAnchorHref(slotHref(slotProps)) ?? '#'"
+            :aria-label="citationLabel(slotProps)"
+            @click="emit('citation-activate', citationFor(slotProps)!)"
+          >
+            <component :is="slotProps.children" />
+          </a>
+          <a
+            v-else-if="safeAnchorHref(slotHref(slotProps))"
+            :href="safeAnchorHref(slotHref(slotProps))!"
+            :target="opensInNewTab(slotHref(slotProps)) ? '_blank' : undefined"
+            :rel="
+              opensInNewTab(slotHref(slotProps))
+                ? 'noopener noreferrer'
+                : undefined
+            "
+          >
+            <component :is="slotProps.children" />
+          </a>
+          <span
+            v-else
+            class="scientific-resource scientific-resource--unavailable"
+          >
+            {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
+          </span>
+          <template #fallback>
+            <span class="scientific-markdown__node-fallback">
+              <component :is="slotProps.children" />
+            </span>
+          </template>
+        </ScientificRenderBoundary>
       </template>
       <template #img="slotProps">
-        <ScientificCifViewer
-          v-if="cifResourceFor(slotHref(slotProps))"
-          :resource="cifResourceFor(slotHref(slotProps))!"
-        />
-        <ScientificImage
-          v-else-if="imageResourceFor(slotHref(slotProps))"
-          :resource="imageResourceFor(slotHref(slotProps))!"
-          :alt="resourceAlt(slotProps)"
-        />
-        <span
-          v-else
-          class="scientific-resource scientific-resource--unavailable"
+        <ScientificRenderBoundary
+          :reset-key="renderRevision"
+          @error="handleNodeRenderError"
         >
-          {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
-        </span>
+          <ScientificCifViewer
+            v-if="cifResourceFor(slotHref(slotProps))"
+            :resource="cifResourceFor(slotHref(slotProps))!"
+          />
+          <ScientificImage
+            v-else-if="imageResourceFor(slotHref(slotProps))"
+            :resource="imageResourceFor(slotHref(slotProps))!"
+            :alt="resourceAlt(slotProps)"
+          />
+          <span
+            v-else
+            class="scientific-resource scientific-resource--unavailable"
+          >
+            {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
+          </span>
+          <template #fallback>
+            <span
+              class="scientific-markdown__node-fallback scientific-resource scientific-resource--unavailable"
+            >
+              {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
+            </span>
+          </template>
+        </ScientificRenderBoundary>
       </template>
       <template #block-code="{ content, language }">
-        <slot name="block-code" :content="content" :language="language">
-          <pre><code :class="language ? `language-${language}` : undefined">{{ content }}</code></pre>
-        </slot>
+        <ScientificRenderBoundary
+          :reset-key="renderRevision"
+          @error="handleNodeRenderError"
+        >
+          <slot name="block-code" :content="content" :language="language">
+            <pre><code :class="language ? `language-${language}` : undefined">{{ content }}</code></pre>
+          </slot>
+          <template #fallback>
+            <pre class="scientific-markdown__node-fallback"><code
+                :class="language ? `language-${language}` : undefined"
+              >{{ content }}</code></pre>
+          </template>
+        </ScientificRenderBoundary>
       </template>
     </XMarkdown>
   </div>
@@ -87,10 +124,12 @@ import type { SanitizeOptions } from "vue-element-plus-x/types/XMarkdownCore/cor
 import type { PluggableList } from "unified";
 import ScientificCifViewer from "@/components/scientific/ScientificCifViewer.vue";
 import ScientificImage from "@/components/scientific/ScientificImage.vue";
+import ScientificRenderBoundary from "@/components/scientific/ScientificRenderBoundary.vue";
 import ScientificResourceLink from "@/components/scientific/ScientificResourceLink.vue";
 import { safeHrefValue } from "@/utils/sanitize-markup";
 import {
   parseCitationBody,
+  requireCitationNamespace,
   scientificCitationRemarkPlugin,
 } from "@/utils/scientific-markdown/citations";
 import { rehypeScientificHeadings } from "@/utils/scientific-markdown/headings";
@@ -134,11 +173,14 @@ const emit = defineEmits<{
 
 const renderedSource = ref(props.source);
 const showFallback = ref(false);
+const renderRevision = ref(0);
 let pendingFrame: number | undefined;
 let pendingSource = props.source;
 
 const safeNamespace = computed(() =>
-  props.citationNamespace.replace(/[^A-Za-z0-9-]/g, "")
+  props.citationNamespace
+    ? requireCitationNamespace(props.citationNamespace)
+    : ""
 );
 const resourceIndex = computed(() => indexScientificResources(props.resources));
 let headingSignature = "";
@@ -202,12 +244,17 @@ const sanitizeOptions: SanitizeOptions = {
 function citationFor(
   slotProps: Record<string, unknown>
 ): ScientificCitationActivation | null {
-  const label = slotProps.ariaLabel ?? slotProps["aria-label"];
+  const label = citationLabel(slotProps);
   if (typeof label !== "string" || !label.startsWith("Citation ")) return null;
   const indices = parseCitationBody(label.slice("Citation ".length))?.indices;
   return indices && safeNamespace.value
     ? { namespace: safeNamespace.value, indices }
     : null;
+}
+
+function citationLabel(slotProps: Record<string, unknown>): string | undefined {
+  const label = slotProps.ariaLabel ?? slotProps["aria-label"];
+  return typeof label === "string" ? label : undefined;
 }
 
 function slotHref(slotProps: Record<string, unknown>): string {
@@ -224,6 +271,18 @@ function resourceAlt(slotProps: Record<string, unknown>): string {
 
 function safeAnchorHref(href: string): string | null {
   return safeHrefValue(href);
+}
+
+function opensInNewTab(href: string): boolean {
+  try {
+    const target = new URL(href, window.location.href);
+    return (
+      (target.protocol === "http:" || target.protocol === "https:") &&
+      target.origin !== window.location.origin
+    );
+  } catch {
+    return false;
+  }
 }
 
 function imageResourceFor(href: string) {
@@ -248,6 +307,10 @@ function publishHeadings(headings: ScientificHeading[]): void {
   emit("headings", headings);
 }
 
+function handleNodeRenderError(): void {
+  emit("render-error", "render");
+}
+
 function cancelPendingFrame(): void {
   if (pendingFrame === undefined) return;
   cancelAnimationFrame(pendingFrame);
@@ -270,6 +333,16 @@ function updateRenderedSource(source: string): void {
 }
 
 watch(() => props.source, updateRenderedSource, { immediate: true });
+watch(renderedSource, () => {
+  renderRevision.value += 1;
+});
+watch(
+  () => props.resources,
+  () => {
+    renderRevision.value += 1;
+  },
+  { deep: true }
+);
 watch(
   () => props.streaming,
   (streaming) => {

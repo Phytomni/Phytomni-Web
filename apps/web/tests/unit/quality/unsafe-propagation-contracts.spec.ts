@@ -9,12 +9,12 @@ const rootSource = (relativePath: string): string =>
   readFileSync(resolve(__dirname, "../../..", relativePath), "utf8");
 
 describe("unsafe propagation contracts", () => {
-  it("keeps markdown and download regex callbacks typed", () => {
-    const markdownViewer = source("components/MarkdownViewer.vue");
+  it("keeps scientific Markdown and download boundaries typed", () => {
+    const scientificMarkdown = source("components/ScientificMarkdown.vue");
     const downloads = source("composables/useDeepGenomeDownloads.ts");
 
-    expect(markdownViewer).toContain(
-      "(_match: string, alt: string, src: string) => {"
+    expect(scientificMarkdown).toContain(
+      "function safeAnchorHref(href: string)"
     );
     expect(downloads).toContain(
       "(match: string, alt: string, src: string) => {"

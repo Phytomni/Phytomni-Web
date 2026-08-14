@@ -104,13 +104,15 @@ describe("ScientificMarkdown", () => {
     });
 
     await vi.dynamicImportSettled();
-    await wrapper.get(".scientific-citation__link").trigger("click");
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    wrapper.get(".scientific-citation__link").element.dispatchEvent(event);
     expect(wrapper.emitted("citation-activate")).toEqual([
       [{ namespace: "report", indices: [1, 2, 3] }],
     ]);
+    expect(event.defaultPrevented).toBe(false);
   });
 
-  it("falls back to the full escaped source and emits only a render category after a child error", async () => {
+  it("falls back only the failed child node and preserves the rest of the report", async () => {
     const source = [
       '<span data-secret="do-not-emit">Whole report</span>',
       "",
@@ -126,18 +128,77 @@ describe("ScientificMarkdown", () => {
       render: () => h("div"),
     });
     const wrapper = mountWithApp(ScientificMarkdown, {
-      props: { source },
+      props: { source, citationNamespace: "report-error" },
       slots: {
-        "block-code": () => h(ThrowingRenderer),
+        "block-code": ({ content }: { content: string }) =>
+          content.trim() === "child error"
+            ? h(ThrowingRenderer)
+            : h("strong", { class: "recovered-node" }, content),
       },
     });
 
     await nextTick();
-    expect(wrapper.get(".scientific-markdown__fallback").text()).toBe(source);
+    expect(wrapper.find(".scientific-markdown__fallback").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Whole report");
+    expect(wrapper.get(".scientific-markdown__node-fallback").text()).toContain(
+      "child error"
+    );
     expect(wrapper.emitted("render-error")).toEqual([["render"]]);
     expect(JSON.stringify(wrapper.emitted("render-error"))).not.toContain(
       source
     );
+
+    await wrapper.setProps({
+      source: source.replace("child error", "recovered child"),
+    });
+    await nextTick();
+    await nextTick();
+    expect(wrapper.find(".scientific-markdown__node-fallback").exists()).toBe(
+      false
+    );
+    expect(wrapper.get(".recovered-node").text()).toContain("recovered child");
+  });
+
+  it("keeps citations interactive when they follow escaped raw HTML", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source: "<span>x</span> Evidence [1]",
+        citationNamespace: "raw-adjacent",
+        referenceCount: 1,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    expect(wrapper.text()).toContain("<span>x</span> Evidence");
+    expect(wrapper.get(".scientific-citation__link").text()).toBe("[1]");
+  });
+
+  it("opens only external HTTP links in a new tab", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source: [
+          "[Fragment](#results)",
+          "[Root](/reports/1)",
+          "[Relative](notes.md)",
+          `[Same origin](${window.location.origin}/reports/1)`,
+          "[External](https://example.org/report)",
+          "[Mail](mailto:science@example.org)",
+        ].join(" "),
+        citationNamespace: "link-policy",
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    const links = Object.fromEntries(
+      wrapper.findAll("a").map((link) => [link.text(), link.attributes()])
+    );
+    expect(links.Fragment.target).toBeUndefined();
+    expect(links.Root.target).toBeUndefined();
+    expect(links.Relative.target).toBeUndefined();
+    expect(links["Same origin"].target).toBeUndefined();
+    expect(links.Mail.target).toBeUndefined();
+    expect(links.External.target).toBe("_blank");
+    expect(links.External.rel).toBe("noopener noreferrer");
   });
 
   it("coalesces streaming revisions into the latest animation frame and cancels frames on unmount", async () => {
@@ -154,7 +215,11 @@ describe("ScientificMarkdown", () => {
 
     const wrapper = mountWithApp(ScientificMarkdown, {
       attachTo: document.body,
-      props: { source: "initial", streaming: false },
+      props: {
+        source: "initial",
+        citationNamespace: "streaming-report",
+        streaming: false,
+      },
     });
     await wrapper.setProps({ streaming: true, source: "first" });
     await wrapper.setProps({ source: "latest" });

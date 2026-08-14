@@ -67,7 +67,10 @@ afterEach(() => {
 describe("ScientificMarkdown resources", () => {
   it("emits parsed heading metadata once for stable rerenders", async () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
-      props: { source: "## Gene *network*\n\n## Gene network" },
+      props: {
+        source: "## Gene *network*\n\n## Gene network",
+        citationNamespace: "resources-headings",
+      },
     });
 
     await vi.dynamicImportSettled();
@@ -88,7 +91,11 @@ describe("ScientificMarkdown resources", () => {
   it("renders an exact authorized image and opens the bounded image dialog", async () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
       attachTo: document.body,
-      props: { source: "![leaf](figures/one.png)", resources },
+      props: {
+        source: "![leaf](figures/one.png)",
+        citationNamespace: "resources-image",
+        resources,
+      },
     });
 
     await vi.dynamicImportSettled();
@@ -112,7 +119,11 @@ describe("ScientificMarkdown resources", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("ResizeObserver", TestResizeObserver);
     const wrapper = mountWithApp(ScientificMarkdown, {
-      props: { source: "![structure](structures/one.cif)", resources },
+      props: {
+        source: "![structure](structures/one.cif)",
+        citationNamespace: "resources-cif",
+        resources,
+      },
     });
 
     await vi.dynamicImportSettled();
@@ -141,7 +152,11 @@ describe("ScientificMarkdown resources", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const wrapper = mountWithApp(ScientificMarkdown, {
-      props: { source: "![structure](structures/one.cif)", resources },
+      props: {
+        source: "![structure](structures/one.cif)",
+        citationNamespace: "resources-cif-abort",
+        resources,
+      },
     });
 
     await vi.dynamicImportSettled();
@@ -160,7 +175,11 @@ describe("ScientificMarkdown resources", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("ResizeObserver", TestResizeObserver);
     const wrapper = mountWithApp(ScientificMarkdown, {
-      props: { source: "![structure](structures/one.cif)", resources },
+      props: {
+        source: "![structure](structures/one.cif)",
+        citationNamespace: "resources-cif-failure",
+        resources,
+      },
     });
 
     await vi.dynamicImportSettled();
@@ -177,6 +196,7 @@ describe("ScientificMarkdown resources", () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
       props: {
         source: "[download](attachments/one.pdf) [notes](notes/methods.md)",
+        citationNamespace: "resources-actions",
         resources,
       },
     });
@@ -201,6 +221,7 @@ describe("ScientificMarkdown resources", () => {
       props: {
         source:
           "![private](/private/path.png) ![wrong](attachments/one.pdf) [missing](unknown.md)",
+        citationNamespace: "resources-inert",
         resources,
       },
     });
@@ -249,6 +270,7 @@ describe("ScientificMarkdown resources", () => {
       props: {
         source:
           "![one](structures/one.cif) ![two](structures/two.cif) [attachment](attachments/duplicate.pdf)",
+        citationNamespace: "resources-duplicates",
         resources: duplicateResources,
       },
     });
