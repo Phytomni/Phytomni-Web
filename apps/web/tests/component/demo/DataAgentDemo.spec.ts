@@ -61,6 +61,7 @@ describe("Data Agent static demonstration", () => {
       "grid-template-columns: minmax(0, 1fr);"
     );
     expect(DATA_AGENT_SOURCE).toContain("overflow-x: auto;");
+    expect(DATA_AGENT_SOURCE).not.toContain("citation-namespace");
   });
 
   it("keeps the three sample rounds in their exact order", () => {

@@ -46,6 +46,7 @@ const visibleSource = ref("");
 let timer: ReturnType<typeof setTimeout> | null = null;
 let cursor = 0;
 let finishedSource: string | null = null;
+let previousSource: string | null = null;
 
 function clearTimer(): void {
   if (timer === null) return;
@@ -57,8 +58,12 @@ function codePoints(source: string): string[] {
   return Array.from(source);
 }
 
-function sourceMatchesVisiblePrefix(source: string): boolean {
-  return codePoints(source).slice(0, cursor).join("") === visibleSource.value;
+function isStrictAppend(source: string): boolean {
+  return (
+    previousSource !== null &&
+    source.startsWith(previousSource) &&
+    codePoints(source).length > codePoints(previousSource).length
+  );
 }
 
 function scheduleTick(): void {
@@ -84,12 +89,13 @@ function tick(): void {
 }
 
 function syncSource(source: string): void {
-  if (!sourceMatchesVisiblePrefix(source)) {
+  if (!isStrictAppend(source)) {
     clearTimer();
     cursor = 0;
     visibleSource.value = "";
     finishedSource = null;
   }
+  previousSource = source;
   scheduleTick();
 }
 

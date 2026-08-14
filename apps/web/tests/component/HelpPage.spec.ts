@@ -93,6 +93,7 @@ describe("Help product document", () => {
       enUS.help.doc.limitations.body,
     ]);
     expect(wrapper.findAll('[data-surface="document"]')).toHaveLength(5);
+    expect(SOURCE).not.toContain("citation-namespace");
   });
 
   it("keeps the Help scroll root and Footer clearance explicit", () => {

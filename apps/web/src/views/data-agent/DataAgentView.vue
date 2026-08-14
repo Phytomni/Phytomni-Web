@@ -30,11 +30,7 @@
               role="region"
               :aria-labelledby="`data-agent-caption-${index}`"
             >
-              <ScientificMarkdown
-                :source="round.response"
-                :citation-namespace="`data-agent-${index}`"
-                surface="chat"
-              />
+              <ScientificMarkdown :source="round.response" surface="chat" />
             </div>
           </figure>
         </article>

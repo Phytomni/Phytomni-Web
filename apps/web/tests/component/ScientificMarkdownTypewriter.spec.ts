@@ -101,6 +101,31 @@ describe("ScientificMarkdownTypewriter", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("resets when a replacement exactly matches the visible prefix", async () => {
+    vi.useFakeTimers();
+    useControlledFrames();
+    const wrapper = mountWithApp(ScientificMarkdownTypewriter, {
+      props: {
+        source: "1234567890abcdef",
+        citationNamespace: "typewriter-prefix-replacement",
+      },
+    });
+
+    await flushRenderedPrefix();
+    await vi.advanceTimersByTimeAsync(20);
+    await flushRenderedPrefix();
+    expect(wrapper.text()).toContain("1234567890");
+
+    await wrapper.setProps({ source: "1234567890" });
+    await flushRenderedPrefix();
+    expect(wrapper.text()).not.toContain("1234567890");
+
+    await vi.advanceTimersByTimeAsync(20);
+    await flushRenderedPrefix();
+    expect(wrapper.text()).toContain("1234567890");
+    expect(wrapper.emitted("finish")).toEqual([[]]);
+  });
+
   it("renders every prefix through ScientificMarkdown with raw HTML inert", async () => {
     vi.useFakeTimers();
     useControlledFrames();

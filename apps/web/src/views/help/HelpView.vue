@@ -51,11 +51,7 @@
           class="help-section"
         >
           <h1 tabindex="-1">{{ section.heading }}</h1>
-          <ScientificMarkdown
-            :source="section.body"
-            :citation-namespace="`help-${section.id}`"
-            surface="document"
-          />
+          <ScientificMarkdown :source="section.body" surface="document" />
         </section>
       </article>
 
