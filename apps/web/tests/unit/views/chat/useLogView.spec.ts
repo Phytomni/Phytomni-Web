@@ -375,6 +375,40 @@ describe("useLogView", () => {
     expect(getChatState("B").activityExpandedByMessage).toEqual({});
   });
 
+  it("keeps a deferred Research Activity response scoped without scrolling the current transcript", async () => {
+    const request = deferred<ApiEnvelope<AnalystAgentLog>>();
+    mockGetAnalystAgentLog.mockReturnValueOnce(request.promise);
+    const messageA = msg({
+      id: "32",
+      tool_name: "InSilicoResearchAgent",
+    });
+    currentChat.value = { messages: [messageA] };
+
+    const { setLogExpanded } = makeComposable();
+    const inflight = setLogExpanded(messageA, true);
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledOnce();
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "32" });
+
+    currentChatId.value = "B";
+    const messageB = msg({
+      id: "33",
+      tool_name: "InSilicoResearchAgent",
+    });
+    currentChat.value = { messages: [messageB] };
+    await setLogExpanded(messageB, false);
+
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledOnce();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+
+    request.resolve(logResponse("A-research-log"));
+    await inflight;
+    await nextTick();
+
+    expect(getChatState("A").logData["32"]?.text).toBe("A-research-log");
+    expect(getChatState("B").logData["32"]).toBeUndefined();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
+
   it("🔒 capture invariant: updatingLog cleanup lands on the originating chat after mid-flight switch", async () => {
     const updatePromise = deferred<ApiEnvelope<MutationData>>();
     mockUpdateAnalystAgentLog.mockReturnValueOnce(updatePromise.promise);

@@ -69,9 +69,6 @@ export function useLogView(opts: {
           res.data
         );
         delete chatState.logErrorKinds[rowId];
-        nextTick(() => {
-          scrollToBottom().catch(() => undefined);
-        }).catch(() => undefined);
       } else {
         console.error("Failed to fetch log:", res);
         chatState.logErrorKinds[rowId] = "fetch";
@@ -126,10 +123,6 @@ export function useLogView(opts: {
     if (expanded) {
       await fetchLogIfNeeded(rowId, chatState);
     }
-
-    nextTick(() => {
-      scrollToBottom().catch(() => undefined);
-    }).catch(() => undefined);
   };
 
   /** @deprecated Prefer setLogExpanded — kept name for call-site clarity during fold. */
