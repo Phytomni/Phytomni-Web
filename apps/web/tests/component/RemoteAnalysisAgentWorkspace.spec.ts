@@ -48,7 +48,8 @@ const SAFE_RESEARCH_PATH_LINES = [
   "/fixtures/rice-root/org.Osativa.eg.db.tar.gz",
 ] as const;
 
-vi.mock("vue-element-plus-x", () => ({
+vi.mock("vue-element-plus-x", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("vue-element-plus-x")>()),
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
 

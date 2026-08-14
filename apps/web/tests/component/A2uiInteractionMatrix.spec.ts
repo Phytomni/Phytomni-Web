@@ -10,7 +10,8 @@ import type { ChatMessage } from "@/views/chat/types";
 import { buildA2uiScenario, type A2uiScenario } from "../helpers/a2uiScenario";
 import { createTestAppContext } from "../helpers/test-app-context";
 
-vi.mock("vue-element-plus-x", () => ({
+vi.mock("vue-element-plus-x", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("vue-element-plus-x")>()),
   Typewriter: { name: "Typewriter", template: "<div></div>" },
   FilesCard: { name: "FilesCard", template: "<div></div>" },
   Prompts: { name: "Prompts", template: "<div></div>" },

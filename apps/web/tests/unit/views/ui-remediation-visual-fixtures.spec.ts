@@ -49,7 +49,7 @@ describe("UI remediation visual fixtures", () => {
       "tests/visual/ui-remediation/UiRemediationVisualFixtureApp.vue"
     );
     expect(app).toContain("ChangePasswordView");
-    expect(app).toContain("MarkdownViewer");
+    expect(app).toContain("ScientificMarkdown");
     expect(app).toContain("ReviewAgentView");
     expect(app).toContain("BriefGeneAgentView");
     expect(app).toContain("ChatCases");

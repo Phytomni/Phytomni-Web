@@ -44,7 +44,7 @@ const DEMO_CONTRACTS: DemoContract[] = [
     required: [
       "AgentDemoShell",
       "data-agent-round",
-      "MarkdownViewer",
+      "ScientificMarkdown",
       "router.back",
     ],
     shell: "agent-demo",
