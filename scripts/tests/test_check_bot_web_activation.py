@@ -6,7 +6,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import pytest
 
@@ -29,19 +29,9 @@ RESEARCH_INPUT_FIXTURE_PATH = Path(
 RESEARCH_FORMAT_SOURCE_PATH = Path(
     "apps/server/service/api_service/attachment_classifier.go"
 )
-RESEARCH_DATASET_FORMATS = (
-    "7z",
-    "bgzf",
-    "bz2",
-    "csv",
-    "gz",
-    "mtx",
-    "rar",
-    "tar",
-    "tgz",
-    "xz",
-    "zip",
-    "zst",
+RESEARCH_LIMIT_SOURCE_PATH = Path("apps/server/external/bot/input_limits.go")
+RESEARCH_CONTRACT_SOURCE_PATH = Path(
+    "apps/server/external/bot/research_input_contract.go"
 )
 
 
@@ -109,33 +99,29 @@ def write(root: Path, relative: str, value: object) -> None:
 
 
 def research_input_fixture_payload() -> dict[str, object]:
-    return {
-        "object": "list",
-        "protocols": {"research_input_resolution_v1": [1]},
-        "research_input_resolution": {
-            "max_user_query_chars": 131_072,
-            "max_attachments_per_request": 64,
-            "max_research_dataset_paths": 64,
-            "max_research_input_references": 128,
-        },
-        "data": [
-            {
-                "slug": "research",
-                "tool": "InSilicoResearchAgent",
-                "capabilities": {
-                    "attachments": {
-                        "document_context": {"max_files": 64},
-                        "datasets": {
-                            "max_file_bytes": 26_214_400,
-                            "max_files": 64,
-                            "max_total_bytes": 52_428_800,
-                            "formats": list(RESEARCH_DATASET_FORMATS),
-                        },
-                    }
-                },
-            }
-        ],
-    }
+    return json.loads(
+        (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_text(encoding="utf-8")
+    )
+
+
+def research_row(payload: dict[str, Any]) -> dict[str, Any]:
+    return next(row for row in payload["data"] if row.get("slug") == "research")
+
+
+def research_datasets(payload: dict[str, Any]) -> dict[str, Any]:
+    return research_row(payload)["capabilities"]["attachments"]["datasets"]
+
+
+def write_accepted_research_contract(root: Path) -> None:
+    fixture = root / RESEARCH_INPUT_FIXTURE_PATH
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_bytes((checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes())
+    for relative in (RESEARCH_LIMIT_SOURCE_PATH, RESEARCH_CONTRACT_SOURCE_PATH):
+        write(
+            root,
+            relative.as_posix(),
+            (checker.ROOT / relative).read_text(encoding="utf-8"),
+        )
 
 
 def research_format_source() -> str:
@@ -159,7 +145,7 @@ def minimal_tree(tmp_path: Path, value: MatrixValue | None = None) -> Path:
     )
     for relative, content in checker.DEFAULT_CHECK_FILES.items():
         write(root, relative.as_posix(), content)
-    write(root, RESEARCH_INPUT_FIXTURE_PATH.as_posix(), research_input_fixture_payload())
+    write_accepted_research_contract(root)
     write(root, RESEARCH_FORMAT_SOURCE_PATH.as_posix(), research_format_source())
     return root
 
@@ -216,11 +202,7 @@ def local_readiness_tree(tmp_path: Path) -> Path:
     )
     for relative, content in checker.DEFAULT_CHECK_FILES.items():
         write(tmp_path, relative.as_posix(), content)
-    write(
-        tmp_path,
-        RESEARCH_INPUT_FIXTURE_PATH.as_posix(),
-        research_input_fixture_payload(),
-    )
+    write_accepted_research_contract(tmp_path)
     write(tmp_path, RESEARCH_FORMAT_SOURCE_PATH.as_posix(), research_format_source())
     for fixture_id, relative in checker.PRODUCT_FIXTURE_PATHS.items():
         write(tmp_path, relative.as_posix(), product_fixture_payload(fixture_id))
@@ -414,62 +396,52 @@ def test_committed_matrix_is_dark_and_cli_has_one_stable_pass_line() -> None:
             "agent descriptor",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
+            lambda payload: research_row(payload)["capabilities"]["attachments"][
                 "document_context"
             ].__setitem__("max_files", 10),
             "document_context.max_files",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("max_files", 10),
+            lambda payload: research_datasets(payload).__setitem__("max_files", 10),
             "datasets.max_files",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("max_files", 257),
+            lambda payload: research_datasets(payload).__setitem__("max_files", 257),
             "datasets.max_files",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("max_file_bytes", 0),
+            lambda payload: research_datasets(payload).__setitem__(
+                "max_file_bytes", 0
+            ),
             "datasets.max_file_bytes",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("max_file_bytes", (10 << 30) + 1),
+            lambda payload: research_datasets(payload).__setitem__(
+                "max_file_bytes", (10 << 30) + 1
+            ),
             "datasets.max_file_bytes",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("max_total_bytes", 26_214_399),
-            "datasets.max_total_bytes",
-        ),
-        (
-            lambda payload: (
-                payload["data"][0]["capabilities"]["attachments"][
-                    "datasets"
-                ].__setitem__("max_file_bytes", 1),
-                payload["data"][0]["capabilities"]["attachments"][
-                    "datasets"
-                ].__setitem__("max_total_bytes", 65),
+            lambda payload: research_datasets(payload).__setitem__(
+                "max_total_bytes", 26_214_399
             ),
             "datasets.max_total_bytes",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ]["formats"].remove("mtx"),
+            lambda payload: (
+                research_datasets(payload).__setitem__("max_file_bytes", 1),
+                research_datasets(payload).__setitem__("max_total_bytes", 65),
+            ),
+            "datasets.max_total_bytes",
+        ),
+        (
+            lambda payload: research_datasets(payload)["formats"].remove("mtx"),
             "datasets.formats",
         ),
         (
-            lambda payload: payload["data"][0]["capabilities"]["attachments"][
-                "datasets"
-            ].__setitem__("formats", ["csv", "mtx"]),
+            lambda payload: research_datasets(payload).__setitem__(
+                "formats", ["csv", "mtx"]
+            ),
             "datasets.formats",
         ),
     ],
@@ -492,7 +464,9 @@ def test_checker_compares_fixture_formats_with_web_source(tmp_path: Path) -> Non
     write(
         root,
         RESEARCH_FORMAT_SOURCE_PATH.as_posix(),
-        research_format_source().replace('".mtx": {},', '".mtx": {}, ".vcf": {},'),
+        research_format_source().replace(
+            '".mtx": {},', '".mtx": {}, ".notadvertised": {},'
+        ),
     )
 
     errors = checker.check(root)
@@ -512,6 +486,104 @@ def test_checker_does_not_accept_commented_go_format(tmp_path: Path) -> None:
 
     errors = checker.check(root)
     assert any("Research format maps" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("relative", "accepted", "drifted"),
+    [
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "DefaultMaxUserQueryChars          = 131_072",
+            "DefaultMaxUserQueryChars = 131_073",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "HardMaxUserQueryChars             = 1_048_576",
+            "HardMaxUserQueryChars = 1_048_577",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "DefaultMaxAssetAttachmentRefs     = 64",
+            "DefaultMaxAssetAttachmentRefs = 65",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "HardMaxAssetAttachmentRefs        = 256",
+            "HardMaxAssetAttachmentRefs = 257",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "DefaultMaxResearchDatasetPaths    = 64",
+            "DefaultMaxResearchDatasetPaths = 65",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "HardMaxResearchDatasetPaths       = 256",
+            "HardMaxResearchDatasetPaths = 257",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "DefaultMaxResearchInputReferences = 128",
+            "DefaultMaxResearchInputReferences = 129",
+        ),
+        (
+            RESEARCH_LIMIT_SOURCE_PATH,
+            "HardMaxResearchInputReferences    = 256",
+            "HardMaxResearchInputReferences = 257",
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            'ResearchInputProtocol        = "research_input_resolution_v1"',
+            'ResearchInputProtocol = "research_input_resolution_v2"',
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            "ResearchInputProtocolVersion = 1",
+            "ResearchInputProtocolVersion = 2",
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            "maxResearchDatasetFormats    = 256",
+            "maxResearchDatasetFormats = 257",
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            "maxResearchDatasetFormatSize = 64",
+            "maxResearchDatasetFormatSize = 65",
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            '"rar": {},',
+            '// "rar": {},',
+        ),
+    ],
+)
+def test_checker_rejects_web_research_go_contract_source_drift(
+    tmp_path: Path, relative: Path, accepted: str, drifted: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / relative
+    source = path.read_text(encoding="utf-8")
+    assert source.count(accepted) == 1
+    replacement = f"// accepted spelling: {accepted}\n\t{drifted}"
+    path.write_text(source.replace(accepted, replacement), encoding="utf-8")
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+def test_checker_rejects_semantically_equivalent_research_fixture_bytes(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / RESEARCH_INPUT_FIXTURE_PATH
+    before = path.read_bytes()
+    after = before + b"\n"
+    assert json.loads(before) == json.loads(after)
+    path.write_bytes(after)
+
+    errors = checker.check(root)
+    assert any("Research fixture SHA-256" in error for error in errors)
 
 
 @pytest.mark.parametrize(
