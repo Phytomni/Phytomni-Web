@@ -178,16 +178,20 @@ describe("artifact policy", () => {
     ).toBeNull();
   });
 
-  it.each(["", "   ", "RUNNING", "FAILED", "SUCCEEDED"])(
-    "does not create a View from status-only content %j",
-    (content) => {
-      expect(
-        artifactPresentationForMessage(
-          reportMessage("KnowledgeAgent", { content })
-        )
-      ).toBeNull();
-    }
-  );
+  it.each([
+    "",
+    "   ",
+    "RUNNING",
+    "FAILED",
+    "SUCCEEDED",
+    "No references available.",
+  ])("does not create a View from status-only content %j", (content) => {
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", { content })
+      )
+    ).toBeNull();
+  });
 
   it("rejects DeepGenome transport placeholders but accepts failed partial text", () => {
     for (const content of [

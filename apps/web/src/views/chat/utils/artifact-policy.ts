@@ -43,7 +43,7 @@ const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
   /^Failed to load file/iu,
 ] as const;
 
-const STATUS_ONLY_REPORTS = new Set([
+const NON_REPORT_TEXT = new Set([
   "PENDING",
   "QUEUED",
   "RUNNING",
@@ -54,6 +54,7 @@ const STATUS_ONLY_REPORTS = new Set([
   "CANCELED",
   "TIMED_OUT",
   "TIMEOUT",
+  "NO REFERENCES AVAILABLE.",
 ]);
 
 function normalizeIdentity(value: unknown): string | null {
@@ -91,7 +92,7 @@ export function isDeepGenomeTransportPlaceholder(
 function isReportTextValid(toolName: string, value: unknown): value is string {
   if (typeof value !== "string") return false;
   const normalized = value.trim();
-  if (normalized === "" || STATUS_ONLY_REPORTS.has(normalized.toUpperCase())) {
+  if (normalized === "" || NON_REPORT_TEXT.has(normalized.toUpperCase())) {
     return false;
   }
   return (

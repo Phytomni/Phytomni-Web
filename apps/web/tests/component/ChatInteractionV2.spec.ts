@@ -174,7 +174,8 @@ vi.mock(
   }
 );
 
-vi.mock("vue-element-plus-x", () => ({
+vi.mock("vue-element-plus-x", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("vue-element-plus-x")>()),
   MentionSender: {
     name: "MentionSender",
     inheritAttrs: false,
