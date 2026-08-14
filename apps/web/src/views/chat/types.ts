@@ -274,10 +274,10 @@ export interface ChatUIState {
    */
   activityExpandedByMessage: Record<string, boolean>;
   artifactOpen: boolean;
-  activeArtifactMessageId: string | null;
+  activeArtifactIdentity: string | null;
   artifactTab: ArtifactTab;
-  /** Runtime-only server IDs already considered for automatic artifact opening. */
-  autoOpenedArtifactMessageIds: string[];
+  /** Runtime-only report identities already considered for automatic opening. */
+  handledArtifactIdentities: string[];
   /** Retry state remains isolated to the owning dialogue and message. */
   archiveRetryingByMessageId: Record<string, boolean>;
 }

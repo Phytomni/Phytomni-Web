@@ -37,6 +37,7 @@ import {
   type AttachmentMetadata,
 } from "../utils/asset-attachments";
 import { isPollableChatAgentTool } from "../utils/async-agent-policy";
+import { artifactPresentationForMessage } from "../utils/artifact-policy";
 
 export type ChatReloadResult = "applied" | "failed" | "superseded";
 
@@ -778,6 +779,12 @@ export function useSelectChat(opts: {
       chatState.historyQuestion = historyMessages;
       const historyMessagesWithLockedA2ui = lockUnverifiedHistoryA2ui(messages);
       const liveMessages = chatState.renderedChat?.messages;
+      const handledIdentities = new Set(chatState.handledArtifactIdentities);
+      for (const message of historyMessagesWithLockedA2ui) {
+        const presentation = artifactPresentationForMessage(message);
+        if (presentation) handledIdentities.add(presentation.identity);
+      }
+      chatState.handledArtifactIdentities = [...handledIdentities];
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,

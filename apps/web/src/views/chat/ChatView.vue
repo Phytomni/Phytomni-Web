@@ -1130,7 +1130,7 @@ watch(
 
 const {
   artifactOpen,
-  activeArtifactMessageId,
+  activeArtifactIdentity,
   artifactTab,
   currentArtifactMessage,
   currentArtifactLinks,
@@ -1140,8 +1140,8 @@ const {
   openArtifact: setArtifactOpen,
   closeArtifact: resetArtifactPanel,
   selectArtifactTab,
-  hasAutoOpened,
-  markAutoOpened,
+  isHandled,
+  markHandled,
 } = useArtifactPanel({ currentChatId, currentChat, getChatState });
 
 const effectiveSidebarCollapsed = computed(
@@ -1186,7 +1186,7 @@ function openArtifactForMessage(message: ChatMessage): void {
 }
 
 const artifactId = computed(() => {
-  const id = activeArtifactMessageId.value || "none";
+  const id = activeArtifactIdentity.value || "none";
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
@@ -1358,7 +1358,7 @@ const currentArtifactDelivery = computed(
 );
 
 const currentArtifactRetrying = computed(() => {
-  const messageId = activeArtifactMessageId.value;
+  const messageId = currentArtifactMessage.value?.id;
   return Boolean(
     messageId &&
     currentChatId.value &&
@@ -1683,15 +1683,15 @@ const restoreTranscriptScroll = async (
   });
 };
 
-const openArtifact = (messageId: string) => {
+const openArtifact = (identity: string) => {
   const dialogueId = currentChatId.value;
   const scrollTop = messageContainer.value?.scrollTop;
-  setArtifactOpen(messageId);
+  setArtifactOpen(identity);
   if (
     !dialogueId ||
     scrollTop === undefined ||
     !artifactOpen.value ||
-    activeArtifactMessageId.value !== messageId
+    activeArtifactIdentity.value !== identity
   ) {
     return;
   }
@@ -1703,22 +1703,22 @@ const closeArtifact = () => {
   resetArtifactPanel();
 };
 
-const observeDeepGenomeArtifacts = () => {
+const observeReportArtifacts = () => {
   const foregroundDialogueId = currentChatId.value;
   let foregroundCandidate: string | null = null;
 
   Object.entries(chatStates.value).forEach(([dialogueId, state]) => {
     (state.renderedChat?.messages ?? []).forEach((message) => {
       const presentation = artifactPresentationForMessage(message);
-      if (presentation?.kind !== "deep-genome") return;
+      if (!presentation) return;
       const normalizedId = presentation.identity;
 
-      if (hasAutoOpened(normalizedId, dialogueId)) return;
+      if (isHandled(normalizedId, dialogueId)) return;
 
       // Mark every eligible server id as considered in its own dialogue. A
       // background result is therefore never auto-opened when the user later
       // switches into that conversation.
-      markAutoOpened(normalizedId, dialogueId);
+      markHandled(normalizedId, dialogueId);
       if (dialogueId === foregroundDialogueId) {
         foregroundCandidate = normalizedId;
       }
@@ -1728,12 +1728,12 @@ const observeDeepGenomeArtifacts = () => {
   if (foregroundCandidate !== null) {
     // Mark before opening so the same reactive update, close/reopen cycle, or
     // history refresh cannot take focus from the user a second time.
-    markAutoOpened(foregroundCandidate);
+    markHandled(foregroundCandidate);
     openArtifact(foregroundCandidate);
   }
 };
 
-watch([chatStates, currentChatId], observeDeepGenomeArtifacts, {
+watch([chatStates, currentChatId], observeReportArtifacts, {
   deep: true,
   flush: "post",
 });

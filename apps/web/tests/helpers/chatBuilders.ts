@@ -35,9 +35,9 @@ export function buildChatState(
     refreshTurnIds: {},
     activityExpandedByMessage: {},
     artifactOpen: false,
-    activeArtifactMessageId: null,
+    activeArtifactIdentity: null,
     artifactTab: "content",
-    autoOpenedArtifactMessageIds: [],
+    handledArtifactIdentities: [],
     ...overrides,
   };
 }

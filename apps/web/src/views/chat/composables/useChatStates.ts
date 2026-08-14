@@ -38,9 +38,9 @@ function createDefaultChatUIState(): ChatUIState {
     refreshTurnIds: {},
     activityExpandedByMessage: {},
     artifactOpen: false,
-    activeArtifactMessageId: null,
+    activeArtifactIdentity: null,
     artifactTab: "content",
-    autoOpenedArtifactMessageIds: [],
+    handledArtifactIdentities: [],
     archiveRetryingByMessageId: {},
   };
 }

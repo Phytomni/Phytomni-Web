@@ -239,6 +239,35 @@ describe("useSelectChat", () => {
     });
   });
 
+  it("seeds hydrated report identities as handled before exposing the chat", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "hydrated-cited",
+          query: "Cited query",
+          answer: "# Cited report",
+          status: "FAILED",
+          tool_name: "KnowledgeAgent",
+        }),
+        buildChatHistoryRecord({
+          id: "hydrated-research",
+          query: "Research query",
+          answer: "# Research report",
+          status: "RUNNING",
+          tool_name: "InSilicoResearchAgent",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(stateFor("d1").handledArtifactIdentities).toEqual([
+      "message:hydrated-cited",
+      "message:hydrated-research",
+    ]);
+    expect(stateFor("d1").renderedChat?.messages).toHaveLength(4);
+  });
+
   it("drops legacy storage fields while preserving v1 delivery and opaque artifacts", async () => {
     const delivery = {
       schema_version: 1,

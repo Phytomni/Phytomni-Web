@@ -45,9 +45,9 @@ export function useArtifactPanel(opts: {
   const artifactOpen = computed(() =>
     currentChatId.value ? getChatState(currentChatId.value).artifactOpen : false
   );
-  const activeArtifactMessageId = computed(() =>
+  const activeArtifactIdentity = computed(() =>
     currentChatId.value
-      ? getChatState(currentChatId.value).activeArtifactMessageId
+      ? getChatState(currentChatId.value).activeArtifactIdentity
       : null
   );
   const artifactTab = computed((): ArtifactTab =>
@@ -56,11 +56,12 @@ export function useArtifactPanel(opts: {
       : "content"
   );
 
-  const findEligibleMessage = (messageId: string): ChatMessage | null => {
+  const findEligibleMessage = (identity: string): ChatMessage | null => {
     const matches = (currentChat.value?.messages ?? []).filter(
       (message) =>
-        artifactIdentityForMessage(message) === messageId ||
-        normalizeServerMessageId(message.id) === messageId
+        artifactIdentityForMessage(message) === identity ||
+        (artifactPresentationForMessage(message) === null &&
+          normalizeServerMessageId(message.id) === identity)
     );
     if (matches.length !== 1) return null;
     const message = matches[0];
@@ -71,10 +72,10 @@ export function useArtifactPanel(opts: {
   };
 
   const currentArtifactMessage = computed((): ChatMessage | null => {
-    if (!artifactOpen.value || activeArtifactMessageId.value === null) {
+    if (!artifactOpen.value || activeArtifactIdentity.value === null) {
       return null;
     }
-    return findEligibleMessage(activeArtifactMessageId.value);
+    return findEligibleMessage(activeArtifactIdentity.value);
   });
   const currentArtifactLinks = computed(
     (): readonly ConversationArtifactLink[] =>
@@ -151,19 +152,22 @@ export function useArtifactPanel(opts: {
 
   const resetArtifact = (state: ChatUIState) => {
     state.artifactOpen = false;
-    state.activeArtifactMessageId = null;
+    state.activeArtifactIdentity = null;
     state.artifactTab = "content";
   };
 
-  const openArtifact = (messageId: string) => {
+  const openArtifact = (identity: string) => {
     if (!currentChatId.value) return;
-    const normalizedId = normalizeServerMessageId(messageId);
-    if (normalizedId === null || findEligibleMessage(normalizedId) === null) {
+    const normalizedIdentity = identity.trim();
+    if (
+      normalizedIdentity === "" ||
+      findEligibleMessage(normalizedIdentity) === null
+    ) {
       return;
     }
 
     const state = getChatState(currentChatId.value);
-    state.activeArtifactMessageId = normalizedId;
+    state.activeArtifactIdentity = normalizedIdentity;
     state.artifactOpen = true;
   };
 
@@ -177,31 +181,28 @@ export function useArtifactPanel(opts: {
     getChatState(currentChatId.value).artifactTab = tab;
   };
 
-  const hasAutoOpened = (
-    messageId: string,
+  const isHandled = (
+    identity: string,
     dialogueId = currentChatId.value
   ): boolean => {
     if (!dialogueId) return false;
-    const normalizedId = normalizeServerMessageId(messageId);
+    const normalizedIdentity = identity.trim();
     return (
-      normalizedId !== null &&
-      getChatState(dialogueId).autoOpenedArtifactMessageIds.includes(
-        normalizedId
+      normalizedIdentity !== "" &&
+      getChatState(dialogueId).handledArtifactIdentities.includes(
+        normalizedIdentity
       )
     );
   };
 
-  const markAutoOpened = (
-    messageId: string,
-    dialogueId = currentChatId.value
-  ) => {
+  const markHandled = (identity: string, dialogueId = currentChatId.value) => {
     if (!dialogueId) return;
-    const normalizedId = normalizeServerMessageId(messageId);
-    if (normalizedId === null) return;
+    const normalizedIdentity = identity.trim();
+    if (normalizedIdentity === "") return;
 
-    const seenIds = getChatState(dialogueId).autoOpenedArtifactMessageIds;
-    if (!seenIds.includes(normalizedId)) {
-      seenIds.push(normalizedId);
+    const handled = getChatState(dialogueId).handledArtifactIdentities;
+    if (!handled.includes(normalizedIdentity)) {
+      handled.push(normalizedIdentity);
     }
   };
 
@@ -209,11 +210,11 @@ export function useArtifactPanel(opts: {
     [
       currentChatId,
       artifactOpen,
-      activeArtifactMessageId,
+      activeArtifactIdentity,
       currentArtifactMessage,
     ],
-    ([dialogueId, isOpen, messageId, message]) => {
-      if (!dialogueId || !isOpen || messageId === null || message !== null)
+    ([dialogueId, isOpen, identity, message]) => {
+      if (!dialogueId || !isOpen || identity === null || message !== null)
         return;
       resetArtifact(getChatState(dialogueId));
     },
@@ -222,7 +223,7 @@ export function useArtifactPanel(opts: {
 
   return {
     artifactOpen,
-    activeArtifactMessageId,
+    activeArtifactIdentity,
     artifactTab,
     currentArtifactMessage,
     currentArtifactLinks,
@@ -232,7 +233,7 @@ export function useArtifactPanel(opts: {
     openArtifact,
     closeArtifact,
     selectArtifactTab,
-    hasAutoOpened,
-    markAutoOpened,
+    isHandled,
+    markHandled,
   };
 }

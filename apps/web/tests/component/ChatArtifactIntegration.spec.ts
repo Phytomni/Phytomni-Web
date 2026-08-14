@@ -315,6 +315,7 @@ async function mountProductionChat(
   width = 1440,
   options: {
     markDeepSeen?: boolean;
+    markCitedSeen?: boolean;
     messagesA?: ChatMessage[];
     messagesB?: ChatMessage[];
   } = {}
@@ -400,7 +401,10 @@ async function mountProductionChat(
   // This fixture represents a history refresh whose DeepGenome id was already
   // observed; dedicated auto-open tests cover a genuinely new foreground row.
   if (options.markDeepSeen !== false) {
-    state.getChatState("A").autoOpenedArtifactMessageIds.push("message:deep-1");
+    state.getChatState("A").handledArtifactIdentities.push("message:deep-1");
+  }
+  if (options.markCitedSeen !== false) {
+    state.getChatState("A").handledArtifactIdentities.push("message:cited-1");
   }
   state.getChatState("A").messageInput = "draft A";
   state.getChatState("B").renderedChat = {
@@ -570,6 +574,41 @@ describe("Chat artifact message ownership", () => {
 });
 
 describe("Chat artifact shell integration", () => {
+  it.each([
+    {
+      name: "cited report",
+      message: citedMessage,
+      identity: "message:cited-1",
+    },
+    {
+      name: "research report",
+      message: researchMessage,
+      identity: "message:research-1",
+    },
+    {
+      name: "DeepGenome report",
+      message: deepGenomeMessage,
+      identity: "message:deep-1",
+    },
+  ])(
+    "auto-opens a new foreground $name once",
+    async ({ message, identity }) => {
+      const { state } = await mountProductionChat(1440, {
+        markCitedSeen: false,
+        markDeepSeen: false,
+        messagesA: [message],
+      });
+      await nextTick();
+      await nextTick();
+
+      expect(state.getChatState("A").artifactOpen).toBe(true);
+      expect(state.getChatState("A").activeArtifactIdentity).toBe(identity);
+      expect(state.getChatState("A").handledArtifactIdentities).toContain(
+        identity
+      );
+    }
+  );
+
   it("auto-opens a new completed foreground DeepGenome id once", async () => {
     const { wrapper, state } = await mountProductionChat(1440, {
       markDeepSeen: false,
@@ -577,11 +616,11 @@ describe("Chat artifact shell integration", () => {
     await nextTick();
     await nextTick();
 
-    expect(state.getChatState("A").activeArtifactMessageId).toBe(
+    expect(state.getChatState("A").activeArtifactIdentity).toBe(
       "message:deep-1"
     );
     expect(state.getChatState("A").artifactOpen).toBe(true);
-    expect(state.getChatState("A").autoOpenedArtifactMessageIds).toContain(
+    expect(state.getChatState("A").handledArtifactIdentities).toContain(
       "message:deep-1"
     );
 
@@ -596,7 +635,19 @@ describe("Chat artifact shell integration", () => {
     await nextTick();
 
     expect(state.getChatState("A").artifactOpen).toBe(false);
-    expect(state.getChatState("A").activeArtifactMessageId).toBeNull();
+    expect(state.getChatState("A").activeArtifactIdentity).toBeNull();
+
+    state.getChatState("A").renderedChat = {
+      dialogue_id: "A",
+      messages: [{ ...deepGenomeMessage, id: "deep-2" }],
+    };
+    await nextTick();
+    await nextTick();
+
+    expect(state.getChatState("A").artifactOpen).toBe(true);
+    expect(state.getChatState("A").activeArtifactIdentity).toBe(
+      "message:deep-2"
+    );
   });
 
   it.each([
@@ -639,8 +690,10 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       expect(state.getChatState("A").artifactOpen).toBe(expectOpen);
-      expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual(
-        expectOpen ? [`message:${message.id}`] : []
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual(
+        expectOpen
+          ? ["message:cited-1", `message:${message.id}`]
+          : ["message:cited-1"]
       );
       if (name === "running server task placeholder") {
         expect(wrapper.text()).not.toContain("Server task created");
@@ -687,7 +740,9 @@ describe("Chat artifact shell integration", () => {
       expect(row.find(".research-artifact-preview").exists()).toBe(false);
       expect(row.find('[data-test="artifact-open"]').exists()).toBe(false);
       expect(state.getChatState("A").artifactOpen).toBe(false);
-      expect(state.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual([
+        "message:cited-1",
+      ]);
     }
   );
 
@@ -767,7 +822,7 @@ describe("Chat artifact shell integration", () => {
       });
       state
         .getChatState("A")
-        .autoOpenedArtifactMessageIds.push(`message:${message.id}`);
+        .handledArtifactIdentities.push(`message:${message.id}`);
       await nextTick();
       await nextTick();
 
@@ -807,7 +862,7 @@ describe("Chat artifact shell integration", () => {
     await nextTick();
     await nextTick();
     expect(state.getChatState("B").artifactOpen).toBe(false);
-    expect(state.getChatState("B").autoOpenedArtifactMessageIds).toEqual([
+    expect(state.getChatState("B").handledArtifactIdentities).toEqual([
       "message:background-deep",
     ]);
   });
@@ -998,7 +1053,7 @@ describe("Chat artifact shell integration", () => {
     await settleResponsiveLayout();
     expect(wrapper.find("[data-test=markdown-body]").exists()).toBe(true);
 
-    state.getChatState("A").activeArtifactMessageId = "missing";
+    state.getChatState("A").activeArtifactIdentity = "missing";
     transcript.scrollTop = 999;
     await settleResponsiveLayout();
     expect(wrapper.find("[data-test=markdown-body]").exists()).toBe(false);

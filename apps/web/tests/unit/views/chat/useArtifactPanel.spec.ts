@@ -41,6 +41,8 @@ const eligibleMessage = (
   ...overrides,
 });
 
+const reportIdentity = (id: string) => `message:${id}`;
+
 const makePanel = () => {
   const states = useChatStates();
   const panel = useArtifactPanel({
@@ -58,10 +60,10 @@ describe("useArtifactPanel", () => {
     states.currentChatId.value = "A";
     states.currentChat.value = { dialogue_id: "A", messages: [message] };
 
-    panel.openArtifact("42");
+    panel.openArtifact(reportIdentity("42"));
 
     expect(panel.artifactOpen.value).toBe(true);
-    expect(panel.activeArtifactMessageId.value).toBe("42");
+    expect(panel.activeArtifactIdentity.value).toBe(reportIdentity("42"));
     expect(panel.artifactTab.value).toBe("content");
     expect(panel.currentArtifactMessage.value).toBe(
       states.getChatState("A").renderedChat?.messages[0]
@@ -93,7 +95,7 @@ describe("useArtifactPanel", () => {
     };
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
 
-    panel.openArtifact("42");
+    panel.openArtifact(reportIdentity("42"));
     await panel.downloadArtifact({
       ...artifact,
     });
@@ -211,12 +213,14 @@ describe("useArtifactPanel", () => {
         dialogue_id: "A",
         messages: [eligibleMessage("selected"), ...messages],
       };
-      panel.openArtifact("selected");
+      panel.openArtifact(reportIdentity("selected"));
 
       panel.openArtifact(requestedId);
 
       expect(panel.artifactOpen.value).toBe(true);
-      expect(panel.activeArtifactMessageId.value).toBe("selected");
+      expect(panel.activeArtifactIdentity.value).toBe(
+        reportIdentity("selected")
+      );
       expect(panel.currentArtifactMessage.value?.id).toBe("selected");
     }
   );
@@ -225,26 +229,24 @@ describe("useArtifactPanel", () => {
     const { states, panel } = makePanel();
     states.currentChatId.value = "A";
 
-    expect(panel.hasAutoOpened("42")).toBe(false);
-    panel.markAutoOpened("42");
-    panel.markAutoOpened("42");
+    expect(panel.isHandled("42")).toBe(false);
+    panel.markHandled("42");
+    panel.markHandled("42");
 
-    expect(panel.hasAutoOpened("42")).toBe(true);
-    expect(states.getChatState("A").autoOpenedArtifactMessageIds).toEqual([
-      "42",
-    ]);
+    expect(panel.isHandled("42")).toBe(true);
+    expect(states.getChatState("A").handledArtifactIdentities).toEqual(["42"]);
   });
 
   it("can mark a background dialogue id without changing the foreground selection", () => {
     const { states, panel } = makePanel();
     states.currentChatId.value = "A";
 
-    panel.markAutoOpened("background-42", "B");
+    panel.markHandled("background-42", "B");
 
-    expect(panel.hasAutoOpened("background-42", "B")).toBe(true);
-    expect(panel.hasAutoOpened("background-42")).toBe(false);
-    expect(states.getChatState("A").autoOpenedArtifactMessageIds).toEqual([]);
-    expect(states.getChatState("B").autoOpenedArtifactMessageIds).toEqual([
+    expect(panel.isHandled("background-42", "B")).toBe(true);
+    expect(panel.isHandled("background-42")).toBe(false);
+    expect(states.getChatState("A").handledArtifactIdentities).toEqual([]);
+    expect(states.getChatState("B").handledArtifactIdentities).toEqual([
       "background-42",
     ]);
   });
@@ -256,8 +258,8 @@ describe("useArtifactPanel", () => {
       dialogue_id: "A",
       messages: [eligibleMessage("42")],
     };
-    panel.markAutoOpened("42");
-    panel.openArtifact("42");
+    panel.markHandled("42");
+    panel.openArtifact(reportIdentity("42"));
 
     panel.selectArtifactTab("evidence");
     expect(panel.artifactTab.value).toBe("evidence");
@@ -265,12 +267,41 @@ describe("useArtifactPanel", () => {
     panel.closeArtifact();
 
     expect(panel.artifactOpen.value).toBe(false);
-    expect(panel.activeArtifactMessageId.value).toBeNull();
+    expect(panel.activeArtifactIdentity.value).toBeNull();
     expect(panel.artifactTab.value).toBe("content");
     expect(panel.currentArtifactMessage.value).toBeNull();
-    expect(states.getChatState("A").autoOpenedArtifactMessageIds).toEqual([
-      "42",
-    ]);
+    expect(states.getChatState("A").handledArtifactIdentities).toEqual(["42"]);
+  });
+
+  it("keeps a stream identity when the same report receives a durable row", async () => {
+    const { states, panel } = makePanel();
+    states.currentChatId.value = "A";
+    states.currentChat.value = {
+      dialogue_id: "A",
+      messages: [
+        eligibleMessage("stream-placeholder", {
+          id: undefined,
+          streamPresentationKey: "turn-7",
+        }),
+      ],
+    };
+
+    panel.openArtifact("stream:turn-7");
+    expect(panel.activeArtifactIdentity.value).toBe("stream:turn-7");
+    expect(panel.currentArtifactMessage.value?.id).toBeUndefined();
+
+    states.currentChat.value = {
+      dialogue_id: "A",
+      messages: [
+        eligibleMessage("durable-7", {
+          streamPresentationKey: "turn-7",
+        }),
+      ],
+    };
+    await nextTick();
+
+    expect(panel.activeArtifactIdentity.value).toBe("stream:turn-7");
+    expect(panel.currentArtifactMessage.value?.id).toBe("durable-7");
   });
 
   it("invalidates a selected message removed by history refresh without clearing seen ids", async () => {
@@ -280,8 +311,8 @@ describe("useArtifactPanel", () => {
       dialogue_id: "A",
       messages: [eligibleMessage("42")],
     };
-    panel.markAutoOpened("42");
-    panel.openArtifact("42");
+    panel.markHandled("42");
+    panel.openArtifact(reportIdentity("42"));
 
     states.currentChat.value = {
       dialogue_id: "A",
@@ -290,11 +321,9 @@ describe("useArtifactPanel", () => {
     await nextTick();
 
     expect(panel.artifactOpen.value).toBe(false);
-    expect(panel.activeArtifactMessageId.value).toBeNull();
+    expect(panel.activeArtifactIdentity.value).toBeNull();
     expect(panel.artifactTab.value).toBe("content");
-    expect(states.getChatState("A").autoOpenedArtifactMessageIds).toEqual([
-      "42",
-    ]);
+    expect(states.getChatState("A").handledArtifactIdentities).toEqual(["42"]);
   });
 
   it("invalidates an inactive dialogue refreshed before it is revisited", async () => {
@@ -304,8 +333,8 @@ describe("useArtifactPanel", () => {
       dialogue_id: "A",
       messages: [eligibleMessage("a-message")],
     };
-    panel.markAutoOpened("a-message");
-    panel.openArtifact("a-message");
+    panel.markHandled("a-message");
+    panel.openArtifact(reportIdentity("a-message"));
     panel.selectArtifactTab("evidence");
 
     states.currentChatId.value = "B";
@@ -313,7 +342,7 @@ describe("useArtifactPanel", () => {
       dialogue_id: "B",
       messages: [{ role: "user", content: "B remains active" }],
     };
-    panel.markAutoOpened("b-seen");
+    panel.markHandled("b-seen");
     const stateB = states.getChatState("B");
     stateB.messageInput = "B draft";
 
@@ -329,13 +358,13 @@ describe("useArtifactPanel", () => {
     await nextTick();
 
     expect(stateA.artifactOpen).toBe(false);
-    expect(stateA.activeArtifactMessageId).toBeNull();
+    expect(stateA.activeArtifactIdentity).toBeNull();
     expect(stateA.artifactTab).toBe("content");
-    expect(stateA.autoOpenedArtifactMessageIds).toEqual(["a-message"]);
+    expect(stateA.handledArtifactIdentities).toEqual(["a-message"]);
     expect(stateB.messageInput).toBe("B draft");
-    expect(stateB.autoOpenedArtifactMessageIds).toEqual(["b-seen"]);
+    expect(stateB.handledArtifactIdentities).toEqual(["b-seen"]);
     expect(stateB.artifactOpen).toBe(false);
-    expect(stateB.activeArtifactMessageId).toBeNull();
+    expect(stateB.activeArtifactIdentity).toBeNull();
     expect(stateB.artifactTab).toBe("content");
   });
 
@@ -347,8 +376,8 @@ describe("useArtifactPanel", () => {
       dialogue_id: "A",
       messages: [eligibleMessage("a-message")],
     };
-    panel.markAutoOpened("a-message");
-    panel.openArtifact("a-message");
+    panel.markHandled("a-message");
+    panel.openArtifact(reportIdentity("a-message"));
     panel.selectArtifactTab("downloads");
 
     states.currentChatId.value = "B";
@@ -358,30 +387,34 @@ describe("useArtifactPanel", () => {
     };
     await nextTick();
     expect(panel.artifactOpen.value).toBe(false);
-    expect(panel.activeArtifactMessageId.value).toBeNull();
+    expect(panel.activeArtifactIdentity.value).toBeNull();
     expect(panel.artifactTab.value).toBe("content");
-    expect(panel.hasAutoOpened("a-message")).toBe(false);
+    expect(panel.isHandled("a-message")).toBe(false);
 
-    panel.markAutoOpened("b-message");
-    panel.openArtifact("b-message");
+    panel.markHandled("b-message");
+    panel.openArtifact(reportIdentity("b-message"));
     panel.selectArtifactTab("activity");
 
     states.currentChatId.value = "A";
     await nextTick();
     expect(panel.artifactOpen.value).toBe(true);
-    expect(panel.activeArtifactMessageId.value).toBe("a-message");
+    expect(panel.activeArtifactIdentity.value).toBe(
+      reportIdentity("a-message")
+    );
     expect(panel.artifactTab.value).toBe("downloads");
     expect(panel.currentArtifactMessage.value?.id).toBe("a-message");
-    expect(panel.hasAutoOpened("a-message")).toBe(true);
-    expect(panel.hasAutoOpened("b-message")).toBe(false);
+    expect(panel.isHandled("a-message")).toBe(true);
+    expect(panel.isHandled("b-message")).toBe(false);
 
     states.currentChatId.value = "B";
     await nextTick();
     expect(panel.artifactOpen.value).toBe(true);
-    expect(panel.activeArtifactMessageId.value).toBe("b-message");
+    expect(panel.activeArtifactIdentity.value).toBe(
+      reportIdentity("b-message")
+    );
     expect(panel.artifactTab.value).toBe("activity");
     expect(panel.currentArtifactMessage.value?.id).toBe("b-message");
-    expect(panel.hasAutoOpened("a-message")).toBe(false);
-    expect(panel.hasAutoOpened("b-message")).toBe(true);
+    expect(panel.isHandled("a-message")).toBe(false);
+    expect(panel.isHandled("b-message")).toBe(true);
   });
 });

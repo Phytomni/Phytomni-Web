@@ -148,9 +148,9 @@ describe("useChatStates parallel chat state", () => {
       refreshTurnIds: {},
       activityExpandedByMessage: {},
       artifactOpen: false,
-      activeArtifactMessageId: null,
+      activeArtifactIdentity: null,
       artifactTab: "content",
-      autoOpenedArtifactMessageIds: [],
+      handledArtifactIdentities: [],
       archiveRetryingByMessageId: {},
     });
     expect(state).not.toHaveProperty("uploadPurpose");
