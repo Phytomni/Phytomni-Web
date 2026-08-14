@@ -142,6 +142,7 @@ func TestResearchFormatsCompatibleOnlyFallsBackToArchiveSuffixes(t *testing.T) {
 	}{
 		{name: "exact compound token", required: "matrix.tsv", advertised: "matrix.tsv", want: true},
 		{name: "accepted archive suffix", required: "matrix.mtx.gz", advertised: "gz", want: true},
+		{name: "retired archive suffix", required: "matrix.mtx.zipx", advertised: "zipx", want: false},
 		{name: "non-archive final segment", required: "matrix.tsv", advertised: "tsv", want: false},
 	}
 
