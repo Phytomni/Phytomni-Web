@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240" role="img" aria-labelledby="title">
+  <title id="title">Authorized scientific figure</title>
+  <rect width="640" height="240" fill="#eef4f8" />
+  <path d="M64 184h512" stroke="#496477" stroke-width="2" />
+  <path d="M96 164 208 110l112 34 112-72 112 26" fill="none" stroke="#176b87" stroke-width="8" />
+  <circle cx="96" cy="164" r="8" fill="#176b87" />
+  <circle cx="208" cy="110" r="8" fill="#176b87" />
+  <circle cx="320" cy="144" r="8" fill="#176b87" />
+  <circle cx="432" cy="72" r="8" fill="#176b87" />
+  <circle cx="544" cy="98" r="8" fill="#176b87" />
+</svg>

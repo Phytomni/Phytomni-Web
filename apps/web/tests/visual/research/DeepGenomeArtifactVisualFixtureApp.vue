@@ -9,6 +9,7 @@
       :status="status"
       :markdown="markdown"
       :references="DEEP_GENOME_CASE_REFERENCES"
+      :resources="resources"
       ns="deep-genome-visual"
       artifact-id="deep-genome-visual-artifact"
       :tab-labels="tabLabels"
@@ -32,15 +33,24 @@ import { useI18n } from "vue-i18n";
 import { DeepGenomeArtifact } from "@/components/research";
 import {
   DEEP_GENOME_CASE_REFERENCES,
-  DEEP_GENOME_CASE_VIEWER_MARKDOWN,
+  DEEP_GENOME_CASE_MARKDOWN,
 } from "@/views/deep-genome-agent/deep-genome-case";
+import {
+  CONTRACT_DEEP_GENOME_MARKDOWN,
+  CONTRACT_DEEP_GENOME_RESOURCES,
+} from "./fixture-data";
 
 const { t } = useI18n();
 const action = ref("idle");
 const title = "Os01g0177400 functional analysis";
 const metadata = ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"];
 const status = computed(() => t("common.finished"));
-const markdown = DEEP_GENOME_CASE_VIEWER_MARKDOWN;
+const isContract =
+  new URLSearchParams(window.location.search).get("case") === "contract";
+const markdown = isContract
+  ? CONTRACT_DEEP_GENOME_MARKDOWN
+  : DEEP_GENOME_CASE_MARKDOWN;
+const resources = isContract ? CONTRACT_DEEP_GENOME_RESOURCES : [];
 const tabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),

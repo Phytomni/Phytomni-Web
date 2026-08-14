@@ -21,7 +21,7 @@
       <DeepGenomeArtifact
         :title="$t('agents.deepGenome.title')"
         :metadata="$t('agents.deepGenome.subtitle')"
-        :markdown="DEEP_GENOME_CASE_VIEWER_MARKDOWN"
+        :markdown="DEEP_GENOME_CASE_MARKDOWN"
         :references="DEEP_GENOME_CASE_REFERENCES"
         ns="deep-genome-demo"
         :tab-labels="artifactTabLabels"
@@ -47,7 +47,7 @@ import { AgentDemoShell } from "@/components/demo";
 import { DeepGenomeArtifact } from "@/components/research";
 import {
   DEEP_GENOME_CASE_REFERENCES,
-  DEEP_GENOME_CASE_VIEWER_MARKDOWN,
+  DEEP_GENOME_CASE_MARKDOWN,
 } from "./deep-genome-case";
 
 const { t } = useI18n();

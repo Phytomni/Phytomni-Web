@@ -486,10 +486,9 @@ export function removeDeletedChat(options: {
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
           :status="currentArtifactStatusLabel"
-          :markdown="
-            String(currentArtifactMessage.content).replace(/\n/g, '\\n')
-          "
+          :markdown="String(currentArtifactMessage.content)"
           :references="currentArtifactMessage.doc_list"
+          :resources="currentArtifactResources"
           :ns="artifactNamespace"
           :tab="artifactTab"
           :tab-labels="artifactTabLabels"
@@ -501,6 +500,7 @@ export function removeDeletedChat(options: {
           @back="closeArtifact"
           @close="closeArtifact"
           @tab="selectArtifactTab"
+          @resource-activate="activateArtifactResource"
         />
         <ResearchArtifactShell
           v-else-if="currentArtifactMessage"
@@ -709,7 +709,11 @@ import type {
   ChatUIState,
   DialogueReconciliationResult,
 } from "./types";
-import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
+import type {
+  AuthorizedScientificResource,
+  ScientificCitationActivation,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
 import type { BotRunProjection } from "./botProjection";
 import {
   cloneBotInterop,
@@ -1165,6 +1169,29 @@ const artifactId = computed(() => {
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const currentArtifactResources = computed<
+  readonly AuthorizedScientificResource[]
+>(() => {
+  const message = currentArtifactMessage.value;
+  if (!message || message.tool_name !== "DeepGenomeAgent") return [];
+  const source = typeof message.content === "string" ? message.content : "";
+
+  return currentArtifactLinks.value.flatMap((artifact) => {
+    const escapedName = artifact.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hrefPattern = new RegExp(
+      String.raw`!?\[[^\]]*\]\(\s*${escapedName}\s*\)`
+    );
+    if (!hrefPattern.test(source)) return [];
+    return [
+      {
+        id: artifact.id,
+        name: artifact.name,
+        kind: artifact.kind === "report" ? "markdown" : "attachment",
+        markdownHref: artifact.name,
+      },
+    ];
+  });
+});
 const evidencePanelRef = ref<{
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);
@@ -1182,6 +1209,15 @@ async function activateEvidence(
   selectArtifactTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
+}
+
+function activateArtifactResource(
+  activation: ScientificResourceActivation
+): void {
+  const artifact = currentArtifactLinks.value.find(
+    (item) => item.id === activation.id
+  );
+  if (artifact) void downloadArtifact(artifact);
 }
 
 type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";

@@ -3,7 +3,6 @@ import type { Ref, ComputedRef } from "vue";
 import { saveAs } from "file-saver";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
-import { convertFilePath } from "@/utils/markdown-inline";
 import type { DisplayReference } from "@/utils/reference-renderer";
 
 export type DeepGenomeMainContentValue =
@@ -222,33 +221,9 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
   };
 
   const downloadMarkdown = () => {
-    // build the converted Markdown content
+    // Preserve the report source exactly. Resource authorization is a render
+    // concern; exports must never invent public paths from report strings.
     let convertedMarkdown = props.markdown;
-
-    // handle line breaks - convert escaped \n into real newlines
-    convertedMarkdown = convertedMarkdown.replace(/\\n/g, "\n");
-
-    // convert image paths
-    convertedMarkdown = convertedMarkdown.replace(
-      /!\[(.*?)\]\((.*?)\)/g,
-      (match: string, alt: string, src: string) => {
-        const convertedSrc = convertFilePath(src);
-        return `![${alt}](${convertedSrc})`;
-      }
-    );
-
-    // convert link paths
-    convertedMarkdown = convertedMarkdown.replace(
-      /\[([^\]]+?)\]\(([^)]+?)\)/g,
-      (match: string, text: string, url: string) => {
-        // skip links that already start with http/https
-        if (url.startsWith("http://") || url.startsWith("https://")) {
-          return match;
-        }
-        const convertedUrl = convertFilePath(url);
-        return `[${text}](${convertedUrl})`;
-      }
-    );
 
     // add the references section
     if (displayReferences.value && displayReferences.value.length > 0) {

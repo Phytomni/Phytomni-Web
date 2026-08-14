@@ -129,7 +129,9 @@ const parseDocTitles = (
   return { mainContent, refs };
 };
 
-const processedContent = computed(() => buildDisplayContent(MDContent.value));
+const processedContent = computed(() =>
+  buildDisplayContent(MDContent.value).replace(/\\n/g, "\n")
+);
 
 // Fetch gene details
 const fetchGeneDetail = async (file_name: string) => {

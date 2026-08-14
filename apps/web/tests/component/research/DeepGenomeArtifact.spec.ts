@@ -19,6 +19,7 @@ const DeepGenomeResultViewerStub = defineComponent({
   props: {
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
+    resources: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
     showActions: { type: Boolean, default: true },
     showReferences: { type: Boolean, default: true },
@@ -40,7 +41,7 @@ const referenceList = [
 function mountArtifact() {
   return mountWithApp(DeepGenomeArtifact, {
     props: {
-      markdown: "# Full report\\nEvidence [1].",
+      markdown: "# Full report\n\nEvidence [1].",
       references: referenceList,
       ns: "artifact_under",
       title: "Deep genome report",
@@ -68,7 +69,7 @@ function mountArtifact() {
 function mountArtifactWithActualViewer() {
   return mountWithApp(DeepGenomeArtifact, {
     props: {
-      markdown: "## Evidence\\nSupported claim [1-2].",
+      markdown: "## Evidence\n\nSupported claim [1-2].",
       references: referenceList,
       ns: "artifact_under",
       title: "Deep genome report",
@@ -201,7 +202,7 @@ describe("DeepGenomeArtifact", () => {
     });
     const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
 
-    await wrapper.get("a.citation-ref").trigger("click");
+    await wrapper.get(".scientific-citation__link").trigger("click");
     await nextTick();
     await nextTick();
 
@@ -215,5 +216,64 @@ describe("DeepGenomeArtifact", () => {
     ).toEqual([true, true]);
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes authorized resources through and relays opaque resource activation", async () => {
+    const resources = [
+      {
+        id: "attachment-1",
+        name: "Report",
+        kind: "attachment" as const,
+        markdownHref: "report.pdf",
+      },
+    ];
+    const wrapper = mountWithApp(DeepGenomeArtifact, {
+      props: {
+        markdown: "# Report\n\n[Download](report.pdf)",
+        references: referenceList,
+        resources,
+        ns: "artifact_under",
+        title: "Deep genome report",
+        metadata: "Deep Genome Agent",
+        status: "Finished",
+        tabLabels: {
+          content: "Report",
+          evidence: "Evidence",
+          activity: "Activity",
+          downloads: "Downloads",
+        },
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+      global: {
+        stubs: {
+          DeepGenomeResultViewer: DeepGenomeResultViewerActual,
+          ElContainer: passthrough,
+          ElAside: passthrough,
+          ElMain: passthrough,
+          ElCard: passthrough,
+          ElMenu: passthrough,
+          ElMenuItem: passthrough,
+          ElSubMenu: passthrough,
+          ElDialog: passthrough,
+          ElButton: passthrough,
+          ElDropdown: passthrough,
+          ElDropdownMenu: passthrough,
+          ElDropdownItem: passthrough,
+        },
+        mocks: { $t: (key: string) => key },
+      },
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(
+      wrapper.findComponent(DeepGenomeResultViewerActual).props("resources")
+    ).toEqual(resources);
+    await wrapper.get(".scientific-resource-link").trigger("click");
+    expect(wrapper.emitted("resource-activate")).toEqual([
+      [{ id: "attachment-1", kind: "attachment" }],
+    ]);
   });
 });

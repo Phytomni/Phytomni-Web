@@ -29,7 +29,7 @@
             :index="item.id"
             class="menu-level-2"
           >
-            <span v-html="item.text"></span>
+            <span>{{ item.text }}</span>
           </el-menu-item>
 
           <el-sub-menu
@@ -40,7 +40,7 @@
             class="menu-level-2"
           >
             <template #title>
-              <span v-html="item.text"></span>
+              <span>{{ item.text }}</span>
             </template>
 
             <template v-for="child in item.children" :key="child.id">
@@ -52,7 +52,7 @@
                 :index="child.id"
                 class="menu-level-3"
               >
-                <span v-html="child.text"></span>
+                <span>{{ child.text }}</span>
               </el-menu-item>
 
               <el-sub-menu
@@ -65,7 +65,7 @@
                 class="menu-level-3"
               >
                 <template #title>
-                  <span v-html="child.text"></span>
+                  <span>{{ child.text }}</span>
                 </template>
 
                 <el-menu-item
@@ -74,7 +74,7 @@
                   :index="grandChild.id"
                   class="menu-level-4"
                 >
-                  <span v-html="grandChild.text"></span>
+                  <span>{{ grandChild.text }}</span>
                 </el-menu-item>
               </el-sub-menu>
             </template>
@@ -85,7 +85,7 @@
             :index="item.id"
             :class="`menu-level-${item.level}`"
           >
-            <span v-html="item.text"></span>
+            <span>{{ item.text }}</span>
           </el-menu-item>
         </template>
       </el-menu>
@@ -96,7 +96,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMenu, ElMenuItem, ElSubMenu } from "element-plus";
-import type { NestedHeading } from "@/utils/deep-genome-markdown";
+import type { ScientificHeading } from "@/utils/scientific-markdown/types";
+
+interface NestedHeading extends ScientificHeading {
+  children: NestedHeading[];
+}
 
 defineProps<{
   nestedHeadings: NestedHeading[];

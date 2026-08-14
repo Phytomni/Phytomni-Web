@@ -1,12 +1,11 @@
-import { afterEach, describe, it, expect } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import { mountWithApp } from "../helpers/test-app-context";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { mountWithApp } from "../helpers/test-app-context";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { parseDeepGenomeMarkdown } from "@/utils/deep-genome-markdown";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
 
 const threeDMolMock = vi.hoisted(() => {
   const viewer = {
@@ -15,7 +14,6 @@ const threeDMolMock = vi.hoisted(() => {
     zoomTo: vi.fn(),
     render: vi.fn(),
     animate: vi.fn(),
-    resize: vi.fn(),
     stopAnimate: vi.fn(),
     clear: vi.fn(),
   };
@@ -31,12 +29,6 @@ vi.mock("@/utils/3dmol", () => ({
   load3DMol: threeDMolMock.load3DMol,
 }));
 
-// Locks the reference-renderer text fields. doc_list comes from the Bot
-// `formatted.references` reshape (attacker-influenceable via agent output / RAG),
-// and each reference is interpolated into ref.html and fed to v-html. The href
-// parts are already scheme-checked; this pins the TEXT fields (title, citation
-// au/so, plain-string and JSON fallbacks) so a raw tag can't reach the DOM.
-const passthrough = { template: "<div><slot /></div>" };
 const VIEWER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/DeepGenomeResultViewer.vue"),
   "utf8"
@@ -45,34 +37,8 @@ const VIEWER_TEMPLATE = VIEWER_SOURCE.slice(
   0,
   VIEWER_SOURCE.indexOf("<script setup")
 );
-const VIEWER_STYLES = [
-  ...VIEWER_SOURCE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g),
-]
-  .map((match) => match[1])
-  .join("\n");
-const TOC_PATH = resolve(
-  __dirname,
-  "../../src/components/research/DeepGenomeToc.vue"
-);
-const TYPES_PATH = resolve(
-  __dirname,
-  "../../src/components/research/deep-genome-types.ts"
-);
-const TOC_SOURCE = existsSync(TOC_PATH) ? readFileSync(TOC_PATH, "utf8") : "";
-const TOC_TEMPLATE = TOC_SOURCE.slice(0, TOC_SOURCE.indexOf("<script setup"));
-const TOC_STYLES = [
-  ...TOC_SOURCE.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g),
-]
-  .map((match) => match[1])
-  .join("\n");
-const TYPES_SOURCE = existsSync(TYPES_PATH)
-  ? readFileSync(TYPES_PATH, "utf8")
-  : "";
 
-function cssRule(styles: string, selector: string): string {
-  return styles.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
-}
-
+const passthrough = { template: "<div><slot /></div>" };
 const stubs = {
   ElContainer: passthrough,
   ElAside: passthrough,
@@ -92,471 +58,219 @@ const mountedViewers: Array<{ unmount: () => void }> = [];
 
 afterEach(() => {
   mountedViewers.splice(0).forEach((wrapper) => wrapper.unmount());
+  vi.unstubAllGlobals();
+  threeDMolMock.createViewer.mockClear();
+  threeDMolMock.viewer.addModel.mockClear();
 });
 
 function render(
-  references: unknown[],
+  markdown: string,
   extraProps: Record<string, unknown> = {}
-) {
+): ReturnType<typeof mountWithApp> {
   const wrapper = mountWithApp(DeepGenomeResultViewer, {
-    props: { markdown: "", references, ...extraProps },
+    props: {
+      markdown,
+      references: [],
+      ns: "deep-test",
+      ...extraProps,
+    },
     global: { stubs, mocks: { $t: (key: string) => key } },
   });
   mountedViewers.push(wrapper);
   return wrapper;
 }
 
-function renderMarkdown(markdown: string) {
-  const wrapper = mountWithApp(DeepGenomeResultViewer, {
-    props: { markdown, references: [] },
-    global: { stubs, mocks: { $t: (key: string) => key } },
-  });
-  mountedViewers.push(wrapper);
-  return wrapper;
+async function settleMarkdown(): Promise<void> {
+  await vi.dynamicImportSettled();
+  await nextTick();
+  await Promise.resolve();
+  await nextTick();
 }
 
-describe("DeepGenomeResultViewer — embedded renderer boundary", () => {
-  it("always renders an embedded root without owning the viewport or page surface", () => {
-    const wrapper = render([]);
-    const root = wrapper.find('[data-testid="deep-genome-viewer"]');
+describe("DeepGenomeResultViewer — shared document boundary", () => {
+  it("renders one ScientificMarkdown body and keeps references outside the report body sink", async () => {
+    const wrapper = render("# Report\n\n## Evidence\n\nBody");
+    await settleMarkdown();
 
-    expect(root.element.tagName).toBe("DIV");
-    expect(VIEWER_TEMPLATE).not.toContain("<el-container");
-    expect(VIEWER_STYLES).not.toMatch(/100(?:d|s|l)?vh/);
-    expect(VIEWER_STYLES).not.toContain("var(--phy-color-bg-page)");
-    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-viewer")).not.toMatch(
-      /\boverflow\b/
+    expect(wrapper.findAllComponents(ScientificMarkdown)).toHaveLength(1);
+    expect(wrapper.find("article.deep-genome-document").exists()).toBe(true);
+    expect(VIEWER_TEMPLATE).not.toContain("contentBlocks");
+    expect(VIEWER_TEMPLATE).not.toContain('v-html="block');
+    expect(VIEWER_TEMPLATE.match(/\bv-html\s*=/g)).toHaveLength(1);
+  });
+
+  it("feeds shared heading metadata into the responsive TOC and keeps heading scroll ownership", async () => {
+    const wrapper = render(
+      "# Report\n\n## Evidence\n\n### Expression\n\nFindings"
     );
+    await settleMarkdown();
+
+    expect(wrapper.find("h2#user-content-evidence").exists()).toBe(true);
+    expect(wrapper.find("h3#user-content-expression").exists()).toBe(true);
+    expect(
+      wrapper.findComponent(DeepGenomeToc).props("nestedHeadings")
+    ).toEqual([
+      {
+        id: "evidence",
+        level: 2,
+        text: "Evidence",
+        children: [
+          { id: "expression", level: 3, text: "Expression", children: [] },
+        ],
+      },
+    ]);
+    expect(VIEWER_SOURCE).toContain('@headings="handleHeadings"');
+    expect(VIEWER_SOURCE).not.toContain("parseDeepGenomeMarkdown");
   });
 
-  it("keeps the legacy embedded prop inert while compatibility actions and references default on", () => {
-    const compatible = render([]);
-    expect(compatible.props("embedded")).toBe(false);
-    expect(compatible.props("showActions")).toBe(true);
-    expect(compatible.props("showReferences")).toBe(true);
-    expect(
-      compatible.find('[data-testid="deep-genome-toolbar"]').exists()
-    ).toBe(true);
-    expect(compatible.find(".deep-genome-references").exists()).toBe(true);
+  it("uses the shared GFM, math, citation, and superscript DOM contract", async () => {
+    const wrapper = render(
+      [
+        "# Report",
+        "",
+        "| Gene | Score | Note |",
+        "| :--- | ---: | :---: |",
+        String.raw`| Os01g | 9.5 | escaped \| pipe |`,
+        "",
+        "Inline $x^2$ and [1-3].",
+        "",
+        "$$E = mc^2$$",
+        "",
+        "<sup>1</sup> <sup>[1-3]</sup>",
+      ].join("\n"),
+      { references: [{ title: "One" }, { title: "Two" }, { title: "Three" }] }
+    );
+    await settleMarkdown();
 
-    const composed = render([], {
-      embedded: true,
-      showActions: false,
-      showReferences: false,
+    expect(wrapper.find("table").exists()).toBe(true);
+    expect(wrapper.text()).toContain("escaped | pipe");
+    expect(wrapper.find(".katex").exists()).toBe(true);
+    expect(
+      wrapper.findAll(".scientific-citation").map((node) => node.text())
+    ).toEqual(["[1-3]", "1", "[1-3]"]);
+  });
+
+  it("keeps hostile raw HTML inert while leaving only controlled resource nodes active", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const wrapper = render(
+      [
+        "# Report",
+        "",
+        '<script>alert(1)</script><img src=x onerror="alert(2)">',
+        "",
+        "![Missing](.out/missing.png)",
+      ].join("\n")
+    );
+    await settleMarkdown();
+
+    expect(wrapper.find("script").exists()).toBe(false);
+    expect(wrapper.findAll("[onerror], [onclick]")).toHaveLength(0);
+    expect(wrapper.findAll(".scientific-resource--unavailable")).toHaveLength(
+      1
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("renders authorized image and CIF metadata while leaving checked-in .out paths inert", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => "data_cif",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+      }
+    );
+    const wrapper = render(
+      [
+        "# Report",
+        "",
+        "![Figure](figures/figure.svg)",
+        "",
+        "![Structure](structures/structure.cif)",
+        "",
+        "![Missing](.out/missing.cif)",
+      ].join("\n"),
+      {
+        resources: [
+          {
+            id: "figure",
+            name: "Figure",
+            kind: "image",
+            markdownHref: "figures/figure.svg",
+            displayUrl: "/authorized/figure.svg",
+          },
+          {
+            id: "structure",
+            name: "Structure",
+            kind: "cif",
+            markdownHref: "structures/structure.cif",
+            displayUrl: "/authorized/structure.cif",
+          },
+        ],
+      }
+    );
+    await settleMarkdown();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(wrapper.get(".scientific-image__thumbnail").attributes("src")).toBe(
+      "/authorized/figure.svg"
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/authorized/structure.cif",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    expect(wrapper.findAll(".scientific-resource--unavailable")).toHaveLength(
+      1
+    );
+    expect(wrapper.find(".scientific-cif-viewer").exists()).toBe(true);
+  });
+
+  it("relays the shared citation activation without root anchor delegation", async () => {
+    const wrapper = render("# Report\n\nEvidence [1-2].", {
+      references: [{ title: "One" }, { title: "Two" }],
     });
-    expect(composed.find('[data-testid="deep-genome-toolbar"]').exists()).toBe(
-      false
-    );
-    expect(composed.find(".deep-genome-references").exists()).toBe(false);
-    expect(
-      composed.find('[data-testid="deep-genome-viewer"]').classes()
-    ).not.toContain("deep-genome-viewer--embedded");
+    await settleMarkdown();
+    const citation = wrapper.get(".scientific-citation__link");
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    citation.element.dispatchEvent(event);
+
+    expect(wrapper.emitted("citation-activate")).toEqual([
+      [{ namespace: "deep-test", indices: [1, 2] }],
+    ]);
+    expect(VIEWER_SOURCE).not.toContain("handleCitationNavigation");
+    expect(VIEWER_TEMPLATE).not.toContain('@click="handleCitation');
   });
 
-  it("uses semantic hooks instead of hard-coded or dynamic inline layout styles", () => {
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-viewer"');
-    expect(VIEWER_TEMPLATE).toContain("<DeepGenomeToc");
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-main"');
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-toolbar"');
-    expect(VIEWER_TEMPLATE).not.toMatch(/\b:?style\s*=/);
-    expect(TOC_TEMPLATE).not.toMatch(/\b:?style\s*=/);
-    expect(VIEWER_TEMPLATE).not.toContain('width="400px"');
+  it("relays opaque resource activation from the shared body", async () => {
+    const wrapper = render("# Report\n\n[Download](report.pdf)", {
+      resources: [
+        {
+          id: "report-1",
+          name: "Report",
+          kind: "attachment",
+          markdownHref: "report.pdf",
+        },
+      ],
+    });
+    await settleMarkdown();
+    await wrapper.get(".scientific-resource-link").trigger("click");
+
+    expect(wrapper.emitted("resource-activate")).toEqual([
+      [{ id: "report-1", kind: "attachment" }],
+    ]);
   });
 
-  it("extracts an exact 232px desktop TOC that becomes a collapsed disclosure at 899px", () => {
-    expect(TOC_SOURCE).not.toBe("");
-    expect(TOC_TEMPLATE).toContain("<details");
-    expect(TOC_TEMPLATE).toContain("<summary");
-    expect(TOC_TEMPLATE).toContain(':open="disclosureOpen"');
-    expect(TOC_SOURCE).toContain("const disclosureOpen = ref(false)");
-    expect(TOC_SOURCE).toContain('window.matchMedia("(min-width: 900px)")');
-    expect(TOC_STYLES).toMatch(
-      /\.deep-genome-toc\s*\{[\s\S]*width:\s*232px[\s\S]*flex:\s*0 0 232px/
-    );
-    expect(TOC_STYLES).toMatch(
-      /@media\s*\(max-width:\s*899px\)[\s\S]*\.deep-genome-toc\s*\{[\s\S]*width:\s*100%/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /@media\s*\(max-width:\s*899px\)[\s\S]*\.deep-genome-viewer\s*\{[\s\S]*flex-direction:\s*column/
-    );
-  });
-
-  it("exports and exposes one typed download facade that delegates to the existing methods", () => {
-    const wrapper = render([]);
-
-    expect(TYPES_SOURCE).toMatch(
-      /export type DeepGenomeDownloadFormat\s*=\s*"pdf"\s*\|\s*"markdown"/
-    );
-    expect(TYPES_SOURCE).toMatch(
-      /export interface DeepGenomeViewerHandle\s*\{[\s\S]*download\(format:\s*DeepGenomeDownloadFormat\):\s*Promise<void>/
-    );
+  it("exposes typed PDF and Markdown download methods", () => {
+    const wrapper = render("# Report");
     expect(wrapper.vm).toHaveProperty("download");
     expect(VIEWER_SOURCE).toMatch(
       /defineExpose(?:<DeepGenomeViewerHandle>)?\(\{\s*download\s*\}\)/
     );
-    expect(VIEWER_SOURCE).toMatch(
-      /const download[\s\S]*format === "pdf"[\s\S]*downloadPDF\(\)[\s\S]*downloadMarkdown\(\)/
-    );
-  });
-
-  it("preserves exactly the thirteen trusted HTML sinks across document, TOC, and references", () => {
-    const sinkCount =
-      (VIEWER_TEMPLATE.match(/\bv-html\s*=/g) ?? []).length +
-      (TOC_TEMPLATE.match(/\bv-html\s*=/g) ?? []).length;
-
-    expect(sinkCount).toBe(13);
-    expect(VIEWER_TEMPLATE).toContain('v-html="ref.html"');
-    expect(VIEWER_SOURCE).toContain(
-      "buildDisplayReferences(props.references, props.ns)"
-    );
-  });
-});
-
-describe("DeepGenomeResultViewer — scientific document skin", () => {
-  it("renders semantic document sections instead of an Element Plus card wall", async () => {
-    const wrapper = renderMarkdown(
-      "# Rice locus report\\n" +
-        "Executive summary.\\n" +
-        "## Evidence\\n" +
-        "Section overview.\\n" +
-        "### Expression\\n" +
-        "Expression evidence."
-    );
-    await nextTick();
-    await nextTick();
-
-    expect(wrapper.find("article.deep-genome-document").exists()).toBe(true);
-    expect(wrapper.find(".deep-genome-title").text()).toBe("Rice locus report");
-    expect(wrapper.find(".deep-genome-heading--section").text()).toBe(
-      "Evidence"
-    );
-    expect(wrapper.find("section.deep-genome-section").exists()).toBe(true);
-    expect(wrapper.find(".deep-genome-section-body").text()).toContain(
-      "Expression evidence."
-    );
-    expect(VIEWER_TEMPLATE).not.toContain("<el-card");
-    expect(VIEWER_TEMPLATE).not.toContain('shadow="hover"');
-  });
-
-  it("localizes the references heading and empty state in both locale packs", () => {
-    expect(VIEWER_TEMPLATE).toContain('$t("agents.deepGenome.references")');
-    expect(VIEWER_TEMPLATE).toContain('$t("agents.deepGenome.noReferences")');
-    expect(VIEWER_TEMPLATE).not.toContain("<h2>References</h2>");
-    expect(VIEWER_TEMPLATE).not.toContain("No references available.");
-    expect(enUS.agents.deepGenome.references).toBe("References");
-    expect(enUS.agents.deepGenome.noReferences).toBe(
-      "No references available."
-    );
-    expect(zhCN.agents.deepGenome.references).toBe("参考文献");
-    expect(zhCN.agents.deepGenome.noReferences).toBe("暂无参考文献。");
-  });
-
-  it("uses only design tokens for the scoped color and surface skin", () => {
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-text\)/);
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-text-secondary\)/);
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-fill-subtle\)/);
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-border-subtle\)/);
-    expect(VIEWER_STYLES).toMatch(/var\(--phy-color-action-text\)/);
-    expect(VIEWER_STYLES).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-    expect(VIEWER_STYLES).not.toMatch(/rgba?\(/i);
-    expect(VIEWER_STYLES).not.toMatch(/box-shadow\s*:/);
-    expect(VIEWER_STYLES).not.toMatch(/transform:\s*translateY/);
-    expect(VIEWER_STYLES).not.toMatch(/transition:\s*all/);
-    expect(VIEWER_STYLES).not.toMatch(/\.theme-dark/);
-  });
-
-  it("gives the document a restrained scientific heading hierarchy", () => {
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-title\s*\{[\s\S]*font-family:\s*var\(--phy-font-shell\)[\s\S]*font-size:\s*clamp\(/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-heading--section\s*\{[\s\S]*border-bottom:\s*1px solid var\(--phy-color-border-subtle\)/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-section-title\s*\{[\s\S]*font-size:\s*18px/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s*\{[\s\S]*max-width:\s*var\(--phy-layout-reading-max-width\)/
-    );
-  });
-
-  it("keeps tables as the only local horizontal scroll surface", () => {
-    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-viewer")).not.toMatch(
-      /overflow-x:\s*auto/
-    );
-    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-main")).not.toMatch(
-      /overflow-x:\s*auto/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.markdown-table\)\s*\{[\s\S]*display:\s*block[\s\S]*max-width:\s*100%[\s\S]*overflow-x:\s*auto/
-    );
-    expect(VIEWER_STYLES).toMatch(/overscroll-behavior-inline:\s*contain/);
-  });
-
-  it("uses quiet tokenized TOC and toolbar states", () => {
-    expect(TOC_STYLES).toMatch(
-      /\.deep-genome-toc\s+:deep\(\.el-menu-item\.is-active\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-brand-blue-soft\)/
-    );
-    expect(TOC_STYLES).toMatch(
-      /\.deep-genome-toc\s+:deep\(\.el-menu-item:hover\)[\s\S]*background(?:-color)?:\s*var\(--phy-color-fill-subtle\)/
-    );
-    expect(VIEWER_TEMPLATE).toMatch(
-      /class="deep-genome-toolbar-button"[\s\S]*?plain/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-toolbar-button[\s\S]*color:\s*var\(--phy-color-action-text\)/
-    );
-  });
-
-  it("renders references and generated media as divider-led document sections", () => {
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-references"');
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-reference"');
-    expect(VIEWER_TEMPLATE).toContain('class="deep-genome-empty-references"');
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-references\s*\{[\s\S]*border-top:\s*1px solid var\(--phy-color-border-subtle\)/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.image-card\)\s*\{[\s\S]*border:\s*0/
-    );
-    expect(cssRule(VIEWER_STYLES, "\\.deep-genome-references")).not.toMatch(
-      /background\s*:/
-    );
-  });
-});
-
-describe("DeepGenomeResultViewer — scoped responsive media viewers", () => {
-  it("scopes CIF and clickable-image setup to this viewer document root", () => {
-    expect(VIEWER_TEMPLATE).toMatch(
-      /<article\b[^>]*class="deep-genome-document phy-reading"[^>]*ref="documentRef"/
-    );
-    expect(VIEWER_SOURCE).toContain("documentRef.value?.querySelectorAll(");
-    expect(VIEWER_SOURCE).toContain(
-      "setupImageClickListeners(documentRef.value)"
-    );
-    expect(VIEWER_SOURCE).not.toMatch(
-      /document\.querySelectorAll\([\s\S]*?cif-container/
-    );
-  });
-
-  it("cleans up owned image listeners when the component unmounts", () => {
-    expect(VIEWER_SOURCE).toContain("onBeforeUnmount");
-    expect(VIEWER_SOURCE).toContain("cleanupImageClickListeners");
-    expect(VIEWER_SOURCE).toMatch(
-      /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*cleanupImageClickListeners\(\)/
-    );
-  });
-
-  it("renders CIF failures as text instead of interpolated HTML", () => {
-    expect(VIEWER_SOURCE).toContain("errorNode.textContent = message");
-    expect(VIEWER_SOURCE).not.toMatch(/\.innerHTML\s*=\s*`<div class="error">/);
-  });
-
-  it("cancels CIF work and releases active viewers on unmount", () => {
-    expect(VIEWER_SOURCE).toContain("new AbortController()");
-    expect(VIEWER_SOURCE).toContain("controller.abort()");
-    expect(VIEWER_SOURCE).toContain("viewer.stopAnimate?.()");
-    expect(VIEWER_SOURCE).toContain("viewer.clear?.()");
-  });
-
-  it("cancels delayed scroll-spy setup before unmount cleanup finishes", () => {
-    expect(VIEWER_SOURCE).toMatch(
-      /observerSetupTimer\s*=\s*window\.setTimeout\([\s\S]*setupIntersectionObserver/
-    );
-    expect(VIEWER_SOURCE).toMatch(
-      /onBeforeUnmount\(\(\)\s*=>\s*\{[\s\S]*window\.clearTimeout\(observerSetupTimer\)/
-    );
-  });
-
-  it("owns CIF setup promises inside the viewer lifecycle", () => {
-    expect(VIEWER_SOURCE).toContain("await loadCifFile();");
-    expect(VIEWER_SOURCE).toContain("await processCifContainers();");
-    expect(VIEWER_SOURCE).not.toMatch(/^\s*loadCifFile\(\);\s*$/m);
-    expect(VIEWER_SOURCE).not.toMatch(/^\s*processCifContainers\(\);\s*$/m);
-  });
-
-  it("loads 3Dmol through the package adapter instead of a public script tag", () => {
-    expect(VIEWER_SOURCE).toContain('@/utils/3dmol"');
-    expect(VIEWER_SOURCE).toContain("load3DMol");
-    expect(VIEWER_SOURCE).toMatch(/load3DMol\(\)[\s\S]*\.then\(/);
-    expect(VIEWER_SOURCE).not.toContain("/static/js/3Dmol-min.js");
-    expect(VIEWER_SOURCE).not.toContain('document.createElement("script")');
-    expect(VIEWER_SOURCE).not.toContain("window.$3Dmol");
-  });
-
-  it("keeps uncropped scientific figures and the CIF canvas responsive", () => {
-    expect(VIEWER_SOURCE).toContain(
-      'viewerDiv.className = "deep-genome-cif-viewer"'
-    );
-    expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.width = "100%"');
-    expect(VIEWER_SOURCE).not.toContain('viewerDiv.style.height = "600px"');
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-document\s+:deep\(\.deep-genome-cif-viewer\)\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*min-height:\s*clamp\(240px,\s*42vh,\s*560px\)/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.deep-genome-prose-block\s+:deep\(img\),[\s\S]*\.deep-genome-section-body\s+:deep\(img\),[\s\S]*\.deep-genome-document\s+:deep\(\.clickable-image\)\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*height:\s*auto/
-    );
-    expect(VIEWER_STYLES).not.toContain("object-fit: cover");
-  });
-
-  it("does not let generated figure markup override the responsive media rules", () => {
-    const { contentBlocks } = parseDeepGenomeMarkdown(
-      "# Report\\n![Expression plot](plots/expression.png)"
-    );
-    const generatedFigure = contentBlocks
-      .map((block) => block.content ?? block.body ?? "")
-      .join("\n");
-
-    expect(generatedFigure).toContain("deep-genome-inline-figure");
-    expect(generatedFigure).not.toContain("width: 70%");
-    expect(generatedFigure).not.toContain("object-fit: cover");
-  });
-
-  it("keeps the image dialog inspectable with a bounded scroll surface", () => {
-    expect(VIEWER_TEMPLATE).toContain(
-      'width="min(800px, calc(100vw - var(--phy-space-32)))"'
-    );
-    expect(VIEWER_TEMPLATE).not.toMatch(
-      /<div\b(?=[^>]*class="image-view-container")[^>]*\bstyle\s*=/
-    );
-    expect(VIEWER_STYLES).toMatch(
-      /\.image-view-container\s*\{[\s\S]*max-width:\s*100%;[\s\S]*max-height:\s*var\(--phy-layout-scientific-media-max-height\);[\s\S]*overflow:\s*auto/
-    );
-  });
-
-  it("resizes CIF renderers with observer support and a window fallback", () => {
-    expect(VIEWER_SOURCE).toContain("new ResizeObserver(");
-    expect(VIEWER_SOURCE).toContain("cifResizeObservers.add(resizeObserver)");
-    expect(VIEWER_SOURCE).toContain(
-      'window.addEventListener("resize", handleCifWindowResize)'
-    );
-    expect(VIEWER_SOURCE).toContain(
-      'window.removeEventListener("resize", handleCifWindowResize)'
-    );
-    expect(VIEWER_SOURCE).toContain("resizeObserver.disconnect()");
-    expect(VIEWER_SOURCE).toMatch(/resize\?\.\(\);[\s\S]*viewer\.render\(\)/);
-  });
-
-  it("resizes an active CIF viewer and disconnects its observer on unmount", async () => {
-    class ResizeObserverMock {
-      static instances: ResizeObserverMock[] = [];
-      readonly observe = vi.fn();
-      readonly disconnect = vi.fn();
-
-      constructor(readonly callback: ResizeObserverCallback) {
-        ResizeObserverMock.instances.push(this);
-      }
-    }
-
-    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () => "data_test",
-      })
-    );
-    threeDMolMock.createViewer.mockClear();
-    threeDMolMock.viewer.render.mockClear();
-    threeDMolMock.viewer.resize.mockClear();
-
-    const wrapper = renderMarkdown("# Report\\n![Structure](structure.cif)");
-    await vi.waitFor(() => {
-      expect(threeDMolMock.createViewer).toHaveBeenCalledTimes(1);
-      expect(ResizeObserverMock.instances).toHaveLength(1);
-    });
-
-    window.dispatchEvent(new Event("resize"));
-    expect(threeDMolMock.viewer.resize).toHaveBeenCalledTimes(1);
-
-    ResizeObserverMock.instances[0].callback([], {} as ResizeObserver);
-    expect(threeDMolMock.viewer.resize).toHaveBeenCalledTimes(2);
-
-    wrapper.unmount();
-    expect(ResizeObserverMock.instances[0].disconnect).toHaveBeenCalledTimes(1);
-    vi.unstubAllGlobals();
-  });
-});
-
-describe("DeepGenomeResultViewer — reference text-field XSS hardening", () => {
-  it("escapes a raw tag in the title-only reference branch", () => {
-    const w = render([{ title: '<img src=x onerror="alert(1)">' }]);
-    const ref = w.find("#ref-1");
-    expect(ref.exists()).toBe(true);
-    expect(ref.find("img").exists()).toBe(false);
-    expect(ref.html()).toContain("&lt;img");
-  });
-
-  it("escapes a raw tag smuggled through the citation author field", () => {
-    const w = render([
-      { au: '<img src=x onerror="alert(2)">', ti: "Title", so: "Nature" },
-    ]);
-    const ref = w.find("#ref-1");
-    expect(ref.find("img").exists()).toBe(false);
-  });
-
-  it("escapes a plain-string reference", () => {
-    const w = render(["<svg onload=alert(3)>"]);
-    const ref = w.find("#ref-1");
-    expect(ref.find("svg").exists()).toBe(false);
-    expect(ref.html()).toContain("&lt;svg");
-  });
-
-  it("still renders a real, scheme-checked DOI anchor for a benign citation", () => {
-    const w = render([
-      {
-        au: "Smith J",
-        ti: "Gene study",
-        so: "Nature",
-        py: 2020,
-        dl: "https://doi.org/10.1/x",
-      },
-    ]);
-    const ref = w.find("#ref-1");
-    const a = ref.find("a.doi-link");
-    expect(a.exists()).toBe(true);
-    expect(a.attributes("href")).toBe("https://doi.org/10.1/x");
-  });
-});
-
-// The image-caption path feeds the first non-empty line after an image into
-// processInlineMarkdown and on into a v-html sink. The caption text comes from
-// props.markdown (agent/RAG output, attacker-influenceable), so it MUST be
-// escapeHtml'd first like every other block path. convertMarkdown splits the
-// prop on the literal two-char sequence "\n", so the input below uses literal
-// backslash-n separators. A leading "## " puts the image card into a
-// standalone-content block that renders through v-html.
-describe("DeepGenomeResultViewer — image-caption XSS hardening", () => {
-  it("escapes a raw <img onerror> smuggled into an image caption", async () => {
-    const markdown =
-      "## Figure section\\n" +
-      "![fig](https://example.com/a.png)\\n" +
-      '<img src=x onerror="window.__xss__=1">';
-
-    const w = renderMarkdown(markdown);
-    await nextTick();
-    await nextTick();
-
-    const html = w.html();
-    // The caption block must render the raw tag as inert, escaped text.
-    expect(html).toContain("&lt;img");
-    // And there must be no live <img onerror> element from the caption.
-    const captionImg = w
-      .findAll("img")
-      .find((el) => el.attributes("onerror") !== undefined);
-    expect(captionImg).toBeUndefined();
-  });
-
-  it("still renders legitimate **bold** markdown in an image caption", async () => {
-    const markdown =
-      "## Figure section\\n" +
-      "![fig](https://example.com/a.png)\\n" +
-      "**Bold caption**";
-
-    const w = renderMarkdown(markdown);
-    await nextTick();
-    await nextTick();
-
-    expect(w.find("strong").exists()).toBe(true);
-    expect(w.find("strong").text()).toBe("Bold caption");
   });
 });

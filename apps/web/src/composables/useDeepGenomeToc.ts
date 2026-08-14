@@ -1,17 +1,16 @@
 import { ref, onUnmounted, nextTick } from "vue";
 import type { Ref } from "vue";
+import type { ScientificHeading } from "@/utils/scientific-markdown/types";
 
-export interface DeepGenomeTocHeading {
-  id: string;
-  children?: DeepGenomeTocHeading[];
-  [key: string]: unknown;
+export interface DeepGenomeTocHeading extends ScientificHeading {
+  children: DeepGenomeTocHeading[];
 }
 
 export type DeepGenomeTocMainContentValue =
   HTMLElement | { $el?: Element | null } | null;
 
 export interface DeepGenomeTocOpts {
-  headings: Ref<Array<{ id: string; [key: string]: unknown }>>;
+  headings: Ref<ScientificHeading[]>;
   nestedHeadings: Ref<DeepGenomeTocHeading[]>;
   mainContentRef: Ref<DeepGenomeTocMainContentValue>;
 }
@@ -37,11 +36,18 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
 
   const findOwnedHeading = (id: string): HTMLElement | null => {
     const viewerRoot = resolveViewerRoot();
-    if (!viewerRoot) return document.getElementById(id);
+    const candidateIds = new Set([id, `user-content-${id}`]);
+    if (!viewerRoot) {
+      return (
+        Array.from(candidateIds)
+          .map((candidateId) => document.getElementById(candidateId))
+          .find((element): element is HTMLElement => element !== null) ?? null
+      );
+    }
 
     return (
       Array.from(viewerRoot.querySelectorAll<HTMLElement>("[id]")).find(
-        (element) => element.id === id
+        (element) => candidateIds.has(element.id)
       ) ?? null
     );
   };
@@ -85,11 +91,7 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
   const expandParentMenus = (id: string) => {
     // first find the active item's path in the nested structure
     const findPath = (
-      items: Array<{
-        id: string;
-        children?: DeepGenomeTocHeading[];
-        [key: string]: unknown;
-      }>,
+      items: DeepGenomeTocHeading[],
       targetId: string,
       path: string[] = []
     ): string[] | null => {
@@ -136,6 +138,17 @@ export function useDeepGenomeToc(opts: DeepGenomeTocOpts) {
 
   // observe heading elements with an Intersection Observer
   const setupIntersectionObserver = () => {
+    const previousObserver = observerRef.value;
+    if (previousObserver) {
+      observedElements.value.forEach((element) => {
+        previousObserver.unobserve(element);
+      });
+      previousObserver.disconnect();
+      observedElements.value.clear();
+    }
+
+    if (typeof IntersectionObserver === "undefined") return;
+
     // create the Intersection Observer instance
     const observer = new IntersectionObserver(
       (entries: IntersectionObserverEntry[]) => {

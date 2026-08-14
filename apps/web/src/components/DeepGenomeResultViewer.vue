@@ -34,52 +34,21 @@
           {{ $t("agents.deepGenome.downloadMD") }}
         </el-button>
       </div>
-      <article class="deep-genome-document phy-reading" ref="documentRef">
-        <div v-for="(block, index) in contentBlocks" :key="index">
-          <!-- H1 document title -->
-          <h1
-            v-if="block.type === 'h1'"
-            :id="block.id"
-            class="deep-genome-title"
-            v-html="block.content"
-          ></h1>
-
-          <!-- H2 section title -->
-          <h2
-            v-else-if="block.type === 'h2'"
-            :id="block.id"
-            class="deep-genome-heading deep-genome-heading--section"
-            v-html="block.content"
-          ></h2>
-
-          <!-- H3 document section -->
-          <section
-            v-else-if="block.type === 'h3-card'"
-            class="deep-genome-section"
-          >
-            <h3
-              :id="block.id"
-              class="deep-genome-section-title"
-              v-html="block.header"
-            ></h3>
-            <div class="deep-genome-section-body" v-html="block.body"></div>
-          </section>
-
-          <!-- H4 Title -->
-          <h4
-            v-else-if="block.type === 'h4'"
-            :id="block.id"
-            class="deep-genome-subheading"
-            v-html="block.content"
-          ></h4>
-
-          <!-- Standalone Content (e.g., after h1, after h2, before h3) -->
-          <div
-            v-else-if="block.type === 'standalone-content'"
-            class="deep-genome-prose-block"
-            v-html="block.content"
-          ></div>
-        </div>
+      <article
+        ref="documentRef"
+        class="deep-genome-document phy-reading"
+        data-testid="deep-genome-document"
+      >
+        <ScientificMarkdown
+          :source="props.markdown"
+          surface="document"
+          :citation-namespace="citationNamespace"
+          :reference-count="referenceRows.length"
+          :resources="props.resources"
+          @headings="handleHeadings"
+          @citation-activate="emit('citation-activate', $event)"
+          @resource-activate="emit('resource-activate', $event)"
+        />
 
         <!-- References section -->
         <section
@@ -91,7 +60,7 @@
             {{ $t("agents.deepGenome.references") }}
           </h2>
           <div
-            v-if="displayReferences && displayReferences.length > 0"
+            v-if="displayReferences.length > 0"
             class="deep-genome-reference-list"
           >
             <div
@@ -102,71 +71,44 @@
               v-html="ref.html"
             ></div>
           </div>
-          <!-- Show an empty-references hint -->
-          <p
-            v-else-if="!props.references || props.references.length === 0"
-            class="deep-genome-empty-references"
-          >
+          <p v-else class="deep-genome-empty-references">
             {{ $t("agents.deepGenome.noReferences") }}
           </p>
         </section>
       </article>
     </main>
   </div>
-
-  <!-- Image viewer dialog -->
-  <el-dialog
-    v-model="imageViewerVisible"
-    :title="$t('agents.deepGenome.imageViewerTitle')"
-    :close-on-click-modal="true"
-    :close-on-press-escape="true"
-    width="min(800px, calc(100vw - var(--phy-space-32)))"
-    center
-  >
-    <div
-      class="image-view-container"
-      @wheel="handleWheel"
-      @mousedown="handleMouseDown"
-      @mousemove="handleMouseMove"
-      @mouseup="handleMouseUp"
-      @mouseleave="handleMouseLeave"
-      ref="containerRef"
-    >
-      <img
-        ref="imageRef"
-        :src="currentImageSrc"
-        :alt="currentImageAlt"
-        class="image-view-image"
-      />
-    </div>
-  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
-import { ElDialog, ElButton } from "element-plus";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { ElButton } from "element-plus";
 import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import type {
   DeepGenomeDownloadFormat,
   DeepGenomeViewerHandle,
 } from "@/components/research/deep-genome-types";
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
-import { useDeepGenomeImageViewer } from "@/composables/useDeepGenomeImageViewer";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
-import {
-  parseDeepGenomeMarkdown,
-  type ContentBlock,
-  type Heading,
-  type NestedHeading,
-} from "@/utils/deep-genome-markdown";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
-import { load3DMol, type ThreeDMolViewer } from "@/utils/3dmol";
+import type {
+  AuthorizedScientificResource,
+  ScientificCitationActivation,
+  ScientificHeading,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
+
+interface DeepGenomeTocHeading extends ScientificHeading {
+  children: DeepGenomeTocHeading[];
+}
 
 const props = withDefaults(
   defineProps<{
     markdown?: string;
-    references?: readonly unknown[];
-    ns?: string;
+    references?: readonly unknown[] | null;
+    ns: string;
+    resources?: readonly AuthorizedScientificResource[];
     embedded?: boolean;
     showActions?: boolean;
     showReferences?: boolean;
@@ -174,192 +116,70 @@ const props = withDefaults(
   {
     markdown: "",
     references: () => [],
-    ns: "",
+    resources: () => [],
     embedded: false,
     showActions: true,
     showReferences: true,
   }
 );
 
-const contentBlocks = ref<ContentBlock[]>([]);
-const headings = ref<Heading[]>([]);
-const nestedHeadings = ref<NestedHeading[]>([]);
+const emit = defineEmits<{
+  "citation-activate": [activation: ScientificCitationActivation];
+  "resource-activate": [activation: ScientificResourceActivation];
+}>();
+
+const headings = ref<ScientificHeading[]>([]);
+const nestedHeadings = ref<DeepGenomeTocHeading[]>([]);
 const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
-const cifAbortControllers = new Set<AbortController>();
-const cifViewers = new Set<ThreeDMolViewer>();
-const cifResizeObservers = new Set<ResizeObserver>();
 let observerSetupTimer: number | null = null;
-let isUnmounted = false;
-
-// Image viewer (zoom/drag/click-to-enlarge dialog) — extracted into a composable
-const {
-  imageViewerVisible,
-  currentImageSrc,
-  currentImageAlt,
-  containerRef,
-  imageRef,
-  imageStyle,
-  handleWheel,
-  handleMouseDown,
-  handleMouseMove,
-  handleMouseUp,
-  handleMouseLeave,
-  setupImageClickListeners,
-  cleanupImageClickListeners,
-} = useDeepGenomeImageViewer();
-const imageTransform = computed(() => imageStyle.value.transform);
-const imageCursor = computed(() => imageStyle.value.cursor);
 
 // Computed: process the reference list into formatted HTML.
 // Rendering logic (incl. the v-html sanitization invariant) is extracted to
 // @/utils/reference-renderer for direct unit testing.
+const referenceRows = computed<readonly unknown[]>(
+  () => props.references ?? []
+);
 const displayReferences = computed(() =>
-  buildDisplayReferences(props.references, props.ns)
+  buildDisplayReferences(referenceRows.value, props.ns)
+);
+const citationNamespace = computed(() =>
+  referenceRows.value.length > 0 ? props.ns : ""
 );
 
-const renderCifError = (container: Element, message: string) => {
-  const errorNode = document.createElement("div");
-  errorNode.className = "error";
-  errorNode.textContent = message;
-  container.replaceChildren(errorNode);
-};
+function buildNestedHeadings(
+  flatHeadings: readonly ScientificHeading[]
+): DeepGenomeTocHeading[] {
+  const nested: DeepGenomeTocHeading[] = [];
+  const stack: DeepGenomeTocHeading[] = [];
 
-const resizeCifViewer = (viewer: ThreeDMolViewer) => {
-  (viewer as ThreeDMolViewer & { resize?: () => void }).resize?.();
-  viewer.render();
-};
-
-const handleCifWindowResize = () => {
-  cifViewers.forEach(resizeCifViewer);
-};
-
-// Process CIF containers
-const processCifContainers = async () => {
-  await nextTick();
-  if (isUnmounted) return;
-
-  // find all unprocessed CIF containers
-  const cifContainers =
-    documentRef.value?.querySelectorAll(
-      '.cif-container[data-src$=".cif"]:not([data-processed])'
-    ) ?? [];
-
-  cifContainers.forEach((container) => {
-    const src = container.getAttribute("data-src") || "";
-
-    // mark as processed
-    container.setAttribute("data-processed", "true");
-
-    try {
-      // load 3Dmol.js and render the structure
-      load3DMol()
-        .then(async (threeDMol) => {
-          if (isUnmounted) return;
-
-          // generate a unique id
-          const viewerId = `cif-viewer-${Date.now()}-${Math.floor(
-            Math.random() * 1000
-          )}`;
-
-          // clear the container and create the viewer element
-          container.replaceChildren();
-          const viewerDiv = document.createElement("div");
-          viewerDiv.id = viewerId;
-          viewerDiv.className = "deep-genome-cif-viewer";
-          container.appendChild(viewerDiv);
-
-          // build the file path
-          let publicSrc = src;
-          if (!src.startsWith("http")) {
-            // ensure the path is correct
-            if (!src.startsWith("/")) {
-              publicSrc = `/${src}`;
-            }
-          }
-
-          // create the 3Dmol viewer
-          const viewer = threeDMol.createViewer(viewerDiv, {
-            backgroundColor: "#f5f5f5",
-          });
-          cifViewers.add(viewer);
-          if (typeof ResizeObserver !== "undefined") {
-            const resizeObserver = new ResizeObserver(() => {
-              if (!isUnmounted) resizeCifViewer(viewer);
-            });
-            resizeObserver.observe(viewerDiv);
-            cifResizeObservers.add(resizeObserver);
-          }
-
-          // try loading the CIF file
-          const loadCifFile = async () => {
-            const controller = new AbortController();
-            cifAbortControllers.add(controller);
-
-            try {
-              const response = await fetch(publicSrc, {
-                signal: controller.signal,
-              });
-              if (!response.ok) {
-                throw new Error(
-                  `Failed to load CIF file: HTTP status ${response.status}`
-                );
-              }
-              const cifContent = await response.text();
-              if (isUnmounted) return;
-
-              // add the model to the viewer
-              viewer.addModel(cifContent, "cif");
-
-              // set style and view
-              viewer.setStyle({}, { cartoon: { color: "spectrum" } });
-              viewer.zoomTo();
-              viewer.render();
-              viewer.animate();
-            } catch (error) {
-              if (controller.signal.aborted || isUnmounted) return;
-              console.error("Error loading or rendering CIF file:", error);
-              renderCifError(
-                viewerDiv,
-                `Failed to load or render the CIF file: ${
-                  error instanceof Error ? error.message : "Unknown error"
-                }`
-              );
-            } finally {
-              cifAbortControllers.delete(controller);
-            }
-          };
-
-          // run the load
-          await loadCifFile();
-        })
-        .catch((error) => {
-          if (isUnmounted) return;
-          console.error("Error loading 3Dmol.js:", error);
-          renderCifError(
-            container,
-            `Failed to load the 3Dmol.js library: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
-        });
-    } catch (error) {
-      if (isUnmounted) return;
-      console.error("Unexpected error processing CIF container:", error);
-      renderCifError(
-        container,
-        `An error occurred while processing the CIF file: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+  for (const heading of flatHeadings) {
+    if (heading.level < 2 || heading.level > 4) continue;
+    while (true) {
+      const parent = stack.at(-1);
+      if (!parent || parent.level < heading.level) break;
+      stack.pop();
     }
-  });
-};
+    const item: DeepGenomeTocHeading = { ...heading, children: [] };
+    const parent = stack.at(-1);
+    if (parent) parent.children.push(item);
+    else nested.push(item);
+    stack.push(item);
+  }
+
+  return nested;
+}
+
+function handleHeadings(nextHeadings: ScientificHeading[]): void {
+  headings.value = nextHeadings;
+  nestedHeadings.value = buildNestedHeadings(nextHeadings);
+  void nextTick(() => setupIntersectionObserver()).catch(() => undefined);
+}
 
 // Download methods (extracted into a composable)
 const { downloadPDF, downloadMarkdown } = useDeepGenomeDownloads({
   props,
-  mainContentRef,
+  mainContentRef: documentRef,
   displayReferences,
 });
 
@@ -380,51 +200,17 @@ defineExpose<DeepGenomeViewerHandle>({ download });
 const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
   useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
 
-// Set up the Intersection Observer in onMounted
-onMounted(async () => {
-  const parsed = parseDeepGenomeMarkdown(props.markdown, props.ns);
-  contentBlocks.value = parsed.contentBlocks;
-  headings.value = parsed.headings;
-  nestedHeadings.value = parsed.nestedHeadings;
-
-  // Use nextTick to process CIF containers and add image click handlers after the DOM updates
-  await nextTick();
-  await processCifContainers();
-  setupImageClickListeners(documentRef.value);
-  window.addEventListener("resize", handleCifWindowResize);
-
-  // Wait for heading elements to render, then set up the Intersection Observer
+onMounted(() => {
   observerSetupTimer = window.setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
-
-  // initialize the first active item
-  await nextTick(() => {
-    if (headings.value.length > 0) {
-      // use the first heading as the initial active item
-      // activeHeadingId.value = headings.value[0].id;
-      // expandParentMenus(headings.value[0].id);
-    }
-  });
 });
 
 onBeforeUnmount(() => {
-  isUnmounted = true;
   if (observerSetupTimer !== null) {
     window.clearTimeout(observerSetupTimer);
     observerSetupTimer = null;
   }
-  window.removeEventListener("resize", handleCifWindowResize);
-  cleanupImageClickListeners();
-  cifAbortControllers.forEach((controller) => controller.abort());
-  cifAbortControllers.clear();
-  cifResizeObservers.forEach((resizeObserver) => resizeObserver.disconnect());
-  cifResizeObservers.clear();
-  cifViewers.forEach((viewer) => {
-    viewer.stopAnimate?.();
-    viewer.clear?.();
-  });
-  cifViewers.clear();
 });
 </script>
 
@@ -509,74 +295,6 @@ onBeforeUnmount(() => {
   color: var(--phy-color-text-secondary);
 }
 
-.deep-genome-title,
-.deep-genome-heading,
-.deep-genome-section-title,
-.deep-genome-subheading,
-.deep-genome-section-body :deep(h4) {
-  color: var(--phy-color-text);
-  font-family: var(--phy-font-shell);
-  font-weight: 600;
-}
-
-.deep-genome-title {
-  margin: var(--phy-space-8) 0 var(--phy-space-32);
-  font-family: var(--phy-font-shell);
-  font-size: clamp(26px, 3vw, 34px);
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-.deep-genome-heading {
-  line-height: 1.3;
-}
-
-.deep-genome-heading--section {
-  margin: var(--phy-space-40) 0 var(--phy-space-20);
-  padding-bottom: var(--phy-space-8);
-  border-bottom: 1px solid var(--phy-color-border-subtle);
-  font-size: 22px;
-}
-
-.deep-genome-section {
-  margin-bottom: var(--phy-space-24);
-  padding-bottom: var(--phy-space-24);
-  border-bottom: 1px solid var(--phy-color-border-subtle);
-}
-
-.deep-genome-section-title {
-  margin: 0 0 var(--phy-space-12);
-  font-size: 18px;
-  line-height: 1.4;
-}
-
-.deep-genome-subheading,
-.deep-genome-section-body :deep(h4) {
-  margin: var(--phy-space-20) 0 var(--phy-space-8);
-  font-size: 16px;
-  line-height: 1.45;
-}
-
-.deep-genome-prose-block,
-.deep-genome-section-body {
-  margin-bottom: var(--phy-space-24);
-  color: var(--phy-color-text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.deep-genome-prose-block :deep(p),
-.deep-genome-section-body :deep(p) {
-  margin: 0 0 var(--phy-space-16);
-  padding: 0;
-  color: var(--phy-color-text-secondary);
-}
-
-.deep-genome-prose-block :deep(strong),
-.deep-genome-section-body :deep(strong) {
-  color: var(--phy-color-text);
-  font-weight: 600;
-}
-
 .deep-genome-document :deep(a) {
   color: var(--phy-color-action-text);
   text-decoration-thickness: 0.08em;
@@ -620,67 +338,6 @@ onBeforeUnmount(() => {
   font-family: var(--phy-font-shell);
   font-weight: 600;
   background: var(--phy-color-fill-subtle);
-}
-
-.deep-genome-document :deep(.image-card) {
-  box-sizing: border-box;
-  margin: var(--phy-space-24) 0;
-  padding-bottom: var(--phy-space-24);
-  overflow: visible;
-  border: 0;
-  border-bottom: 1px solid var(--phy-color-border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-
-.deep-genome-document :deep(.image-card .el-card__body) {
-  color: var(--phy-color-text-secondary);
-  background: transparent;
-}
-
-.deep-genome-prose-block :deep(img),
-.deep-genome-section-body :deep(img),
-.deep-genome-document :deep(.clickable-image) {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-}
-
-.deep-genome-document :deep(.deep-genome-inline-figure) {
-  width: 100%;
-  text-align: center;
-}
-
-.deep-genome-document :deep(.clickable-image) {
-  cursor: zoom-in;
-}
-
-.deep-genome-document :deep(.cif-container) {
-  box-sizing: border-box;
-  margin: var(--phy-space-24) 0;
-  padding: var(--phy-space-20) 0;
-  overflow: hidden;
-  border-top: 1px solid var(--phy-color-border-subtle);
-  border-bottom: 1px solid var(--phy-color-border-subtle);
-  background: transparent;
-}
-
-.deep-genome-document :deep(.deep-genome-cif-viewer) {
-  position: relative;
-  width: 100%;
-  min-height: clamp(240px, 42vh, 560px);
-}
-
-.deep-genome-document :deep(figure) {
-  margin: 0;
-  text-align: center;
-}
-
-.deep-genome-document :deep(figcaption) {
-  margin-top: var(--phy-space-8);
-  color: var(--phy-color-text-muted);
-  font-size: 0.9em;
 }
 
 .deep-genome-references {
@@ -731,44 +388,5 @@ onBeforeUnmount(() => {
   padding: var(--phy-space-12) 0;
   color: var(--phy-color-text-muted);
   text-align: center;
-}
-
-/* Image viewer styles */
-.image-view-container {
-  box-sizing: border-box;
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  max-height: var(--phy-layout-scientific-media-max-height);
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-  cursor: grab;
-  background-color: var(--phy-color-fill-subtle);
-}
-
-.image-view-image {
-  display: block;
-  max-width: 100%;
-  max-height: var(--phy-layout-scientific-media-max-height);
-  height: auto;
-  cursor: v-bind(imageCursor);
-  transform: v-bind(imageTransform);
-  transform-origin: 0 0;
-  transition: transform 0.2s ease;
-}
-
-/* Download dropdown styles */
-.download-dropdown {
-  z-index: var(--phy-z-modal) !important;
-  position: fixed !important;
-  top: auto !important;
-  left: auto !important;
-}
-
-.download-dropdown .el-dropdown-menu {
-  padding: var(--phy-space-4) 0 !important;
-  border: 1px solid var(--phy-color-border-subtle) !important;
-  background-color: var(--phy-color-bg-elevated) !important;
 }
 </style>

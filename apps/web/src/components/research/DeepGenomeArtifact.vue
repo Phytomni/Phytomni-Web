@@ -57,10 +57,12 @@
           ref="viewerRef"
           :markdown="markdown"
           :references="references"
+          :resources="resources"
           :ns="ns"
           :show-actions="false"
           :show-references="false"
           @citation-activate="activateEvidence"
+          @resource-activate="emit('resource-activate', $event)"
         />
       </template>
 
@@ -88,7 +90,11 @@ import type {
 import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
-import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
+import type {
+  AuthorizedScientificResource,
+  ScientificCitationActivation,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
 
 type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ArtifactTabLabels = Partial<Record<ArtifactTab, string>>;
@@ -97,6 +103,7 @@ const props = withDefaults(
   defineProps<{
     markdown?: string;
     references?: readonly unknown[];
+    resources?: readonly AuthorizedScientificResource[];
     ns: string;
     title: string;
     metadata?: string | string[];
@@ -112,6 +119,7 @@ const props = withDefaults(
   {
     markdown: "",
     references: () => [],
+    resources: () => [],
     tab: "content",
     tabLabels: () => ({}),
     tablistLabel: "Report sections",
@@ -123,6 +131,7 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "action"): void;
   (event: "tab", tab: ArtifactTab): void;
+  (event: "resource-activate", activation: ScientificResourceActivation): void;
 }>();
 
 const viewerRef = ref<DeepGenomeViewerHandle | null>(null);

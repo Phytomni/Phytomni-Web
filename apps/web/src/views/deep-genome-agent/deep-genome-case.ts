@@ -11,9 +11,6 @@ export const DEEP_GENOME_CASE_MARKDOWN = rawDeepGenomeCase
   .trimEnd()
   .replace(/\[document:(\d{1,3})\]/g, "[$1]");
 
-export const DEEP_GENOME_CASE_VIEWER_MARKDOWN =
-  DEEP_GENOME_CASE_MARKDOWN.replace(/\n/g, "\\n");
-
 const referenceSection = DEEP_GENOME_CASE_MARKDOWN.slice(
   DEEP_GENOME_CASE_MARKDOWN.indexOf("\n## Reference:\n")
 );

@@ -1,6 +1,10 @@
 /// <reference types="vue/jsx" />
 
 declare module "file-saver";
+declare module "*.cif?url" {
+  const source: string;
+  export default source;
+}
 
 import "vue-i18n";
 

@@ -2,6 +2,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CONTRACT_DEEP_GENOME_MARKDOWN,
+  CONTRACT_DEEP_GENOME_RESOURCES,
   REAL_DEEP_GENOME_MARKDOWN,
   REAL_DEEP_GENOME_REFERENCES,
 } from "../../visual/research/fixture-data";
@@ -104,5 +106,17 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(FIXTURE_DATA_SOURCE).toContain(
       'from "@/views/deep-genome-agent/deep-genome-case"'
     );
+  });
+
+  it("provides the deterministic shared-renderer contract fixture", () => {
+    expect(CONTRACT_DEEP_GENOME_MARKDOWN).toContain("| Escaped pipe |");
+    expect(CONTRACT_DEEP_GENOME_MARKDOWN).toContain("$$E = mc^2$$");
+    expect(CONTRACT_DEEP_GENOME_MARKDOWN).toContain("<sup>[1-2]</sup>");
+    expect(CONTRACT_DEEP_GENOME_MARKDOWN).toContain(
+      "![Missing result](.out/missing-result.png)"
+    );
+    expect(CONTRACT_DEEP_GENOME_RESOURCES).toHaveLength(2);
+    expect(VISUAL_FIXTURE_SOURCE).toContain('get("case") === "contract"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(':resources="resources"');
   });
 });

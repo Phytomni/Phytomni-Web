@@ -2,7 +2,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, nextTick, ref } from "vue";
-import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
+import {
+  useDeepGenomeToc,
+  type DeepGenomeTocHeading,
+} from "@/composables/useDeepGenomeToc";
+import type { ScientificHeading } from "@/utils/scientific-markdown/types";
 import { invalidInput } from "../../helpers/invalidInput";
 import { createTestAppContext } from "../../helpers/test-app-context";
 
@@ -19,18 +23,16 @@ const TOC_SOURCE = readFileSync(
 
 function makeHarness(opts?: {
   headingIds?: string[];
-  nestedItems?: Array<{
-    id: string;
-    children?: unknown[];
-    [key: string]: unknown;
-  }>;
+  nestedItems?: DeepGenomeTocHeading[];
 }) {
-  const headings = ref<Array<{ id: string; [key: string]: unknown }>>(
-    (opts?.headingIds ?? []).map((id) => ({ id }))
+  const headings = ref<ScientificHeading[]>(
+    (opts?.headingIds ?? []).map((id) => ({
+      id,
+      level: 2,
+      text: id,
+    }))
   );
-  const nestedHeadings = ref<
-    Array<{ id: string; children?: unknown[]; [key: string]: unknown }>
-  >(opts?.nestedItems ?? []);
+  const nestedHeadings = ref<DeepGenomeTocHeading[]>(opts?.nestedItems ?? []);
   const mainContentRef = ref<HTMLElement | null>(null);
 
   const Harness = defineComponent({
@@ -339,7 +341,16 @@ describe("useDeepGenomeToc — setupIntersectionObserver", () => {
       nestedItems: [
         {
           id: "parent-heading",
-          children: [{ id: heading.id, children: [] }],
+          level: 2,
+          text: "Parent",
+          children: [
+            {
+              id: heading.id,
+              level: 3,
+              text: heading.id,
+              children: [],
+            },
+          ],
         },
       ],
     });

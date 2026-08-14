@@ -16,6 +16,7 @@ import "@/assets/main.css";
 const params = new URLSearchParams(window.location.search);
 const locale = params.get("locale") === "zh-CN" ? "zh-CN" : "en-US";
 const theme = params.get("theme") === "dark" ? "dark" : "light";
+const fixtureCase = params.get("case") === "contract" ? "contract" : "real";
 
 async function boot() {
   const app = createApp(DeepGenomeArtifactVisualFixtureApp);
@@ -37,6 +38,9 @@ async function boot() {
   document
     .querySelector<HTMLElement>("[data-testid=deep-genome-visual-root]")
     ?.setAttribute("data-fixture-ready", "true");
+  document
+    .querySelector<HTMLElement>("[data-testid=deep-genome-visual-root]")
+    ?.setAttribute("data-fixture-case", fixtureCase);
 }
 
 void boot();

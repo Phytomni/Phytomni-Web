@@ -12,12 +12,6 @@ vi.mock("element-plus", () => ({
   ElMessage: { error: vi.fn() },
 }));
 
-// convertFilePath: pass through the original path (the unit test does not exercise path-conversion logic)
-vi.mock("@/utils/markdown-inline", () => ({
-  processInlineMarkdown: vi.fn((s: string) => s),
-  convertFilePath: vi.fn((s: string) => s),
-}));
-
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -100,14 +94,25 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     expect(text).not.toContain("## References");
   });
 
-  it("escaped \\n is expanded into an actual newline", async () => {
+  it("preserves the original Markdown source and literal backslash text", async () => {
     const opts = makeOpts("line1\\nline2", "out.md", []);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
     downloadMarkdown();
 
     const [blob] = mockSaveAs.mock.calls[0];
     const text = await (blob as Blob).text();
-    expect(text).toContain("line1\nline2");
+    expect(text).toContain("line1\\nline2");
+    expect(text).not.toContain("line1\nline2");
+  });
+
+  it("does not rewrite report resource paths during Markdown export", async () => {
+    const source = "![Figure](./.out/result.png) [Report](report.md)";
+    const opts = makeOpts(source, "out.md", []);
+    const { downloadMarkdown } = useDeepGenomeDownloads(opts);
+    downloadMarkdown();
+
+    const [blob] = mockSaveAs.mock.calls[0];
+    expect(await (blob as Blob).text()).toBe(source);
   });
 
   it("Blob MIME type is text/markdown", () => {
