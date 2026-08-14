@@ -3,6 +3,7 @@ import {
   convertFilePath,
 } from "@/utils/markdown-inline";
 import { sanitizeHref } from "@/utils/sanitize-markup";
+import { requireCitationNamespace } from "@/utils/scientific-markdown/citations";
 
 // Markdown parser for the deep_genome agent (relayed via Bot). Extracted verbatim
 // from DeepGenomeResultViewer.vue: a pure function that only reads the `text` arg
@@ -53,7 +54,8 @@ export interface NestedHeading extends Heading {
 // --- Conversion logic ---
 export function parseDeepGenomeMarkdown(
   text: string,
-  ns = ""
+  ns = "",
+  referenceCount = 0
 ): {
   contentBlocks: ContentBlock[];
   headings: Heading[];
@@ -62,8 +64,9 @@ export function parseDeepGenomeMarkdown(
   const lines = text.split("\\n"); // split into lines
   // ns namespaces the inline [N] citation anchors so they target reference N of the SAME message.
   // All processInlineMarkdown calls below go through this alias so ns threads uniformly.
-  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
-  const inlineMd = (s: string): string => processInlineMarkdown(s, safeNs);
+  const safeNs = ns ? requireCitationNamespace(ns) : "";
+  const inlineMd = (s: string): string =>
+    processInlineMarkdown(s, safeNs, referenceCount);
   const blocks: ContentBlock[] = [];
   let currentH3CardContent = "";
   let currentH3CardHeader = "";

@@ -46,6 +46,7 @@
     -->
     <CitationReferenceList
       v-if="references && references.length > 0"
+      ref="referenceListRef"
       :references="references"
       :ns="citationNs"
     />
@@ -53,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import ChatActivity from "./ChatActivity.vue";
 import MarkdownBlock from "./blocks/MarkdownBlock.vue";
@@ -113,6 +114,9 @@ const messageKey = computed(() =>
 );
 
 const presentationItems = computed(() => buildPresentationItems(props.blocks));
+const referenceListRef = ref<{
+  focusReferences(indices: readonly number[]): boolean;
+} | null>(null);
 
 const renderer = (type: string) => resolveBlockRenderer(type);
 
@@ -129,6 +133,9 @@ function onA2uiRetry(block: ContentBlock) {
 }
 
 function onCitationActivate(activation: ScientificCitationActivation) {
+  if (activation.namespace === citationNs.value) {
+    referenceListRef.value?.focusReferences(activation.indices);
+  }
   emit("citation-activate", activation);
 }
 

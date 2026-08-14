@@ -64,6 +64,7 @@ const referenceListRef = ref<{
 function handleCitationActivate(
   activation: ScientificCitationActivation
 ): void {
+  if (activation.namespace !== props.ns) return;
   if (props.referencePresentation === "inline") {
     referenceListRef.value?.focusReferences(activation.indices);
     return;

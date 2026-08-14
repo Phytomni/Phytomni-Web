@@ -3,6 +3,7 @@ import {
   formatDetailedCitation,
   normalizeReferenceDocument,
 } from "@/utils/citation";
+import { requireCitationNamespace } from "@/utils/scientific-markdown/citations";
 
 export interface DisplayReference {
   html: string;
@@ -18,19 +19,17 @@ export interface DisplayReference {
 // citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
 // DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
 export const buildDisplayReferences = (
-  references: readonly unknown[],
-  ns = ""
+  references: readonly unknown[] | null | undefined,
+  ns: string
 ): DisplayReference[] => {
   if (references == null || references.length === 0) {
     return [];
   }
 
-  // ns namespaces the anchor ids so [N] links jump to reference N of the SAME
-  // message (multiple cited/DeepGenome answers render into one chat document, so
-  // a bare `ref-N` would collide). ns is developer-supplied (m<index> / kb / bg),
-  // never agent text; sanitize defensively so it can never inject markup into an id.
-  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
-  const refId = (n: number) => (safeNs ? `${safeNs}-ref-${n}` : `ref-${n}`);
+  // A namespace is a developer-owned identifier. Reject missing or invalid
+  // input instead of creating bare IDs that can collide across answers.
+  const safeNs = requireCitationNamespace(ns);
+  const refId = (n: number) => `${safeNs}-ref-${n}`;
 
   return references.map((doc, index) => {
     const refIndex = index + 1;

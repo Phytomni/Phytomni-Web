@@ -31,11 +31,11 @@ import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus"
 const props = defineProps<{
   references?: readonly unknown[];
   /** Developer-owned page namespace (e.g. m<index>); never agent text. */
-  ns?: string;
+  ns: string;
 }>();
 
 const displayReferences = computed(() =>
-  buildDisplayReferences(props.references ?? [], props.ns ?? "")
+  buildDisplayReferences(props.references ?? [], props.ns)
 );
 const listRef = ref<HTMLElement | null>(null);
 const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
@@ -49,7 +49,7 @@ function focusReferences(indices: readonly number[]): boolean {
   if (
     !focusReferenceRows({
       root: listRef.value,
-      namespace: props.ns ?? "",
+      namespace: props.ns,
       indices,
     })
   ) {

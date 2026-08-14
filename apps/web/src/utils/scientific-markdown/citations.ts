@@ -22,6 +22,11 @@ interface MdParent extends MdNode {
   children: MdNode[];
 }
 
+interface RawHtmlBoundary {
+  kind: "open" | "close";
+  tagName: string;
+}
+
 const MAX_CITATION_INDEX = 999;
 const MAX_EXPANDED_INDICES = 100;
 const CITATION_NAMESPACE_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,255})?$/;
@@ -150,17 +155,17 @@ function citationNode(
 }
 
 function rewriteSupTriplets(parent: MdParent, options: CitationOptions): void {
-  let rawDepth = 0;
+  const rawTags: string[] = [];
   for (let index = 0; index < parent.children.length; index += 1) {
     const node = parent.children[index];
     const boundary =
-      node.type === "html" ? rawHtmlBoundary(node.value ?? "") : "other";
-    if (boundary === "close") {
-      rawDepth = Math.max(0, rawDepth - 1);
+      node.type === "html" ? rawHtmlBoundary(node.value ?? "") : null;
+    if (boundary?.kind === "close") {
+      if (rawTags.at(-1) === boundary.tagName) rawTags.pop();
       continue;
     }
 
-    if (rawDepth === 0 && index <= parent.children.length - 3) {
+    if (rawTags.length === 0 && index <= parent.children.length - 3) {
       const [open, body, close] = parent.children.slice(index, index + 3);
       if (
         open.type === "html" &&
@@ -181,7 +186,7 @@ function rewriteSupTriplets(parent: MdParent, options: CitationOptions): void {
       }
     }
 
-    if (boundary === "open") rawDepth += 1;
+    if (boundary?.kind === "open") rawTags.push(boundary.tagName);
   }
 }
 
@@ -226,14 +231,14 @@ function rewriteTextCitations(
   }
 }
 
-function rawHtmlBoundary(value: string): "open" | "close" | "other" {
+function rawHtmlBoundary(value: string): RawHtmlBoundary | null {
   const trimmed = value.trim();
-  if (!trimmed.startsWith("<")) return "other";
+  if (!trimmed.startsWith("<")) return null;
 
   let cursor = 1;
   const closing = trimmed[cursor] === "/";
   if (closing) cursor += 1;
-  if (!/[A-Za-z]/.test(trimmed[cursor] ?? "")) return "other";
+  if (!/[A-Za-z]/.test(trimmed[cursor] ?? "")) return null;
 
   const nameStart = cursor;
   cursor += 1;
@@ -253,31 +258,35 @@ function rawHtmlBoundary(value: string): "open" | "close" | "other" {
       continue;
     }
     if (character !== ">") continue;
-    if (trimmed.slice(cursor + 1).trim()) return "other";
+    if (trimmed.slice(cursor + 1).trim()) return null;
 
     const suffix = trimmed.slice(nameEnd, cursor);
-    if (closing) return /^\s*$/.test(suffix) ? "close" : "other";
-    if (suffix.trimEnd().endsWith("/") || VOID_HTML_TAGS.has(tagName)) {
-      return "other";
+    if (closing) {
+      return /^\s*$/.test(suffix) ? { kind: "close", tagName } : null;
     }
-    return "open";
+    if (suffix.trimEnd().endsWith("/") || VOID_HTML_TAGS.has(tagName)) {
+      return null;
+    }
+    return { kind: "open", tagName };
   }
 
-  return "other";
+  return null;
 }
 
 function rewriteHtmlNodes(parent: MdParent): void {
-  let rawDepth = 0;
+  const rawTags: string[] = [];
   for (const node of parent.children) {
     if (node.type === "html") {
       const boundary = rawHtmlBoundary(node.value ?? "");
-      if (boundary === "close") rawDepth = Math.max(0, rawDepth - 1);
+      if (boundary?.kind === "close" && rawTags.at(-1) === boundary.tagName) {
+        rawTags.pop();
+      }
       node.type = "text";
       node.data = { ...node.data, scientificRawHtml: true };
-      if (boundary === "open") rawDepth += 1;
+      if (boundary?.kind === "open") rawTags.push(boundary.tagName);
       continue;
     }
-    if (rawDepth > 0) {
+    if (rawTags.length > 0) {
       node.data = { ...node.data, scientificRawHtmlContent: true };
     }
   }

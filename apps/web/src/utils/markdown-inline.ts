@@ -3,6 +3,10 @@ import {
   sanitizeEscapedHref,
   sanitizeHref,
 } from "@/utils/sanitize-markup";
+import {
+  parseCitationBody,
+  requireCitationNamespace,
+} from "@/utils/scientific-markdown/citations";
 
 // AnalystAgent returns markdown that writes images/links as ./.out/xxxx; the
 // frontend rewrites them into accessible attachment URLs. The base prefix comes
@@ -26,7 +30,11 @@ export const convertFilePath = (path: string): string => {
 // function does inline processing on the bare string and never escapes itself
 // (escaping belongs to the caller; see the v-html sanitization invariant /
 // @/utils/sanitize-markup).
-export const processInlineMarkdown = (line: string, ns = ""): string => {
+export const processInlineMarkdown = (
+  line: string,
+  ns = "",
+  referenceCount = 0
+): string => {
   if (!line) return line;
 
   // Emitted-HTML vault (regex-reentrancy guard). Each pass below runs a
@@ -71,17 +79,29 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
   };
 
   // ns namespaces the [N] citation anchors so they target reference N of the SAME message
-  // (multiple DeepGenome/cited answers render into one chat document). ns is developer-supplied,
-  // never agent text; sanitize defensively. Empty ns keeps the bare #ref-N (back-compat).
-  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
-  const refHref = (n: string) => (safeNs ? `#${safeNs}-ref-${n}` : `#ref-${n}`);
+  // (multiple DeepGenome/cited answers render into one chat document). Reject a
+  // malformed non-empty namespace instead of silently changing its identity.
+  const safeNs = ns ? requireCitationNamespace(ns) : "";
+
+  const inlineCodeRanges = [...line.matchAll(/`[^`]*`/g)].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
 
   // First restore the escaped HTML <a> tags (supports various attribute combinations)
   // Match pattern: &lt;a href=&quot;...&quot; ... &gt;...&lt;/a&gt;
   // Use a looser match to handle attributes that contain HTML entities
   line = line.replace(
     /&lt;a\s+(.*?)&gt;(.*?)&lt;\/a&gt;/g,
-    function (match: string, attributes: string, text: string) {
+    function (match: string, attributes: string, text: string, offset: number) {
+      if (
+        inlineCodeRanges.some(
+          (range) => range.start < offset + match.length && offset < range.end
+        )
+      ) {
+        return match;
+      }
+
       // restore escaped characters in the attributes
       attributes = attributes
         .replace(/&quot;/g, '"')
@@ -106,6 +126,13 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
       // re-enter its attribute text (the regex-reentrancy XSS above).
       return stash(`<a ${attributes}>${text}</a>`);
     }
+  );
+
+  // Protect inline-code spans before processing images, links, citations, and
+  // emphasis. The caller already escaped the code text, and the vault keeps
+  // markdown-looking content inside backticks inert through later passes.
+  line = line.replace(/`([^`]*)`/g, (_match: string, content: string) =>
+    stash(`<code>${content}</code>`)
   );
 
   // handle .cif images first
@@ -165,20 +192,33 @@ export const processInlineMarkdown = (line: string, ns = ""): string => {
       );
     }
   );
-  // handle reference citations, ensuring a citation does not sit on its own line. The anchor is a
-  // native #ns-ref-N fragment jump (v-html content is not compiled, so the old @click was inert
-  // dead text — dropped here). The digit run is widened to three to match multi-hundred references.
-  line = line.replace(/\[(\d{1,3})\]/g, (_m: string, n: string) =>
-    stash(`<a href="${refHref(n)}" style="display: inline-block;">[${n}]</a>`)
+  // v-html content cannot compile Vue click handlers, so DeepGenome citations
+  // use native fragment links plus stable class/ARIA metadata consumed by the
+  // artifact's delegated interaction. Without a namespace, keep the marker
+  // literal instead of creating a cross-message bare #ref-N target.
+  line = line.replace(
+    /\[(\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*)\]/g,
+    (match: string) => {
+      const parsed = parseCitationBody(match);
+      if (
+        !safeNs ||
+        !parsed ||
+        !Number.isInteger(referenceCount) ||
+        referenceCount < 1 ||
+        parsed.indices.some((index) => index > referenceCount)
+      ) {
+        return match;
+      }
+      return stash(
+        `<a href="#${safeNs}-ref-${parsed.indices[0]}" class="citation-ref" aria-label="Citation ${parsed.display}" style="display: inline-block;">[${parsed.display}]</a>`
+      );
+    }
   );
   // handle bold
   line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
   line = line.replace(/\*(.*?)\*/g, "<em>$1</em>");
   // handle italics (improved, avoids confusion with lists)
   line = line.replace(/(^|\s)\*([^*]+?)\*(?=\s|$|[.,;:!?])/g, "$1<em>$2</em>");
-  // handle inline code
-  line = line.replace(/`(.*?)`/g, "<code>$1</code>");
-
   // Splice the stashed finished tags back in, non-recursively.
   return expandVault(line);
 };

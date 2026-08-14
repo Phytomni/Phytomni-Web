@@ -659,6 +659,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			}
 			_, serr := ph.service.QueryStream(ctx, name.(string), in, onReady, forward)
 			if serr != nil {
+				rxLog.Sugar().Errorw("ApiQuery stream failed", "user", name, "err", serr)
 				status, msg := queryErrorStatus(serr)
 				if headerSent {
 					// Frames already flushed: HTTP status is locked, so surface
