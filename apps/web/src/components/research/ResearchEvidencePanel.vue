@@ -136,12 +136,10 @@ defineExpose({ focusReferences });
 
 .research-evidence-panel__item--active {
   background: var(--phy-color-accent-soft);
-  box-shadow: inset 0 -2px 0 var(--phy-color-accent);
 }
 
 .research-evidence-panel__item.is-citation-target {
   background: var(--phy-color-accent-soft);
-  box-shadow: inset 0 -2px 0 var(--phy-color-accent);
 }
 
 .research-evidence-panel__item:focus-visible,
