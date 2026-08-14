@@ -11,6 +11,7 @@ const testState = vi.hoisted(() => ({
   copiedText: vi.fn(),
   downloadFile: vi.fn(),
   getAnswerCheck: vi.fn(),
+  getAnalystAgentLog: vi.fn(),
 }));
 
 vi.mock("vue-element-plus-x", () => ({
@@ -48,6 +49,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
     ...actual,
     getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
     getAnswerCheck: testState.getAnswerCheck,
+    getAnalystAgentLog: testState.getAnalystAgentLog,
     getUserTool: vi.fn(async () => ({
       code: 200,
       data: {
@@ -433,6 +435,18 @@ beforeEach(() => {
   testState.copiedText.mockReset();
   testState.downloadFile.mockReset();
   testState.getAnswerCheck.mockReset();
+  testState.getAnalystAgentLog.mockReset();
+  testState.getAnalystAgentLog.mockResolvedValue({
+    code: 200,
+    data: {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "Synthetic Research execution log",
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    },
+  });
   localStorage.clear();
   localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "false");
   window.history.replaceState({}, "", "/chat");
@@ -1084,6 +1098,35 @@ describe("Chat artifact shell integration", () => {
       "/obs/bucket/run-research-1"
     );
     expect(wrapper.html()).not.toContain("/private.txt");
+  });
+
+  it("loads the selected Research execution log once through the owner-scoped row id", async () => {
+    const message = { ...researchMessage, id: "65" };
+    const { wrapper, state } = await mountProductionChat(1440, {
+      messagesA: [message],
+    });
+    await nextTick();
+    await nextTick();
+
+    if (!state.getChatState("A").artifactOpen) {
+      await wrapper.get('[data-test="artifact-open"]').trigger("click");
+    }
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    await flushPromises();
+
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledTimes(1);
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledWith({ id: "65" });
+    expect(state.getChatState("A").logData["65"]?.text).toBe(
+      "Synthetic Research execution log"
+    );
+    expect(wrapper.findComponent({ name: "ChatAnalystLog" }).exists()).toBe(
+      true
+    );
+
+    await wrapper.get('[data-tab-id="content"]').trigger("click");
+    await wrapper.get('[data-tab-id="activity"]').trigger("click");
+    await flushPromises();
+    expect(testState.getAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
   it("preserves interop provenance when the artifact has only a projection", async () => {

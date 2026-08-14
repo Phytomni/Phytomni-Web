@@ -523,7 +523,7 @@ export function removeDeletedChat(options: {
           :action-label="t('common.operation')"
           @back="closeArtifact"
           @close="closeArtifact"
-          @tab="selectArtifactTab"
+          @tab="selectArtifactPanelTab"
         >
           <template #content>
             <BotReportState
@@ -562,7 +562,23 @@ export function removeDeletedChat(options: {
               :ns="artifactNamespace"
             />
           </template>
-          <template #activity>{{ t("chat.log.noData") }}</template>
+          <template #activity>
+            <ChatAnalystLog
+              v-if="
+                currentArtifactMessage.tool_name === 'InSilicoResearchAgent' &&
+                !!deriveAnalystLogRowId(currentArtifactMessage)
+              "
+              :row-id="deriveAnalystLogRowId(currentArtifactMessage)"
+              :task-id="deriveAnalystLogTaskId(currentArtifactMessage)"
+              :log-data="analystLogData(currentArtifactMessage)"
+              :loading="analystLogLoading(currentArtifactMessage)"
+              :updating="analystLogUpdating(currentArtifactMessage)"
+              :error-kind="analystLogErrorKind(currentArtifactMessage)"
+              @update="updateLog(currentArtifactMessage)"
+              @retry="retryLog(currentArtifactMessage)"
+            />
+            <span v-else>{{ t("chat.log.noData") }}</span>
+          </template>
           <template #downloads>
             <ResultArchiveDelivery
               v-if="currentArtifactProjection?.resultArchiveV1 === true"
@@ -714,6 +730,7 @@ import {
   artifactPresentationForMessage,
 } from "./utils/artifact-policy";
 import type {
+  ArtifactTab,
   Chat,
   ChatMessage,
   ChatComposerHandle as ComposerHandle,
@@ -1229,7 +1246,7 @@ async function activateEvidence(
   activation: ScientificCitationActivation
 ): Promise<void> {
   if (activation.namespace !== artifactNamespace.value) return;
-  selectArtifactTab("evidence");
+  await selectArtifactPanelTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
 }
@@ -1700,6 +1717,13 @@ const openArtifact = (identity: string) => {
 };
 
 const closeArtifact = () => {
+  const message = currentArtifactMessage.value;
+  if (
+    artifactTab.value === "activity" &&
+    message?.tool_name === "InSilicoResearchAgent"
+  ) {
+    void setLogExpanded(message, false);
+  }
   resetArtifactPanel();
 };
 
@@ -1789,6 +1813,13 @@ const { setLogExpanded, updateLog, retryLog, refreshModernLog } = useLogView({
   getChatState,
   scrollToBottom,
 });
+
+async function selectArtifactPanelTab(tab: ArtifactTab): Promise<void> {
+  selectArtifactTab(tab);
+  const message = currentArtifactMessage.value;
+  if (message?.tool_name !== "InSilicoResearchAgent") return;
+  await setLogExpanded(message, tab === "activity");
+}
 
 function analystLogStateKey(message: ChatMessage): string | null {
   const rowId = deriveAnalystLogRowId(message);
