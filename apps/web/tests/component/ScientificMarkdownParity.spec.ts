@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import MarkdownBlock from "@/views/chat/components/blocks/MarkdownBlock.vue";
+import ReasoningBlock from "@/views/chat/components/blocks/ReasoningBlock.vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import type { ContentBlock } from "@/views/chat/types";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -138,6 +139,28 @@ describe("ScientificMarkdown parity across AG-UI streaming surfaces", () => {
       },
     });
 
+    const fencedCode = mountWithApp(MarkdownBlock, {
+      props: {
+        block: markdownBlock("```text\n$$ remains code\n```"),
+        streaming: true,
+      },
+    });
+    await vi.dynamicImportSettled();
+    expect(
+      fencedCode.find(".scientific-markdown__stream-fallback").exists()
+    ).toBe(false);
+    expect(fencedCode.get("code").text()).toContain("$$ remains code");
+
+    const inlineCode = mountWithApp(MarkdownBlock, {
+      props: {
+        block: markdownBlock("`$$ remains code`\n$$E ="),
+        streaming: true,
+      },
+    });
+    expect(
+      inlineCode.find(".scientific-markdown__stream-fallback").exists()
+    ).toBe(true);
+
     for (const partial of [
       "| Gene | Score |\n| :--- |",
       "```text\npartial",
@@ -164,6 +187,25 @@ describe("ScientificMarkdown parity across AG-UI streaming surfaces", () => {
     await vi.dynamicImportSettled();
     expect(semanticSignature(stream.element)).toEqual(
       semanticSignature(direct.element)
+    );
+  });
+
+  it("keeps collapsed standalone reasoning hidden while its display math is incomplete", async () => {
+    const reasoning = mountWithApp(ReasoningBlock, {
+      props: {
+        block: { type: "reasoning", authority: "web", text: "$$E =" },
+        streaming: true,
+      },
+    });
+
+    expect(reasoning.find(".reasoning-toggle").exists()).toBe(true);
+    expect(
+      reasoning.find(".scientific-markdown__stream-fallback").exists()
+    ).toBe(false);
+
+    await reasoning.get(".reasoning-toggle").trigger("click");
+    expect(reasoning.get(".scientific-markdown__stream-fallback").text()).toBe(
+      "$$E ="
     );
   });
 });

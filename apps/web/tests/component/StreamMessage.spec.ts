@@ -151,6 +151,23 @@ describe("StreamMessage", () => {
     expect(md.html()).toContain('href="#m2-ref-1"');
   });
 
+  it("relays a streamed citation activation alongside its reference list", async () => {
+    const w = mountWithApp(StreamMessage, {
+      props: {
+        blocks: [{ type: "markdown", authority: "web", text: "Evidence [1]." }],
+        ns: "m-citation",
+        references: [{ title: "Reference one" }],
+      },
+    });
+    await vi.dynamicImportSettled();
+
+    expect(w.get(".doc-list-item").attributes("id")).toBe("m-citation-ref-1");
+    await w.get(".scientific-citation__link").trigger("click");
+    expect(w.emitted("citation-activate")).toEqual([
+      [{ namespace: "m-citation", indices: [1] }],
+    ]);
+  });
+
   it("keeps two streams' citation targets disjoint; empty references stay a no-op", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "Claim [1]." },

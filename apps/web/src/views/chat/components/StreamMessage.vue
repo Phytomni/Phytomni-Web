@@ -10,6 +10,7 @@
         :ns="citationNs"
         :reference-count="references?.length ?? 0"
         @update:expanded="(v) => onActivityExpanded(item.startIndex, v)"
+        @citation-activate="onCitationActivate"
       />
       <MarkdownBlock
         v-else-if="item.block.type === 'markdown'"
@@ -17,6 +18,7 @@
         :ns="citationNs"
         :reference-count="references?.length ?? 0"
         :streaming="streaming"
+        @citation-activate="onCitationActivate"
       />
       <ReasoningBlock
         v-else-if="item.block.type === 'reasoning'"
@@ -24,6 +26,7 @@
         :ns="citationNs"
         :reference-count="references?.length ?? 0"
         :streaming="streaming"
+        @citation-activate="onCitationActivate"
       />
       <component
         :is="renderer(item.block.type)"
@@ -58,6 +61,7 @@ import ReasoningBlock from "./blocks/ReasoningBlock.vue";
 import type { ContentBlock } from "../types";
 import type { A2uiActionIntent } from "../streaming/a2uiContract";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import {
   activityDisclosureStateKey,
@@ -91,6 +95,7 @@ const emit = defineEmits<{
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
 // Defense in depth: never pass a non-empty ns to markdown/reasoning (or the
@@ -121,6 +126,10 @@ function onA2uiRetry(block: ContentBlock) {
   const surfaceId = block.a2ui?.surface.surface_id;
   if (!surfaceId) return;
   emit("a2ui-retry", surfaceId);
+}
+
+function onCitationActivate(activation: ScientificCitationActivation) {
+  emit("citation-activate", activation);
 }
 
 function activityStateKeyFor(startIndex: number): string | null {

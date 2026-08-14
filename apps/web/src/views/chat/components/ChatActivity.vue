@@ -5,14 +5,28 @@
       <div class="chat-activity__body chat-activity__body--forced">
         <slot>
           <template v-for="(block, i) in blocks" :key="i">
-            <component
-              :is="renderer(block.type)"
-              v-if="renderer(block.type)"
+            <MarkdownBlock
+              v-if="block.type === 'markdown'"
               :block="block"
               :ns="ns"
               :reference-count="referenceCount"
               :streaming="streaming"
-              :within-activity="block.type === 'reasoning'"
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <ReasoningBlock
+              v-else-if="block.type === 'reasoning'"
+              :block="block"
+              :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              within-activity
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <component
+              :is="renderer(block.type)"
+              v-else-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
             />
           </template>
         </slot>
@@ -51,14 +65,28 @@
       >
         <slot>
           <template v-for="(block, i) in blocks" :key="i">
-            <component
-              :is="renderer(block.type)"
-              v-if="renderer(block.type)"
+            <MarkdownBlock
+              v-if="block.type === 'markdown'"
               :block="block"
               :ns="ns"
               :reference-count="referenceCount"
               :streaming="streaming"
-              :within-activity="block.type === 'reasoning'"
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <ReasoningBlock
+              v-else-if="block.type === 'reasoning'"
+              :block="block"
+              :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              within-activity
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <component
+              :is="renderer(block.type)"
+              v-else-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
             />
           </template>
         </slot>
@@ -72,6 +100,9 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ContentBlock } from "../types";
 import type { AgentTaskLifecycle } from "@/api/types";
+import MarkdownBlock from "./blocks/MarkdownBlock.vue";
+import ReasoningBlock from "./blocks/ReasoningBlock.vue";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import { activityRegionDomId } from "../streaming/presentation";
 
@@ -104,6 +135,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   "update:expanded": [value: boolean];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
 const { t } = useI18n();

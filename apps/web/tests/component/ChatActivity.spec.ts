@@ -141,6 +141,20 @@ describe("ChatActivity", () => {
     expect(w.findComponent(ScientificMarkdown).exists()).toBe(true);
   });
 
+  it("keeps Markdown props off tool and step renderer fallthrough attributes", () => {
+    const w = mountActivity({
+      blocks,
+      stateKey: null,
+      streaming: true,
+      referenceCount: 3,
+    });
+    for (const selector of [".tool-block", ".step-block"]) {
+      const node = w.get(selector);
+      expect(node.attributes("reference-count")).toBeUndefined();
+      expect(node.attributes("streaming")).toBeUndefined();
+    }
+  });
+
   it("supports label override, hideCount, and default slot body content", async () => {
     const w = mountWithApp(ChatActivity, {
       props: {
