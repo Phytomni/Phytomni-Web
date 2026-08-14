@@ -1,15 +1,11 @@
 /**
  * Markdown surface skins.
  *
- * - `.phy-markdown--legacy` — no new visual declarations (existing MarkdownViewer
- *   scoped styles + `.phy-reading` remain authoritative).
  * - `.phy-markdown--chat` — quiet lab sans/mono transcript skin.
  * - `.phy-markdown--artifact` — research prose with sans/mono structure.
  * - `.phy-markdown--document` — sans document hierarchy for explicit consumers.
  */
 
-/* Beat `.markdown-viewer.phy-markdown--legacy { all: initial }` when both classes compete. */
-.markdown-viewer.phy-markdown--chat,
 .md-block.phy-markdown--chat,
 .phy-markdown.phy-markdown--chat {
   all: revert;
@@ -173,11 +169,8 @@
   border-top: 1px solid var(--phy-color-border-subtle);
 }
 
-/* The legacy static parser preserves every source newline as <br>. Keep prose
-   breaks real (so adjacent words cannot join), and suppress only the first
-   break directly associated with a block boundary. Never use a two-hop
-   sibling selector here: sibling combinators ignore intervening text nodes and
-   can otherwise hide a later prose break. */
+/* Keep prose breaks real and suppress only the first break directly associated
+   with a block boundary. */
 .phy-markdown--chat .markdown-content br {
   display: inline;
 }
@@ -203,7 +196,7 @@
   margin-bottom: 0;
 }
 
-/* Nested content wrappers from MarkdownViewer / streaming blocks. */
+/* Nested content wrappers emitted by the shared Markdown engine. */
 .phy-markdown--chat .markdown-content,
 .phy-markdown--chat.md-block {
   box-sizing: border-box;
@@ -280,11 +273,24 @@
   font-family: var(--phy-font-mono);
 }
 
-.phy-markdown--artifact :is(caption, figcaption, button, input, select, textarea, [role="button"], .doc-list, .doc-list-title, .doc-list-item) {
+.phy-markdown--artifact
+  :is(
+    caption,
+    figcaption,
+    button,
+    input,
+    select,
+    textarea,
+    [role="button"],
+    .doc-list,
+    .doc-list-title,
+    .doc-list-item
+  ) {
   font-family: var(--phy-font-shell);
 }
 
-:is(.phy-markdown--artifact, .phy-markdown--document) :is(h1, h2, h3, h4, h5, h6) {
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  :is(h1, h2, h3, h4, h5, h6) {
   margin: 1.2em 0 0.4em;
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
@@ -435,7 +441,8 @@
   border-radius: var(--phy-radius-sm);
 }
 
-:is(.phy-markdown--artifact, .phy-markdown--document) :is(button, input, select, textarea, [role="button"]) {
+:is(.phy-markdown--artifact, .phy-markdown--document)
+  :is(button, input, select, textarea, [role="button"]) {
   font-family: var(--phy-font-shell);
 }
 
@@ -445,7 +452,7 @@
   border-top: 1px solid var(--phy-color-border-subtle);
 }
 
-/* Reference rows are siblings of MarkdownViewer in CitedAnswer, so keep them
+/* Reference rows are siblings of CitedAnswer's Markdown body, so keep them
    sans when the body opts into either research surface. */
 .cited-answer:has(> .phy-markdown--artifact) .doc-list,
 .cited-answer:has(> .phy-markdown--document) .doc-list {
@@ -564,10 +571,7 @@
   .markdown-content
   :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)
   + br,
-:is(.phy-markdown--artifact, .phy-markdown--document)
-  .markdown-content
-  li
-  + br,
+:is(.phy-markdown--artifact, .phy-markdown--document) .markdown-content li + br,
 :is(.phy-markdown--artifact, .phy-markdown--document)
   .markdown-content
   br:has(+ :is(h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol)) {

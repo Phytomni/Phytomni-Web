@@ -11,8 +11,11 @@ const MARKDOWN_CSS = readFileSync(
 );
 const SURFACE_CALLERS = [
   "../../src/components/CitedAnswer.vue",
+  "../../src/components/DeepGenomeResultViewer.vue",
   "../../src/components/research/BotReportState.vue",
   "../../src/views/chat/components/ChatMessageContent.vue",
+  "../../src/views/chat/components/blocks/MarkdownBlock.vue",
+  "../../src/views/chat/components/blocks/ReasoningBlock.vue",
   "../../src/views/data-agent/DataAgentView.vue",
   "../../src/views/help/HelpView.vue",
 ] as const;
@@ -56,6 +59,15 @@ describe("ScientificMarkdown completed surfaces", () => {
     });
     expect(wrapper.classes()).toContain("phy-markdown--reading");
     expect(wrapper.classes()).not.toContain("phy-markdown--legacy");
+  });
+
+  it("pins raw HTML off and sanitization on at the shared boundary", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../../src/components/ScientificMarkdown.vue"),
+      "utf8"
+    );
+    expect(source).toContain(':allow-html="false"');
+    expect(source).toContain(':sanitize="true"');
   });
 
   it("keeps artifact and document overflow, font, and focus affordances", () => {

@@ -9,6 +9,25 @@ const rootSource = (relativePath: string): string =>
   readFileSync(resolve(__dirname, "../../..", relativePath), "utf8");
 
 describe("unsafe propagation contracts", () => {
+  it("keeps report content on the single scientific renderer", () => {
+    const reportContent = [
+      source("components/CitedAnswer.vue"),
+      source("components/research/DeepGenomeArtifact.vue"),
+      source("components/research/BotReportState.vue"),
+      source("views/chat/components/ChatMessageContent.vue"),
+      source("views/chat/components/StreamMessage.vue"),
+    ].join("\n");
+    const scientificMarkdown = source("components/ScientificMarkdown.vue");
+
+    expect(reportContent).not.toMatch(/v-html\s*=/);
+    expect(reportContent).not.toContain("processInlineMarkdown");
+    expect(reportContent).not.toContain("renderStreamingMarkdown");
+    expect(reportContent).not.toContain("parseDeepGenomeMarkdown");
+    expect(reportContent).not.toContain("linkifyCitations");
+    expect(scientificMarkdown).toContain(':allow-html="false"');
+    expect(scientificMarkdown).toContain(':sanitize="true"');
+  });
+
   it("keeps scientific Markdown and download boundaries typed", () => {
     const scientificMarkdown = source("components/ScientificMarkdown.vue");
     const downloads = source("composables/useDeepGenomeDownloads.ts");
@@ -16,17 +35,22 @@ describe("unsafe propagation contracts", () => {
     expect(scientificMarkdown).toContain(
       "function safeAnchorHref(href: string)"
     );
-    expect(downloads).toContain(
-      "(match: string, alt: string, src: string) => {"
-    );
+    expect(downloads).toContain("const downloadMarkdown = () => {");
+    expect(downloads).toContain("saveAs(blob, filename);");
   });
 
   it("keeps sanitizer entity callbacks and text coercion explicit", () => {
     const sanitizer = source("utils/sanitize-markup.ts");
 
-    expect(sanitizer).toContain("function decodeEntities(s: string): string {");
-    expect(sanitizer).toContain("(m: string, hex: string) =>");
-    expect(sanitizer).toContain("(m: string, dec: string) =>");
+    expect(sanitizer).toContain(
+      "function decodeEntities(value: string): string {"
+    );
+    expect(sanitizer).toContain(
+      ".replace(/&#x([0-9a-f]+);?/gi, (match: string, hex: string) =>"
+    );
+    expect(sanitizer).toContain(
+      ".replace(/&#(\\d+);?/g, (match: string, dec: string) =>"
+    );
     expect(sanitizer).toContain(
       "export function escapeHtml(text: unknown): string {"
     );

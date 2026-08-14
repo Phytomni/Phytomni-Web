@@ -369,40 +369,41 @@ claim backend completion, persistence, or measured transfer progress.
 
 ## Artifact and citation behavior
 
-### DeepGenome Chat lifecycle
+### One scientific Markdown engine
 
-DeepGenome is an asynchronous Chat row and uses the shared pollable lifecycle
-policy. A lifecycle snapshot can trigger owner-scoped history hydration only
-when the message has a normalized positive Web row id; the snapshot must not
-inject a report body into the row.
+`ScientificMarkdown` is the only renderer for agent report bodies, including
+cited answers, Chat blocks, DeepGenome documents, research reports, and the
+streaming typewriter. It passes `allow-html=false` and `sanitize=true` to
+XMarkdown, accepts only the citation-only `<sup>` grammar, and owns local table,
+code, math, and link overflow; report bodies must not add a `v-html` sink.
 
-| Lifecycle presentation             | Chat ownership rule                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| Preparing transport placeholder    | Show lifecycle status only; raw transport copy never mounts the result viewer.       |
-| Running with a meaningful report   | Render the partial report without an empty-reference conclusion or final actions.    |
-| Succeeded with a meaningful report | Keep the completed preview in Chat and move the full report to the Artifact surface. |
+Structured images, CIF files, Markdown attachments, and citation rows are
+separate authorized resources. A caller passes owner-authorized resource
+metadata and a page-unique citation namespace only when matching reference rows
+exist; resource activation is emitted as a typed event and never inferred from
+an arbitrary report URL.
 
-Only `SUCCEEDED` plus a meaningful report is eligible for the completed
-artifact preview. An empty reference list is not a scientific conclusion, so
-partial reports hide both the empty-reference message and the final toolbar.
+### Report-backed artifact lifecycle
 
-An artifact is eligible only for a completed assistant message with a non-empty
-server id, non-empty content, and a recognized tool mapping in
-`views/chat/utils/artifact-policy.ts`. Server ids are normalized to strings and
-must identify exactly one eligible message in the current dialogue. Artifact
-selection and open state are per dialogue.
+The Chat artifact policy maps only the supported report tools to `cited-report`,
+`research`, or `deep-genome`. Any substantive final, intermediate, or message
+report is eligible regardless of lifecycle status, including a retained failed
+or timed-out report; status-only placeholders, empty text, and DeepGenome
+transport placeholders are not reports. Chat and Data content without a report
+stays inline.
 
-The chat transcript keeps the preview; the Artifact surface owns the complete
-report body. Auto-open is limited to the explicitly configured research tools.
-Cited families render through `CitedAnswer`/`MarkdownViewer` and must pass a
-page-unique citation namespace (`m<index>` in chat, or a stable demo namespace),
-so `[N]` links target only the matching reference list.
+Artifact selection is keyed by a stable stream/message/run identity and isolated
+per dialogue. Hydrated and background reports are marked handled without taking
+focus; a new foreground identity may auto-open once, while manual View always
+opens an eligible report and downloads still require a durable row id.
 
-Agent-influenced content reaches `v-html` only through the escape-first
-pipeline. Resurrected anchor attributes use `sanitizeAnchorAttributes`; URLs
-interpolated into fixed links use `sanitizeHref` (or its escaped equivalent).
-Do not add a raw `v-html` sink, bypass the sanitizer, or give a cited renderer
-an empty namespace.
+### Citation and HTML safety
+
+Citation links emit typed activation events to the owning reference list and
+must use a matching namespace. The only retained HTML sink is the separately
+reviewed, escaped reference-row renderer; its text uses `escapeHtml` and fixed
+URLs use `sanitizeHref`. Vue-bound resource links use `safeHrefValue`; do not
+resurrect report HTML, add raw report-body `v-html`, or bypass these validators.
 
 ## Auth, PII, and legal invariants
 

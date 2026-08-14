@@ -149,7 +149,7 @@ export function useStreamMessage(opts: {
       placeholder.followUpQuestions = state.followUp;
       if (state.followUp.length) {
         // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
-        // MarkdownViewer path), so reveal the follow-up chips here.
+        // completed Markdown path), so reveal the follow-up chips here.
         placeholder.showFollowUpQuestions = true;
       }
       if (state.references.length) {

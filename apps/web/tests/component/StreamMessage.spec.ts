@@ -14,7 +14,7 @@ describe("StreamMessage", () => {
     expect(w.html()).toContain("<strong>hi</strong>");
   });
 
-  it("skins the streaming markdown wrapper with chat classes without MarkdownViewer", async () => {
+  it("skins the streaming markdown wrapper with chat classes without a legacy renderer", async () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
@@ -23,7 +23,7 @@ describe("StreamMessage", () => {
     const md = w.find(".md-block.phy-markdown.phy-markdown--chat");
     expect(md.exists()).toBe(true);
     expect(md.html()).toContain("<strong>hi</strong>");
-    // Streaming stays on MarkdownBlock — no MarkdownViewer handoff.
+    // Streaming stays on MarkdownBlock and the shared ScientificMarkdown engine.
     expect(w.find(".markdown-viewer").exists()).toBe(false);
     expect(w.findComponent({ name: "ScientificMarkdown" }).exists()).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("StreamMessage", () => {
       },
     ];
     const w = mountWithApp(StreamMessage, { props: { blocks } });
-    // Scope gate: without ns / references, renderStreamingMarkdown keeps [N] literal.
+    // Scope gate: without ns / references, ScientificMarkdown keeps [N] literal.
     expect(w.html()).toContain("[1]");
     expect(w.html()).not.toContain('href="#');
     expect(w.find(".doc-list").exists()).toBe(false);
@@ -136,7 +136,7 @@ describe("StreamMessage", () => {
     });
     await nextTick();
 
-    // Streaming path: processInlineMarkdown emits #ns-ref-N anchors (not citation-ref).
+    // Streaming path: ScientificMarkdown emits #ns-ref-N anchors (not citation-ref).
     expect(w.html()).toContain('href="#m2-ref-1"');
     expect(w.get(".scientific-citation__link").attributes("href")).toBe(
       "#m2-ref-1"
