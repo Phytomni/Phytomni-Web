@@ -2,7 +2,10 @@ package bot
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -34,6 +37,32 @@ func validResearchCatalog() *AgentsListResponse {
 				},
 			},
 		}},
+	}
+}
+
+const headResearchInputFixtureSHA256 = "0885a3dfc606e9ed03f572a26886404badf9dde8bb2983bcf6e2384d8345e300"
+
+func TestHeadResearchInputFixtureMatchesContract(t *testing.T) {
+	raw, err := os.ReadFile("testdata/head/research_input_resolution_v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != headResearchInputFixtureSHA256 {
+		t.Fatalf("fixture digest = %s, want accepted Bot digest", got)
+	}
+	var catalog AgentsListResponse
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	contract, err := ValidateResearchInputContract(&catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contract.MaxUserQueryChars < DefaultMaxUserQueryChars ||
+		contract.MaxAttachments < DefaultMaxAssetAttachmentRefs ||
+		contract.MaxDatasetPaths < DefaultMaxResearchDatasetPaths ||
+		contract.MaxReferences < DefaultMaxResearchInputReferences {
+		t.Fatalf("fixture contract is below the Web floor: %#v", contract)
 	}
 }
 

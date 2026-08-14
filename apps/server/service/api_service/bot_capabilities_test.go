@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,32 @@ func capabilityDescriptors() []rxBot.AgentDescriptor {
 		})
 	}
 	return descriptors
+}
+
+func TestBotCapabilitiesHeadResearchInputFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(
+		"..", "..", "external", "bot", "testdata", "head",
+		"research_input_resolution_v1.json",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := capabilityServer(t, http.StatusOK, string(raw), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: true})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "fixture-user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.ResearchInput.Enabled ||
+		manifest.ResearchInput.Protocol != rxBot.ResearchInputProtocol ||
+		manifest.ResearchInput.MaxQueryChars < rxBot.DefaultMaxUserQueryChars ||
+		manifest.ResearchInput.MaxAttachments < rxBot.DefaultMaxAssetAttachmentRefs ||
+		manifest.ResearchInput.MaxDatasetPaths < rxBot.DefaultMaxResearchDatasetPaths ||
+		manifest.ResearchInput.MaxReferences < rxBot.DefaultMaxResearchInputReferences {
+		t.Fatalf("fixture Research capability was not accepted: %#v", manifest.ResearchInput)
+	}
 }
 
 func capabilityServer(t *testing.T, status int, body string, delay time.Duration) *httptest.Server {
