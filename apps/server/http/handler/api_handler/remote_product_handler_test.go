@@ -350,6 +350,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			var gotPath string
 			var gotRequest rxBot.AgentRunRequest
 			var gotBody map[string]json.RawMessage
+			var gotIdempotencyKey string
 			catalogCalls := 0
 			runID := "run-" + tc.slug
 			taskID := "task-" + tc.slug
@@ -365,6 +366,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 					return
 				}
 				gotPath = r.URL.Path
+				gotIdempotencyKey = r.Header.Get("Idempotency-Key")
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Errorf("read Bot request: %v", err)
@@ -411,6 +413,12 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 				t.Fatal("dataset_description crossed the product boundary inside arguments")
 			}
 			if tc.slug == "research" {
+				if gotIdempotencyKey != "remote-product-research-turn" {
+					t.Fatalf("Research Idempotency-Key=%q", gotIdempotencyKey)
+				}
+				if _, leaked := gotBody["idempotency_key"]; leaked {
+					t.Fatalf("Research idempotency key leaked into JSON body: %#v", gotBody)
+				}
 				dataList, ok := gotRequest.Arguments["data_list"].(map[string]interface{})
 				if !ok || len(dataList) != 0 {
 					t.Fatalf("research data_list=%#v, want an empty JSON object", gotRequest.Arguments["data_list"])

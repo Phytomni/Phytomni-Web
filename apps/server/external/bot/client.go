@@ -169,6 +169,10 @@ func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, 
 // Agent-run responses opt in so duplicate object keys cannot become a
 // last-value-wins agent/run identity.
 func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool) (ResponseMeta, error) {
+	return c.doJSONWithMetaOptionsAndIdempotency(ctx, method, path, body, out, rejectDuplicateKeys, "")
+}
+
+func (c *Client) doJSONWithMetaOptionsAndIdempotency(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool, idempotencyKey string) (ResponseMeta, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -185,6 +189,9 @@ func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string,
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return ResponseMeta{}, wrapTransportError(err)
@@ -362,7 +369,7 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 // InvokeAgentWithMeta submits a run and returns Bot response metadata.
 func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
 	var out AgentRunResponse
-	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true)
+	meta, err := c.doJSONWithMetaOptionsAndIdempotency(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true, req.IdempotencyKey)
 	if err == nil && req.Conversation != nil {
 		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
 	}

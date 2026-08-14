@@ -227,6 +227,37 @@ func TestInvokeAgentForwardsConversationAndValidatesContext(t *testing.T) {
 	}
 }
 
+func TestInvokeAgentSendsIdempotencyKeyAsHeaderOnly(t *testing.T) {
+	const key = "turn-research-runtime"
+	var rawBody map[string]json.RawMessage
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Idempotency-Key"); got != key {
+			t.Errorf("Idempotency-Key=%q, want %q", got, key)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
+			t.Errorf("decode agent request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"research",
+		AgentRunRequest{
+			Arguments:      map[string]interface{}{"user_query": "research"},
+			IdempotencyKey: key,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	if _, leaked := rawBody["idempotency_key"]; leaked {
+		t.Fatalf("idempotency key leaked into JSON body: %#v", rawBody)
+	}
+}
+
 func TestInvokeAgentRejectsMismatchedContextTurn(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

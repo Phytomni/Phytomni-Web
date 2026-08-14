@@ -2821,6 +2821,9 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 			DialogueID:   dialogueID,
 		}
+		if slug == "research" {
+			agentRequest.IdempotencyKey = in.ClientTurnID
+		}
 		if conversationV1 {
 			agentRequest.Conversation = submission.envelope
 		}

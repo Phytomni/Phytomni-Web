@@ -111,6 +111,8 @@ type AgentRunRequest struct {
 	DialogueID   string                  `json:"dialogue_id,omitempty"`
 	Debug        bool                    `json:"debug,omitempty"`
 	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	// IdempotencyKey is transport metadata and must never enter the JSON body.
+	IdempotencyKey string `json:"-"`
 }
 
 // AgentRunResult carries either a finished formatted payload (sync agents) or
