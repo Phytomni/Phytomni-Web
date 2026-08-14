@@ -56,10 +56,8 @@ func TestResearchFormatsRequiredAreSortedDetachedSuffixTokens(t *testing.T) {
 
 func TestClassifyAttachmentFilenameArchiveSuffixes(t *testing.T) {
 	archiveSuffixes := []string{
-		".zip", ".zipx",
-		".tar", ".tgz", ".tbz", ".tbz2", ".txz", ".tlz", ".tzst",
-		".gz", ".bgz", ".bgzf", ".bgzip", ".bz", ".bz2", ".xz", ".lz", ".lzma", ".lz4", ".lzo", ".br", ".z", ".zst",
-		".7z", ".rar", ".cab", ".ace", ".arj",
+		".zip", ".tar", ".tgz", ".gz", ".bgzf",
+		".bz2", ".xz", ".zst", ".7z", ".rar",
 	}
 
 	for _, suffix := range archiveSuffixes {
@@ -70,11 +68,24 @@ func TestClassifyAttachmentFilenameArchiveSuffixes(t *testing.T) {
 	}
 
 	for _, filename := range []string{
-		"READS.FASTQ.GZ", "variants.VCF.BGZ", "bundle.TAR.GZ",
-		"reads.FaStQ.Gz", "variants.VcF.BgZ", "bundle.TaR.Gz",
+		"READS.FASTQ.GZ", "variants.VCF.BGZF", "bundle.TAR.GZ",
+		"reads.FaStQ.Gz", "variants.VcF.BgZf", "bundle.TaR.Gz",
 	} {
 		t.Run(filename, func(t *testing.T) {
 			assertAttachmentClass(t, filename, attachmentClassDataset)
+		})
+	}
+
+	for _, suffix := range []string{
+		".zipx", ".tbz", ".tbz2", ".txz", ".tlz", ".tzst",
+		".bgz", ".bgzip", ".bz", ".lz", ".lzma", ".lz4", ".lzo", ".br", ".z",
+		".cab", ".ace", ".arj",
+	} {
+		t.Run("reject"+suffix, func(t *testing.T) {
+			class, err := classifyAttachmentFilename("bundle" + suffix)
+			if class != "" || !errors.Is(err, ErrAttachmentTypeUnsupported) {
+				t.Fatalf("class=%q err=%v, want unsupported", class, err)
+			}
 		})
 	}
 }
