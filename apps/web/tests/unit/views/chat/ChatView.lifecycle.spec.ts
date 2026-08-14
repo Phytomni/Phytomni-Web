@@ -82,7 +82,7 @@ describe("ChatView lifecycle cleanup", () => {
     expect(remaining).toEqual([retained]);
   });
 
-  it("renders Research active and timeout lifecycle states without Finished previews", async () => {
+  it("renders report-backed Research previews regardless of lifecycle status", async () => {
     const context = createTestAppContext({ locale: "en-US" });
     const wrapper = context.mount(ChatView, {
       global: {
@@ -161,8 +161,8 @@ describe("ChatView lifecycle cleanup", () => {
     await nextTick();
 
     const row = wrapper.get('[data-message-id="research-running-1"]');
-    expect(row.find(".research-artifact-preview").exists()).toBe(false);
-    expect(row.text()).not.toContain("Finished");
+    expect(row.find(".research-artifact-preview").exists()).toBe(true);
+    expect(row.get(".agent-lifecycle").text()).toBe("Running");
 
     state.getChatState("research-dialogue").renderedChat = {
       dialogue_id: "research-dialogue",
