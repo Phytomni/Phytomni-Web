@@ -11,11 +11,16 @@ describe("buildDisplayContent", () => {
     expect(out).toContain("Body text");
   });
 
-  it("normalizes CRLF and LF to literal backslash-n (viewer contract)", () => {
+  it("preserves real CRLF and LF as Markdown newlines", () => {
     const raw = "line1\r\nline2\nline3";
     const out = buildDisplayContent(raw);
-    expect(out).toBe("line1\\nline2\\nline3");
+    expect(out).toBe("line1\nline2\nline3");
     expect(out).not.toMatch(/\r/);
+  });
+
+  it("preserves a literal backslash-n sequence in source text", () => {
+    const raw = String.raw`line1\nline2`;
+    expect(buildDisplayContent(raw)).toBe(raw);
   });
 
   it("leaves a backend gene-image URL untouched (no client rewrite)", () => {

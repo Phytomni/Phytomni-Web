@@ -187,7 +187,7 @@
     <template v-else-if="isDeepGenomeMessage">
       <DeepGenomeResultViewer
         v-if="hasMeaningfulDeepGenomeReport"
-        :markdown="chatContentToText(message.content).replace(/\n/g, '\\n')"
+        :markdown="chatContentToText(message.content)"
         :references="message.doc_list || []"
         :ns="'m' + index"
         :show-actions="showDeepGenomeFinalActions"

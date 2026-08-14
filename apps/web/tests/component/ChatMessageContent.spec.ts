@@ -736,6 +736,18 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
     ...overrides,
   });
 
+  it("passes DeepGenome Markdown newlines and literal backslashes unchanged", () => {
+    const content = String.raw`line1
+line2\nline3`;
+    const wrapper = mountContent(deepGenomeMessage({ content }));
+
+    expect(
+      wrapper
+        .findComponent({ name: "DeepGenomeResultViewer" })
+        .props("markdown")
+    ).toBe(content);
+  });
+
   it("renders an anchored task placeholder as preparing without raw content", () => {
     const wrapper = mountContent(
       deepGenomeMessage({ content: "Server task created: child-task-123" })
