@@ -165,6 +165,44 @@ func TestDecodeRunProjectionRetainsLegacyArtifactsWithoutDeliveryMarker(t *testi
 	if !reflect.DeepEqual(got.Artifacts.Paths, []string{"obs://bucket/legacy/result.txt"}) {
 		t.Fatalf("legacy artifacts = %#v", got.Artifacts)
 	}
+	if !reflect.DeepEqual(got.Artifacts.OutputDirs, []string{"obs://bucket/canonical-without-marker", "obs://bucket/legacy"}) {
+		t.Fatalf("merged output roots = %#v", got.Artifacts.OutputDirs)
+	}
+	if got.OutputDirectoryCount != 2 {
+		t.Fatalf("merged output root count = %d", got.OutputDirectoryCount)
+	}
+}
+
+func TestDecodeRunProjectionRetainsCurrentExecutionState(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:            "run-current-execution",
+		Agent:            "research",
+		Status:           "succeeded",
+		DegradedTracking: true,
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"complete report"},
+			"execution":{
+				"tracking":{"degraded":true},
+				"output_dirs":["internal/runs/synthetic"],
+				"delivery":null
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.TrackingDegraded || got.OutputDirectoryCount != 1 || len(got.Artifacts.OutputDirs) != 0 {
+		t.Fatalf("current run projection = %#v", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "internal/runs/synthetic") {
+		t.Fatalf("internal output directory leaked: %s", encoded)
+	}
 }
 
 func TestDecodeRunProjectionRejectsMalformedCanonicalDelivery(t *testing.T) {
@@ -502,6 +540,31 @@ func TestDecodeAgentRunSubmissionNormalizesNativeRunIdentity(t *testing.T) {
 				t.Fatalf("submission run id = %q, want %q", got.RunID, tt.wantRunID)
 			}
 		})
+	}
+}
+
+func TestDecodeAgentRunSubmissionRetainsTerminalExecutionState(t *testing.T) {
+	runID := "run-terminal-submit"
+	response := rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "research",
+		Status: "succeeded",
+		Result: rxBot.AgentRunResult{
+			Formatted: &rxBot.Formatted{Answer: "complete report"},
+			Execution: json.RawMessage(`{
+				"tracking":{"degraded":true},
+				"output_dirs":["internal/runs/synthetic"],
+				"delivery":null
+			}`),
+		},
+	}
+
+	got, err := DecodeAgentRunSubmission(response)
+	if err != nil {
+		t.Fatalf("DecodeAgentRunSubmission: %v", err)
+	}
+	if !got.TrackingDegraded || got.OutputDirectoryCount != 1 || len(got.Artifacts.OutputDirs) != 0 {
+		t.Fatalf("terminal submission projection = %#v", got)
 	}
 }
 

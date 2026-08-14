@@ -13,6 +13,7 @@ import (
 
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
+	"phytomni-server/model"
 )
 
 type lifecycleFakeRunReader struct {
@@ -90,6 +91,15 @@ func lifecycleRunRecord(runID, status string, childIDs ...string) *rxBot.RunReco
 		Status:  status,
 		TaskIDs: childIDs,
 		Result:  json.RawMessage(`{}`),
+	}
+}
+
+func TestLifecycleArtifactSummaryUsesRedactedOutputDirectoryCount(t *testing.T) {
+	got := lifecycleArtifactSummary(&model.QuestionAgentLog{}, BotRunProjection{
+		OutputDirectoryCount: 1,
+	})
+	if got.OutputDirectoryCount != 1 {
+		t.Fatalf("artifact summary = %#v", got)
 	}
 }
 

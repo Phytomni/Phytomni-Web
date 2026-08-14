@@ -690,6 +690,64 @@ func TestDedicatedResearchSubmissionReusesClientTurnRowAndRun(t *testing.T) {
 	}
 }
 
+func TestDedicatedResearchTerminalSubmissionPersistsExecutionProjection(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agents/research/runs" {
+			t.Errorf("Bot path = %q, want Research run", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-terminal-research",
+			"object":"agent.run",
+			"agent":"research",
+			"status":"succeeded",
+			"task_ids":["child-terminal-research"],
+			"result":{
+				"formatted":{"answer":"complete report"},
+				"execution":{
+					"tracking":{"degraded":true},
+					"output_dirs":["internal/runs/synthetic"],
+					"delivery":null
+				}
+			}
+		}`))
+	})
+	rxBot.BotConfig.ResearchEnabled = true
+	service := &Service{
+		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
+	}
+
+	out, err := service.Query(context.Background(), "alice", QueryInput{
+		Query:        "Reproduce the completed synthetic study",
+		Mode:         "instant",
+		Tool:         "InSilicoResearchAgent",
+		ClientTurnID: "terminal-research-execution",
+		Surface:      QuerySurfaceAgentProduct,
+	})
+	if err != nil {
+		t.Fatalf("terminal Research submission: %v", err)
+	}
+	if out.Status != statusSucceeded || !out.TrackingDegraded {
+		t.Fatalf("terminal Research response = %+v", out)
+	}
+
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatalf("read terminal Research row: %v", err)
+	}
+	projection, _, err := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
+	if err != nil {
+		t.Fatalf("decode terminal Research projection: %v", err)
+	}
+	if !projection.TrackingDegraded || projection.OutputDirectoryCount != 1 || len(projection.Artifacts.OutputDirs) != 0 {
+		t.Fatalf("stored terminal Research projection = %#v", projection)
+	}
+	if strings.Contains(row.BotProjectionJSON, "internal/runs/synthetic") {
+		t.Fatalf("internal output directory leaked into persisted projection: %s", row.BotProjectionJSON)
+	}
+}
+
 func TestDedicatedResearchSubmissionReusesClientTurnWithoutConversationV1(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	var (

@@ -87,29 +87,30 @@ type ProjectionDelivery struct {
 // older callers that asserted raw state was absent; DecodeRunProjection never
 // assigns it.
 type BotRunProjection struct {
-	RunID              string
-	Agent              string
-	Status             string
-	WorkStage          string
-	ChildTaskCount     int
-	ReportStage        string
-	ReportCompleteness string
-	ReportRevision     int64
-	ReportUpdatedAt    *time.Time
-	IntermediateReport string
-	FinalReport        string
-	Progress           ProjectionProgress
-	Degraded           bool
-	DegradedReason     string
-	Failures           []string
-	Artifacts          ProjectionArtifacts
-	ResultArchiveV1    bool
-	Delivery           *ProjectionDelivery
-	RequestID          string
-	TrackingDegraded   bool
-	DegradedInterop    bool
-	InterOp            *InteropProvenance
-	RawPayload         []byte
+	RunID                string
+	Agent                string
+	Status               string
+	WorkStage            string
+	ChildTaskCount       int
+	ReportStage          string
+	ReportCompleteness   string
+	ReportRevision       int64
+	ReportUpdatedAt      *time.Time
+	IntermediateReport   string
+	FinalReport          string
+	Progress             ProjectionProgress
+	Degraded             bool
+	DegradedReason       string
+	Failures             []string
+	Artifacts            ProjectionArtifacts
+	OutputDirectoryCount int
+	ResultArchiveV1      bool
+	Delivery             *ProjectionDelivery
+	RequestID            string
+	TrackingDegraded     bool
+	DegradedInterop      bool
+	InterOp              *InteropProvenance
+	RawPayload           []byte
 }
 
 // ProjectionDecodeError identifies malformed data at the Bot/Web projection
@@ -208,6 +209,7 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	}
 	projection.ChildTaskCount = len(record.TaskIDs)
 	projection.WorkStage = sanitizeRunWorkStage(record.Stage)
+	projection.TrackingDegraded = projection.TrackingDegraded || record.DegradedTracking
 	return normalizeCompletedReviewProjection(projection), nil
 }
 
@@ -253,12 +255,17 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		// row.
 		status = "FAILED"
 	}
+	execution, err := rxBot.DecodeRunExecutionDelivery(response.Result.Execution, agent)
+	if err != nil {
+		return BotRunProjection{}, projectionDecodeError("execution", err.Error())
+	}
+	trackingDegraded := response.DegradedTracking || execution.TrackingDegraded
 
 	runID, err := normalizeAgentRunResponseID(response)
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	if runID == "" && !response.DegradedTracking && status != "FAILED" {
+	if runID == "" && !trackingDegraded && status != "FAILED" {
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
 	}
 
@@ -268,9 +275,16 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		Status:           status,
 		ChildTaskCount:   len(response.TaskIDs),
 		ReportRevision:   -1,
-		TrackingDegraded: response.DegradedTracking,
-		DegradedInterop:  interopMetadata.DegradedInterop,
-		InterOp:          interopMetadata.projection(),
+		TrackingDegraded: trackingDegraded,
+		Artifacts: ProjectionArtifacts{
+			Directories: append([]string(nil), execution.OutputDirs...),
+			OutputDirs:  append([]string(nil), execution.OutputDirs...),
+		},
+		OutputDirectoryCount: execution.OutputDirectoryCount,
+		ResultArchiveV1:      execution.ResultArchiveV1,
+		Delivery:             projectRunDelivery(execution.Delivery),
+		DegradedInterop:      interopMetadata.DegradedInterop,
+		InterOp:              interopMetadata.projection(),
 	}
 	if response.Result.Formatted != nil {
 		answer, err := boundProjectionText(response.Result.Formatted.Answer, rxBot.MaxProjectionReportLength, "formatted.answer")
@@ -618,15 +632,24 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	}
 
 	directories := append([]string(nil), executionDelivery.OutputDirs...)
-	if !executionDelivery.ResultArchiveV1 {
-		directories = make([]string, 0, len(runArtifacts))
+	directoryCount := executionDelivery.OutputDirectoryCount
+	seenDirectories := make(map[string]struct{}, len(directories))
+	for _, directory := range directories {
+		seenDirectories[directory] = struct{}{}
 	}
 	paths := make([]string, 0)
 	for _, artifact := range runArtifacts {
 		if artifact.OutputDir != "" {
-			directories = append(directories, artifact.OutputDir)
+			if _, exists := seenDirectories[artifact.OutputDir]; !exists {
+				directories = append(directories, artifact.OutputDir)
+				seenDirectories[artifact.OutputDir] = struct{}{}
+				directoryCount++
+			}
 		}
 		paths = append(paths, artifact.Paths...)
+	}
+	if directoryCount > rxBot.MaxProjectionArtifactCount {
+		return BotRunProjection{}, projectionDecodeError("execution.output_dirs", "too many output roots")
 	}
 	artifacts := ProjectionArtifacts{
 		Directories: directories,
@@ -650,12 +673,14 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 			Pending:         runProgress.Pending,
 			BriefGeneStatus: runProgress.BriefGeneStatus,
 		},
-		Degraded:        envelope.Degraded,
-		DegradedReason:  degradedReason,
-		Failures:        failures,
-		Artifacts:       artifacts,
-		ResultArchiveV1: executionDelivery.ResultArchiveV1,
-		Delivery:        projectRunDelivery(executionDelivery.Delivery),
+		Degraded:             envelope.Degraded,
+		DegradedReason:       degradedReason,
+		Failures:             failures,
+		Artifacts:            artifacts,
+		OutputDirectoryCount: directoryCount,
+		TrackingDegraded:     executionDelivery.TrackingDegraded,
+		ResultArchiveV1:      executionDelivery.ResultArchiveV1,
+		Delivery:             projectRunDelivery(executionDelivery.Delivery),
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
 		DegradedInterop: interopAgent(agent) && (envelope.DegradedInterop || formattedInterop.DegradedInterop),

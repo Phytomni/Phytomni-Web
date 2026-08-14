@@ -2571,7 +2571,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.ToolName = slugToToolName[slug]
 	}
 	var botRunID, serverID, taskID, logStatus string
-	var expertProjection *BotRunProjection
+	var submissionProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
 	if useExpertContextRoute {
 		// Autonomous Expert lets Bot select from the allowlist. A forced V1
@@ -2655,14 +2655,14 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 		routeRevision := metadataReportRevision(formattedMetadata(resp.Result.Formatted))
 		botSubmission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
-		botSubmission.TrackingDegraded = resp.DegradedTracking
-		expertProjection = &botSubmission
+		botSubmission.TrackingDegraded = botSubmission.TrackingDegraded || resp.DegradedTracking
+		submissionProjection = &botSubmission
 		contextStage = resp.ConversationContext
 		slug = resolvedSlug
 		out.ToolName = resolvedTool
 		botRunID = botSubmission.RunID
 		out.BotRunID = botRunID
-		out.TrackingDegraded = resp.DegradedTracking
+		out.TrackingDegraded = botSubmission.TrackingDegraded
 		if botSubmission.InterOp != nil {
 			if strings.TrimSpace(botSubmission.InterOp.Mode) == "" {
 				botSubmission.InterOp.Mode = "off"
@@ -2866,6 +2866,19 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
+		if interopAgent(slug) {
+			botSubmission, projectionErr := DecodeAgentRunSubmission(resp)
+			if projectionErr != nil {
+				var fieldErr *ProjectionDecodeError
+				if errors.As(projectionErr, &fieldErr) && fieldErr.Field == "run_id" && fieldErr.Reason == "missing umbrella run id" {
+					projectionErr = ErrMissingBotRunID
+				}
+				return nil, v1SubmissionError(ctx, username, submission, projectionErr)
+			}
+			botSubmission.ReportRevision = out.ReportRevision
+			submissionProjection = &botSubmission
+			out.TrackingDegraded = botSubmission.TrackingDegraded
+		}
 		var (
 			interopMetadata botInteropMetadata
 			metadataErr     error
@@ -2882,6 +2895,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 				interopProjection.Mode = interop.Provenance.Mode
 				out.InterOp = interopProjection
 			}
+		}
+		if submissionProjection != nil {
+			submissionProjection.DegradedInterop = out.DegradedInterop
+			submissionProjection.InterOp = out.InterOp
 		}
 		responseStatus := strings.ToUpper(strings.TrimSpace(resp.Status))
 		if interopAgent(slug) && interopMetadata.failed(len(resp.TaskIDs) == 0 && strings.TrimSpace(resp.Result.TaskID) == "") {
@@ -2987,7 +3004,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			submission.row.Id,
 			out,
 			in.Mode,
-			expertProjection,
+			submissionProjection,
 			private,
 			in.Query,
 		)
@@ -3073,23 +3090,10 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			return nil, err
 		}
 	}
-	if expertProjection != nil {
-		// The row now exists, so the accepted Expert submission can enter the
+	if submissionProjection != nil {
+		// The row now exists, so the accepted Bot submission can enter the
 		// same owner-scoped projection store used by polling/reconciliation.
-		if err := SaveBotRunProjection(ctx, username, id, *expertProjection); err != nil {
-			return nil, err
-		}
-	}
-	if expertProjection == nil && interopAgent(slug) {
-		projection := BotRunProjection{
-			RunID:           botRunID,
-			Agent:           slug,
-			Status:          out.Status,
-			ReportRevision:  -1,
-			DegradedInterop: out.DegradedInterop,
-			InterOp:         out.InterOp,
-		}
-		if err := SaveBotRunProjection(ctx, username, id, projection); err != nil {
+		if err := SaveBotRunProjection(ctx, username, id, *submissionProjection); err != nil {
 			return nil, err
 		}
 	}

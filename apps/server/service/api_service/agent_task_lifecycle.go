@@ -253,7 +253,10 @@ func lifecycleArtifactSummary(row *model.QuestionAgentLog, projection BotRunProj
 	if len(directories) == 0 {
 		directories = projection.Artifacts.Directories
 	}
-	directoryCount := boundedLifecycleCount(len(directories))
+	directoryCount := boundedLifecycleCount(projection.OutputDirectoryCount)
+	if storedCount := boundedLifecycleCount(len(directories)); storedCount > directoryCount {
+		directoryCount = storedCount
+	}
 	if imageCount == 0 {
 		imageCount = boundedLifecycleCount(lifecycleLegacyImageCount(row.ImagePaths))
 	}

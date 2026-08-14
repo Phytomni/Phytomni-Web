@@ -115,13 +115,14 @@ type AgentRunRequest struct {
 	IdempotencyKey string `json:"-"`
 }
 
-// AgentRunResult carries either a finished formatted payload (sync agents) or
-// a dedup-hit marker (analyst re-submit of an identical input fingerprint).
+// AgentRunResult carries the bounded fields consumed from a submitted run.
+// Execution is decoded through the explicit projection boundary before use.
 type AgentRunResult struct {
-	Formatted      *Formatted `json:"formatted,omitempty"`
-	DedupHit       bool       `json:"dedup_hit,omitempty"`
-	TaskID         string     `json:"task_id,omitempty"`
-	ReportRevision *int64     `json:"report_revision,omitempty"`
+	Formatted      *Formatted      `json:"formatted,omitempty"`
+	DedupHit       bool            `json:"dedup_hit,omitempty"`
+	TaskID         string          `json:"task_id,omitempty"`
+	ReportRevision *int64          `json:"report_revision,omitempty"`
+	Execution      json.RawMessage `json:"execution,omitempty"`
 }
 
 // AgentRunResponse covers both the 200 sync shape (status=succeeded) and the
@@ -166,23 +167,24 @@ type RouteQueryResponse = AgentRunResponse
 // query/answer/tool_name/model/status are lifted by Bot from the result so
 // the read path (answer-check) can merge them without parsing result JSON.
 type RunRecord struct {
-	RunID      string          `json:"run_id"`
-	Agent      string          `json:"agent"`
-	Origin     string          `json:"origin"`
-	UserID     string          `json:"user_id"`
-	Status     string          `json:"status"`
-	Stage      string          `json:"stage"`
-	Result     json.RawMessage `json:"result"`
-	Error      string          `json:"error"`
-	CreatedAt  string          `json:"created_at"`
-	UpdatedAt  string          `json:"updated_at"`
-	ExpiresAt  string          `json:"expires_at"`
-	TaskIDs    []string        `json:"task_ids"`
-	DialogueID string          `json:"dialogue_id"`
-	Query      string          `json:"query"`
-	ToolName   string          `json:"tool_name"`
-	Model      string          `json:"model"`
-	Answer     string          `json:"answer"`
+	RunID            string          `json:"run_id"`
+	Agent            string          `json:"agent"`
+	Origin           string          `json:"origin"`
+	UserID           string          `json:"user_id"`
+	Status           string          `json:"status"`
+	Stage            string          `json:"stage"`
+	Result           json.RawMessage `json:"result"`
+	Error            string          `json:"error"`
+	CreatedAt        string          `json:"created_at"`
+	UpdatedAt        string          `json:"updated_at"`
+	ExpiresAt        string          `json:"expires_at"`
+	TaskIDs          []string        `json:"task_ids"`
+	DialogueID       string          `json:"dialogue_id"`
+	Query            string          `json:"query"`
+	ToolName         string          `json:"tool_name"`
+	Model            string          `json:"model"`
+	Answer           string          `json:"answer"`
+	DegradedTracking bool            `json:"degraded_tracking,omitempty"`
 }
 
 // RunsListResponse is the GET /v1/runs envelope.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -61,12 +62,14 @@ type RunDelivery struct {
 	Retryable       bool                  `json:"retryable"`
 }
 
-// RunExecutionDelivery is the canonical delivery subset retained from
-// result.execution. Other execution fields remain outside the Web projection.
+// RunExecutionDelivery is the public subset retained from result.execution.
+// Other execution fields remain outside the Web projection.
 type RunExecutionDelivery struct {
-	OutputDirs      []string
-	Delivery        *RunDelivery
-	ResultArchiveV1 bool
+	OutputDirs           []string
+	OutputDirectoryCount int
+	TrackingDegraded     bool
+	Delivery             *RunDelivery
+	ResultArchiveV1      bool
 }
 
 type runDeliveryWire struct {
@@ -90,9 +93,8 @@ type runArchiveWire struct {
 	DownloadRef           *string `json:"download_ref"`
 }
 
-// DecodeRunExecutionDelivery decodes only the canonical output roots and
-// delivery marker from result.execution. A missing or null delivery preserves
-// historical flat-artifact behavior.
+// DecodeRunExecutionDelivery decodes only the canonical output roots, tracking
+// state, and delivery marker from result.execution.
 func DecodeRunExecutionDelivery(raw json.RawMessage, agent string) (RunExecutionDelivery, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -103,28 +105,39 @@ func DecodeRunExecutionDelivery(raw json.RawMessage, agent string) (RunExecution
 	}
 	var wire struct {
 		OutputDirs json.RawMessage `json:"output_dirs"`
+		Tracking   json.RawMessage `json:"tracking"`
 		Delivery   json.RawMessage `json:"delivery"`
 	}
 	if err := json.Unmarshal(trimmed, &wire); err != nil {
 		return RunExecutionDelivery{}, fmt.Errorf("execution must be an object: %w", err)
 	}
-	deliveryRaw := bytes.TrimSpace(wire.Delivery)
-	if len(deliveryRaw) == 0 || bytes.Equal(deliveryRaw, []byte("null")) {
-		return RunExecutionDelivery{}, nil
-	}
-	outputDirs, err := decodeResultArchiveOutputDirs(wire.OutputDirs)
+	outputDirs, outputDirectoryCount, err := decodeProjectionOutputDirs(wire.OutputDirs)
 	if err != nil {
 		return RunExecutionDelivery{}, err
+	}
+	trackingDegraded, err := decodeExecutionTracking(wire.Tracking)
+	if err != nil {
+		return RunExecutionDelivery{}, err
+	}
+	projection := RunExecutionDelivery{
+		OutputDirs:           outputDirs,
+		OutputDirectoryCount: outputDirectoryCount,
+		TrackingDegraded:     trackingDegraded,
+	}
+	deliveryRaw := bytes.TrimSpace(wire.Delivery)
+	if len(deliveryRaw) == 0 || bytes.Equal(deliveryRaw, []byte("null")) {
+		return projection, nil
+	}
+	if len(outputDirs) != outputDirectoryCount {
+		return RunExecutionDelivery{}, fmt.Errorf("execution.output_dirs: delivery requires OBS roots")
 	}
 	delivery, err := DecodeRunDelivery(deliveryRaw, agent, outputDirs)
 	if err != nil {
 		return RunExecutionDelivery{}, err
 	}
-	return RunExecutionDelivery{
-		OutputDirs:      outputDirs,
-		Delivery:        &delivery,
-		ResultArchiveV1: true,
-	}, nil
+	projection.Delivery = &delivery
+	projection.ResultArchiveV1 = true
+	return projection, nil
 }
 
 // DecodeRunDelivery validates one exact versioned delivery object. Output
@@ -332,12 +345,77 @@ func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (strin
 	return roots[0] + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
 }
 
-func decodeResultArchiveOutputDirs(raw json.RawMessage) ([]string, error) {
-	var outputDirs []string
-	if err := decodeStrictResultJSON(raw, &outputDirs); err != nil {
-		return nil, fmt.Errorf("execution.output_dirs: %w", err)
+func decodeProjectionOutputDirs(raw json.RawMessage) ([]string, int, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, 0, nil
 	}
-	return validateResultArchiveOutputDirs(outputDirs)
+	var outputDirs []string
+	if err := decodeStrictResultJSON(trimmed, &outputDirs); err != nil {
+		return nil, 0, fmt.Errorf("execution.output_dirs: %w", err)
+	}
+	if len(outputDirs) > MaxProjectionArtifactCount {
+		return nil, 0, fmt.Errorf("execution.output_dirs: count exceeds %d", MaxProjectionArtifactCount)
+	}
+	public := make([]string, 0, len(outputDirs))
+	seen := make(map[string]struct{}, len(outputDirs))
+	for index, outputDir := range outputDirs {
+		if err := validateExecutionOutputDir(outputDir); err != nil {
+			return nil, 0, fmt.Errorf("execution.output_dirs[%d]: %w", index, err)
+		}
+		if _, duplicate := seen[outputDir]; duplicate {
+			return nil, 0, fmt.Errorf("execution.output_dirs[%d]: duplicate root", index)
+		}
+		seen[outputDir] = struct{}{}
+		if ValidateProjectionOBSPath(outputDir) == nil {
+			public = append(public, outputDir)
+		}
+	}
+	return public, len(outputDirs), nil
+}
+
+func validateExecutionOutputDir(value string) error {
+	if ValidateProjectionOBSPath(value) == nil {
+		return nil
+	}
+	if value == "" || value != strings.TrimSpace(value) || len([]rune(value)) > MaxProjectionArtifactPathLen {
+		return fmt.Errorf("path is empty, overlong, or has surrounding whitespace")
+	}
+	if strings.Contains(value, "://") || strings.HasPrefix(value, "/obs/") || strings.ContainsAny(value, "\\?#") {
+		return fmt.Errorf("path is not an internal output directory")
+	}
+	for _, char := range value {
+		if unicode.IsControl(char) || unicode.IsSpace(char) {
+			return fmt.Errorf("path contains whitespace or control characters")
+		}
+	}
+	segments := strings.Split(strings.TrimPrefix(value, "/"), "/")
+	if len(segments) == 0 {
+		return fmt.Errorf("path has no segments")
+	}
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return fmt.Errorf("path contains an invalid segment")
+		}
+	}
+	return nil
+}
+
+func decodeExecutionTracking(raw json.RawMessage) (bool, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false, nil
+	}
+	var tracking struct {
+		Degraded *bool `json:"degraded"`
+	}
+	if err := decodeStrictResultJSON(trimmed, &tracking); err != nil {
+		return false, fmt.Errorf("execution.tracking: %w", err)
+	}
+	if tracking.Degraded == nil {
+		return false, fmt.Errorf("execution.tracking: degraded is required")
+	}
+	return *tracking.Degraded, nil
 }
 
 func validateResultArchiveOutputDirs(outputDirs []string) ([]string, error) {

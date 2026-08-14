@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -167,6 +168,38 @@ func TestHeadFixturesKeepHistoricalTerminalArtifactsLegacy(t *testing.T) {
 	}
 	if delivery.ResultArchiveV1 || delivery.Delivery != nil {
 		t.Fatalf("legacy terminal fixture became v1 delivery: %#v", delivery)
+	}
+}
+
+func TestDecodeRunExecutionRetainsCurrentFieldsWithoutDelivery(t *testing.T) {
+	execution, err := DecodeRunExecutionDelivery(json.RawMessage(`{
+		"tracking":{"degraded":true},
+		"output_dirs":["internal/runs/synthetic","obs://bucket/owner/run"],
+		"delivery":null
+	}`), "research")
+	if err != nil {
+		t.Fatalf("decode current execution: %v", err)
+	}
+	if execution.ResultArchiveV1 || execution.Delivery != nil {
+		t.Fatalf("execution unexpectedly activated archive delivery: %#v", execution)
+	}
+	if !execution.TrackingDegraded || execution.OutputDirectoryCount != 2 ||
+		!reflect.DeepEqual(execution.OutputDirs, []string{"obs://bucket/owner/run"}) {
+		t.Fatalf("current execution projection = %#v", execution)
+	}
+}
+
+func TestDecodeRunExecutionRejectsMalformedCurrentFieldsWithoutDelivery(t *testing.T) {
+	tests := []json.RawMessage{
+		json.RawMessage(`{"tracking":{"degraded":"yes"},"output_dirs":["obs://bucket/owner/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true},"output_dirs":["https://private.invalid/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true},"output_dirs":["internal/../private/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true,"private":"secret"},"output_dirs":["obs://bucket/owner/run"]}`),
+	}
+	for _, raw := range tests {
+		if got, err := DecodeRunExecutionDelivery(raw, "research"); err == nil {
+			t.Fatalf("malformed execution accepted: %#v", got)
+		}
 	}
 }
 

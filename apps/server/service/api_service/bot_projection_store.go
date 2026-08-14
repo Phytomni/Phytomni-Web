@@ -28,28 +28,29 @@ const (
 // question_agent_logs. RequestID and RawPayload are transport/provider
 // metadata and must never cross this persistence boundary.
 type persistedProjection struct {
-	RunID               string                        `json:"run_id,omitempty"`
-	Agent               string                        `json:"agent,omitempty"`
-	Status              string                        `json:"status,omitempty"`
-	WorkStage           string                        `json:"work_stage,omitempty"`
-	ChildTaskCount      int                           `json:"child_task_count,omitempty"`
-	ReportStage         string                        `json:"report_stage,omitempty"`
-	ReportCompleteness  string                        `json:"report_completeness,omitempty"`
-	ReportRevision      int64                         `json:"report_revision"`
-	ReportUpdatedAt     *time.Time                    `json:"report_updated_at,omitempty"`
-	IntermediateReport  string                        `json:"intermediate_report,omitempty"`
-	FinalReport         string                        `json:"final_report,omitempty"`
-	Progress            persistedProjectionProgress   `json:"progress,omitempty"`
-	Degraded            bool                          `json:"degraded,omitempty"`
-	DegradedReason      string                        `json:"degraded_reason,omitempty"`
-	Failures            []string                      `json:"failures,omitempty"`
-	Artifacts           persistedProjectionArtifacts  `json:"artifacts,omitempty"`
-	ResultArchiveV1     bool                          `json:"result_archive_v1,omitempty"`
-	Delivery            *persistedProjectionDelivery  `json:"delivery,omitempty"`
-	TrackingDegraded    bool                          `json:"tracking_degraded,omitempty"`
-	DegradedInterop     bool                          `json:"degraded_interop,omitempty"`
-	InterOp             *InteropProvenance            `json:"interop,omitempty"`
-	ConversationContext *persistedConversationContext `json:"conversation_context,omitempty"`
+	RunID                string                        `json:"run_id,omitempty"`
+	Agent                string                        `json:"agent,omitempty"`
+	Status               string                        `json:"status,omitempty"`
+	WorkStage            string                        `json:"work_stage,omitempty"`
+	ChildTaskCount       int                           `json:"child_task_count,omitempty"`
+	ReportStage          string                        `json:"report_stage,omitempty"`
+	ReportCompleteness   string                        `json:"report_completeness,omitempty"`
+	ReportRevision       int64                         `json:"report_revision"`
+	ReportUpdatedAt      *time.Time                    `json:"report_updated_at,omitempty"`
+	IntermediateReport   string                        `json:"intermediate_report,omitempty"`
+	FinalReport          string                        `json:"final_report,omitempty"`
+	Progress             persistedProjectionProgress   `json:"progress,omitempty"`
+	Degraded             bool                          `json:"degraded,omitempty"`
+	DegradedReason       string                        `json:"degraded_reason,omitempty"`
+	Failures             []string                      `json:"failures,omitempty"`
+	Artifacts            persistedProjectionArtifacts  `json:"artifacts,omitempty"`
+	OutputDirectoryCount int                           `json:"output_directory_count,omitempty"`
+	ResultArchiveV1      bool                          `json:"result_archive_v1,omitempty"`
+	Delivery             *persistedProjectionDelivery  `json:"delivery,omitempty"`
+	TrackingDegraded     bool                          `json:"tracking_degraded,omitempty"`
+	DegradedInterop      bool                          `json:"degraded_interop,omitempty"`
+	InterOp              *InteropProvenance            `json:"interop,omitempty"`
+	ConversationContext  *persistedConversationContext `json:"conversation_context,omitempty"`
 }
 
 type persistedProjectionProgress struct {
@@ -483,6 +484,9 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if len(incoming.Artifacts.Paths) > 0 {
 		dst.Artifacts.Paths = append([]string(nil), incoming.Artifacts.Paths...)
 	}
+	if incoming.OutputDirectoryCount > dst.OutputDirectoryCount {
+		dst.OutputDirectoryCount = incoming.OutputDirectoryCount
+	}
 }
 
 func isProjectionTerminalStatus(status string) bool {
@@ -599,12 +603,13 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 			OutputDirs:  append([]string(nil), projection.Artifacts.OutputDirs...),
 			Paths:       append([]string(nil), projection.Artifacts.Paths...),
 		},
-		ResultArchiveV1:     projection.ResultArchiveV1,
-		Delivery:            persistProjectionDelivery(projection.Delivery),
-		TrackingDegraded:    projection.TrackingDegraded,
-		DegradedInterop:     projection.DegradedInterop,
-		InterOp:             interop,
-		ConversationContext: privateContext,
+		OutputDirectoryCount: projection.OutputDirectoryCount,
+		ResultArchiveV1:      projection.ResultArchiveV1,
+		Delivery:             persistProjectionDelivery(projection.Delivery),
+		TrackingDegraded:     projection.TrackingDegraded,
+		DegradedInterop:      projection.DegradedInterop,
+		InterOp:              interop,
+		ConversationContext:  privateContext,
 	})
 	if err != nil {
 		return "", err
@@ -655,11 +660,12 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 			OutputDirs:  append([]string(nil), stored.Artifacts.OutputDirs...),
 			Paths:       append([]string(nil), stored.Artifacts.Paths...),
 		},
-		ResultArchiveV1:  stored.ResultArchiveV1,
-		Delivery:         restoreProjectionDelivery(stored.Delivery),
-		TrackingDegraded: stored.TrackingDegraded,
-		DegradedInterop:  stored.DegradedInterop,
-		InterOp:          interop,
+		OutputDirectoryCount: stored.OutputDirectoryCount,
+		ResultArchiveV1:      stored.ResultArchiveV1,
+		Delivery:             restoreProjectionDelivery(stored.Delivery),
+		TrackingDegraded:     stored.TrackingDegraded,
+		DegradedInterop:      stored.DegradedInterop,
+		InterOp:              interop,
 	}
 	return normalizeCompletedReviewProjection(projection), stored.ConversationContext, nil
 }
