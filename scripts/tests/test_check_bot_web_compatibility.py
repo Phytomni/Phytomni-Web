@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import hashlib
 import io
 import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
@@ -35,7 +36,7 @@ REQUIRED_FIXTURES = [
     "review_input_required",
     "conversation_context_v1",
 ]
-ARCHIVE_FIXTURE_HASHES = {
+PINNED_ARCHIVE_FIXTURE_HASHES = {
     "analyst": "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
     "research": "9655b1e1b677b36b75a46ced3169456f2ef0db0a457205896803b1a9da5d8d26",
     "network": "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
@@ -60,7 +61,7 @@ def release_manifest() -> dict[str, object]:
                     "path": f"apps/server/external/bot/testdata/head/{agent}_terminal.json",
                     "sha256": digest,
                 }
-                for agent, digest in ARCHIVE_FIXTURE_HASHES.items()
+                for agent, digest in PINNED_ARCHIVE_FIXTURE_HASHES.items()
             },
         },
     }
@@ -75,6 +76,14 @@ def test_release_sha_pins_agree():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert RELEASE_SHA == checker.RELEASE_BOT_COMMIT == manifest["bot_commit"]
+    assert checker.RESULT_ARCHIVE_RELEASE_FIXTURE_SHA256 == {
+        RELEASE_SHA: PINNED_ARCHIVE_FIXTURE_HASHES
+    }
+    for agent, expected_digest in PINNED_ARCHIVE_FIXTURE_HASHES.items():
+        fixture_path = checker.ROOT / checker.RESULT_ARCHIVE_FIXTURE_PATHS[agent]
+        actual_digest = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        manifest_digest = manifest["result_archive_v1"]["fixtures"][agent]["sha256"]
+        assert actual_digest == manifest_digest == expected_digest
 
 
 @pytest.mark.parametrize(
@@ -127,6 +136,11 @@ def contract_tree(root: Path) -> Path:
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(checker.ROOT / relative, destination)
+    for paths in checker.FIXTURE_PATHS.values():
+        for relative in paths:
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(checker.ROOT / relative, destination)
     for relative in checker.RESULT_ARCHIVE_FIXTURE_PATHS.values():
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -134,39 +148,145 @@ def contract_tree(root: Path) -> Path:
     return root
 
 
+def assert_contract_transition(
+    root: Path,
+    mutate: Callable[[Path], None],
+    expected_violations: list[str],
+) -> None:
+    assert checker.check(root) == []
+    mutate(root)
+    assert checker.check(root) == expected_violations
+
+
 @pytest.mark.parametrize(
-    ("name", "mutate", "marker"),
+    ("name", "mutate", "expected_violations"),
     [
-        ("missing analyst", lambda root: (root / checker.RESULT_ARCHIVE_FIXTURE_PATHS["analyst"]).unlink(), "missing result archive fixture"),
-        ("wrong protocol", lambda root: mutate_delivery(root, "analyst", lambda delivery: delivery.__setitem__("schema_version", 2)), "protocol_version"),
-        ("legacy artifacts", lambda root: mutate_result(root, "research", lambda result: result.__setitem__("artifacts", [])), "legacy artifacts"),
-        ("empty archive", lambda root: mutate_delivery(root, "design", lambda delivery: delivery.__setitem__("archive", None)), "archive"),
-        ("second archive", lambda root: mutate_execution(root, "network", add_second_archive), "exactly one archive"),
-        ("unsafe reference", lambda root: mutate_archive(root, "research", lambda archive: archive.__setitem__("download_ref", "obs://private/archive.zip")), "download_ref"),
-        ("changed hash", lambda root: mutate_manifest_hash(root, "analyst"), "sha256"),
-        ("private delivery", lambda root: mutate_delivery(root, "network", lambda delivery: delivery.__setitem__("delivery_internal", {"secret": "not-for-output"})), "private delivery"),
-        ("zero size", lambda root: mutate_archive(root, "analyst", lambda archive: archive.__setitem__("size_bytes", 0)), "size_bytes"),
+        (
+            "missing analyst",
+            lambda root: (
+                root / checker.RESULT_ARCHIVE_FIXTURE_PATHS["analyst"]
+            ).unlink(),
+            [
+                "missing compatibility file: "
+                "apps/server/external/bot/testdata/head/analyst_terminal.json",
+                "missing result archive fixture",
+            ],
+        ),
+        (
+            "wrong protocol",
+            lambda root: mutate_delivery(
+                root,
+                "analyst",
+                lambda delivery: delivery.__setitem__("schema_version", 2),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture delivery protocol_version must be 1",
+            ],
+        ),
+        (
+            "legacy artifacts",
+            lambda root: mutate_result(
+                root,
+                "research",
+                lambda result: result.__setitem__("artifacts", []),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture contains legacy artifacts",
+            ],
+        ),
+        (
+            "empty archive",
+            lambda root: mutate_delivery(
+                root,
+                "design",
+                lambda delivery: delivery.__setitem__("archive", None),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture delivery archive must be an object",
+            ],
+        ),
+        (
+            "second archive",
+            lambda root: mutate_execution(root, "network", add_second_archive),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture must contain exactly one archive",
+            ],
+        ),
+        (
+            "unsafe reference",
+            lambda root: mutate_archive(
+                root,
+                "research",
+                lambda archive: archive.__setitem__(
+                    "download_ref", "obs://private/archive.zip"
+                ),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture delivery archive download_ref is unsafe",
+            ],
+        ),
+        (
+            "changed hash",
+            lambda root: mutate_manifest_hash(root, "analyst"),
+            ["result archive fixture sha256 does not match manifest"],
+        ),
+        (
+            "private delivery",
+            lambda root: mutate_delivery(
+                root,
+                "network",
+                lambda delivery: delivery.__setitem__(
+                    "delivery_internal", {"secret": "not-for-output"}
+                ),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture contains private delivery fields",
+                "result archive fixture delivery fields are invalid",
+            ],
+        ),
+        (
+            "zero size",
+            lambda root: mutate_archive(
+                root,
+                "analyst",
+                lambda archive: archive.__setitem__("size_bytes", 0),
+            ),
+            [
+                "result archive fixture sha256 is not pinned to Bot release",
+                "result archive fixture delivery archive size_bytes is invalid",
+            ],
+        ),
     ],
 )
 def test_result_archive_contract_rejects_one_mutation_at_a_time(
-    tmp_path: Path, name: str, mutate, marker: str
+    tmp_path: Path,
+    name: str,
+    mutate: Callable[[Path], None],
+    expected_violations: list[str],
 ):
     root = contract_tree(tmp_path)
-    mutate(root)
-    violations = checker.check(root)
-    assert any(marker in violation for violation in violations), name
-    assert all("not-for-output" not in violation for violation in violations)
-    assert all(len(violation) <= checker.MAX_FAILURE_LENGTH for violation in violations)
+    assert_contract_transition(root, mutate, expected_violations)
+    assert all("not-for-output" not in violation for violation in expected_violations), name
+    assert all(
+        len(violation) <= checker.MAX_FAILURE_LENGTH
+        for violation in expected_violations
+    )
 
 
 def test_research_fixture_byte_drift_fails(tmp_path: Path):
     root = contract_tree(tmp_path)
     fixture = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS["research"]
-    fixture.write_bytes(fixture.read_bytes() + b" ")
-
-    violations = checker.check(root)
-
-    assert "result archive fixture sha256 does not match manifest" in violations
+    assert_contract_transition(
+        root,
+        lambda _: fixture.write_bytes(fixture.read_bytes() + b" "),
+        ["result archive fixture sha256 does not match manifest"],
+    )
 
 
 def archive_fixture(root: Path, agent: str) -> tuple[Path, dict[str, Any]]:
@@ -174,8 +294,10 @@ def archive_fixture(root: Path, agent: str) -> tuple[Path, dict[str, Any]]:
     return path, json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_archive_fixture(path: Path, payload: dict[str, Any]) -> None:
+def write_archive_fixture(root: Path, agent: str, payload: dict[str, Any]) -> None:
+    path = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS[agent]
     path.write_text(json.dumps(payload), encoding="utf-8")
+    sync_archive_manifest_hash(root, agent)
 
 
 def archive_delivery(payload: dict[str, Any]) -> dict[str, Any]:
@@ -189,9 +311,9 @@ def archive_delivery(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def mutate_delivery(root: Path, agent: str, mutate) -> None:
-    path, payload = archive_fixture(root, agent)
+    _, payload = archive_fixture(root, agent)
     mutate(archive_delivery(payload))
-    write_archive_fixture(path, payload)
+    write_archive_fixture(root, agent, payload)
 
 
 def mutate_archive(root: Path, agent: str, mutate) -> None:
@@ -204,11 +326,11 @@ def mutate_archive(root: Path, agent: str, mutate) -> None:
 
 
 def mutate_result(root: Path, agent: str, mutate) -> None:
-    path, payload = archive_fixture(root, agent)
+    _, payload = archive_fixture(root, agent)
     result = payload["result"]
     assert isinstance(result, dict)
     mutate(result)
-    write_archive_fixture(path, payload)
+    write_archive_fixture(root, agent, payload)
 
 
 def add_second_archive(execution: dict[str, Any]) -> None:
@@ -220,13 +342,13 @@ def add_second_archive(execution: dict[str, Any]) -> None:
 
 
 def mutate_execution(root: Path, agent: str, mutate) -> None:
-    path, payload = archive_fixture(root, agent)
+    _, payload = archive_fixture(root, agent)
     result = payload["result"]
     assert isinstance(result, dict)
     execution = result["execution"]
     assert isinstance(execution, dict)
     mutate(execution)
-    write_archive_fixture(path, payload)
+    write_archive_fixture(root, agent, payload)
 
 
 def mutate_manifest_hash(root: Path, agent: str) -> None:
@@ -234,6 +356,268 @@ def mutate_manifest_hash(root: Path, agent: str) -> None:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["result_archive_v1"]["fixtures"][agent]["sha256"] = "0" * 64
     path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def sync_archive_manifest_hash(root: Path, agent: str) -> None:
+    fixture_path = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS[agent]
+    manifest_path = root / checker.MANIFEST_REL
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["result_archive_v1"]["fixtures"][agent]["sha256"] = hashlib.sha256(
+        fixture_path.read_bytes()
+    ).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def mutate_scoped_source(
+    root: Path,
+    source_name: str,
+    old: str,
+    new: str,
+) -> None:
+    path = root / checker.SCOPED_FILES[source_name]
+    source = path.read_text(encoding="utf-8")
+    assert old in source
+    path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+
+@pytest.mark.parametrize("agent", checker.RESULT_ARCHIVE_AGENT_SLUGS)
+def test_archive_fixture_and_manifest_cannot_drift_together(
+    tmp_path: Path, agent: str
+):
+    root = contract_tree(tmp_path)
+
+    def drift_fixture_and_manifest(_: Path) -> None:
+        fixture = root / checker.RESULT_ARCHIVE_FIXTURE_PATHS[agent]
+        fixture.write_bytes(fixture.read_bytes() + b" ")
+        sync_archive_manifest_hash(root, agent)
+
+    assert_contract_transition(
+        root,
+        drift_fixture_and_manifest,
+        ["result archive fixture sha256 is not pinned to Bot release"],
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda root: mutate_delivery(
+            root,
+            "analyst",
+            lambda delivery: delivery.__setitem__(
+                "inventory_digest", "sha256:" + "3" * 64
+            ),
+        ),
+        lambda root: mutate_archive(
+            root,
+            "analyst",
+            lambda archive: archive.__setitem__(
+                "download_ref", "result-archive:sha256:" + "4" * 64
+            ),
+        ),
+    ],
+)
+def test_archive_inventory_and_download_digest_must_match(
+    tmp_path: Path, mutate: Callable[[Path], None]
+):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        mutate,
+        [
+            "result archive fixture sha256 is not pinned to Bot release",
+            "result archive fixture inventory_digest and download_ref do not match",
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutate", "field_violation"),
+    [
+        (
+            lambda root: mutate_delivery(
+                root,
+                "analyst",
+                lambda delivery: delivery.__setitem__("revision", True),
+            ),
+            "result archive fixture delivery revision is invalid",
+        ),
+        (
+            lambda root: mutate_archive(
+                root,
+                "analyst",
+                lambda archive: archive.__setitem__("size_bytes", True),
+            ),
+            "result archive fixture delivery archive size_bytes is invalid",
+        ),
+    ],
+)
+def test_archive_integer_fields_reject_booleans(
+    tmp_path: Path,
+    mutate: Callable[[Path], None],
+    field_violation: str,
+):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        mutate,
+        [
+            "result archive fixture sha256 is not pinned to Bot release",
+            field_violation,
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        '// "GeneNetworkAgent",',
+        '/* "GeneNetworkAgent", */',
+    ],
+)
+def test_typescript_agent_parser_ignores_commented_entries(
+    tmp_path: Path, replacement: str
+):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "web_agents",
+            '  "GeneNetworkAgent",',
+            f"  {replacement}",
+        ),
+        ["Web canonical agent tools missing: GeneNetworkAgent"],
+    )
+
+
+def test_typescript_agent_parser_ignores_delimiters_in_comments(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert checker.check(root) == []
+    mutate_scoped_source(
+        root,
+        "web_agents",
+        '  "GeneNetworkAgent",',
+        '  /* ] } ignored */\n  "GeneNetworkAgent", // ] ignored',
+    )
+    assert checker.check(root) == []
+
+
+def test_typescript_agent_parser_rejects_unsupported_expressions(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "web_agents",
+            '  "GeneNetworkAgent",',
+            '  resolveAgent("GeneNetworkAgent"),',
+        ),
+        ["Web canonical agent list is missing or malformed"],
+    )
+
+
+def test_go_map_parser_accepts_trailing_comments_and_braces_in_comments(
+    tmp_path: Path,
+):
+    root = contract_tree(tmp_path)
+    assert checker.check(root) == []
+    mutate_scoped_source(
+        root,
+        "go_agents",
+        '\t"network":     "GeneNetworkAgent",',
+        (
+            '\t/* } "ignored": "IgnoredAgent", */\n'
+            '\t"network":     "GeneNetworkAgent", // } ignored'
+        ),
+    )
+    assert checker.check(root) == []
+
+
+def test_go_map_parser_rejects_unsupported_expressions(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "go_agents",
+            '\t"network":     "GeneNetworkAgent",',
+            '\t"network": canonicalTool("GeneNetworkAgent"),',
+        ),
+        ["Go canonical agent map is missing or malformed"],
+    )
+
+
+def test_web_agent_definitions_are_required(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "go_aliases",
+            (
+                '\t{Tool: "InSilicoResearchAgent", Slug: "research", '
+                'Execution: "agent_run"},\n'
+            ),
+            "",
+        ),
+        ["Web agent definition slugs missing: research"],
+    )
+
+
+def test_web_agent_definition_parser_accepts_comments_with_braces(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert checker.check(root) == []
+    mutate_scoped_source(
+        root,
+        "go_aliases",
+        (
+            '\t{Tool: "InSilicoResearchAgent", Slug: "research", '
+            'Execution: "agent_run"},'
+        ),
+        (
+            '\t/* } {Tool: "Ignored", Slug: "ignored", Execution: "chat"}, */\n'
+            '\t{Tool: "InSilicoResearchAgent", Slug: "research", '
+            'Execution: "agent_run"}, // } ignored'
+        ),
+    )
+    assert checker.check(root) == []
+
+
+def test_web_agent_definition_parser_rejects_unsupported_expressions(
+    tmp_path: Path,
+):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "go_aliases",
+            'Tool: "InSilicoResearchAgent", Slug: "research"',
+            'Tool: canonicalTool("InSilicoResearchAgent"), Slug: "research"',
+        ),
+        ["Web agent definitions are missing or malformed"],
+    )
+
+
+def test_web_agent_definition_execution_is_release_pinned(tmp_path: Path):
+    root = contract_tree(tmp_path)
+    assert_contract_transition(
+        root,
+        lambda candidate: mutate_scoped_source(
+            candidate,
+            "go_aliases",
+            (
+                'Tool: "InSilicoResearchAgent", Slug: "research", '
+                'Execution: "agent_run"'
+            ),
+            (
+                'Tool: "InSilicoResearchAgent", Slug: "research", '
+                'Execution: "chat"'
+            ),
+        ),
+        ["Web agent definition executions drift from the release contract"],
+    )
 
 
 def test_conversation_context_fixture_rejects_raw_context_fields(tmp_path: Path):

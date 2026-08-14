@@ -47,6 +47,26 @@ RESULT_ARCHIVE_FIXTURE_PATHS = {
     agent: Path(f"apps/server/external/bot/testdata/head/{agent}_terminal.json")
     for agent in RESULT_ARCHIVE_AGENT_SLUGS
 }
+RESULT_ARCHIVE_RELEASE_FIXTURE_SHA256 = {
+    RELEASE_BOT_COMMIT: {
+        "analyst": "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
+        "research": "9655b1e1b677b36b75a46ced3169456f2ef0db0a457205896803b1a9da5d8d26",
+        "network": "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
+        "design": "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2",
+    }
+}
+REQUIRED_AGENT_EXECUTIONS = {
+    "chat": "chat",
+    "knowledge": "chat",
+    "data": "blocking",
+    "review": "chat",
+    "brief_gene": "agent_run",
+    "analyst": "agent_run",
+    "deep_genome": "agent_run",
+    "research": "agent_run",
+    "design": "agent_run",
+    "network": "agent_run",
+}
 RESULT_ARCHIVE_DOWNLOAD_REF_RE = re.compile(r"^result-archive:sha256:[0-9a-f]{64}$")
 RESULT_ARCHIVE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 RESULT_ARCHIVE_ARCHIVE_FIELDS = {
@@ -166,12 +186,9 @@ _MANIFEST_FIELDS = {
     "fixtures",
     "result_archive_v1",
 }
-_GO_ENTRY_RE = re.compile(
-    r'(?m)^\s*"(?P<key>[A-Za-z0-9_]+)"\s*:\s*'
-    r'"(?P<value>[A-Za-z0-9_.-]+)"\s*,?\s*$'
-)
-_WEB_AGENT_ENTRY_RE = re.compile(r'"(?P<tool>[A-Za-z0-9_]+)"')
 _FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
+_SOURCE_IDENTIFIER_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+_SOURCE_STRING_RE = re.compile(r'"(?P<value>[A-Za-z0-9_.-]+)"')
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -315,42 +332,253 @@ def _load_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
         return None
 
 
-def _extract_braced_block(text: str, marker: str) -> str | None:
-    declaration = re.search(
-        rf"(?m)^\s*(?:var|const)\s+{re.escape(marker)}\b", text
-    )
+def _strip_source_comments(text: str) -> str | None:
+    """Remove line/block comments while preserving strings and source offsets."""
+
+    output: list[str] = []
+    index = 0
+    quote: str | None = None
+    while index < len(text):
+        character = text[index]
+        if quote is not None:
+            output.append(character)
+            if character == "\\":
+                index += 1
+                if index >= len(text):
+                    return None
+                output.append(text[index])
+            elif character == quote:
+                quote = None
+            elif character in "\r\n" and quote != "`":
+                return None
+            index += 1
+            continue
+
+        if text.startswith("//", index):
+            output.extend((" ", " "))
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                output.append(" ")
+                index += 1
+            continue
+        if text.startswith("/*", index):
+            output.extend((" ", " "))
+            index += 2
+            while index < len(text) and not text.startswith("*/", index):
+                output.append(text[index] if text[index] in "\r\n" else " ")
+                index += 1
+            if index >= len(text):
+                return None
+            output.extend((" ", " "))
+            index += 2
+            continue
+        if character in {'"', "'", "`"}:
+            quote = character
+        output.append(character)
+        index += 1
+    return None if quote is not None else "".join(output)
+
+
+def _balanced_close(
+    text: str, opening_index: int, opening: str, closing: str
+) -> int | None:
+    depth = 0
+    quote: str | None = None
+    index = opening_index
+    while index < len(text):
+        character = text[index]
+        if quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {'"', "'", "`"}:
+            quote = character
+        elif character == opening:
+            depth += 1
+        elif character == closing:
+            depth -= 1
+            if depth == 0:
+                return index
+            if depth < 0:
+                return None
+        index += 1
+    return None
+
+
+def _extract_literal_body(
+    text: str,
+    declaration_pattern: str,
+    opening: str,
+    closing: str,
+    suffix_pattern: str | None = None,
+) -> str | None:
+    stripped = _strip_source_comments(text)
+    if stripped is None:
+        return None
+    declaration = re.search(declaration_pattern, stripped)
     if declaration is None:
         return None
-    start = declaration.start()
-    opening = text.find("{", start)
-    if opening < 0:
+    opening_index = declaration.end() - 1
+    closing_index = _balanced_close(stripped, opening_index, opening, closing)
+    if closing_index is None:
         return None
-    closing = text.find("}", opening + 1)
-    if closing < 0:
+    if suffix_pattern is not None and re.match(
+        suffix_pattern, stripped[closing_index + 1 :]
+    ) is None:
         return None
-    return text[opening + 1 : closing]
+    return stripped[opening_index + 1 : closing_index]
+
+
+def _skip_source_whitespace(text: str, index: int) -> int:
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index
+
+
+def _parse_source_string(text: str, index: int) -> tuple[str, int] | None:
+    match = _SOURCE_STRING_RE.match(text, index)
+    if match is None:
+        return None
+    return match.group("value"), match.end()
+
+
+def _parse_string_array(body: str) -> list[str] | None:
+    values: list[str] = []
+    index = _skip_source_whitespace(body, 0)
+    while index < len(body):
+        parsed = _parse_source_string(body, index)
+        if parsed is None:
+            return None
+        value, index = parsed
+        values.append(value)
+        index = _skip_source_whitespace(body, index)
+        if index == len(body):
+            break
+        if body[index] != ",":
+            return None
+        index = _skip_source_whitespace(body, index + 1)
+    return values
+
+
+def _parse_string_map(body: str) -> dict[str, str] | None:
+    values: dict[str, str] = {}
+    index = _skip_source_whitespace(body, 0)
+    while index < len(body):
+        parsed_key = _parse_source_string(body, index)
+        if parsed_key is None:
+            return None
+        key, index = parsed_key
+        index = _skip_source_whitespace(body, index)
+        if index >= len(body) or body[index] != ":":
+            return None
+        index = _skip_source_whitespace(body, index + 1)
+        parsed_value = _parse_source_string(body, index)
+        if parsed_value is None or key in values:
+            return None
+        value, index = parsed_value
+        values[key] = value
+        index = _skip_source_whitespace(body, index)
+        if index == len(body):
+            break
+        if body[index] != ",":
+            return None
+        index = _skip_source_whitespace(body, index + 1)
+    return values
+
+
+def _parse_record_fields(
+    body: str, index: int
+) -> tuple[dict[str, str], int] | None:
+    fields: dict[str, str] = {}
+    index = _skip_source_whitespace(body, index)
+    while index < len(body) and body[index] != "}":
+        field_match = _SOURCE_IDENTIFIER_RE.match(body, index)
+        if field_match is None:
+            return None
+        field = field_match.group(0)
+        if field in fields:
+            return None
+        index = _skip_source_whitespace(body, field_match.end())
+        if index >= len(body) or body[index] != ":":
+            return None
+        index = _skip_source_whitespace(body, index + 1)
+        parsed_value = _parse_source_string(body, index)
+        if parsed_value is None:
+            return None
+        fields[field], index = parsed_value
+        index = _skip_source_whitespace(body, index)
+        if index < len(body) and body[index] == ",":
+            index = _skip_source_whitespace(body, index + 1)
+        elif index >= len(body) or body[index] != "}":
+            return None
+    if index >= len(body) or body[index] != "}":
+        return None
+    return fields, index + 1
+
+
+def _parse_record_list(body: str) -> list[dict[str, str]] | None:
+    records: list[dict[str, str]] = []
+    index = _skip_source_whitespace(body, 0)
+    while index < len(body):
+        if body[index] != "{":
+            return None
+        parsed = _parse_record_fields(body, index + 1)
+        if parsed is None:
+            return None
+        fields, index = parsed
+        if set(fields) != {"Tool", "Slug", "Execution"}:
+            return None
+        records.append(fields)
+        index = _skip_source_whitespace(body, index)
+        if index == len(body):
+            break
+        if body[index] != ",":
+            return None
+        index = _skip_source_whitespace(body, index + 1)
+    return records
 
 
 def _parse_go_map(text: str, marker: str) -> dict[str, str] | None:
-    block = _extract_braced_block(text, marker)
+    block = _extract_literal_body(
+        text,
+        rf"(?m)^\s*var\s+{re.escape(marker)}\s*=\s*"
+        r"map\s*\[\s*string\s*\]\s*string\s*\{",
+        "{",
+        "}",
+    )
     if block is None:
         return None
-    return {
-        match.group("key"): match.group("value")
-        for match in _GO_ENTRY_RE.finditer(block)
-    }
+    return _parse_string_map(block)
 
 
 def _parse_web_tools(text: str) -> list[str] | None:
-    marker = "CANONICAL_AGENT_TOOLS"
-    start = text.find(marker)
-    if start < 0:
+    block = _extract_literal_body(
+        text,
+        r"(?m)^\s*export\s+const\s+CANONICAL_AGENT_TOOLS\s*=\s*\[",
+        "[",
+        "]",
+        r"\s*as\s+const\s*;",
+    )
+    if block is None:
         return None
-    opening = text.find("[", start)
-    closing = text.find("]", opening + 1)
-    if opening < 0 or closing < 0:
+    return _parse_string_array(block)
+
+
+def _parse_web_agent_definitions(text: str) -> list[dict[str, str]] | None:
+    block = _extract_literal_body(
+        text,
+        r"(?m)^\s*var\s+WebAgentDefinitions\s*=\s*"
+        r"\[\]\s*WebAgentDefinition\s*\{",
+        "{",
+        "}",
+    )
+    if block is None:
         return None
-    return [match.group("tool") for match in _WEB_AGENT_ENTRY_RE.finditer(text[opening + 1 : closing])]
+    return _parse_record_list(block)
 
 
 def _check_agent_maps(source_text: dict[str, str], violations: list[str]) -> None:
@@ -365,6 +593,34 @@ def _check_agent_maps(source_text: dict[str, str], violations: list[str]) -> Non
         violations.append("Web canonical agent list is missing or malformed")
     elif go_map is not None:
         _compare_exact_set("Web canonical agent tools", web_tools, tuple(go_map.values()), violations)
+
+    definitions = _parse_web_agent_definitions(source_text.get("go_aliases", ""))
+    if definitions is None:
+        violations.append("Web agent definitions are missing or malformed")
+    else:
+        definition_slugs = [record["Slug"] for record in definitions]
+        definition_check_start = len(violations)
+        _compare_exact_set(
+            "Web agent definition slugs",
+            definition_slugs,
+            REQUIRED_AGENT_SLUGS,
+            violations,
+        )
+        if len(violations) == definition_check_start:
+            if definition_slugs != list(REQUIRED_AGENT_SLUGS):
+                violations.append("Web agent definition order drifts from the release contract")
+            definition_tools = {
+                record["Slug"]: record["Tool"] for record in definitions
+            }
+            if go_map is not None and definition_tools != go_map:
+                violations.append("Web agent definitions drift from the canonical map")
+            definition_executions = {
+                record["Slug"]: record["Execution"] for record in definitions
+            }
+            if definition_executions != REQUIRED_AGENT_EXECUTIONS:
+                violations.append(
+                    "Web agent definition executions drift from the release contract"
+                )
 
     aliases = _parse_go_map(source_text.get("go_aliases", ""), "aliasToSlug")
     if aliases is None:
@@ -592,6 +848,10 @@ def _check_result_archive_fixtures(
     entries = archive_v1.get("fixtures")
     if not isinstance(entries, dict):
         return
+    release_digests = RESULT_ARCHIVE_RELEASE_FIXTURE_SHA256.get(RELEASE_BOT_COMMIT)
+    if release_digests is None:
+        violations.append("result archive fixture release pins are missing")
+        return
     for agent in RESULT_ARCHIVE_AGENT_SLUGS:
         entry = entries.get(agent)
         if not isinstance(entry, dict):
@@ -602,8 +862,13 @@ def _check_result_archive_fixtures(
             violations.append("missing result archive fixture")
             continue
         digest = entry.get("sha256")
-        if not isinstance(digest, str) or hashlib.sha256(raw).hexdigest() != digest:
+        actual_digest = hashlib.sha256(raw).hexdigest()
+        if not isinstance(digest, str) or actual_digest != digest:
             violations.append("result archive fixture sha256 does not match manifest")
+        elif actual_digest != release_digests.get(agent):
+            violations.append(
+                "result archive fixture sha256 is not pinned to Bot release"
+            )
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError:
@@ -646,9 +911,14 @@ def _check_result_archive_fixture(
         violations.append("result archive fixture delivery protocol_version must be 1")
     if delivery.get("required") is not True or delivery.get("status") != "ready":
         violations.append("result archive fixture delivery must be required and ready")
-    if not isinstance(delivery.get("revision"), int) or delivery["revision"] < 1:
+    if type(delivery.get("revision")) is not int or delivery["revision"] < 1:
         violations.append("result archive fixture delivery revision is invalid")
-    if not isinstance(delivery.get("inventory_digest"), str) or not RESULT_ARCHIVE_DIGEST_RE.fullmatch(delivery["inventory_digest"]):
+    inventory_digest = delivery.get("inventory_digest")
+    inventory_digest_valid = (
+        isinstance(inventory_digest, str)
+        and RESULT_ARCHIVE_DIGEST_RE.fullmatch(inventory_digest) is not None
+    )
+    if not inventory_digest_valid:
         violations.append("result archive fixture delivery digest is invalid")
     if delivery.get("error_code") is not None or delivery.get("retryable") is not False:
         violations.append("result archive fixture ready delivery state is invalid")
@@ -663,10 +933,20 @@ def _check_result_archive_fixture(
         violations.append("result archive fixture delivery archive identity is invalid")
     if archive.get("media_type") != "application/zip" or archive.get("downloadable") is not True or archive.get("report_context_eligible") is not False:
         violations.append("result archive fixture delivery archive metadata is invalid")
-    if not isinstance(archive.get("size_bytes"), int) or archive["size_bytes"] <= 0:
+    if type(archive.get("size_bytes")) is not int or archive["size_bytes"] <= 0:
         violations.append("result archive fixture delivery archive size_bytes is invalid")
-    if not isinstance(archive.get("download_ref"), str) or not RESULT_ARCHIVE_DOWNLOAD_REF_RE.fullmatch(archive["download_ref"]):
+    download_ref = archive.get("download_ref")
+    if (
+        not isinstance(download_ref, str)
+        or RESULT_ARCHIVE_DOWNLOAD_REF_RE.fullmatch(download_ref) is None
+    ):
         violations.append("result archive fixture delivery archive download_ref is unsafe")
+    elif inventory_digest_valid and download_ref.removeprefix(
+        "result-archive:"
+    ) != inventory_digest:
+        violations.append(
+            "result archive fixture inventory_digest and download_ref do not match"
+        )
     artifacts = execution.get("artifacts")
     if not isinstance(artifacts, list):
         violations.append("result archive fixture execution artifacts must be a list")
