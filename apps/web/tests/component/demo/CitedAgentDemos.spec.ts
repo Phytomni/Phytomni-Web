@@ -69,7 +69,7 @@ describe("cited agent demonstrations", () => {
   it.each([
     [KnowledgeAgent, "kb", "20", "epigenetic modifications"],
     [ReviewAgent, "review", "17", "single-cell RNA sequencing"],
-    [BriefGeneAgent, "bg", "4", "Os01g0177400"],
+    [BriefGeneAgent, "bg", "32", "Os01g0177400"],
   ])(
     "keeps the %s cited report in the shared static shell",
     async (component, namespace, referenceCount, contentMarker) => {
@@ -97,7 +97,9 @@ describe("cited agent demonstrations", () => {
       "# Brief Gene Analysis of Os01g0177400"
     );
     expect(BRIEF_GENE_CASE.content).not.toContain("single-cell RNA sequencing");
-    expect(BRIEF_GENE_CASE.references).toHaveLength(4);
-    expect(BRIEF_GENE_CASE.provenance.source).toBe("user-supplied API log");
+    expect(BRIEF_GENE_CASE.references).toHaveLength(32);
+    expect(BRIEF_GENE_CASE.provenance.botCommit).toBe(
+      "c84a129aa354a911eba34d40cd4d780f062f25c3"
+    );
   });
 });
