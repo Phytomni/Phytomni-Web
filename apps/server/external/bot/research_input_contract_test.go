@@ -40,14 +40,12 @@ func validResearchCatalog() *AgentsListResponse {
 	}
 }
 
-const headResearchInputFixtureSHA256 = "0885a3dfc606e9ed03f572a26886404badf9dde8bb2983bcf6e2384d8345e300"
-
 func TestHeadResearchInputFixtureMatchesContract(t *testing.T) {
 	raw, err := os.ReadFile("testdata/head/research_input_resolution_v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != headResearchInputFixtureSHA256 {
+	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != acceptedResearchInputFixtureSHA256 {
 		t.Fatalf("fixture digest = %s, want accepted Bot digest", got)
 	}
 	var catalog AgentsListResponse

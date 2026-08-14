@@ -187,8 +187,18 @@ _MANIFEST_FIELDS = {
     "result_archive_v1",
 }
 _FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
-_SOURCE_IDENTIFIER_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
-_SOURCE_STRING_RE = re.compile(r'"(?P<value>[A-Za-z0-9_.-]+)"')
+_SOURCE_TOKEN_RE = re.compile(
+    r"""
+    (?P<whitespace>\s+)
+    |(?P<line_comment>//[^\r\n]*)
+    |(?P<block_comment>/\*.*?\*/)
+    |(?P<string>"[A-Za-z0-9_.-]+")
+    |(?P<identifier>[A-Za-z][A-Za-z0-9_]*)
+    |(?P<punctuation>[\[\]{}:,=;])
+    |(?P<unsupported>.)
+    """,
+    re.DOTALL | re.VERBOSE,
+)
 
 
 def _unique(values: Iterable[str]) -> list[str]:
@@ -332,253 +342,193 @@ def _load_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
         return None
 
 
-def _strip_source_comments(text: str) -> str | None:
-    """Remove line/block comments while preserving strings and source offsets."""
-
-    output: list[str] = []
-    index = 0
-    quote: str | None = None
-    while index < len(text):
-        character = text[index]
-        if quote is not None:
-            output.append(character)
-            if character == "\\":
-                index += 1
-                if index >= len(text):
-                    return None
-                output.append(text[index])
-            elif character == quote:
-                quote = None
-            elif character in "\r\n" and quote != "`":
-                return None
-            index += 1
-            continue
-
-        if text.startswith("//", index):
-            output.extend((" ", " "))
-            index += 2
-            while index < len(text) and text[index] not in "\r\n":
-                output.append(" ")
-                index += 1
-            continue
-        if text.startswith("/*", index):
-            output.extend((" ", " "))
-            index += 2
-            while index < len(text) and not text.startswith("*/", index):
-                output.append(text[index] if text[index] in "\r\n" else " ")
-                index += 1
-            if index >= len(text):
-                return None
-            output.extend((" ", " "))
-            index += 2
-            continue
-        if character in {'"', "'", "`"}:
-            quote = character
-        output.append(character)
-        index += 1
-    return None if quote is not None else "".join(output)
+SourceToken = tuple[str, str]
 
 
-def _balanced_close(
-    text: str, opening_index: int, opening: str, closing: str
-) -> int | None:
-    depth = 0
-    quote: str | None = None
-    index = opening_index
-    while index < len(text):
-        character = text[index]
-        if quote is not None:
-            if character == "\\":
-                index += 2
-                continue
-            if character == quote:
-                quote = None
-            index += 1
+def _source_tokens(text: str) -> list[SourceToken]:
+    tokens: list[SourceToken] = []
+    for match in _SOURCE_TOKEN_RE.finditer(text):
+        kind = match.lastgroup
+        if kind in {"whitespace", "line_comment", "block_comment"}:
             continue
-        if character in {'"', "'", "`"}:
-            quote = character
-        elif character == opening:
+        value = match.group(0)
+        tokens.append((kind or "unsupported", value.strip('"') if kind == "string" else value))
+    return tokens
+
+
+def _literal_tokens(
+    text: str,
+    prefix: tuple[SourceToken, ...],
+    opening: str,
+    closing: str,
+    suffix: tuple[SourceToken, ...] = (),
+) -> list[SourceToken] | None:
+    tokens = _source_tokens(text)
+    starts = [
+        index
+        for index in range(len(tokens) - len(prefix) + 1)
+        if tuple(tokens[index : index + len(prefix)]) == prefix
+    ]
+    if len(starts) != 1:
+        return None
+
+    body_start = starts[0] + len(prefix)
+    depth = 1
+    for index in range(body_start, len(tokens)):
+        if tokens[index] == ("punctuation", opening):
             depth += 1
-        elif character == closing:
+        elif tokens[index] == ("punctuation", closing):
             depth -= 1
             if depth == 0:
-                return index
-            if depth < 0:
-                return None
-        index += 1
+                if tuple(tokens[index + 1 : index + 1 + len(suffix)]) != suffix:
+                    return None
+                return tokens[body_start:index]
     return None
 
 
-def _extract_literal_body(
-    text: str,
-    declaration_pattern: str,
-    opening: str,
-    closing: str,
-    suffix_pattern: str | None = None,
-) -> str | None:
-    stripped = _strip_source_comments(text)
-    if stripped is None:
-        return None
-    declaration = re.search(declaration_pattern, stripped)
-    if declaration is None:
-        return None
-    opening_index = declaration.end() - 1
-    closing_index = _balanced_close(stripped, opening_index, opening, closing)
-    if closing_index is None:
-        return None
-    if suffix_pattern is not None and re.match(
-        suffix_pattern, stripped[closing_index + 1 :]
-    ) is None:
-        return None
-    return stripped[opening_index + 1 : closing_index]
-
-
-def _skip_source_whitespace(text: str, index: int) -> int:
-    while index < len(text) and text[index].isspace():
-        index += 1
-    return index
-
-
-def _parse_source_string(text: str, index: int) -> tuple[str, int] | None:
-    match = _SOURCE_STRING_RE.match(text, index)
-    if match is None:
-        return None
-    return match.group("value"), match.end()
-
-
-def _parse_string_array(body: str) -> list[str] | None:
+def _comma_separated_strings(tokens: list[SourceToken]) -> list[str] | None:
     values: list[str] = []
-    index = _skip_source_whitespace(body, 0)
-    while index < len(body):
-        parsed = _parse_source_string(body, index)
-        if parsed is None:
+    index = 0
+    while index < len(tokens):
+        kind, value = tokens[index]
+        if kind != "string":
             return None
-        value, index = parsed
         values.append(value)
-        index = _skip_source_whitespace(body, index)
-        if index == len(body):
+        index += 1
+        if index == len(tokens):
             break
-        if body[index] != ",":
+        if tokens[index] != ("punctuation", ","):
             return None
-        index = _skip_source_whitespace(body, index + 1)
+        index += 1
     return values
 
 
-def _parse_string_map(body: str) -> dict[str, str] | None:
+def _string_map(tokens: list[SourceToken]) -> dict[str, str] | None:
     values: dict[str, str] = {}
-    index = _skip_source_whitespace(body, 0)
-    while index < len(body):
-        parsed_key = _parse_source_string(body, index)
-        if parsed_key is None:
+    index = 0
+    while index < len(tokens):
+        if index + 2 >= len(tokens):
             return None
-        key, index = parsed_key
-        index = _skip_source_whitespace(body, index)
-        if index >= len(body) or body[index] != ":":
+        key_kind, key = tokens[index]
+        value_kind, value = tokens[index + 2]
+        if (
+            key_kind != "string"
+            or tokens[index + 1] != ("punctuation", ":")
+            or value_kind != "string"
+            or key in values
+        ):
             return None
-        index = _skip_source_whitespace(body, index + 1)
-        parsed_value = _parse_source_string(body, index)
-        if parsed_value is None or key in values:
-            return None
-        value, index = parsed_value
         values[key] = value
-        index = _skip_source_whitespace(body, index)
-        if index == len(body):
+        index += 3
+        if index == len(tokens):
             break
-        if body[index] != ",":
+        if tokens[index] != ("punctuation", ","):
             return None
-        index = _skip_source_whitespace(body, index + 1)
+        index += 1
     return values
 
 
-def _parse_record_fields(
-    body: str, index: int
-) -> tuple[dict[str, str], int] | None:
-    fields: dict[str, str] = {}
-    index = _skip_source_whitespace(body, index)
-    while index < len(body) and body[index] != "}":
-        field_match = _SOURCE_IDENTIFIER_RE.match(body, index)
-        if field_match is None:
-            return None
-        field = field_match.group(0)
-        if field in fields:
-            return None
-        index = _skip_source_whitespace(body, field_match.end())
-        if index >= len(body) or body[index] != ":":
-            return None
-        index = _skip_source_whitespace(body, index + 1)
-        parsed_value = _parse_source_string(body, index)
-        if parsed_value is None:
-            return None
-        fields[field], index = parsed_value
-        index = _skip_source_whitespace(body, index)
-        if index < len(body) and body[index] == ",":
-            index = _skip_source_whitespace(body, index + 1)
-        elif index >= len(body) or body[index] != "}":
-            return None
-    if index >= len(body) or body[index] != "}":
-        return None
-    return fields, index + 1
-
-
-def _parse_record_list(body: str) -> list[dict[str, str]] | None:
+def _record_list(tokens: list[SourceToken]) -> list[dict[str, str]] | None:
     records: list[dict[str, str]] = []
-    index = _skip_source_whitespace(body, 0)
-    while index < len(body):
-        if body[index] != "{":
+    index = 0
+    while index < len(tokens):
+        if tokens[index] != ("punctuation", "{"):
             return None
-        parsed = _parse_record_fields(body, index + 1)
-        if parsed is None:
-            return None
-        fields, index = parsed
-        if set(fields) != {"Tool", "Slug", "Execution"}:
+        index += 1
+        fields: dict[str, str] = {}
+        while index < len(tokens) and tokens[index] != ("punctuation", "}"):
+            if index + 2 >= len(tokens):
+                return None
+            field_kind, field = tokens[index]
+            value_kind, value = tokens[index + 2]
+            if (
+                field_kind != "identifier"
+                or tokens[index + 1] != ("punctuation", ":")
+                or value_kind != "string"
+                or field in fields
+            ):
+                return None
+            fields[field] = value
+            index += 3
+            if index < len(tokens) and tokens[index] == ("punctuation", ","):
+                index += 1
+            elif index >= len(tokens) or tokens[index] != ("punctuation", "}"):
+                return None
+        if index >= len(tokens) or set(fields) != {"Tool", "Slug", "Execution"}:
             return None
         records.append(fields)
-        index = _skip_source_whitespace(body, index)
-        if index == len(body):
+        index += 1
+        if index == len(tokens):
             break
-        if body[index] != ",":
+        if tokens[index] != ("punctuation", ","):
             return None
-        index = _skip_source_whitespace(body, index + 1)
+        index += 1
     return records
 
 
 def _parse_go_map(text: str, marker: str) -> dict[str, str] | None:
-    block = _extract_literal_body(
+    tokens = _literal_tokens(
         text,
-        rf"(?m)^\s*var\s+{re.escape(marker)}\s*=\s*"
-        r"map\s*\[\s*string\s*\]\s*string\s*\{",
+        (
+            ("identifier", "var"),
+            ("identifier", marker),
+            ("punctuation", "="),
+            ("identifier", "map"),
+            ("punctuation", "["),
+            ("identifier", "string"),
+            ("punctuation", "]"),
+            ("identifier", "string"),
+            ("punctuation", "{"),
+        ),
         "{",
         "}",
     )
-    if block is None:
+    if tokens is None:
         return None
-    return _parse_string_map(block)
+    return _string_map(tokens)
 
 
 def _parse_web_tools(text: str) -> list[str] | None:
-    block = _extract_literal_body(
+    tokens = _literal_tokens(
         text,
-        r"(?m)^\s*export\s+const\s+CANONICAL_AGENT_TOOLS\s*=\s*\[",
+        (
+            ("identifier", "export"),
+            ("identifier", "const"),
+            ("identifier", "CANONICAL_AGENT_TOOLS"),
+            ("punctuation", "="),
+            ("punctuation", "["),
+        ),
         "[",
         "]",
-        r"\s*as\s+const\s*;",
+        (
+            ("identifier", "as"),
+            ("identifier", "const"),
+            ("punctuation", ";"),
+        ),
     )
-    if block is None:
+    if tokens is None:
         return None
-    return _parse_string_array(block)
+    return _comma_separated_strings(tokens)
 
 
 def _parse_web_agent_definitions(text: str) -> list[dict[str, str]] | None:
-    block = _extract_literal_body(
+    tokens = _literal_tokens(
         text,
-        r"(?m)^\s*var\s+WebAgentDefinitions\s*=\s*"
-        r"\[\]\s*WebAgentDefinition\s*\{",
+        (
+            ("identifier", "var"),
+            ("identifier", "WebAgentDefinitions"),
+            ("punctuation", "="),
+            ("punctuation", "["),
+            ("punctuation", "]"),
+            ("identifier", "WebAgentDefinition"),
+            ("punctuation", "{"),
+        ),
         "{",
         "}",
     )
-    if block is None:
+    if tokens is None:
         return None
-    return _parse_record_list(block)
+    return _record_list(tokens)
 
 
 def _check_agent_maps(source_text: dict[str, str], violations: list[str]) -> None:

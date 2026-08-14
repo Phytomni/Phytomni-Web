@@ -32,8 +32,12 @@ RESEARCH_LIMIT_SOURCE_REL = Path("apps/server/external/bot/input_limits.go")
 RESEARCH_CONTRACT_SOURCE_REL = Path(
     "apps/server/external/bot/research_input_contract.go"
 )
-RESEARCH_INPUT_FIXTURE_SHA256 = (
-    "0885a3dfc606e9ed03f572a26886404badf9dde8bb2983bcf6e2384d8345e300"
+AGENT_CANONICAL_SOURCE_REL = Path(
+    "apps/server/external/bot/agent_canonical.go"
+)
+AGENT_MAP_SOURCE_REL = Path("apps/server/external/bot/agent_map.go")
+UPLOAD_CONTRACT_SOURCE_REL = Path(
+    "apps/server/external/bot/upload_contract.go"
 )
 RESEARCH_INPUT_PROTOCOL = "research_input_resolution_v1"
 RESEARCH_INPUT_PROTOCOL_VERSION = 1
@@ -66,21 +70,6 @@ _RESEARCH_INPUT_LIMIT_SOURCES = {
 RESEARCH_ARCHIVE_FORMATS = frozenset(
     {"zip", "tar", "tgz", "gz", "bgzf", "bz2", "xz", "zst", "7z", "rar"}
 )
-CANONICAL_AGENT_TOOLS = {
-    "chat": "ChatAgent",
-    "knowledge": "KnowledgeAgent",
-    "data": "DataAgent",
-    "review": "ReviewAgent",
-    "brief_gene": "BriefGeneAgent",
-    "analyst": "AnalystAgent",
-    "deep_genome": "DeepGenomeAgent",
-    "research": "InSilicoResearchAgent",
-    "design": "DigitalDesignAgent",
-    "network": "GeneNetworkAgent",
-}
-MAX_BOT_AGENT_DESCRIPTORS = 32
-MAX_RESEARCH_DATASET_FILE_BYTES = 10 << 30
-MAX_RESEARCH_DATASET_TOTAL_BYTES = MAX_RESEARCH_DATASET_FILE_BYTES * 256
 
 ROW_IDS = (
     "RC-WEB-001",
@@ -180,6 +169,10 @@ class _ResearchGoContract(NamedTuple):
     archive_formats: frozenset[str]
     max_dataset_formats: int
     max_dataset_format_size: int
+    accepted_fixture_sha256: str
+    canonical_agent_tools: dict[str, str]
+    max_agent_descriptors: int
+    max_dataset_file_bytes: int
 
 _MATRIX_FIELDS = {
     "schema_version",
@@ -288,56 +281,173 @@ def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
         return None
 
 
-def _go_group_body(source: str, keyword: str) -> str | None:
+def _go_top_level_const_bodies(
+    source: str,
+) -> list[tuple[str, str]] | None:
+    """Return source/masked bodies for finite package-level const declarations."""
+
     masked = _mask_go_non_code(source)
-    matches = list(re.finditer(rf"(?m)^[ \t]*{re.escape(keyword)}[ \t]*\(", masked))
-    if len(matches) != 1:
+    bodies: list[tuple[str, str]] = []
+    for match in re.finditer(r"(?m)^const\b", masked):
+        cursor = match.end()
+        while cursor < len(masked) and masked[cursor] in " \t":
+            cursor += 1
+        if cursor < len(masked) and masked[cursor] == "(":
+            opening = cursor
+            depth = 0
+            closing = None
+            for index in range(opening, len(masked)):
+                if masked[index] == "(":
+                    depth += 1
+                elif masked[index] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        closing = index
+                        break
+            if closing is None:
+                return None
+            bodies.append(
+                (
+                    source[opening + 1 : closing],
+                    masked[opening + 1 : closing],
+                )
+            )
+            continue
+
+        line_end = masked.find("\n", cursor)
+        if line_end < 0:
+            line_end = len(masked)
+        bodies.append((source[cursor:line_end], masked[cursor:line_end]))
+    return bodies
+
+
+def _parse_go_finite_literal(
+    literal: str, declared_type: str | None
+) -> str | int | None:
+    if re.fullmatch(r'"(?:\\.|[^"\\])*"', literal):
+        if declared_type not in (None, "string"):
+            return None
+        try:
+            value = json.loads(literal)
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, str) else None
+
+    decimal = r"[0-9](?:_?[0-9])*"
+    integer = re.fullmatch(
+        rf"(?P<base>{decimal})(?:[ \t]*<<[ \t]*(?P<shift>{decimal}))?",
+        literal,
+    )
+    if integer is None or declared_type not in (None, "int", "int64"):
+        return None
+    base = int(integer.group("base").replace("_", ""))
+    shift_text = integer.group("shift")
+    shift = int(shift_text.replace("_", "")) if shift_text else 0
+    if shift > 62:
+        return None
+    value = base << shift
+    return value if value <= (1 << 63) - 1 else None
+
+
+def _parse_go_named_const_literals(
+    source: str, expected_names: tuple[str, ...]
+) -> dict[str, str | int] | None:
+    """Extract only guarded const symbols and reject ambiguous declarations."""
+
+    bodies = _go_top_level_const_bodies(source)
+    if bodies is None:
+        return None
+    expected = set(expected_names)
+    values: dict[str, str | int] = {}
+    for body, masked_body in bodies:
+        starts = [0]
+        starts.extend(match.end() for match in re.finditer(r"[;\r\n]", masked_body))
+        ends = [match.start() for match in re.finditer(r"[;\r\n]", masked_body)]
+        ends.append(len(masked_body))
+        for start, end in zip(starts, ends, strict=True):
+            masked_spec = masked_body[start:end]
+            source_spec = _strip_go_comments(body[start:end]).strip()
+            equals = masked_spec.find("=")
+            lhs = masked_spec if equals < 0 else masked_spec[:equals]
+            identifiers = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", lhs)
+            guarded = [name for name in identifiers if name in expected]
+            if not guarded:
+                continue
+            if len(guarded) != 1 or identifiers[0] != guarded[0]:
+                return None
+            name = guarded[0]
+            if name in values:
+                return None
+            declaration = re.fullmatch(
+                rf"{re.escape(name)}"
+                r"(?:[ \t]+(?P<type>[A-Za-z_][A-Za-z0-9_]*))?"
+                r"[ \t]*=[ \t]*(?P<literal>.+?)",
+                source_spec,
+            )
+            if declaration is None:
+                return None
+            value = _parse_go_finite_literal(
+                declaration.group("literal").strip(), declaration.group("type")
+            )
+            if value is None:
+                return None
+            values[name] = value
+    return values if set(values) == expected else None
+
+
+def _parse_go_string_map(source: str, name: str) -> dict[str, str] | None:
+    masked = _mask_go_non_code(source)
+    guarded = list(
+        re.finditer(rf"(?m)^var[ \t]+{re.escape(name)}\b", masked)
+    )
+    declaration = re.compile(
+        rf"(?m)^var[ \t]+{re.escape(name)}[ \t]*=[ \t]*"
+        r"map[ \t]*\[[ \t]*string[ \t]*\][ \t]*string[ \t]*\{"
+    )
+    matches = list(declaration.finditer(masked))
+    if (
+        len(guarded) != 1
+        or len(matches) != 1
+        or guarded[0].start() != matches[0].start()
+    ):
         return None
     opening = matches[0].end() - 1
     depth = 0
+    closing = None
     for index in range(opening, len(masked)):
-        if masked[index] == "(":
+        if masked[index] == "{":
             depth += 1
-        elif masked[index] == ")":
+        elif masked[index] == "}":
             depth -= 1
             if depth == 0:
-                return _strip_go_comments(source[opening + 1 : index])
-    return None
-
-
-def _parse_go_const_group(
-    source: str, expected_names: tuple[str, ...]
-) -> dict[str, str | int] | None:
-    body = _go_group_body(source, "const")
-    if body is None:
+                closing = index
+                break
+    if closing is None:
         return None
+
+    body = _strip_go_comments(source[opening + 1 : closing])
     entry = re.compile(
-        r'(?m)^[ \t]*(?P<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*'
-        r'(?P<literal>"(?:\\.|[^"\\])*"|[0-9][0-9_]*)[ \t]*$'
+        r'\s*(?P<key>"(?:\\.|[^"\\])*")[ \t]*:[ \t]*'
+        r'(?P<value>"(?:\\.|[^"\\])*")[ \t]*,?'
     )
-    values: dict[str, str | int] = {}
+    values: dict[str, str] = {}
     position = 0
-    for match in entry.finditer(body):
-        if body[position : match.start()].strip():
+    while position < len(body):
+        if not body[position:].strip():
+            break
+        match = entry.match(body, position)
+        if match is None:
             return None
-        name = match.group("name")
-        if name in values:
+        try:
+            key = json.loads(match.group("key"))
+            value = json.loads(match.group("value"))
+        except (TypeError, ValueError):
             return None
-        literal = match.group("literal")
-        if literal.startswith('"'):
-            try:
-                value = json.loads(literal)
-            except (TypeError, ValueError):
-                return None
-            if not isinstance(value, str):
-                return None
-            values[name] = value
-        else:
-            values[name] = int(literal.replace("_", ""))
+        if not isinstance(key, str) or not isinstance(value, str) or key in values:
+            return None
+        values[key] = value
         position = match.end()
-    if body[position:].strip() or set(values) != set(expected_names):
-        return None
-    return values
+    return values or None
 
 
 def _parse_go_string_set_map(source: str, name: str) -> set[str] | None:
@@ -393,11 +503,29 @@ def _parse_go_suffix_map(source: str, name: str) -> set[str] | None:
 def _load_research_go_contract(
     limit_source: str | None,
     contract_source: str | None,
+    agent_canonical_source: str | None,
+    agent_map_source: str | None,
+    upload_contract_source: str | None,
     violations: list[str],
 ) -> _ResearchGoContract | None:
-    if limit_source is None or contract_source is None:
+    if any(
+        source is None
+        for source in (
+            limit_source,
+            contract_source,
+            agent_canonical_source,
+            agent_map_source,
+            upload_contract_source,
+        )
+    ):
         violations.append("Web Research Go contract sources are missing")
         return None
+
+    assert limit_source is not None
+    assert contract_source is not None
+    assert agent_canonical_source is not None
+    assert agent_map_source is not None
+    assert upload_contract_source is not None
 
     expected_limits: dict[str, int] = {}
     for default_name, hard_name, default_value, hard_value in (
@@ -405,22 +533,57 @@ def _load_research_go_contract(
     ):
         expected_limits[default_name] = default_value
         expected_limits[hard_name] = hard_value
-    limit_values = _parse_go_const_group(limit_source, tuple(expected_limits))
+    limit_values = _parse_go_named_const_literals(
+        limit_source, tuple(expected_limits)
+    )
     expected_contract = {
         "ResearchInputProtocol": RESEARCH_INPUT_PROTOCOL,
         "ResearchInputProtocolVersion": RESEARCH_INPUT_PROTOCOL_VERSION,
         "maxResearchDatasetFormats": MAX_RESEARCH_DATASET_FORMATS,
         "maxResearchDatasetFormatSize": MAX_RESEARCH_DATASET_FORMAT_SIZE,
     }
-    contract_values = _parse_go_const_group(
-        contract_source, tuple(expected_contract)
+    accepted_digest_name = "acceptedResearchInputFixtureSHA256"
+    contract_values = _parse_go_named_const_literals(
+        contract_source, (*expected_contract, accepted_digest_name)
+    )
+    agent_tools = _parse_go_string_map(
+        agent_canonical_source, "CanonicalAgentTool"
+    )
+    descriptor_values = _parse_go_named_const_literals(
+        agent_map_source, ("maxBotAgentDescriptors",)
+    )
+    upload_values = _parse_go_named_const_literals(
+        upload_contract_source, ("maxResumableUploadFileBytes",)
     )
     archive_formats = _parse_go_string_set_map(
         contract_source, "acceptedResearchArchiveFormats"
     )
+    accepted_digest = (
+        contract_values.get(accepted_digest_name)
+        if contract_values is not None
+        else None
+    )
+    max_agent_descriptors = (
+        descriptor_values.get("maxBotAgentDescriptors")
+        if descriptor_values is not None
+        else None
+    )
+    max_dataset_file_bytes = (
+        upload_values.get("maxResumableUploadFileBytes")
+        if upload_values is not None
+        else None
+    )
     if (
         limit_values != expected_limits
-        or contract_values != expected_contract
+        or contract_values is None
+        or any(contract_values.get(name) != value for name, value in expected_contract.items())
+        or not isinstance(accepted_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", accepted_digest) is None
+        or agent_tools is None
+        or not isinstance(max_agent_descriptors, int)
+        or max_agent_descriptors < 1
+        or not isinstance(max_dataset_file_bytes, int)
+        or max_dataset_file_bytes < 1
         or archive_formats != RESEARCH_ARCHIVE_FORMATS
     ):
         violations.append("Web Research Go contract sources are malformed or drifted")
@@ -442,6 +605,10 @@ def _load_research_go_contract(
         max_dataset_format_size=int(
             contract_values["maxResearchDatasetFormatSize"]
         ),
+        accepted_fixture_sha256=accepted_digest,
+        canonical_agent_tools=agent_tools,
+        max_agent_descriptors=max_agent_descriptors,
+        max_dataset_file_bytes=max_dataset_file_bytes,
     )
 
 
@@ -496,16 +663,28 @@ def _check_research_input_contract(
     format_source: str | None,
     limit_source: str | None,
     contract_source: str | None,
+    agent_canonical_source: str | None,
+    agent_map_source: str | None,
+    upload_contract_source: str | None,
     violations: list[str],
 ) -> None:
     go_contract = _load_research_go_contract(
-        limit_source, contract_source, violations
+        limit_source,
+        contract_source,
+        agent_canonical_source,
+        agent_map_source,
+        upload_contract_source,
+        violations,
     )
     fixture_raw = _read_bytes(root, RESEARCH_INPUT_FIXTURE_REL, violations)
     if fixture_raw is None:
         violations.append("research_input_resolution_v1.json is missing")
         return
-    if hashlib.sha256(fixture_raw).hexdigest() != RESEARCH_INPUT_FIXTURE_SHA256:
+    if (
+        go_contract is not None
+        and hashlib.sha256(fixture_raw).hexdigest()
+        != go_contract.accepted_fixture_sha256
+    ):
         violations.append("Research fixture SHA-256 differs from accepted bytes")
     try:
         fixture_text = fixture_raw.decode("utf-8")
@@ -549,7 +728,7 @@ def _check_research_input_contract(
             violations.append("research input reference limit is below an input lane")
 
     data = fixture.get("data")
-    if not isinstance(data, list) or len(data) > MAX_BOT_AGENT_DESCRIPTORS:
+    if not isinstance(data, list) or len(data) > go_contract.max_agent_descriptors:
         violations.append("agent descriptor catalog is malformed")
         return
     research_rows: list[Mapping[str, Any]] = []
@@ -565,7 +744,7 @@ def _check_research_input_contract(
             or not isinstance(tool, str)
             or slug != slug.strip()
             or tool != tool.strip()
-            or CANONICAL_AGENT_TOOLS.get(slug) != tool
+            or go_contract.canonical_agent_tools.get(slug) != tool
             or slug in seen_slugs
         ):
             violations.append("agent descriptor catalog is malformed")
@@ -598,15 +777,20 @@ def _check_research_input_contract(
     max_files = datasets["max_files"]
     max_file_bytes = datasets.get("max_file_bytes")
     max_total_bytes = datasets.get("max_total_bytes")
-    if not _bounded_integer(max_file_bytes, 1, MAX_RESEARCH_DATASET_FILE_BYTES):
+    if not _bounded_integer(
+        max_file_bytes, 1, go_contract.max_dataset_file_bytes
+    ):
         violations.append("research datasets.max_file_bytes is outside Web bounds")
+    max_total_bytes_ceiling = (
+        go_contract.max_dataset_file_bytes * attachment_ceiling
+    )
     if (
         not isinstance(max_total_bytes, int)
         or isinstance(max_total_bytes, bool)
         or not isinstance(max_file_bytes, int)
         or isinstance(max_file_bytes, bool)
         or max_total_bytes < max_file_bytes
-        or max_total_bytes > MAX_RESEARCH_DATASET_TOTAL_BYTES
+        or max_total_bytes > max_total_bytes_ceiling
         or max_total_bytes > max_file_bytes * max_files
     ):
         violations.append("research datasets.max_total_bytes is outside Web bounds")
@@ -1337,11 +1521,21 @@ def check(root: Path) -> list[str]:
     format_source = _read_text(root, RESEARCH_FORMAT_SOURCE_REL, violations)
     limit_source = _read_text(root, RESEARCH_LIMIT_SOURCE_REL, violations)
     contract_source = _read_text(root, RESEARCH_CONTRACT_SOURCE_REL, violations)
+    agent_canonical_source = _read_text(
+        root, AGENT_CANONICAL_SOURCE_REL, violations
+    )
+    agent_map_source = _read_text(root, AGENT_MAP_SOURCE_REL, violations)
+    upload_contract_source = _read_text(
+        root, UPLOAD_CONTRACT_SOURCE_REL, violations
+    )
     _check_research_input_contract(
         root,
         format_source,
         limit_source,
         contract_source,
+        agent_canonical_source,
+        agent_map_source,
+        upload_contract_source,
         violations,
     )
     _check_defaults(source, violations)

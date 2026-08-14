@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -32,6 +33,13 @@ RESEARCH_FORMAT_SOURCE_PATH = Path(
 RESEARCH_LIMIT_SOURCE_PATH = Path("apps/server/external/bot/input_limits.go")
 RESEARCH_CONTRACT_SOURCE_PATH = Path(
     "apps/server/external/bot/research_input_contract.go"
+)
+AGENT_CANONICAL_SOURCE_PATH = Path(
+    "apps/server/external/bot/agent_canonical.go"
+)
+AGENT_MAP_SOURCE_PATH = Path("apps/server/external/bot/agent_map.go")
+UPLOAD_CONTRACT_SOURCE_PATH = Path(
+    "apps/server/external/bot/upload_contract.go"
 )
 
 
@@ -116,7 +124,13 @@ def write_accepted_research_contract(root: Path) -> None:
     fixture = root / RESEARCH_INPUT_FIXTURE_PATH
     fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_bytes((checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes())
-    for relative in (RESEARCH_LIMIT_SOURCE_PATH, RESEARCH_CONTRACT_SOURCE_PATH):
+    for relative in (
+        RESEARCH_LIMIT_SOURCE_PATH,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        AGENT_CANONICAL_SOURCE_PATH,
+        AGENT_MAP_SOURCE_PATH,
+        UPLOAD_CONTRACT_SOURCE_PATH,
+    ):
         write(
             root,
             relative.as_posix(),
@@ -148,6 +162,15 @@ def minimal_tree(tmp_path: Path, value: MatrixValue | None = None) -> Path:
     write_accepted_research_contract(root)
     write(root, RESEARCH_FORMAT_SOURCE_PATH.as_posix(), research_format_source())
     return root
+
+
+def replace_source_once(
+    root: Path, relative: Path, accepted: str, replacement: str
+) -> None:
+    path = root / relative
+    source = path.read_text(encoding="utf-8")
+    assert source.count(accepted) == 1
+    path.write_text(source.replace(accepted, replacement), encoding="utf-8")
 
 
 def local_readiness_matrix_value() -> MatrixValue:
@@ -584,6 +607,228 @@ def test_checker_rejects_semantically_equivalent_research_fixture_bytes(
 
     errors = checker.check(root)
     assert any("Research fixture SHA-256" in error for error in errors)
+
+
+def test_checker_has_no_python_duplicates_for_authoritative_go_values() -> None:
+    assert not hasattr(checker, "RESEARCH_INPUT_FIXTURE_SHA256")
+    assert not hasattr(checker, "CANONICAL_AGENT_TOOLS")
+    assert not hasattr(checker, "MAX_BOT_AGENT_DESCRIPTORS")
+    assert not hasattr(checker, "MAX_RESEARCH_DATASET_FILE_BYTES")
+
+
+def test_checker_rejects_canonical_agent_tool_drift(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(
+        root,
+        AGENT_CANONICAL_SOURCE_PATH,
+        '"InSilicoResearchAgent"',
+        '"ChangedResearchAgent"',
+    )
+
+    errors = checker.check(root)
+    assert any("agent descriptor catalog" in error for error in errors)
+
+
+def test_checker_rejects_agent_descriptor_ceiling_drift(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(
+        root,
+        AGENT_MAP_SOURCE_PATH,
+        "const maxBotAgentDescriptors = 32",
+        "const maxBotAgentDescriptors = 1",
+    )
+
+    errors = checker.check(root)
+    assert any("agent descriptor catalog" in error for error in errors)
+
+
+def test_checker_rejects_upload_file_ceiling_drift(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(
+        root,
+        UPLOAD_CONTRACT_SOURCE_PATH,
+        "maxResumableUploadFileBytes int64 = 10 << 30",
+        "maxResumableUploadFileBytes int64 = 1",
+    )
+
+    errors = checker.check(root)
+    assert any("datasets.max_file_bytes" in error for error in errors)
+
+
+def test_checker_rejects_accepted_research_fixture_digest_drift(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    digest = hashlib.sha256((root / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()).hexdigest()
+    replace_source_once(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        digest,
+        "0" * 64,
+    )
+
+    errors = checker.check(root)
+    assert any("Research fixture SHA-256" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        RESEARCH_LIMIT_SOURCE_PATH,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        AGENT_MAP_SOURCE_PATH,
+        UPLOAD_CONTRACT_SOURCE_PATH,
+    ],
+)
+def test_checker_ignores_unrelated_go_const_declarations(
+    tmp_path: Path, relative: Path
+) -> None:
+    root = local_readiness_tree(tmp_path)
+    path = root / relative
+    source = path.read_text(encoding="utf-8")
+    path.write_text(
+        source
+        + "\nconst unrelatedActivationValue = 1 + 2\n"
+        + "const (\n\tanotherUnrelatedActivationValue = 3\n)\n",
+        encoding="utf-8",
+    )
+
+    assert checker.check(root) == []
+
+
+def test_checker_ignores_unrelated_const_in_guarded_group(tmp_path: Path) -> None:
+    root = local_readiness_tree(tmp_path)
+    replace_source_once(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "const (\n",
+        "const (\n\tunrelatedActivationValue = 1 + 2\n",
+    )
+
+    assert checker.check(root) == []
+
+
+@pytest.mark.parametrize(
+    ("relative", "accepted", "replacement"),
+    [
+        (
+            AGENT_CANONICAL_SOURCE_PATH,
+            "var CanonicalAgentTool =",
+            "var MissingCanonicalAgentTool =",
+        ),
+        (
+            AGENT_MAP_SOURCE_PATH,
+            "const maxBotAgentDescriptors = 32",
+            "const missingBotAgentDescriptors = 32",
+        ),
+        (
+            UPLOAD_CONTRACT_SOURCE_PATH,
+            "maxResumableUploadFileBytes int64 = 10 << 30",
+            "missingResumableUploadFileBytes int64 = 10 << 30",
+        ),
+    ],
+)
+def test_checker_rejects_missing_authoritative_go_declaration(
+    tmp_path: Path, relative: Path, accepted: str, replacement: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(root, relative, accepted, replacement)
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+def test_checker_rejects_missing_fixture_digest_declaration(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "acceptedResearchInputFixtureSHA256",
+        "missingResearchInputFixtureSHA256",
+    )
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("relative", "duplicate"),
+    [
+        (
+            AGENT_CANONICAL_SOURCE_PATH,
+            '\nvar CanonicalAgentTool = map[string]string{"research": "duplicate"}\n',
+        ),
+        (
+            AGENT_MAP_SOURCE_PATH,
+            "\nconst maxBotAgentDescriptors = 32\n",
+        ),
+        (
+            UPLOAD_CONTRACT_SOURCE_PATH,
+            "\nconst maxResumableUploadFileBytes int64 = 10 << 30\n",
+        ),
+        (
+            RESEARCH_CONTRACT_SOURCE_PATH,
+            '\nconst acceptedResearchInputFixtureSHA256 = "' + "0" * 64 + '"\n',
+        ),
+    ],
+)
+def test_checker_rejects_duplicate_authoritative_go_declaration(
+    tmp_path: Path, relative: Path, duplicate: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    path = root / relative
+    path.write_text(path.read_text(encoding="utf-8") + duplicate, encoding="utf-8")
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("relative", "accepted", "replacement"),
+    [
+        (
+            AGENT_MAP_SOURCE_PATH,
+            "const maxBotAgentDescriptors = 32",
+            "const maxBotAgentDescriptors = 16 * 2",
+        ),
+        (
+            UPLOAD_CONTRACT_SOURCE_PATH,
+            "maxResumableUploadFileBytes int64 = 10 << 30",
+            "maxResumableUploadFileBytes int64 = 5 * 2 << 30",
+        ),
+    ],
+)
+def test_checker_rejects_unsupported_guarded_go_declaration(
+    tmp_path: Path, relative: Path, accepted: str, replacement: str
+) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(root, relative, accepted, replacement)
+
+    errors = checker.check(root)
+    assert any("Research Go contract" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        AGENT_CANONICAL_SOURCE_PATH,
+        AGENT_MAP_SOURCE_PATH,
+        UPLOAD_CONTRACT_SOURCE_PATH,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+    ],
+)
+def test_checker_rejects_out_of_root_authoritative_go_source(
+    tmp_path: Path, relative: Path
+) -> None:
+    root = local_readiness_tree(tmp_path / "root")
+    path = root / relative
+    outside = tmp_path / f"outside-{relative.name}"
+    outside.write_bytes(path.read_bytes())
+    path.unlink()
+    path.symlink_to(outside)
+
+    errors = checker.check(root)
+    assert any("out-of-scope" in error for error in errors)
 
 
 @pytest.mark.parametrize(
