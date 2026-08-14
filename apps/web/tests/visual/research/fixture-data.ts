@@ -3,7 +3,7 @@ export {
   DEEP_GENOME_CASE_REFERENCES as REAL_DEEP_GENOME_REFERENCES,
 } from "@/views/deep-genome-agent/deep-genome-case";
 
-import authorizedFigureUrl from "./fixtures/authorized-figure.svg?url";
+import authorizedFigureUrl from "./fixtures/authorized-figure.svg?url&no-inline";
 import authorizedStructureUrl from "./fixtures/authorized-structure.cif?url";
 import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 

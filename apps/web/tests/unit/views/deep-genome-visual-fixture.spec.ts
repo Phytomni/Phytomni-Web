@@ -24,6 +24,14 @@ const FIXTURE_DATA_SOURCE = readFileSync(
   resolve(WEB_ROOT, "tests/visual/research/fixture-data.ts"),
   "utf8"
 );
+const FIXTURE_ENTRY_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "tests/visual/research/main.ts"),
+  "utf8"
+);
+const MARKDOWN_CSS_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "src/styles/markdown.css"),
+  "utf8"
+);
 
 const EXPECTED_MEDIA = [
   "Os01g0177400_tree.png",
@@ -119,5 +127,50 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(CONTRACT_DEEP_GENOME_RESOURCES).toHaveLength(2);
     expect(VISUAL_FIXTURE_SOURCE).toContain('get("case") === "contract"');
     expect(VISUAL_FIXTURE_SOURCE).toContain(':resources="resources"');
+  });
+
+  it("serves the authorized visual fixture image from a browser-safe URL", () => {
+    const figure = CONTRACT_DEEP_GENOME_RESOURCES.find(
+      ({ kind }) => kind === "image"
+    );
+    expect(figure?.displayUrl).toContain("authorized-figure.svg");
+    expect(figure?.displayUrl).not.toMatch(/^data:/);
+  });
+
+  it("locks computed foreground, CIF containment, and image browser assertions", () => {
+    expect(FIXTURE_ENTRY_SOURCE).toContain(
+      "assertScientificMarkdownVisualContract"
+    );
+    expect(FIXTURE_ENTRY_SOURCE).toContain("getComputedStyle(paragraph).color");
+    expect(FIXTURE_ENTRY_SOURCE).toContain(
+      "getComputedStyle(row).backgroundColor"
+    );
+    expect(FIXTURE_ENTRY_SOURCE).toContain("canvas.offsetParent !== viewer");
+    expect(FIXTURE_ENTRY_SOURCE).toContain(
+      "imageUrl.origin !== window.location.origin"
+    );
+    expect(FIXTURE_ENTRY_SOURCE).toContain(
+      "document.documentElement.scrollWidth"
+    );
+  });
+
+  it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {
+    const xMarkdownBlock = MARKDOWN_CSS_SOURCE.match(
+      /\.phy-markdown \.elx-xmarkdown-container\s*\{([^}]*)\}/
+    )?.[1];
+    const cifBlock = MARKDOWN_CSS_SOURCE.match(
+      /\.phy-markdown \.scientific-cif-viewer\s*\{([^}]*)\}/
+    )?.[1];
+    expect(xMarkdownBlock).toContain("color: inherit;");
+    expect(cifBlock).toContain("position: relative;");
+    expect(cifBlock).toContain(
+      "height: var(--phy-layout-scientific-media-max-height);"
+    );
+    expect(MARKDOWN_CSS_SOURCE).toMatch(
+      /\.elx-xmarkdown-container tbody tr:nth-child\(2n\)\s*\{[^}]*background-color: var\(--phy-color-bg-elevated\);/
+    );
+    expect(MARKDOWN_CSS_SOURCE).toMatch(
+      /\.scientific-cif-viewer > canvas\s*\{[^}]*max-width: 100%;[^}]*max-height: 100%;/
+    );
   });
 });
