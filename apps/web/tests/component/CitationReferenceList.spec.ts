@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
+import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 
 const CITATION_LIST_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/CitationReferenceList.vue"),
@@ -91,7 +92,7 @@ describe("CitationReferenceList", () => {
         { title: "Fourth source" },
         { title: "Fifth source" },
       ],
-      ns: "report_under",
+      ns: "1report_under",
     });
     const rows = wrapper.findAll(".doc-list-item");
     const firstScroll = vi.fn();
@@ -119,8 +120,36 @@ describe("CitationReferenceList", () => {
       rows.map((row) => row.classes().includes("is-citation-target"))
     ).toEqual([false, false, false, true, false]);
     expect(focusReferences([99])).toBe(false);
+    expect(focusReferences([1, 1])).toBe(false);
+    expect(focusReferences([0])).toBe(false);
     expect(
       rows.map((row) => row.classes().includes("is-citation-target"))
     ).toEqual([false, false, false, true, false]);
+  });
+
+  it("uses canonical underscore namespaces and rejects hostile namespace input", () => {
+    const root = document.createElement("section");
+    const row = document.createElement("div");
+    row.id = "artifact_under-ref-1";
+    root.appendChild(row);
+    document.body.appendChild(root);
+
+    expect(
+      focusReferenceRows({
+        root,
+        namespace: "artifact_under",
+        indices: [1],
+      })
+    ).toBe(true);
+    expect(row.classList.contains("is-citation-target")).toBe(true);
+    expect(() =>
+      focusReferenceRows({
+        root,
+        namespace: 'artifact_under" onmouseover="alert(1)',
+        indices: [1],
+      })
+    ).toThrowError(TypeError);
+
+    root.remove();
   });
 });

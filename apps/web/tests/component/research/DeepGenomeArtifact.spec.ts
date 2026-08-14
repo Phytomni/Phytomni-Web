@@ -4,10 +4,15 @@ import { resolve } from "node:path";
 import { defineComponent, nextTick } from "vue";
 import { mountWithApp } from "../../helpers/test-app-context";
 import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
+import DeepGenomeResultViewerActual from "@/components/DeepGenomeResultViewer.vue";
 
 const download = vi.fn<(format: "pdf" | "markdown") => Promise<void>>(
   async () => undefined
 );
+
+const passthrough = defineComponent({
+  template: "<div><slot /></div>",
+});
 
 const DeepGenomeResultViewerStub = defineComponent({
   name: "DeepGenomeResultViewer",
@@ -54,6 +59,46 @@ function mountArtifact() {
     global: {
       stubs: {
         DeepGenomeResultViewer: DeepGenomeResultViewerStub,
+      },
+      mocks: { $t: (key: string) => key },
+    },
+  });
+}
+
+function mountArtifactWithActualViewer() {
+  return mountWithApp(DeepGenomeArtifact, {
+    props: {
+      markdown: "## Evidence\\nSupported claim [1-2].",
+      references: referenceList,
+      ns: "artifact_under",
+      title: "Deep genome report",
+      metadata: "Deep Genome Agent",
+      status: "Finished",
+      tabLabels: {
+        content: "Report",
+        evidence: "Evidence",
+        activity: "Activity",
+        downloads: "Downloads",
+      },
+      backLabel: "Back",
+      closeLabel: "Close",
+      actionLabel: "Actions",
+    },
+    global: {
+      stubs: {
+        DeepGenomeResultViewer: DeepGenomeResultViewerActual,
+        ElContainer: passthrough,
+        ElAside: passthrough,
+        ElMain: passthrough,
+        ElCard: passthrough,
+        ElMenu: passthrough,
+        ElMenuItem: passthrough,
+        ElSubMenu: passthrough,
+        ElDialog: passthrough,
+        ElButton: passthrough,
+        ElDropdown: passthrough,
+        ElDropdownMenu: passthrough,
+        ElDropdownItem: passthrough,
       },
       mocks: { $t: (key: string) => key },
     },
@@ -141,5 +186,34 @@ describe("DeepGenomeArtifact", () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
     expect(row.classes()).toContain("research-evidence-panel__item--active");
+  });
+
+  it("routes a grouped citation from the mounted viewer to evidence rows", async () => {
+    const wrapper = mountArtifactWithActualViewer();
+    await nextTick();
+    await nextTick();
+
+    const rows = wrapper.findAll(".research-evidence-panel__item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    await wrapper.get("a.citation-ref").trigger("click");
+    await nextTick();
+    await nextTick();
+
+    expect(
+      wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")
+    ).toBe("true");
+    expect(
+      rows.map((row) =>
+        row.classes().includes("research-evidence-panel__item--active")
+      )
+    ).toEqual([true, true]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
   });
 });

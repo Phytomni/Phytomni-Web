@@ -15,6 +15,7 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import {
   MESSAGE_SHORT_GENERIC,
   MESSAGE_LONG_GENERIC,
@@ -151,7 +152,7 @@ const mountContent = (
         StreamMessage: {
           name: "StreamMessage",
           props: ["blocks", "ns", "references"],
-          emits: ["a2ui-action", "a2ui-retry"],
+          emits: ["a2ui-action", "a2ui-retry", "citation-activate"],
           template:
             "<div data-testid=\"stream-message\" :data-ns=\"ns === undefined || ns === '' ? '__absent__' : ns\" :data-ref-count=\"Array.isArray(references) && references.length ? String(references.length) : '0'\" />",
         },
@@ -958,6 +959,19 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
     expect(wrapper.emitted("a2ui-retry")).toEqual([["surface-1"]]);
   });
 
+  it("relays streamed citation activation to the owning chat surface", async () => {
+    const wrapper = mountContent(MESSAGE_STREAM_REFS_CAPTURED, { index: 2 });
+    const stream = wrapper.findComponent({ name: "StreamMessage" });
+    const activation: ScientificCitationActivation = {
+      namespace: "m2",
+      indices: [1],
+    };
+
+    await stream.vm.$emit("citation-activate", activation);
+
+    expect(wrapper.emitted("citation-activate")).toEqual([[activation]]);
+  });
+
   it("reference-free streaming fixtures invent no namespace", () => {
     for (const message of [MESSAGE_STREAMING, MESSAGE_INTERLEAVED_STREAMING]) {
       const wrapper = mountContent(message, { index: 5 });
@@ -989,7 +1003,7 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
     const plain = mountContent(MESSAGE_SHORT_GENERIC, { index: 9 });
     expect(
       plain.find('[data-testid="scientific-markdown"]').attributes("data-ns")
-    ).toBe("__absent__");
+    ).toBe("m9");
   });
 
   it("emits finish from CitedAnswer and ScientificMarkdownTypewriter paths", async () => {

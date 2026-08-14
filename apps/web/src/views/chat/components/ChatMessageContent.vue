@@ -51,6 +51,7 @@
       @update:activity-expanded="onActivityExpanded"
       @a2ui-action="(event) => emit('a2ui-action', event)"
       @a2ui-retry="(surfaceId) => emit('a2ui-retry', surfaceId)"
+      @citation-activate="(activation) => emit('citation-activate', activation)"
     />
     <!-- GeneNetworkAgent image display -->
     <div
@@ -293,6 +294,7 @@ import { computed } from "vue";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import {
@@ -324,6 +326,7 @@ const emit = defineEmits<{
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
