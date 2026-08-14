@@ -792,6 +792,67 @@ describe("useSelectChat", () => {
     });
   });
 
+  it("seeds both hydrated and live stream identities after an A2UI merge", async () => {
+    const runtime = {
+      dialogueId: "d1",
+      messageId: "hydrated-report",
+      runId: "live-report-run",
+      transport: vi.fn(),
+    };
+    const state = getChatState("d1");
+    state.renderedChat = {
+      dialogue_id: "d1",
+      messages: [
+        {
+          role: "assistant",
+          id: "hydrated-report",
+          tool_name: "InSilicoResearchAgent",
+          content: "# Live report",
+          streaming: false,
+          streamPresentationKey: "turn-live-report",
+          a2uiRuntime: runtime,
+          blocks: [
+            {
+              type: "agent-surface",
+              authority: "agent",
+              interactive: true,
+              a2ui: {
+                surface: {
+                  catalog_version: "v1.0",
+                  surface_id: "live-report-surface",
+                  widget: "confirm",
+                  props: { title: "Continue?" },
+                },
+                state: { status: "ready", round: 1 },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    state.historyHydration = "ready";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "hydrated-report",
+          query: "Research query",
+          answer: "# Hydrated report",
+          status: "SUCCEEDED",
+          tool_name: "InSilicoResearchAgent",
+        }),
+      ])
+    );
+
+    await expect(makeComposable().reloadChat("d1")).resolves.toBe("applied");
+
+    expect(stateFor("d1").handledArtifactIdentities).toEqual(
+      expect.arrayContaining([
+        "message:hydrated-report",
+        "stream:turn-live-report",
+      ])
+    );
+  });
+
   it("non-200 response: clears stale history and records a recoverable request error", async () => {
     // Seed stale rendered/history state to verify this dialogue is reset before fetch.
     const st = getChatState("d1");

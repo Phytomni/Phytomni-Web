@@ -779,20 +779,35 @@ export function useSelectChat(opts: {
       chatState.historyQuestion = historyMessages;
       const historyMessagesWithLockedA2ui = lockUnverifiedHistoryA2ui(messages);
       const liveMessages = chatState.renderedChat?.messages;
+      const mergedMessages = mergeLiveA2uiMessages(
+        historyMessagesWithLockedA2ui,
+        liveMessages,
+        capturedDialogueId
+      );
       const handledIdentities = new Set(chatState.handledArtifactIdentities);
-      for (const message of historyMessagesWithLockedA2ui) {
+      for (const message of mergedMessages) {
         const presentation = artifactPresentationForMessage(message);
-        if (presentation) handledIdentities.add(presentation.identity);
+        if (!presentation) continue;
+        handledIdentities.add(presentation.identity);
+
+        // A live merge may add a stream key to an already hydrated row. Seed
+        // the durable fallback identity too, so the same report cannot reclaim
+        // focus when the runtime key is later replaced by the row/run identity.
+        if (message.streamPresentationKey) {
+          const withoutStreamKey = artifactPresentationForMessage({
+            ...message,
+            streamPresentationKey: undefined,
+          });
+          if (withoutStreamKey) {
+            handledIdentities.add(withoutStreamKey.identity);
+          }
+        }
       }
       chatState.handledArtifactIdentities = [...handledIdentities];
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,
-        messages: mergeLiveA2uiMessages(
-          historyMessagesWithLockedA2ui,
-          liveMessages,
-          capturedDialogueId
-        ),
+        messages: mergedMessages,
       };
       chatState.historyHydration =
         messages.length > 0 ? "ready" : "history-empty";
