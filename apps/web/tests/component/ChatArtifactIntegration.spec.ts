@@ -281,9 +281,9 @@ function mountContent(
     global: {
       stubs: {
         StreamMessage: true,
-        MarkdownViewer: {
-          props: ["content"],
-          template: '<div data-test="markdown-body">{{ content }}</div>',
+        ScientificMarkdown: {
+          props: ["source"],
+          template: '<div data-test="markdown-body">{{ source }}</div>',
         },
         CitedAnswer: {
           props: ["content"],
@@ -354,11 +354,11 @@ async function mountProductionChat(
           template:
             '<button type="button" data-test="copy-source" @click="$emit(\'copy\')">copy</button>',
         },
-        MarkdownViewer: {
-          name: "MarkdownViewer",
-          props: ["content", "surface", "ns"],
+        ScientificMarkdown: {
+          name: "ScientificMarkdown",
+          props: ["source", "surface", "citationNamespace"],
           template:
-            '<article data-test="markdown-body" :data-surface="surface" :class="[\'phy-markdown\', `phy-markdown--${surface}`]">{{ content }}</article>',
+            '<article data-test="markdown-body" :data-surface="surface" :class="[\'phy-markdown\', `phy-markdown--${surface}`]">{{ source }}</article>',
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",

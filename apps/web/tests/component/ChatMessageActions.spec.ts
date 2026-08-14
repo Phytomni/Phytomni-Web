@@ -287,7 +287,7 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).toMatch(/#actions|name=["']actions["']/);
     // Reply Markdown surface lives in ChatMessageContent (not index).
     expect(CONTENT_SOURCE).toMatch(
-      /<MarkdownViewer[\s\S]*surface=["']chat["']/
+      /<ScientificMarkdown[\s\S]*surface=["']chat["']/
     );
     // Analyst execution log folds into #activity via ChatActivity + ChatAnalystLog.
     expect(INDEX_SOURCE).toMatch(/#activity|name=["']activity["']/);

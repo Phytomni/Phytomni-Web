@@ -9,21 +9,16 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: routerBack }),
 }));
 
-vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div />" },
-}));
-
-const MarkdownViewerStub = {
-  props: ["content", "instantMessage", "surface"],
+const ScientificMarkdownStub = {
+  props: ["source", "surface"],
   template: `
     <div
       class="phy-markdown phy-markdown--chat"
       data-test="markdown-result"
       :data-surface="surface"
-      :data-instant="String(instantMessage)"
-      :data-content="content"
+      :data-content="source"
     >
-      <table><tbody><tr><td>{{ content }}</td></tr></tbody></table>
+      <table><tbody><tr><td>{{ source }}</td></tr></tbody></table>
     </div>
   `,
 };
@@ -47,7 +42,7 @@ function mountDemo() {
     global: {
       stubs: {
         AgentDemoShell: AgentDemoShellStub,
-        MarkdownViewer: MarkdownViewerStub,
+        ScientificMarkdown: ScientificMarkdownStub,
       },
     },
   });
@@ -113,9 +108,6 @@ describe("Data Agent static demonstration", () => {
         expect(
           region.find(".phy-markdown--chat").attributes("data-surface")
         ).toBe("chat");
-        expect(
-          region.find(".phy-markdown--chat").attributes("data-instant")
-        ).toBe("true");
       });
   });
 

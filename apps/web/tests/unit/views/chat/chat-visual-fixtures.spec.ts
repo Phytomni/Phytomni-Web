@@ -1601,11 +1601,11 @@ const mountFixtureApp = (
       template:
         '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
     },
-    MarkdownViewer: {
-      name: "MarkdownViewer",
-      props: ["ns", "content"],
+    ScientificMarkdown: {
+      name: "ScientificMarkdown",
+      props: ["citationNamespace", "source"],
       template:
-        '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : String(citationNamespace)">{{ source }}</div>',
     },
     teleport: true,
   } as Record<string, unknown>;
@@ -2057,8 +2057,8 @@ describe("Chat visual fixture rendering (no network)", () => {
 
   it("renders Phase 3B message fixtures via ChatMessageRow + ChatMessageContent without network", async () => {
     const expectations: Record<string, { testId: string; ns?: string }> = {
-      "short-generic": { testId: "markdown-viewer", ns: "__absent__" },
-      "long-generic": { testId: "markdown-viewer", ns: "__absent__" },
+      "short-generic": { testId: "scientific-markdown", ns: "m0" },
+      "long-generic": { testId: "scientific-markdown", ns: "m0" },
       cited: { testId: "cited-answer", ns: "m1" },
       "deep-genome": { testId: "deep-genome", ns: "m1" },
       streaming: { testId: "stream-message", ns: "__absent__" },

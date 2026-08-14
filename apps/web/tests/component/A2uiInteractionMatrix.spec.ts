@@ -92,10 +92,10 @@ function mountReviewScenario(scenario: A2uiScenario) {
             </article>
           `,
         },
-        MarkdownViewer: {
-          name: "MarkdownViewer",
-          props: ["content"],
-          template: '<div data-testid="review-markdown">{{ content }}</div>',
+        ScientificMarkdown: {
+          name: "ScientificMarkdown",
+          props: ["source"],
+          template: '<div data-testid="review-markdown">{{ source }}</div>',
         },
       },
     },

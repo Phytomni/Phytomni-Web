@@ -4,10 +4,16 @@ import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "@/views/chat/types";
 import { mountWithApp } from "../helpers/test-app-context";
 
-vi.mock("@/components/MarkdownViewer.vue", () => ({
+vi.mock("@/components/ScientificMarkdown.vue", () => ({
   default: {
-    props: ["content"],
-    template: '<div data-test="markdown-viewer">{{ content }}</div>',
+    props: ["source"],
+    template: '<div data-test="scientific-markdown">{{ source }}</div>',
+  },
+}));
+vi.mock("@/components/ScientificMarkdownTypewriter.vue", () => ({
+  default: {
+    props: ["source"],
+    template: '<div data-test="scientific-markdown">{{ source }}</div>',
   },
 }));
 vi.mock("@/components/CitedAnswer.vue", () => ({
@@ -79,7 +85,7 @@ describe("ChatMessageContent lifecycle status", () => {
     );
 
     expect(wrapper.find(".agent-lifecycle").text()).toBe("Succeeded");
-    expect(wrapper.get('[data-test="markdown-viewer"]').text()).toContain(
+    expect(wrapper.get('[data-test="scientific-markdown"]').text()).toContain(
       "Synthetic result."
     );
   });

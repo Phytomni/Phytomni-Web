@@ -69,12 +69,18 @@
       >
         {{ $t(lifecycleLabel) }}
       </div>
-      <MarkdownViewer
-        v-if="hasSpecializedReport"
-        :instantMessage="(message?.instantMessage && isLastMessage) || false"
-        :content="chatContentToText(message.content)"
+      <ScientificMarkdownTypewriter
+        v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
         surface="chat"
         @finish="emit('finish')"
+      />
+      <ScientificMarkdown
+        v-else-if="hasSpecializedReport"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
       />
       <div
         v-if="
@@ -123,12 +129,18 @@
       >
         {{ $t(lifecycleLabel) }}
       </div>
-      <MarkdownViewer
-        v-if="hasSpecializedReport"
-        :instantMessage="(message?.instantMessage && isLastMessage) || false"
-        :content="chatContentToText(message.content)"
+      <ScientificMarkdownTypewriter
+        v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
         surface="chat"
         @finish="emit('finish')"
+      />
+      <ScientificMarkdown
+        v-else-if="hasSpecializedReport"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
       />
       <div
         v-if="
@@ -201,12 +213,18 @@
       :instant-message="(message?.instantMessage && isLastMessage) || false"
       @finish="emit('finish')"
     />
-    <MarkdownViewer
-      v-else
-      :instantMessage="(message?.instantMessage && isLastMessage) || false"
-      :content="chatContentToText(message.content)"
+    <ScientificMarkdownTypewriter
+      v-else-if="message?.instantMessage && isLastMessage"
+      :source="chatContentToText(message.content)"
+      :citation-namespace="'m' + index"
       surface="chat"
       @finish="emit('finish')"
+    />
+    <ScientificMarkdown
+      v-else
+      :source="chatContentToText(message.content)"
+      :citation-namespace="'m' + index"
+      surface="chat"
     />
   </div>
   <!-- Table data display -->
@@ -246,11 +264,18 @@
     </div>
     <!-- Final answer -->
     <div class="final-answer">
-      <MarkdownViewer
-        :instantMessage="(message?.instantMessage && isLastMessage) || false"
-        :content="chatContentToText(message.content)"
+      <ScientificMarkdownTypewriter
+        v-if="message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
         surface="chat"
         @finish="emit('finish')"
+      />
+      <ScientificMarkdown
+        v-else
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
       />
     </div>
   </div>
@@ -258,7 +283,8 @@
 
 <script setup lang="ts">
 import { Loading } from "@element-plus/icons-vue";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import ScientificMarkdownTypewriter from "@/components/ScientificMarkdownTypewriter.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";

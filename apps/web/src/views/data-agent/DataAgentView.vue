@@ -30,9 +30,9 @@
               role="region"
               :aria-labelledby="`data-agent-caption-${index}`"
             >
-              <MarkdownViewer
-                :content="round.response"
-                :instant-message="true"
+              <ScientificMarkdown
+                :source="round.response"
+                :citation-namespace="`data-agent-${index}`"
                 surface="chat"
               />
             </div>
@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { AgentDemoShell } from "@/components/demo";
 
 const router = useRouter();

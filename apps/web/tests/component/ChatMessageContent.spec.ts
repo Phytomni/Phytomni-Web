@@ -3,8 +3,9 @@ import { type VueWrapper } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// Real MarkdownViewer / DeepGenome import graphs pull vue-element-plus-x CSS.
+// Real scientific Markdown / DeepGenome import graphs pull vue-element-plus-x CSS.
 vi.mock("vue-element-plus-x", () => ({
+  XMarkdown: { name: "XMarkdown", template: "<div><slot /></div>" },
   Typewriter: { name: "Typewriter", template: "<div></div>" },
   FilesCard: { name: "FilesCard", template: "<div></div>" },
   Prompts: { name: "Prompts", template: "<div></div>" },
@@ -117,7 +118,7 @@ function detectBranch(wrapper: VueWrapper): Branch {
   }
   if (wrapper.find(".table-response").exists()) return "table";
   if (wrapper.find(".ai-response").exists()) return "legacy";
-  if (wrapper.find('[data-testid="markdown-viewer"]').exists())
+  if (wrapper.find('[data-testid="scientific-markdown"]').exists())
     return "markdown";
   throw new Error(`Unable to detect branch from: ${wrapper.html()}`);
 }
@@ -173,11 +174,18 @@ const mountContent = (
           template:
             '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
         },
-        MarkdownViewer: {
-          name: "MarkdownViewer",
-          props: ["content", "instantMessage", "ns"],
+        ScientificMarkdown: {
+          name: "ScientificMarkdown",
+          props: ["source", "citationNamespace"],
           template:
-            '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+            '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : citationNamespace">{{ source }}</div>',
+        },
+        ScientificMarkdownTypewriter: {
+          name: "ScientificMarkdownTypewriter",
+          props: ["source", "citationNamespace"],
+          emits: ["finish"],
+          template:
+            '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : citationNamespace">{{ source }}</div>',
         },
         ElTable: {
           name: "ElTable",
@@ -339,7 +347,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       );
       expect(report.text()).toContain("Running");
       expect(
-        report.findComponent({ name: "MarkdownViewer" }).props("content")
+        report.findComponent({ name: "ScientificMarkdown" }).props("source")
       ).toBe("partial report");
 
       const pendingImage = mountContent(
@@ -414,7 +422,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
 
     expect(wrapper.get('[role="status"]').text()).toBe("chat.contextDegraded");
     expect(
-      wrapper.findComponent({ name: "MarkdownViewer" }).props("content")
+      wrapper.findComponent({ name: "ScientificMarkdown" }).props("source")
     ).toBe("Answer remains visible");
   });
 
@@ -643,7 +651,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     });
     expect(detectBranch(wrapper)).toBe("artifact-preview");
     expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
       false
     );
   });
@@ -678,7 +686,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
       const branch = detectBranch(wrapper);
       // Bubble-path generic Markdown must not win over specialized families.
       expect(branch).not.toBe("markdown");
-      // Bubble specialized renderers (not legacy, which embeds MarkdownViewer).
+      // Bubble specialized renderers do not mount the generic renderer.
       if (
         branch === "cited" ||
         branch === "deep-genome" ||
@@ -688,9 +696,9 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
         branch === "digital-design" ||
         branch === "table"
       ) {
-        expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
-          false
-        );
+        expect(
+          wrapper.find('[data-testid="scientific-markdown"]').exists()
+        ).toBe(false);
       }
     }
   });
@@ -735,7 +743,7 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
     expect(wrapper.text()).toContain("Preparing");
     expect(wrapper.text()).not.toContain("Server task created");
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
       false
     );
   });
@@ -807,7 +815,7 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
 
       expect(wrapper.text()).toContain(label);
       expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
-      expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+      expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
         false
       );
     }
@@ -881,7 +889,7 @@ describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
       );
       expect(wrapper.find(".table-response").exists()).toBe(false);
       expect(wrapper.find(".ai-response").exists()).toBe(false);
-      expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+      expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
         false
       );
       expect(wrapper.text()).not.toContain("Server task created");
@@ -980,17 +988,19 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
 
     const plain = mountContent(MESSAGE_SHORT_GENERIC, { index: 9 });
     expect(
-      plain.find('[data-testid="markdown-viewer"]').attributes("data-ns")
+      plain.find('[data-testid="scientific-markdown"]').attributes("data-ns")
     ).toBe("__absent__");
   });
 
-  it("emits finish from CitedAnswer and MarkdownViewer paths", async () => {
+  it("emits finish from CitedAnswer and ScientificMarkdownTypewriter paths", async () => {
     const cited = mountContent(MESSAGE_CITED);
     await cited.findComponent({ name: "CitedAnswer" }).vm.$emit("finish");
     expect(cited.emitted("finish")).toBeTruthy();
 
-    const md = mountContent(MESSAGE_SHORT_GENERIC);
-    await md.findComponent({ name: "MarkdownViewer" }).vm.$emit("finish");
+    const md = mountContent({ ...MESSAGE_SHORT_GENERIC, instantMessage: true });
+    await md
+      .findComponent({ name: "ScientificMarkdownTypewriter" })
+      .vm.$emit("finish");
     expect(md.emitted("finish")).toBeTruthy();
   });
 });
@@ -1084,7 +1094,7 @@ describe("ChatMessageContent integration in chat index", () => {
     expect(CHAT_SOURCE).toMatch(
       /import ChatMessageContent from ["']\.\/components\/ChatMessageContent\.vue["']/
     );
-    // Content renderers live in ChatMessageContent; index keeps log MarkdownViewer only.
+    // Content renderers live in ChatMessageContent; index keeps its log surface only.
     expect(CHAT_SOURCE).not.toMatch(
       /<StreamMessage[\s\S]*:blocks="message\.blocks/
     );

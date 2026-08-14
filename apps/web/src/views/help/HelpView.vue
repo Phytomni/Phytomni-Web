@@ -51,7 +51,11 @@
           class="help-section"
         >
           <h1 tabindex="-1">{{ section.heading }}</h1>
-          <MarkdownViewer :content="section.body" surface="document" />
+          <ScientificMarkdown
+            :source="section.body"
+            :citation-namespace="`help-${section.id}`"
+            surface="document"
+          />
         </section>
       </article>
 
@@ -64,7 +68,7 @@
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { PhyDocLayout, PhyPageHeader } from "@/components/shell";
 import Footer from "@/components/AppFooter.vue";
 import LangSwitch from "@/components/LangSwitch.vue";

@@ -16,10 +16,10 @@
     >
       <p class="ui-remediation-fixture-label">Visual fixture</p>
       <ChangePasswordView v-if="fixture.state === 'change-password'" />
-      <MarkdownViewer
+      <ScientificMarkdown
         v-else-if="fixture.state === 'markdown'"
-        :content="markdownContent"
-        :instant-message="false"
+        :source="markdownContent"
+        citation-namespace="ui-remediation-markdown"
         surface="artifact"
       />
       <ReviewAgentView v-else-if="fixture.state === 'review'" />
@@ -42,7 +42,7 @@ import { computed, onMounted, ref } from "vue";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { useAppStore } from "@/stores";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import {
   AgentCapabilityPopover,
   CANONICAL_AGENT_PRESENTATIONS,

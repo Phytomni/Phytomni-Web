@@ -26,10 +26,10 @@
       <span>{{ progressSummary }}</span>
     </div>
 
-    <MarkdownViewer
+    <ScientificMarkdown
       v-if="reportText"
-      :content="reportText"
-      :ns="ns"
+      :source="reportText"
+      :citation-namespace="ns"
       surface="artifact"
       data-test="bot-report-content"
     />
@@ -54,7 +54,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
@@ -92,7 +92,7 @@ const props = withDefaults(
     state: BotLifecycleState;
     progress?: BotProgress | null;
     updatedAt?: string | number | Date | null;
-    ns?: string;
+    ns: string;
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
     failureLabel?: string;
@@ -101,7 +101,6 @@ const props = withDefaults(
   {
     progress: null,
     updatedAt: null,
-    ns: "",
     labels: () => ({}),
     hideActiveReport: false,
   }

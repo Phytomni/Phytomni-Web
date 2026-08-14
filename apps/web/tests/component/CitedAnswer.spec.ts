@@ -1,16 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
-
-// The real vue-element-plus-x barrel eagerly imports aggregated CSS that the test
-// transform can't load. CitedAnswer imports the real MarkdownViewer module (even
-// though it's stubbed below via global.stubs, Vue still resolves and evaluates the
-// component's <script setup> import graph), so neutralize the module here too —
-// mirrors tests/component/MarkdownViewer.spec.ts.
-vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div></div>" },
-}));
 
 import CitedAnswer from "@/components/CitedAnswer.vue";
 
@@ -19,18 +10,23 @@ const CITED_ANSWER_SOURCE = readFileSync(
   "utf8"
 );
 
-// MarkdownViewer is stubbed so these tests isolate CitedAnswer's reference-list wiring
-// (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
+// The scientific renderers are stubbed so these tests isolate CitedAnswer's
+// reference-list wiring (their own specs lock the rendering contract).
 // CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
   mountWithApp(CitedAnswer, {
     props,
     global: {
       stubs: {
-        MarkdownViewer: {
+        ScientificMarkdown: {
           template:
-            '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}|{{ surface }}</div>',
-          props: ["content", "instantMessage", "ns", "surface"],
+            '<div class="sm-stub">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</div>',
+          props: ["source", "citationNamespace", "referenceCount", "surface"],
+        },
+        ScientificMarkdownTypewriter: {
+          template:
+            '<div class="smt-stub">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</div>',
+          props: ["source", "citationNamespace", "referenceCount", "surface"],
         },
       },
       mocks: {
@@ -77,22 +73,22 @@ describe("CitedAnswer", () => {
       referencePresentation: "external",
     });
 
-    expect(wrapper.find(".mv-stub").text()).toContain(
+    expect(wrapper.find(".sm-stub").text()).toContain(
       "Evidence-backed body [1]"
     );
-    expect(wrapper.find(".mv-stub").text()).toContain("artifact-a");
-    expect(wrapper.find(".mv-stub").text()).toContain("artifact");
+    expect(wrapper.find(".sm-stub").text()).toContain("artifact-a");
+    expect(wrapper.find(".sm-stub").text()).toContain("artifact");
     expect(wrapper.find(".doc-list").exists()).toBe(false);
   });
 
-  it("passes content and instantMessage through to MarkdownViewer", () => {
+  it("switches to the typewriter with the same citation contract", () => {
     const wrapper = mountCited({
       content: "hello",
       references: [],
       instantMessage: true,
     });
-    expect(wrapper.find(".mv-stub").text()).toContain("hello");
-    expect(wrapper.find(".mv-stub").text()).toContain("true");
+    expect(wrapper.find(".smt-stub").text()).toContain("hello");
+    expect(wrapper.find(".smt-stub").text()).toContain("0");
   });
 
   it("namespaces reference-row ids with the ns prop", () => {
@@ -121,23 +117,22 @@ describe("CitedAnswer", () => {
     expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
   });
 
-  it("passes ns through to MarkdownViewer", () => {
+  it("passes ns through to ScientificMarkdown", () => {
     const wrapper = mountCited({ content: "hi", references: [], ns: "m3" });
-    expect(wrapper.find(".mv-stub").text()).toContain("m3");
+    expect(wrapper.find(".sm-stub").text()).toContain("m3");
   });
 
-  it("forwards each explicit surface to MarkdownViewer", () => {
+  it("forwards each explicit surface to ScientificMarkdown", () => {
     for (const surface of ["chat", "artifact", "document"]) {
       const withSurface = mountCited({
         content: "hi",
         references: [],
         surface,
       });
-      expect(withSurface.find(".mv-stub").text()).toContain(surface);
+      expect(withSurface.find(".sm-stub").text()).toContain(surface);
     }
 
-    const legacyDefault = mountCited({ content: "hi", references: [] });
-    // Absent surface is not forwarded as chat — stub interpolates empty/undefined.
-    expect(legacyDefault.find(".mv-stub").text()).not.toContain("chat");
+    const readingDefault = mountCited({ content: "hi", references: [] });
+    expect(readingDefault.find(".sm-stub").text()).toContain("reading");
   });
 });

@@ -12,10 +12,10 @@ import {
   mountWithApp,
 } from "../../../helpers/test-app-context";
 
-vi.mock("@/components/MarkdownViewer.vue", () => ({
+vi.mock("@/components/ScientificMarkdown.vue", () => ({
   default: {
-    props: ["content"],
-    template: '<article data-test="report-markdown">{{ content }}</article>',
+    props: ["source"],
+    template: '<article data-test="report-markdown">{{ source }}</article>',
   },
 }));
 
@@ -131,10 +131,10 @@ function mountReport(
     },
     global: {
       stubs: {
-        MarkdownViewer: {
-          props: ["content"],
+        ScientificMarkdown: {
+          props: ["source"],
           template:
-            '<article data-test="report-markdown">{{ content }}</article>',
+            '<article data-test="report-markdown">{{ source }}</article>',
         },
       },
     },

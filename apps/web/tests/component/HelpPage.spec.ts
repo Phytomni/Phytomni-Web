@@ -23,7 +23,7 @@ vi.mock("vue-router", () => ({
 }));
 vi.mock("@/utils/auth", () => ({ getToken: mocks.getToken }));
 vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div />" },
+  XMarkdown: { name: "XMarkdown", template: "<div><slot /></div>" },
 }));
 
 import HelpPage from "@/views/help/HelpView.vue";
@@ -34,13 +34,13 @@ const SOURCE = readFileSync(
 );
 
 const MarkdownStub = defineComponent({
-  name: "MarkdownViewer",
+  name: "ScientificMarkdown",
   props: {
-    content: { type: String, required: true },
-    surface: { type: String, default: "legacy" },
+    source: { type: String, required: true },
+    surface: { type: String, default: "reading" },
   },
   template:
-    '<div class="markdown-test" :data-surface="surface">{{ content }}</div>',
+    '<div class="markdown-test" :data-surface="surface">{{ source }}</div>',
 });
 
 enableAutoUnmount(afterEach);
@@ -53,7 +53,7 @@ const mountHelp = () =>
     global: {
       stubs: {
         LangSwitch: { template: '<div data-test="lang-switch" />' },
-        MarkdownViewer: MarkdownStub,
+        ScientificMarkdown: MarkdownStub,
         PhyPageHeader: {
           template:
             '<header class="page-header-test"><slot name="actions" /></header>',
@@ -84,7 +84,7 @@ describe("Help product document", () => {
 
     const bodies = wrapper
       .findAllComponents(MarkdownStub)
-      .map((markdown) => markdown.props("content"));
+      .map((markdown) => markdown.props("source"));
     expect(bodies).toEqual([
       enUS.help.doc.whatIs.body,
       enUS.help.doc.gettingStarted.body,
@@ -130,7 +130,7 @@ describe("Help product document", () => {
     expect(wrapper.find("#what-is-phytomni h1").text()).toBe(
       zhCN.help.doc.whatIs.heading
     );
-    expect(wrapper.findAllComponents(MarkdownStub)[0].props("content")).toBe(
+    expect(wrapper.findAllComponents(MarkdownStub)[0].props("source")).toBe(
       zhCN.help.doc.whatIs.body
     );
   });

@@ -110,7 +110,7 @@ describe("ChatView lifecycle cleanup", () => {
             template: "<div />",
           },
           ChatMessageActions: true,
-          MarkdownViewer: true,
+          ScientificMarkdown: true,
           DeepGenomeResultViewer: true,
           ChatSidebarNav: true,
           ChatHistoryList: true,

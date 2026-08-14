@@ -288,9 +288,9 @@ const CHAT_MESSAGE_CONTENT_STUBS = {
     template:
       '<div data-testid="research-reference-viewer">No references available.</div>',
   },
-  MarkdownViewer: {
-    props: ["content"],
-    template: '<div data-testid="research-result-viewer">{{ content }}</div>',
+  ScientificMarkdown: {
+    props: ["source"],
+    template: '<div data-testid="research-result-viewer">{{ source }}</div>',
   },
   ResearchArtifactPreview: {
     template:
@@ -1144,7 +1144,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     const wrapper = mount(Harness, {
       global: {
         stubs: {
-          MarkdownViewer: true,
+          ScientificMarkdown: true,
           CitedAnswer: true,
           DeepGenomeResultViewer: true,
           ResearchArtifactPreview: true,
@@ -1975,7 +1975,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
           },
           DeepGenomeResultViewer: true,
           StreamMessage: true,
-          MarkdownViewer: true,
+          ScientificMarkdown: true,
           ElIcon: true,
           ElTable: true,
           ElTableColumn: true,
@@ -2286,10 +2286,10 @@ describe("ChatInteractionV2 — Phase 3C harness registry", () => {
             },
             DeepGenomeResultViewer: true,
             CitedAnswer: true,
-            MarkdownViewer: {
-              name: "MarkdownViewer",
-              props: ["content"],
-              template: '<div data-testid="markdown-viewer" />',
+            ScientificMarkdown: {
+              name: "ScientificMarkdown",
+              props: ["source"],
+              template: '<div data-testid="scientific-markdown" />',
             },
             teleport: true,
           },

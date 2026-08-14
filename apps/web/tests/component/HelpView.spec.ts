@@ -14,7 +14,7 @@ vi.mock("@/utils/auth", () => ({
 }));
 
 vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div />" },
+  XMarkdown: { name: "XMarkdown", template: "<div><slot /></div>" },
 }));
 
 import HelpView from "@/views/help/HelpView.vue";
@@ -28,7 +28,7 @@ describe("HelpView", () => {
 
   it("renders real section anchors instead of leaking HTML wrappers into markdown", () => {
     const wrapper = context.mount(HelpView, {
-      global: { stubs: { Typewriter: true } },
+      global: { stubs: { ScientificMarkdown: true } },
     });
 
     const sections = wrapper.findAll(".help-article > section");
