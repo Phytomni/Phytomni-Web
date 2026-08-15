@@ -32,6 +32,18 @@ function reducedMarkdownBlocks(...deltas: string[]): ChatMessage["blocks"] {
   return state.blocks;
 }
 
+function completedMarkdownBlocks(...deltas: string[]): ChatMessage["blocks"] {
+  let state = initReducerState();
+  for (const delta of deltas) {
+    state = reduceAGUIEvent(state, {
+      type: "TextMessageContent",
+      data: { delta },
+    });
+  }
+  state = reduceAGUIEvent(state, { type: "TextMessageEnd", data: {} });
+  return state.blocks;
+}
+
 const artifactByTool: Record<
   (typeof CANONICAL_AGENT_TOOLS)[number],
   ArtifactKind
@@ -194,7 +206,7 @@ describe("artifact policy", () => {
   });
 
   it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
-    "keeps a substantive streaming %s report View-eligible through completion",
+    "waits for a completed %s stream before making its report View-eligible",
     (tool_name) => {
       const content = `# ${tool_name} report\n\nAccumulated scientific evidence.`;
       const streaming = reportMessage(tool_name, {
@@ -216,10 +228,45 @@ describe("artifact policy", () => {
         source: "message",
         identity: `stream:turn-${tool_name}`,
       };
-      expect(artifactPresentationForMessage(streaming)).toEqual(expected);
+      expect(artifactPresentationForMessage(streaming)).toBeNull();
       expect(artifactPresentationForMessage(completed)).toEqual(expected);
     }
   );
+
+  it.each(["run-error", "interrupted", "cancelled"] as const)(
+    "rejects an incomplete Markdown fragment after %s",
+    (streamTerminalFailure) => {
+      expect(
+        artifactPresentationForMessage(
+          reportMessage("KnowledgeAgent", {
+            content: "Localized stream failure copy",
+            streaming: false,
+            streamPresentationKey: `fragment-${streamTerminalFailure}`,
+            streamTerminalFailure,
+            blocks: reducedMarkdownBlocks("#"),
+          })
+        )
+      ).toBeNull();
+    }
+  );
+
+  it("keeps a completed short stream report without a length threshold", () => {
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", {
+          content: "",
+          streaming: false,
+          streamPresentationKey: "short-completed",
+          blocks: completedMarkdownBlocks("OK"),
+        })
+      )
+    ).toEqual({
+      kind: "cited-report",
+      report: "OK",
+      source: "message",
+      identity: "stream:short-completed",
+    });
+  });
 
   it.each(["ChatAgent", "DataAgent"] as const)(
     "keeps a substantive streaming %s response inline",
@@ -286,7 +333,7 @@ describe("artifact policy", () => {
   it("uses retained stream Markdown instead of RunError content", () => {
     const message = reportMessage("BriefGeneAgent", {
       content: "upstream failure",
-      blocks: reducedMarkdownBlocks(
+      blocks: completedMarkdownBlocks(
         "# Retained gene report\n\nEvidence accumulated before failure."
       ),
       streamPresentationKey: "failed-with-report",

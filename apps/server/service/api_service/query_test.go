@@ -95,7 +95,7 @@ func TestQueryPreservesAttachmentsAcrossBlockingAndStreamChat(t *testing.T) {
 			refs := []rxBot.AssetAttachmentRef{{AssetID: "file_counts"}}
 			in := QueryInput{Query: "Analyze counts", Mode: "instant", Attachments: refs}
 			if tc.stream {
-				_, err := NewService().QueryStream(context.Background(), "alice@example.com", in, nil, nil)
+				_, err := streamCapableService().QueryStream(context.Background(), "alice@example.com", in, nil, nil)
 				if err != nil {
 					t.Fatalf("QueryStream: %v", err)
 				}

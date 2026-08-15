@@ -2338,7 +2338,7 @@ func TestQuerySubmissionBoundsLegacyStreamConversationTitle(t *testing.T) {
 	sseChatServer(t)
 	rawQuery := "\n  streamed   title  \n" + strings.Repeat("x", 500)
 
-	out, err := NewService().QueryStream(context.Background(), "alice@example.com", QueryInput{
+	out, err := streamCapableService().QueryStream(context.Background(), "alice@example.com", QueryInput{
 		Query: rawQuery, Mode: "instant",
 	}, nil, nil)
 	if err != nil {

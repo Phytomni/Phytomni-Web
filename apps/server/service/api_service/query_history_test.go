@@ -151,7 +151,7 @@ func TestQueryStreamForwardsHistoryBeforeCurrentTurn(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_stream_reads"}}
-	_, err := NewService().QueryStream(context.Background(), "alice", QueryInput{
+	_, err := streamCapableService().QueryStream(context.Background(), "alice", QueryInput{
 		Query: "follow up", History: `[{"role":"assistant","content":"prior"}]`, Mode: "instant",
 		Attachments: refs,
 	}, nil, nil)

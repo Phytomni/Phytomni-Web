@@ -281,7 +281,7 @@ describe("useArtifactPanel", () => {
       messages: [
         eligibleMessage("stream-placeholder", {
           id: undefined,
-          streaming: true,
+          streaming: false,
           streamPresentationKey: "turn-7",
         }),
       ],

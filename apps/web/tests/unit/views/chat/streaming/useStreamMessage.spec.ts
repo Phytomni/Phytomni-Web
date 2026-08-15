@@ -280,6 +280,7 @@ describe("useStreamMessage", () => {
   it("marks RunError terminal copy without obscuring accumulated Markdown", async () => {
     const body = sseStream([
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"# Retained report\\n\\nEvidence."}\n\n',
+      'event: TextMessageEnd\ndata: {"type":"TextMessageEnd"}\n\n',
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
     ]);
     mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));

@@ -39,13 +39,47 @@ describe("reduceAGUIEvent", () => {
     expect(s.runId).toBe("r9");
   });
 
-  it("does not treat message start/end markers as run terminal events", () => {
+  it("marks accumulated Markdown complete without ending the run", () => {
     let state = reduceAGUIEvent(initReducerState(), {
       type: "TextMessageStart",
       data: {},
     });
+    state = reduceAGUIEvent(state, {
+      type: "TextMessageContent",
+      data: { delta: "OK" },
+    });
     state = reduceAGUIEvent(state, { type: "TextMessageEnd", data: {} });
     expect(state.done).toBe(false);
+    expect(state.blocks).toEqual([
+      {
+        type: "markdown",
+        authority: "web",
+        text: "OK",
+        complete: true,
+      },
+    ]);
+  });
+
+  it("starts an incomplete Markdown block after a completed message", () => {
+    let state = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageContent",
+      data: { delta: "retained" },
+    });
+    state = reduceAGUIEvent(state, { type: "TextMessageEnd", data: {} });
+    state = reduceAGUIEvent(state, {
+      type: "TextMessageContent",
+      data: { delta: "partial" },
+    });
+
+    expect(state.blocks).toEqual([
+      {
+        type: "markdown",
+        authority: "web",
+        text: "retained",
+        complete: true,
+      },
+      { type: "markdown", authority: "web", text: "partial" },
+    ]);
   });
 
   it("does not clobber a captured run_id with a later blank RunStarted", () => {

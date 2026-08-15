@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { shouldStream } from "@/views/chat/streaming/sendBranch";
+import {
+  shouldStream,
+  type StreamCapability,
+} from "@/views/chat/streaming/sendBranch";
 
 describe("shouldStream", () => {
   it("streams only agents present in the enabled capability", () => {
@@ -23,23 +26,27 @@ describe("shouldStream", () => {
     ).toBe(false);
   });
 
-  it("keeps the legacy environment boolean limited to ChatAgent", () => {
-    expect(shouldStream("ChatAgent", "instant", true)).toBe(true);
-    expect(shouldStream("KnowledgeAgent", "instant", true)).toBe(false);
-    expect(shouldStream("BriefGeneAgent", "instant", true)).toBe(false);
+  it("does not synthesize Chat streaming from a legacy boolean", () => {
+    expect(
+      shouldStream("ChatAgent", "instant", true as unknown as StreamCapability)
+    ).toBe(false);
   });
 
-  it("streams for ChatAgent in instant mode when the flag is on", () => {
-    expect(shouldStream("ChatAgent", "instant", true)).toBe(true);
-  });
-  it("does not stream when the flag is off", () => {
-    expect(shouldStream("ChatAgent", "instant", false)).toBe(false);
-  });
-  it("keeps the legacy boolean path out of expert mode", () => {
-    expect(shouldStream("ChatAgent", "expert", true)).toBe(false);
+  it("streams Chat only from an enabled negotiated capability", () => {
+    expect(
+      shouldStream("ChatAgent", "instant", {
+        enabled: true,
+        agents: ["ChatAgent"],
+      })
+    ).toBe(true);
+    expect(
+      shouldStream("ChatAgent", "instant", {
+        enabled: false,
+        agents: ["ChatAgent"],
+      })
+    ).toBe(false);
   });
   it("rejects agents in a mode that cannot route them", () => {
-    expect(shouldStream("KnowledgeAgent", "instant", true)).toBe(false);
     expect(
       shouldStream("KnowledgeAgent", "instant", {
         enabled: true,
@@ -52,6 +59,11 @@ describe("shouldStream", () => {
         agents: ["ChatAgent"],
       })
     ).toBe(false);
-    expect(shouldStream("DataAgent", "instant", true)).toBe(false);
+    expect(
+      shouldStream("DataAgent", "instant", {
+        enabled: true,
+        agents: ["DataAgent"],
+      })
+    ).toBe(false);
   });
 });

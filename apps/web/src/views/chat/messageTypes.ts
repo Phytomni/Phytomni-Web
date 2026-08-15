@@ -40,6 +40,8 @@ interface StreamContentBlockBase {
 
 export interface MarkdownContentBlock extends StreamContentBlockBase {
   type: "markdown";
+  /** True only after the stream emits TextMessageEnd for this Markdown. */
+  complete?: boolean;
 }
 
 export interface ToolContentBlock extends StreamContentBlockBase {
@@ -212,6 +214,9 @@ export function decodeStreamContentBlock(
 
   const block = { type, authority } as StreamContentBlock;
   copyOptionalFields(value, block);
+  if (block.type === "markdown" && typeof value.complete === "boolean") {
+    block.complete = value.complete;
+  }
   return block;
 }
 
@@ -230,10 +235,26 @@ export function decodeStreamContentBlocks(
 export function streamMarkdownToText(
   blocks: readonly StreamContentBlock[] | undefined
 ): string {
+  return markdownBlocksToText(blocks, false);
+}
+
+/** Join only Markdown blocks explicitly closed by TextMessageEnd. */
+export function completedStreamMarkdownToText(
+  blocks: readonly StreamContentBlock[] | undefined
+): string {
+  return markdownBlocksToText(blocks, true);
+}
+
+function markdownBlocksToText(
+  blocks: readonly StreamContentBlock[] | undefined,
+  completedOnly: boolean
+): string {
   return (blocks ?? [])
     .filter(
       (block): block is MarkdownContentBlock =>
-        block.type === "markdown" && typeof block.text === "string"
+        block.type === "markdown" &&
+        typeof block.text === "string" &&
+        (!completedOnly || block.complete === true)
     )
     .map((block) => block.text?.trim() ?? "")
     .filter(Boolean)

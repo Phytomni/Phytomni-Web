@@ -38,6 +38,21 @@ func sseChatServer(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
+func streamCapableService() *Service {
+	return &Service{
+		catalogReader: staticResearchCatalogReader{
+			response: &rxBot.AgentsListResponse{
+				Object: "list",
+				Data: []rxBot.AgentDescriptor{
+					{Slug: "chat", Tool: "ChatAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+					{Slug: "knowledge", Tool: "KnowledgeAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+					{Slug: "brief_gene", Tool: "BriefGeneAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+				},
+			},
+		},
+	}
+}
+
 // DB setup reuses setupExpertTestDB (query_expert_test.go, same package): its
 // hand-written DDL INCLUDES the mode column. The older shared setupTestDB
 // (agent_task_test.go) predates the column — using it would fail the INSERT
@@ -189,7 +204,7 @@ func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) 
 	}
 
 	var forwarded strings.Builder
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"stream-context@example.com",
 		QueryInput{
@@ -263,7 +278,7 @@ func TestQueryStreamSettlementAckFailureLeavesVisibleSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"stream-ack@example.com",
 		QueryInput{
@@ -325,7 +340,7 @@ func TestQueryStreamContextDegradedForcesRebuildWithoutAck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"stream-degraded@example.com",
 		QueryInput{
@@ -418,7 +433,7 @@ func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
-			out, err := NewService().QueryStream(
+			out, err := streamCapableService().QueryStream(
 				context.Background(),
 				email,
 				QueryInput{
@@ -480,7 +495,7 @@ func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testin
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		ctx,
 		email,
 		QueryInput{
@@ -566,7 +581,7 @@ func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
-			_, err := NewService().QueryStream(
+			_, err := streamCapableService().QueryStream(
 				context.Background(),
 				email,
 				QueryInput{
@@ -596,7 +611,7 @@ func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 func TestQueryStream_PersistsAndForwards(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
-	svc := &Service{}
+	svc := streamCapableService()
 
 	var forwarded strings.Builder
 	forward := func(frame []byte) error {
@@ -662,7 +677,7 @@ func TestQueryStream_SettledKeyedV0RetryReplaysTerminalSnapshot(t *testing.T) {
 		Query: "keyed stream replay", Mode: "instant",
 		ClientTurnID: "keyed-stream-replay", Surface: QuerySurfaceChat,
 	}
-	service := NewService()
+	service := streamCapableService()
 	first, err := service.QueryStream(context.Background(), "alice", input, nil, nil)
 	if err != nil {
 		t.Fatalf("initial QueryStream: %v", err)
@@ -741,7 +756,7 @@ func TestQueryStream_SettledRetryReplaysLargeStructuredAnswerByteExactly(t *test
 		t.Fatal(err)
 	}
 	var forwarded strings.Builder
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(), "alice", input, nil,
 		func(frame []byte) error {
 			_, _ = forwarded.Write(frame)
@@ -805,7 +820,7 @@ func TestQueryStream_NonterminalKeyedV0RetryIsPendingBeforeReady(t *testing.T) {
 	}
 	ready := false
 	forwarded := false
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"alice",
 		QueryInput{
@@ -851,7 +866,7 @@ func TestQueryStream_SubmittingKeyedV0RetryPublishesDurableIdentityBeforePending
 	}
 	var ready StreamIdentity
 	forwarded := false
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"alice",
 		QueryInput{
@@ -899,7 +914,7 @@ func TestQueryStream_FailedKeyedV0RetryReplaysRunError(t *testing.T) {
 		t.Fatal(err)
 	}
 	var forwarded strings.Builder
-	out, err := NewService().QueryStream(
+	out, err := streamCapableService().QueryStream(
 		context.Background(),
 		"alice",
 		QueryInput{
@@ -976,7 +991,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 				firstFramePrivate   *persistedConversationContext
 				firstFrameReadError error
 			)
-			out, err := NewService().QueryStream(
+			out, err := streamCapableService().QueryStream(
 				context.Background(),
 				"alice",
 				input,
@@ -1044,7 +1059,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 			}
 
 			var replay strings.Builder
-			retry, err := NewService().QueryStream(
+			retry, err := streamCapableService().QueryStream(
 				context.Background(), "alice", input, nil,
 				func(frame []byte) error {
 					_, _ = replay.Write(frame)
@@ -1169,7 +1184,7 @@ func TestQueryAndQueryStreamShareClientTurnReservationWithoutConversationV1(t *t
 func TestQueryStream_ReadyRowAndRunIDPrecedeFrames(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
-	svc := &Service{}
+	svc := streamCapableService()
 
 	ready := false
 	identity := StreamIdentity{}
@@ -1234,7 +1249,7 @@ func TestQueryStream_InitialPersistenceFailureForwardsNothing(t *testing.T) {
 
 	ready := false
 	forwarded := false
-	_, err := (&Service{}).QueryStream(context.Background(), "broken@example.com",
+	_, err := streamCapableService().QueryStream(context.Background(), "broken@example.com",
 		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
 		func(StreamIdentity) { ready = true },
 		func([]byte) error { forwarded = true; return nil },
@@ -1264,7 +1279,7 @@ func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	identity := StreamIdentity{}
-	out, err := (&Service{}).QueryStream(ctx, "cancel@example.com",
+	out, err := streamCapableService().QueryStream(ctx, "cancel@example.com",
 		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
 		func(got StreamIdentity) { identity = got },
 		func([]byte) error { cancel(); return context.Canceled },
@@ -1305,7 +1320,7 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	svc := &Service{}
+	svc := streamCapableService()
 	identity := StreamIdentity{}
 	authorizedAtFrame := false
 	_, err := svc.QueryStream(context.Background(), "action@example.com",
@@ -1345,7 +1360,7 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
-	svc := &Service{}
+	svc := streamCapableService()
 	forward := func(frame []byte) error { return http.ErrBodyNotAllowed } // simulate browser disconnect
 	out, err := svc.QueryStream(context.Background(), "bob@example.com",
 		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, forward)
@@ -1367,7 +1382,7 @@ func TestQueryStream_AutonomousExpertRefused(t *testing.T) {
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-	svc := &Service{}
+	svc := streamCapableService()
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
 		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "expert"}, nil, nil)
 	if !errors.Is(err, ErrStreamUnsupported) {
@@ -1416,7 +1431,7 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
-			out, err := (&Service{}).QueryStream(
+			out, err := streamCapableService().QueryStream(
 				context.Background(),
 				"eve@example.com",
 				QueryInput{
@@ -1451,6 +1466,110 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 			if row.ToolName != expectedTool || row.Mode != tt.mode ||
 				!strings.Contains(row.Answer, "# report") {
 				t.Fatalf("persisted row = %#v", row)
+			}
+		})
+	}
+}
+
+func TestQueryStream_RequiresAdvertisedStreamingCapability(t *testing.T) {
+	tests := []struct {
+		name          string
+		catalogStatus int
+		catalogBody   string
+		wantSuccess   bool
+	}{
+		{
+			name:          "exact true",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":true}}]}`,
+			wantSuccess:   true,
+		},
+		{
+			name:          "descriptor missing",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[]}`,
+		},
+		{
+			name:          "catalog request fails",
+			catalogStatus: http.StatusServiceUnavailable,
+			catalogBody:   `{}`,
+		},
+		{
+			name:          "streaming missing",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{}}]}`,
+		},
+		{
+			name:          "streaming false",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":false}}]}`,
+		},
+		{
+			name:          "streaming wrong type",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":"true"}}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			catalogHits := 0
+			chatHits := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/agents":
+					catalogHits++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tt.catalogStatus)
+					_, _ = w.Write([]byte(tt.catalogBody))
+				case "/v1/chat/completions":
+					chatHits++
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = w.Write([]byte(strings.Join([]string{
+						`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-admission"}` + "\n",
+						`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-admission"}` + "\n",
+					}, "\n")))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			t.Cleanup(server.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := NewService().QueryStream(
+				context.Background(),
+				"alice@example.com",
+				QueryInput{Query: "admission", Mode: "instant"},
+				nil,
+				nil,
+			)
+			if tt.wantSuccess {
+				if err != nil || out == nil {
+					t.Fatalf("exact capability should stream: out=%#v err=%v", out, err)
+				}
+				if catalogHits != 1 || chatHits != 1 {
+					t.Fatalf("success hits catalog=%d chat=%d, want 1/1", catalogHits, chatHits)
+				}
+				return
+			}
+
+			if !errors.Is(err, ErrStreamUnsupported) {
+				t.Fatalf("error = %v, want ErrStreamUnsupported", err)
+			}
+			if catalogHits != 1 || chatHits != 0 {
+				t.Fatalf("rejected hits catalog=%d chat=%d, want 1/0", catalogHits, chatHits)
+			}
+			var rows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+				t.Fatalf("count rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("rejected stream persisted %d rows, want zero", rows)
 			}
 		})
 	}
@@ -1516,7 +1635,7 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-	svc := &Service{}
+	svc := streamCapableService()
 	// Instant Chat streaming has no caller-selected agent. A non-ChatAgent tool
 	// is invalid before any Bot call, regardless of its stream capability.
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
@@ -1532,7 +1651,7 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 func TestQueryStream_PersistsBotRunID(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t) // fixture RunStarted carries run_id "run_77"
-	svc := &Service{}
+	svc := streamCapableService()
 	out, err := svc.QueryStream(context.Background(), "carol@example.com",
 		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, nil)
 	if err != nil {
@@ -1581,7 +1700,7 @@ func TestQueryStream_CompatibilityModelsPreserveAGUIBytes(t *testing.T) {
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
 			var forwarded strings.Builder
-			out, err := (&Service{}).QueryStream(context.Background(), "compat@example.com",
+			out, err := streamCapableService().QueryStream(context.Background(), "compat@example.com",
 				QueryInput{Query: "compat", Tool: tc.tool, Mode: "instant"}, nil,
 				func(frame []byte) error {
 					_, _ = forwarded.Write(frame)
@@ -1648,7 +1767,7 @@ func TestQueryStream_CombinedAGUICompatibilityFixture(t *testing.T) {
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
 			var forwarded strings.Builder
-			out, err := (&Service{}).QueryStream(context.Background(), "task27-stream@example.com",
+			out, err := streamCapableService().QueryStream(context.Background(), "task27-stream@example.com",
 				QueryInput{Query: "synthetic", Tool: tc.tool, Mode: "instant"}, nil,
 				func(frame []byte) error {
 					_, _ = forwarded.Write(frame)
@@ -1701,7 +1820,7 @@ func TestQueryStream_CombinedRunErrorFixture(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	var forwarded strings.Builder
-	out, err := (&Service{}).QueryStream(context.Background(), "task27-error@example.com",
+	out, err := streamCapableService().QueryStream(context.Background(), "task27-error@example.com",
 		QueryInput{Query: "synthetic", Tool: "", Mode: "instant"}, nil,
 		func(frame []byte) error {
 			_, _ = forwarded.Write(frame)
@@ -1942,7 +2061,7 @@ func TestQueryStream_NonChatRoutingRejectedBeforeAnyBotRequest(t *testing.T) {
 func TestQueryStream_RefreshClearsTaskColumns(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	sseChatServer(t)
-	svc := &Service{}
+	svc := streamCapableService()
 	seed := model.QuestionAgentLog{
 		DialogueId: "d1", UserName: "dan@example.com", Query: "old",
 		ServerId: "srv-1", BotRunId: "run-old", TaskId: "task-1", LogStatus: "RUNNING",
@@ -2006,7 +2125,7 @@ func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-	svc := &Service{}
+	svc := streamCapableService()
 	out, err := svc.QueryStream(context.Background(), "erin@example.com",
 		QueryInput{Query: "hi", Id: 0, Tool: "", Mode: "instant"}, nil, nil)
 	if err != nil {
@@ -2081,7 +2200,7 @@ func TestConversationContextIntegrationStreamingSettlementRedactsOutput(t *testi
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
-	out, err := NewService().QueryStream(context.Background(), username, QueryInput{
+	out, err := streamCapableService().QueryStream(context.Background(), username, QueryInput{
 		Query:        "Continue the focus entity stream.",
 		Id:           1,
 		Mode:         "instant",

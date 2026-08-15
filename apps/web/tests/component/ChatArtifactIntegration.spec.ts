@@ -669,13 +669,12 @@ describe("Chat artifact shell integration", () => {
   });
 
   it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
-    "auto-opens a substantive streaming %s report once across completion",
+    "waits for a token-by-token %s stream to complete before auto-opening once",
     async (toolName) => {
       const streamKey = `turn-${toolName}`;
-      const content = `# ${toolName} report\n\nAccumulated scientific evidence.`;
-      const reduced = reduceAGUIEvent(initReducerState(), {
+      let reduced = reduceAGUIEvent(initReducerState(), {
         type: "TextMessageContent",
-        data: { delta: content },
+        data: { delta: "#" },
       });
       const streamingMessage: ChatMessage = {
         role: "assistant",
@@ -694,13 +693,43 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       const identity = `stream:${streamKey}`;
-      expect(state.getChatState("A").artifactOpen).toBe(true);
-      expect(state.getChatState("A").activeArtifactIdentity).toBe(identity);
-      expect(state.getChatState("A").handledArtifactIdentities).toEqual([
-        identity,
-      ]);
+      expect(state.getChatState("A").artifactOpen).toBe(false);
+      expect(state.getChatState("A").activeArtifactIdentity).toBeNull();
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual([]);
 
-      await wrapper.get("[data-test=artifact-close]").trigger("click");
+      for (const delta of [
+        ` ${toolName}`,
+        " report",
+        "\n\nAccumulated ",
+        "scientific evidence.",
+      ]) {
+        reduced = reduceAGUIEvent(reduced, {
+          type: "TextMessageContent",
+          data: { delta },
+        });
+        state.getChatState("A").renderedChat = {
+          dialogue_id: "A",
+          messages: [{ ...streamingMessage, blocks: reduced.blocks }],
+        };
+        await nextTick();
+        await nextTick();
+        expect(state.getChatState("A").artifactOpen).toBe(false);
+        expect(state.getChatState("A").handledArtifactIdentities).toEqual([]);
+      }
+
+      reduced = reduceAGUIEvent(reduced, {
+        type: "TextMessageEnd",
+        data: {},
+      });
+      state.getChatState("A").renderedChat = {
+        dialogue_id: "A",
+        messages: [{ ...streamingMessage, blocks: reduced.blocks }],
+      };
+      await nextTick();
+      await nextTick();
+      expect(state.getChatState("A").artifactOpen).toBe(false);
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual([]);
+
       state.getChatState("A").renderedChat = {
         dialogue_id: "A",
         messages: [
@@ -708,19 +737,90 @@ describe("Chat artifact shell integration", () => {
             ...streamingMessage,
             id: `row-${toolName}`,
             streaming: false,
+            blocks: reduced.blocks,
           },
         ],
       };
       await nextTick();
       await nextTick();
 
-      expect(state.getChatState("A").artifactOpen).toBe(false);
-      expect(state.getChatState("A").activeArtifactIdentity).toBeNull();
+      expect(state.getChatState("A").artifactOpen).toBe(true);
+      expect(state.getChatState("A").activeArtifactIdentity).toBe(identity);
       expect(state.getChatState("A").handledArtifactIdentities).toEqual([
         identity,
       ]);
+
+      await wrapper.get("[data-test=artifact-close]").trigger("click");
+      await nextTick();
+      expect(state.getChatState("A").artifactOpen).toBe(false);
     }
   );
+
+  it("does not consume report identity for an interrupted first delta", async () => {
+    const streamKey = "turn-interrupted-fragment";
+    let reduced = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageContent",
+      data: { delta: "#" },
+    });
+    const streamingMessage: ChatMessage = {
+      role: "assistant",
+      tool_name: "KnowledgeAgent",
+      content: "",
+      blocks: reduced.blocks,
+      streaming: true,
+      streamPresentationKey: streamKey,
+    };
+    const { state } = await mountProductionChat(1440, {
+      markCitedSeen: false,
+      markDeepSeen: false,
+      messagesA: [streamingMessage],
+    });
+    await nextTick();
+    await nextTick();
+
+    state.getChatState("A").renderedChat = {
+      dialogue_id: "A",
+      messages: [
+        {
+          ...streamingMessage,
+          content: "Localized interruption copy",
+          streaming: false,
+          streamTerminalFailure: "interrupted",
+        },
+      ],
+    };
+    await nextTick();
+    await nextTick();
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+    expect(state.getChatState("A").activeArtifactIdentity).toBeNull();
+    expect(state.getChatState("A").handledArtifactIdentities).toEqual([]);
+
+    reduced = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageContent",
+      data: { delta: "OK" },
+    });
+    reduced = reduceAGUIEvent(reduced, { type: "TextMessageEnd", data: {} });
+    state.getChatState("A").renderedChat = {
+      dialogue_id: "A",
+      messages: [
+        {
+          ...streamingMessage,
+          id: "row-short-retry",
+          blocks: reduced.blocks,
+          streaming: false,
+        },
+      ],
+    };
+    await nextTick();
+    await nextTick();
+    expect(state.getChatState("A").artifactOpen).toBe(true);
+    expect(state.getChatState("A").activeArtifactIdentity).toBe(
+      `stream:${streamKey}`
+    );
+    expect(state.getChatState("A").handledArtifactIdentities).toEqual([
+      `stream:${streamKey}`,
+    ]);
+  });
 
   it.each([
     {

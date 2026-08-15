@@ -1,5 +1,8 @@
 import type { ArtifactKind, ChatMessage } from "../types";
-import { streamMarkdownToText } from "../messageTypes";
+import {
+  completedStreamMarkdownToText,
+  streamMarkdownToText,
+} from "../messageTypes";
 
 export type ReportSource = "final" | "intermediate" | "message";
 
@@ -112,13 +115,20 @@ function reportCandidates(
     ["intermediate", message.botLifecycle?.intermediateReport],
     ["intermediate", message.botProjection?.intermediateReport],
   ];
+  if (message.streaming === true) return candidates;
+
   if (!message.streamTerminalFailure) {
     candidates.push([
       "message",
       typeof message.content === "string" ? message.content : "",
     ]);
   }
-  candidates.push(["message", streamMarkdownToText(message.blocks)]);
+  candidates.push([
+    "message",
+    message.streamTerminalFailure
+      ? completedStreamMarkdownToText(message.blocks)
+      : streamMarkdownToText(message.blocks),
+  ]);
   return candidates;
 }
 

@@ -58,6 +58,25 @@ func setupStreamHandlerTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
+func newAdvertisedStreamingBotServer(t *testing.T, next http.Handler) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/agents" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(rxBot.AgentsListResponse{
+				Object: "list",
+				Data: []rxBot.AgentDescriptor{
+					{Slug: "chat", Tool: "ChatAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+					{Slug: "knowledge", Tool: "KnowledgeAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+					{Slug: "brief_gene", Tool: "BriefGeneAgent", Capabilities: rxBot.AgentDescriptorCapabilities{Streaming: true}},
+				},
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
+}
+
 // newStreamTestRequest builds a multipart /query request with a NON-empty
 // query field: the handler 400s on empty query (query.go:82-85) BEFORE the
 // SSE branch point, so an empty body could never discriminate the flag/mode
@@ -155,7 +174,7 @@ func TestQuery_AutonomousExpertModeSkipsStream(t *testing.T) {
 func TestQuery_ForcedExpertChatFamilyUsesStreamBranch(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupStreamHandlerTestDB(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
 		}
@@ -186,6 +205,99 @@ func TestQuery_ForcedExpertChatFamilyUsesStreamBranch(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
 		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+}
+
+func TestQuery_StreamAdmissionRequiresAdvertisedCapability(t *testing.T) {
+	tests := []struct {
+		name          string
+		catalogStatus int
+		catalogBody   string
+		wantSuccess   bool
+	}{
+		{
+			name:          "exact true",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":true}}]}`,
+			wantSuccess:   true,
+		},
+		{name: "descriptor missing", catalogStatus: http.StatusOK, catalogBody: `{"object":"list","data":[]}`},
+		{name: "catalog request fails", catalogStatus: http.StatusServiceUnavailable, catalogBody: `{}`},
+		{
+			name:          "streaming missing",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{}}]}`,
+		},
+		{
+			name:          "streaming false",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":false}}]}`,
+		},
+		{
+			name:          "streaming wrong type",
+			catalogStatus: http.StatusOK,
+			catalogBody:   `{"object":"list","data":[{"slug":"chat","tool":"ChatAgent","capabilities":{"streaming":"true"}}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			setupStreamHandlerTestDB(t)
+			catalogHits := 0
+			chatHits := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v1/agents":
+					catalogHits++
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tt.catalogStatus)
+					_, _ = w.Write([]byte(tt.catalogBody))
+				case "/v1/chat/completions":
+					chatHits++
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = w.Write([]byte(strings.Join([]string{
+						`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-handler-admission"}` + "\n",
+						`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-handler-admission"}` + "\n",
+					}, "\n")))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			t.Cleanup(server.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Set("username", "alice@example.com")
+			ctx.Request = newStreamTestRequest(t, "instant")
+			ctx.Params = gin.Params{{Key: "id", Value: "0"}}
+			NewHandler().Query(ctx)
+
+			if tt.wantSuccess {
+				if recorder.Code != http.StatusOK || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "text/event-stream") {
+					t.Fatalf("success status=%d content-type=%q body=%q", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.String())
+				}
+				if catalogHits != 1 || chatHits != 1 {
+					t.Fatalf("success hits catalog=%d chat=%d, want 1/1", catalogHits, chatHits)
+				}
+				return
+			}
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("rejected status=%d body=%q, want 400", recorder.Code, recorder.Body.String())
+			}
+			if strings.HasPrefix(recorder.Header().Get("Content-Type"), "text/event-stream") {
+				t.Fatalf("rejected response exposed SSE content type %q", recorder.Header().Get("Content-Type"))
+			}
+			if catalogHits != 1 || chatHits != 0 {
+				t.Fatalf("rejected hits catalog=%d chat=%d, want 1/0", catalogHits, chatHits)
+			}
+		})
 	}
 }
 
@@ -240,7 +352,7 @@ func TestQuery_StreamExposesDurableIdentityHeaders(t *testing.T) {
 		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"hello\"}\n",
 		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run_headers\"}\n",
 	}, "\n")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(body))
 	}))
@@ -288,7 +400,7 @@ func TestQuery_SettledKeyedStreamRetryReplaysTerminalSnapshot(t *testing.T) {
 		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"stored answer\"}\n\n" +
 		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.follow_up\",\"value\":[\"next question\"]}\n\n" +
 		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-handler-replay\"}\n\n"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		botCalls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(streamBody))
@@ -351,7 +463,7 @@ func TestQuery_SettledKeyedStreamRetryReplaysLargeStructuredAnswerForBrowser(t *
 		"event: TextMessageContent\ndata: " + string(content) + "\n\n" +
 		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-handler-large\"}\n\n"
 	var botCalls atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		botCalls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(streamBody))
@@ -426,6 +538,8 @@ func TestQuery_SettledKeyedStreamRetryReplaysLargeStructuredAnswerForBrowser(t *
 func TestQuery_NonterminalKeyedStreamRetryIsJSONConflictBeforeHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	gdb := setupStreamHandlerTestDB(t)
+	server := newAdvertisedStreamingBotServer(t, http.NotFoundHandler())
+	t.Cleanup(server.Close)
 	row := model.QuestionAgentLog{
 		DialogueId: "pending-dialogue", UserName: "headers@example.com",
 		Query: "hello", ToolName: "ChatAgent", Mode: "instant",
@@ -437,7 +551,9 @@ func TestQuery_NonterminalKeyedStreamRetryIsJSONConflictBeforeHeaders(t *testing
 		t.Fatalf("seed pending row: %v", err)
 	}
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 2}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 2,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	w := httptest.NewRecorder()
@@ -462,7 +578,7 @@ func TestQuery_SubmittingKeyedBlockingRetryPreservesIdentityHeaders(t *testing.T
 	gin.SetMode(gin.TestMode)
 	gdb := setupStreamHandlerTestDB(t)
 	var botCalls atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		botCalls.Add(1)
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {
@@ -534,7 +650,7 @@ func TestQuery_SubmittingKeyedStreamRetryPreservesIdentityHeadersBeforeJSONConfl
 	gin.SetMode(gin.TestMode)
 	gdb := setupStreamHandlerTestDB(t)
 	var botCalls atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		botCalls.Add(1)
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {
@@ -653,7 +769,7 @@ func TestQuery_StreamV1ForwardsTypedContextFrameAndIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	gdb := setupStreamHandlerTestDB(t)
 	const answer = "typed stream answer"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/chat/completions":
 			var request rxBot.ChatCompletionRequest

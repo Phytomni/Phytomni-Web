@@ -222,7 +222,10 @@ reviewed.
   advertise that stream. Missing, false, stale, absent, or mismatched descriptors
   fail closed even when the local flags are on. Chat requires only the stream
   gates; forced Expert Knowledge and Brief Gene additionally require
-  `bot.expert_enabled=true`. No other Expert or async agent streams.
+  `bot.expert_enabled=true`. Web Go validates the matching descriptor again at
+  SSE request admission, before opening `/v1/chat/completions`, so a direct
+  authenticated caller cannot bypass browser negotiation. No other Expert or
+  async agent streams.
 - **Activation order:** (1) Bot ships real-answer persistence and advertises the
   verified per-agent streaming booleans; (2) deploy Web Go and confirm
   `/api/v1/bot/capabilities` exposes `stream=true` only for the intended agents;
@@ -231,7 +234,10 @@ reviewed.
   (5) smoke Instant Chat plus forced Expert Knowledge and Brief Gene, verify the
   Brief Gene request resolves a free-form gene id, then reload each conversation
   and confirm the accumulated answer survives. Keep unsupported descriptors and
-  denied tools on the blocking/refused path during the smoke.
+  denied tools on the blocking/refused path during the smoke. With local stream
+  flags still on, temporarily return a missing or false matching descriptor and
+  verify a direct authenticated SSE request receives a non-SSE rejection without
+  a Bot chat-completion call.
 - **Rollback:** set `bot.stream_enabled=false` and
   `VITE_STREAM_ENABLED=false`, restart Web Go and redeploy the SPA, then repeat
   one blocking Chat and one forced Expert request. Disable `bot.expert_enabled`

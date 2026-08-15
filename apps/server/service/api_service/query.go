@@ -4084,6 +4084,9 @@ func (ps *Service) QueryStream(
 		// Slugs without an approved stream model stay on their blocking path.
 		return nil, fmt.Errorf("%w: tool %q has no Bot streaming primitive (handoff P1)", ErrStreamUnsupported, in.Tool)
 	}
+	if err := ps.requireAdvertisedStreamingCapability(ctx, slug); err != nil {
+		return nil, err
+	}
 
 	var submission *v1Submission
 	if ownerAllocated {
@@ -4494,6 +4497,21 @@ func (ps *Service) QueryStream(
 		return out, streamErr
 	}
 	return out, nil
+}
+
+func (ps *Service) requireAdvertisedStreamingCapability(ctx context.Context, slug string) error {
+	response, err := ps.agentCatalogReader().GetAgents(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: fetch Bot agent catalog: %v", ErrStreamUnsupported, err)
+	}
+	if _, err := rxBot.ValidateWebAgentDescriptors(response); err != nil {
+		return fmt.Errorf("%w: validate Bot agent catalog: %v", ErrStreamUnsupported, err)
+	}
+	capability, ok := rxBot.FindAgentCapability(response, slug)
+	if !ok || !capability.Streaming {
+		return fmt.Errorf("%w: Bot agent %q does not advertise streaming", ErrStreamUnsupported, slug)
+	}
+	return nil
 }
 
 // beginQuestionStream creates a fresh row or moves a refresh target into

@@ -94,12 +94,22 @@ describe("chat message boundary decoders", () => {
         type: "markdown",
         authority: "web",
         text: "partial answer",
+        complete: true,
       })
     ).toEqual({
       type: "markdown",
       authority: "web",
       text: "partial answer",
+      complete: true,
     });
+    expect(
+      decodeStreamContentBlock({
+        type: "markdown",
+        authority: "web",
+        text: "partial answer",
+        complete: "true",
+      })
+    ).not.toHaveProperty("complete");
   });
 
   it("rejects unknown streamed block types instead of creating an interactive surface", () => {

@@ -131,7 +131,11 @@ export function reduceAGUIEvent(
       break;
     }
     case "TextMessageStart":
+      break;
     case "TextMessageEnd":
+      for (const block of blocks) {
+        if (block.type === "markdown") block.complete = true;
+      }
       break;
     case "RunFinished":
       next.done = true;
@@ -218,7 +222,11 @@ function appendText(
 ): void {
   if (!delta) return;
   const tail = blocks[blocks.length - 1];
-  if (tail && tail.type === type) {
+  if (
+    tail &&
+    tail.type === type &&
+    (tail.type !== "markdown" || tail.complete !== true)
+  ) {
     tail.text = (tail.text ?? "") + delta;
   } else {
     blocks.push({ type, authority: "web", text: delta });
