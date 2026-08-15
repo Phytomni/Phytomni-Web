@@ -183,6 +183,14 @@ func TestResearchFormatsCompatibleOnlyFallsBackToArchiveSuffixes(t *testing.T) {
 	}
 }
 
+func TestResearchArchiveFormatsIncludeCompoundArchives(t *testing.T) {
+	for _, format := range []string{"tar.gz"} {
+		if _, ok := acceptedResearchArchiveFormats[format]; !ok {
+			t.Fatalf("acceptedResearchArchiveFormats missing %q", format)
+		}
+	}
+}
+
 func TestValidateResearchInputContractRejectsInvalidCatalog(t *testing.T) {
 	tests := []struct {
 		name   string

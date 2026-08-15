@@ -17,7 +17,7 @@ const (
 
 var acceptedResearchArchiveFormats = map[string]struct{}{
 	"zip": {}, "tar": {}, "tgz": {}, "gz": {}, "bgzf": {},
-	"bz2": {}, "xz": {}, "zst": {}, "7z": {}, "rar": {},
+	"bz2": {}, "xz": {}, "zst": {}, "7z": {}, "rar": {}, "tar.gz": {},
 }
 
 // ResearchInputResolutionDescriptor is the bounded limit descriptor advertised
