@@ -31,9 +31,11 @@
       :source="reportText"
       :citation-namespace="ns"
       :reference-count="referenceCount"
+      :resources="resources"
       surface="artifact"
       data-test="bot-report-content"
       @citation-activate="emit('citation-activate', $event)"
+      @resource-activate="emit('resource-activate', $event)"
     />
     <p
       v-else-if="
@@ -64,7 +66,11 @@ import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
-import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
+import type {
+  AuthorizedScientificResource,
+  ScientificCitationActivation,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
 
 type BotReportStatus = "loading" | "degraded" | "complete" | "failed";
 
@@ -107,6 +113,7 @@ const props = withDefaults(
     report?: string | null;
     ns: string;
     referenceCount?: number;
+    resources?: readonly AuthorizedScientificResource[];
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
     failureLabel?: string;
@@ -117,6 +124,7 @@ const props = withDefaults(
     updatedAt: null,
     report: null,
     referenceCount: 0,
+    resources: () => [],
     labels: () => ({}),
     hideActiveReport: false,
   }
@@ -124,6 +132,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   "citation-activate": [activation: ScientificCitationActivation];
+  "resource-activate": [activation: ScientificResourceActivation];
 }>();
 
 const { t, d } = useI18n();

@@ -132,12 +132,13 @@ export interface ConversationContextNotice {
 }
 
 export type ConversationArtifactKind =
-  "file" | "report" | "table" | "image" | "archive";
+  "file" | "report" | "table" | "image" | "cif" | "archive";
 
 export interface ConversationArtifactLink {
   id: string;
   name: string;
   kind: ConversationArtifactKind;
+  media_type?: string;
 }
 
 export type ResultDeliveryErrorCode =
@@ -465,8 +466,11 @@ const CONVERSATION_ARTIFACT_KINDS = new Set<ConversationArtifactKind>([
   "report",
   "table",
   "image",
+  "cif",
   "archive",
 ]);
+const ARTIFACT_MEDIA_TYPE_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$/u;
 const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const utf8Length = (value: string): number =>
   new TextEncoder().encode(value).length;
@@ -827,6 +831,7 @@ export function decodeConversationArtifacts(
     if (!isRecord(item)) invalid("chat response");
     for (const forbiddenKey of [
       "download_url",
+      "display_url",
       "obs_path",
       "path",
       "token",
@@ -846,11 +851,24 @@ export function decodeConversationArtifacts(
     ) {
       invalid("chat response");
     }
+    let mediaType: string | undefined;
+    if (hasOwn(item, "media_type")) {
+      const raw = item.media_type;
+      if (
+        typeof raw !== "string" ||
+        utf8Length(raw) > 127 ||
+        !ARTIFACT_MEDIA_TYPE_PATTERN.test(raw)
+      ) {
+        invalid("chat response");
+      }
+      mediaType = raw;
+    }
     seen.add(id);
     return {
       id,
       name,
       kind: kind as ConversationArtifactKind,
+      ...(mediaType ? { media_type: mediaType } : {}),
     };
   });
 }

@@ -1,4 +1,4 @@
-import { computed, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
 import { saveAs } from "file-saver";
@@ -6,18 +6,23 @@ import {
   getConversationArtifactDownloadURL,
   getConversationArtifactFile,
 } from "@/api/chat";
+import {
+  isConversationArtifactDownloadURL,
+  type ConversationArtifactLink,
+} from "@/api/types";
 import i18n from "@/locales";
 import {
   removeDownloadTransfer,
   upsertDownloadTransfer,
 } from "@/utils/download-transfers";
 import { createTransferTracker } from "@/utils/transfer-progress";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
-import type { ConversationArtifactLink } from "@/api/types";
 import {
   artifactIdentityForMessage,
   artifactPresentationForMessage,
 } from "../utils/artifact-policy";
+import { authorizedResourcesFromConversationArtifacts } from "../utils/authorized-report-resources";
 import { useResultArchiveDelivery } from "./useResultArchiveDelivery";
 
 let artifactDownloadSequence = 0;
@@ -80,6 +85,74 @@ export function useArtifactPanel(opts: {
   const currentArtifactLinks = computed(
     (): readonly ConversationArtifactLink[] =>
       currentArtifactMessage.value?.artifacts ?? []
+  );
+  const signedDisplayUrls = shallowRef(new Map<string, string>());
+  let displayUrlSignGeneration = 0;
+
+  const currentArtifactResources = computed(
+    (): readonly AuthorizedScientificResource[] => {
+      const message = currentArtifactMessage.value;
+      if (!message) return [];
+      const presentation = artifactPresentationForMessage(message);
+      const source =
+        presentation?.report ??
+        (typeof message.content === "string" ? message.content : "");
+      return authorizedResourcesFromConversationArtifacts(
+        source,
+        currentArtifactLinks.value,
+        signedDisplayUrls.value
+      );
+    }
+  );
+
+  watch(
+    () => {
+      const message = currentArtifactMessage.value;
+      const messageId = normalizeServerMessageId(message?.id) ?? "";
+      const targetIds = currentArtifactLinks.value
+        .filter(
+          (artifact) => artifact.kind === "image" || artifact.kind === "cif"
+        )
+        .map((artifact) => artifact.id)
+        .join("\0");
+      return `${currentChatId.value}\0${messageId}\0${targetIds}`;
+    },
+    async () => {
+      const generation = ++displayUrlSignGeneration;
+      signedDisplayUrls.value = new Map();
+      const dialogueId = currentChatId.value;
+      const messageId = normalizeServerMessageId(
+        currentArtifactMessage.value?.id
+      );
+      const targets = currentArtifactLinks.value.filter(
+        (artifact) => artifact.kind === "image" || artifact.kind === "cif"
+      );
+      if (!dialogueId || messageId === null || targets.length === 0) return;
+
+      const next = new Map<string, string>();
+      await Promise.all(
+        targets.map(async (artifact) => {
+          try {
+            const signed = await getConversationArtifactDownloadURL({
+              dialogue_id: dialogueId,
+              message_id: messageId,
+              artifact_id: artifact.id,
+            });
+            if (
+              signed.code === 200 &&
+              isConversationArtifactDownloadURL(signed.data)
+            ) {
+              next.set(artifact.id, signed.data);
+            }
+          } catch {
+            // Leave unsigned so the renderer stays inert.
+          }
+        })
+      );
+      if (generation !== displayUrlSignGeneration) return;
+      signedDisplayUrls.value = next;
+    },
+    { flush: "post" }
   );
 
   const downloadArtifact = async (artifact: ConversationArtifactLink) => {
@@ -227,6 +300,7 @@ export function useArtifactPanel(opts: {
     artifactTab,
     currentArtifactMessage,
     currentArtifactLinks,
+    currentArtifactResources,
     downloadArtifact,
     downloadResultArchive,
     retryResultArchive,

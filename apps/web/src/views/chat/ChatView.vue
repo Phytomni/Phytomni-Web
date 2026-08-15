@@ -540,7 +540,9 @@ export function removeDeletedChat(options: {
               :empty-report-label="currentArtifactEmptyReportLabel"
               :ns="artifactNamespace"
               :reference-count="currentArtifactMessage.doc_list?.length ?? 0"
+              :resources="currentArtifactResources"
               @citation-activate="activateEvidence"
+              @resource-activate="activateArtifactResource"
             />
             <CitedAnswer
               v-else
@@ -549,10 +551,12 @@ export function removeDeletedChat(options: {
                 String(currentArtifactMessage.content)
               "
               :references="currentArtifactMessage.doc_list"
+              :resources="currentArtifactResources"
               :ns="artifactNamespace"
               surface="artifact"
               reference-presentation="external"
               @citation-activate="activateEvidence"
+              @resource-activate="activateArtifactResource"
             />
           </template>
           <template #evidence>
@@ -738,7 +742,6 @@ import type {
   DialogueReconciliationResult,
 } from "./types";
 import type {
-  AuthorizedScientificResource,
   ScientificCitationActivation,
   ScientificResourceActivation,
 } from "@/utils/scientific-markdown/types";
@@ -1151,6 +1154,7 @@ const {
   artifactTab,
   currentArtifactMessage,
   currentArtifactLinks,
+  currentArtifactResources,
   downloadArtifact,
   downloadResultArchive,
   retryResultArchive,
@@ -1207,31 +1211,6 @@ const artifactId = computed(() => {
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
-const currentArtifactResources = computed<
-  readonly AuthorizedScientificResource[]
->(() => {
-  const message = currentArtifactMessage.value;
-  if (!message || message.tool_name !== "DeepGenomeAgent") return [];
-  const source =
-    currentArtifactPresentation.value?.report ??
-    (typeof message.content === "string" ? message.content : "");
-
-  return currentArtifactLinks.value.flatMap((artifact) => {
-    const escapedName = artifact.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const hrefPattern = new RegExp(
-      String.raw`!?\[[^\]]*\]\(\s*${escapedName}\s*\)`
-    );
-    if (!hrefPattern.test(source)) return [];
-    return [
-      {
-        id: artifact.id,
-        name: artifact.name,
-        kind: artifact.kind === "report" ? "markdown" : "attachment",
-        markdownHref: artifact.name,
-      },
-    ];
-  });
-});
 const evidencePanelRef = ref<{
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);

@@ -356,10 +356,36 @@ describe("QueryData — conversation artifact contract", () => {
     }
   });
 
+  it("accepts cif kind and optional media type without a durable URL", () => {
+    const cif = {
+      id: "structure-1",
+      name: "fold.cif",
+      kind: "cif",
+      media_type: "chemical/x-cif",
+    };
+    const result = decodeQueryData({
+      id: 9,
+      answer: "saved",
+      artifacts: [cif],
+    });
+    expect(result.artifacts).toEqual([cif]);
+    expect(result.artifacts?.[0]).not.toHaveProperty("display_url");
+    expect(result.artifacts?.[0]).not.toHaveProperty("download_url");
+  });
+
   it.each([
     {
       name: "absolute URL",
       artifacts: [{ ...artifact, download_url: "https://evil.invalid/file" }],
+    },
+    {
+      name: "display URL on the list DTO",
+      artifacts: [
+        {
+          ...artifact,
+          display_url: "/api/v1/downloads/relay-file?token=signed-token",
+        },
+      ],
     },
     {
       name: "legacy relay URL without canonical token",

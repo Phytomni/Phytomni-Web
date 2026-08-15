@@ -128,6 +128,7 @@ describe("useArtifactPanel", () => {
       expect.stringMatching(/^conversation-artifact-/)
     );
     expect(open).not.toHaveBeenCalled();
+    expect(states.currentChat.value?.messages[0].artifacts).toEqual([artifact]);
 
     await panel.downloadArtifact({ ...artifact, id: "foreign-artifact" });
     expect(artifactMocks.getConversationArtifactFile).toHaveBeenCalledTimes(1);
@@ -157,6 +158,118 @@ describe("useArtifactPanel", () => {
 
     expect(panel.currentArtifactMessage.value?.id).toBe("data-artifact");
     expect(panel.currentArtifactLinks.value).toHaveLength(1);
+  });
+
+  it("signs image and CIF display URLs at render without mutating the message", async () => {
+    const { states, panel } = makePanel();
+    const image = {
+      id: "figure-1",
+      name: "figure.png",
+      kind: "image" as const,
+      media_type: "image/png",
+    };
+    const structure = {
+      id: "fold-1",
+      name: "fold.cif",
+      kind: "cif" as const,
+      media_type: "chemical/x-cif",
+    };
+    artifactMocks.getConversationArtifactDownloadURL
+      .mockResolvedValueOnce({
+        code: 200,
+        data: "/api/v1/downloads/relay-file?token=image-token",
+      })
+      .mockResolvedValueOnce({
+        code: 200,
+        data: "/api/v1/downloads/relay-file?token=cif-token",
+      });
+    const message = eligibleMessage("88", {
+      tool_name: "DeepGenomeAgent",
+      content: "![plot](figure.png)\n\n[structure](fold.cif)",
+      artifacts: [image, structure],
+    });
+    states.currentChatId.value = "A";
+    states.currentChat.value = { dialogue_id: "A", messages: [message] };
+
+    panel.openArtifact(reportIdentity("88"));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(panel.currentArtifactResources.value).toEqual([
+      {
+        id: "figure-1",
+        name: "figure.png",
+        kind: "image",
+        markdownHref: "figure.png",
+        displayUrl: "/api/v1/downloads/relay-file?token=image-token",
+      },
+      {
+        id: "fold-1",
+        name: "fold.cif",
+        kind: "cif",
+        markdownHref: "fold.cif",
+        displayUrl: "/api/v1/downloads/relay-file?token=cif-token",
+      },
+    ]);
+    expect(states.currentChat.value.messages[0].artifacts).toEqual([
+      image,
+      structure,
+    ]);
+    expect(
+      states.currentChat.value.messages[0].artifacts?.[0]
+    ).not.toHaveProperty("displayUrl");
+    expect(
+      artifactMocks.getConversationArtifactDownloadURL
+    ).toHaveBeenCalledWith({
+      dialogue_id: "A",
+      message_id: "88",
+      artifact_id: image.id,
+    });
+    expect(
+      artifactMocks.getConversationArtifactDownloadURL
+    ).toHaveBeenCalledWith({
+      dialogue_id: "A",
+      message_id: "88",
+      artifact_id: structure.id,
+    });
+  });
+
+  it("keeps a failed signing attempt as an unavailable resource", async () => {
+    const { states, panel } = makePanel();
+    const image = {
+      id: "figure-2",
+      name: "figure.png",
+      kind: "image" as const,
+    };
+    artifactMocks.getConversationArtifactDownloadURL.mockRejectedValueOnce(
+      new Error("forbidden")
+    );
+    states.currentChatId.value = "A";
+    states.currentChat.value = {
+      dialogue_id: "A",
+      messages: [
+        eligibleMessage("89", {
+          tool_name: "KnowledgeAgent",
+          content: "![plot](figure.png)",
+          artifacts: [image],
+        }),
+      ],
+    };
+
+    panel.openArtifact(reportIdentity("89"));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(panel.currentArtifactResources.value).toEqual([
+      {
+        id: "figure-2",
+        name: "figure.png",
+        kind: "image",
+        markdownHref: "figure.png",
+      },
+    ]);
   });
 
   it("preserves bounded artifacts and context notices during history hydration", () => {

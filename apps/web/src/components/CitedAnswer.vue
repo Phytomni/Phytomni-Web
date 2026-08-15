@@ -5,17 +5,21 @@
       :source="content"
       :citation-namespace="ns"
       :reference-count="references?.length ?? 0"
+      :resources="resources"
       :surface="surface"
       @finish="emit('finish')"
       @citation-activate="handleCitationActivate"
+      @resource-activate="emit('resource-activate', $event)"
     />
     <ScientificMarkdown
       v-else
       :source="content"
       :citation-namespace="ns"
       :reference-count="references?.length ?? 0"
+      :resources="resources"
       :surface="surface"
       @citation-activate="handleCitationActivate"
+      @resource-activate="emit('resource-activate', $event)"
     />
     <CitationReferenceList
       v-if="referencePresentation === 'inline'"
@@ -32,8 +36,10 @@ import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import ScientificMarkdownTypewriter from "@/components/ScientificMarkdownTypewriter.vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import type {
+  AuthorizedScientificResource,
   MarkdownSurface,
   ScientificCitationActivation,
+  ScientificResourceActivation,
 } from "@/utils/scientific-markdown/types";
 
 // Pure presentational renderer for cited-family answers (Knowledge / Review / BriefGene).
@@ -44,17 +50,24 @@ const props = withDefaults(
   defineProps<{
     content: string;
     references?: readonly unknown[];
+    resources?: readonly AuthorizedScientificResource[];
     instantMessage?: boolean;
     ns: string;
     surface?: MarkdownSurface;
     referencePresentation?: "inline" | "external";
   }>(),
-  { instantMessage: false, surface: "reading", referencePresentation: "inline" }
+  {
+    instantMessage: false,
+    surface: "reading",
+    referencePresentation: "inline",
+    resources: () => [],
+  }
 );
 
 const emit = defineEmits<{
   finish: [];
   "citation-activate": [activation: ScientificCitationActivation];
+  "resource-activate": [activation: ScientificResourceActivation];
 }>();
 
 const referenceListRef = ref<{
