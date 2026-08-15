@@ -7,17 +7,28 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import check_bot_web_activation as checker
-from scripts.bounded_input import InputTooLargeError, read_bytes as read_bounded_bytes
+from scripts.bounded_input import (
+    FileIdentity,
+    InputTooLargeError,
+    read_snapshot as read_bounded_snapshot,
+)
+
+
+class _ManifestSnapshot(NamedTuple):
+    value: dict[str, Any]
+    raw: bytes
+    identity: FileIdentity
 
 
 def _git(repository: Path, *arguments: str) -> bytes:
@@ -214,21 +225,81 @@ def _generate_binding(
     }
 
 
-def _load_manifest(path: Path) -> tuple[dict[str, Any], str]:
+def _manifest_path(web_root: Path) -> Path:
+    relative = checker.BOT_CONTRACT_MANIFEST_REL
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("Web contract manifest path escapes the Web root")
+    candidate = web_root / relative
+    current = web_root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise ValueError("Web contract manifest path uses a symlink")
     try:
-        raw = read_bounded_bytes(path, checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(web_root)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ValueError("Web contract manifest path escapes the Web root") from exc
+    if resolved != candidate:
+        raise ValueError("Web contract manifest path uses a symlink")
+    return candidate
+
+
+def _load_manifest(path: Path) -> _ManifestSnapshot:
+    try:
+        snapshot = read_bounded_snapshot(
+            path,
+            checker.MAX_BOT_CONTRACT_MANIFEST_BYTES,
+            no_follow=True,
+        )
     except InputTooLargeError as exc:
         raise ValueError("Web contract manifest is oversized") from exc
     except OSError as exc:
         raise ValueError("Web contract manifest cannot be read") from exc
+    raw = snapshot.value
     try:
-        text = raw.decode("utf-8")
+        raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError("Web contract manifest is malformed") from exc
     value = checker._json_object(raw)
     if value is None:
         raise ValueError("Web contract manifest is malformed")
-    return value, text
+    return _ManifestSnapshot(value=value, raw=raw, identity=snapshot.identity)
+
+
+def _write_manifest(
+    path: Path,
+    raw: bytes,
+    expected_identity: FileIdentity,
+) -> None:
+    flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError("Web contract manifest cannot be written") from exc
+    try:
+        metadata = os.fstat(descriptor)
+        identity = FileIdentity(
+            device=metadata.st_dev,
+            inode=metadata.st_ino,
+            mode=metadata.st_mode,
+            size=metadata.st_size,
+            modified_ns=metadata.st_mtime_ns,
+            changed_ns=metadata.st_ctime_ns,
+        )
+        if identity != expected_identity:
+            raise ValueError("Web contract manifest changed during generation")
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.seek(0)
+            stream.truncate()
+            stream.write(raw)
+    except OSError as exc:
+        raise ValueError("Web contract manifest cannot be written") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -242,10 +313,16 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    web_root = args.web_root.resolve()
-    manifest_path = web_root / checker.BOT_CONTRACT_MANIFEST_REL
     try:
-        manifest, current_manifest_text = _load_manifest(manifest_path)
+        try:
+            web_root = args.web_root.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("Web root cannot be resolved") from exc
+        if not web_root.is_dir():
+            raise ValueError("Web root is not a directory")
+        manifest_path = _manifest_path(web_root)
+        initial = _load_manifest(manifest_path)
+        manifest = initial.value
         current_binding = manifest.get("activation_source_binding")
         current_binding_commit = (
             current_binding.get("bot_commit")
@@ -263,20 +340,26 @@ def main(argv: list[str] | None = None) -> int:
             else web_root.parent / "Phytomni-Bot"
         )
         binding = _generate_binding(web_root, bot_repository, bot_commit)
+
+        expected = dict(manifest)
+        expected["activation_source_binding"] = binding
+        rendered = (json.dumps(expected, ensure_ascii=False, indent=2) + "\n").encode(
+            "utf-8"
+        )
+        manifest_path = _manifest_path(web_root)
+        final = _load_manifest(manifest_path)
+        if final.identity != initial.identity or final.raw != initial.raw:
+            raise ValueError("Web contract manifest changed during generation")
+        if args.check:
+            if final.raw != rendered:
+                raise ValueError("committed manifest is stale")
+            print("Bot activation manifest: PASS")
+            return 0
+        _manifest_path(web_root)
+        _write_manifest(manifest_path, rendered, final.identity)
     except ValueError as exc:
         print(f"Bot activation manifest: FAIL - {exc}", file=sys.stderr)
         return 1
-
-    expected = dict(manifest)
-    expected["activation_source_binding"] = binding
-    rendered = json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
-    if args.check:
-        if current_manifest_text != rendered:
-            print("Bot activation manifest: FAIL - committed manifest is stale")
-            return 1
-        print("Bot activation manifest: PASS")
-        return 0
-    manifest_path.write_text(rendered, encoding="utf-8")
     print("Bot activation manifest: generated")
     return 0
 

@@ -89,7 +89,7 @@ def test_generation_rejects_oversized_manifest_before_unbounded_read(
         generator._load_manifest(manifest_path)
 
 
-def test_check_mode_reuses_bounded_manifest_read(
+def test_check_mode_uses_bounded_final_manifest_reread(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -124,6 +124,148 @@ def test_check_mode_reuses_bounded_manifest_read(
         )
         == 0
     )
+
+
+def test_check_mode_rejects_manifest_replacement_during_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    manifest_path.write_bytes(manifest_raw)
+    binding = json.loads(manifest_raw)["activation_source_binding"]
+
+    def replace_manifest(
+        _web_root: Path,
+        _bot_repository: Path,
+        _bot_commit: str,
+    ) -> dict[str, object]:
+        replacement = manifest_path.with_suffix(".replacement")
+        replacement.write_bytes(manifest_raw)
+        replacement.replace(manifest_path)
+        return binding
+
+    monkeypatch.setattr(generator, "_generate_binding", replace_manifest)
+
+    assert (
+        generator.main(
+            [
+                "--web-root",
+                str(tmp_path),
+                "--bot-repo",
+                str(tmp_path),
+                "--check",
+            ]
+        )
+        == 1
+    )
+
+
+def test_check_mode_rejects_oversized_manifest_replacement_during_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    manifest_path.write_bytes(manifest_raw)
+    binding = json.loads(manifest_raw)["activation_source_binding"]
+
+    def replace_manifest(
+        _web_root: Path,
+        _bot_repository: Path,
+        _bot_commit: str,
+    ) -> dict[str, object]:
+        replacement = manifest_path.with_suffix(".replacement")
+        with replacement.open("wb") as stream:
+            stream.seek(checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+            stream.write(b"}")
+        replacement.replace(manifest_path)
+        return binding
+
+    monkeypatch.setattr(generator, "_generate_binding", replace_manifest)
+
+    assert (
+        generator.main(
+            [
+                "--web-root",
+                str(tmp_path),
+                "--bot-repo",
+                str(tmp_path),
+                "--check",
+            ]
+        )
+        == 1
+    )
+
+
+@pytest.mark.parametrize("check_flag", [[], ["--check"]])
+def test_generator_rejects_manifest_symlink_escape_before_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    check_flag: list[str],
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    outside_path = tmp_path.parent / f"{tmp_path.name}-outside-manifest.json"
+    outside_path.write_bytes(MANIFEST_PATH.read_bytes())
+    manifest_path.symlink_to(outside_path)
+
+    def reject_manifest_read(_path: Path) -> tuple[dict[str, Any], str]:
+        raise AssertionError("unsafe manifest path was read")
+
+    monkeypatch.setattr(generator, "_load_manifest", reject_manifest_read)
+
+    assert (
+        generator.main(
+            [
+                "--web-root",
+                str(tmp_path),
+                "--bot-repo",
+                str(tmp_path),
+                *check_flag,
+            ]
+        )
+        == 1
+    )
+
+
+def test_write_mode_rejects_manifest_symlink_replacement_before_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    manifest_path.write_bytes(manifest_raw)
+    binding = json.loads(manifest_raw)["activation_source_binding"]
+    outside_path = tmp_path.parent / f"{tmp_path.name}-outside-manifest.json"
+    outside_raw = b"outside target must not change\n"
+    outside_path.write_bytes(outside_raw)
+
+    def replace_manifest(
+        _web_root: Path,
+        _bot_repository: Path,
+        _bot_commit: str,
+    ) -> dict[str, object]:
+        manifest_path.unlink()
+        manifest_path.symlink_to(outside_path)
+        return binding
+
+    monkeypatch.setattr(generator, "_generate_binding", replace_manifest)
+
+    result = generator.main(
+        [
+            "--web-root",
+            str(tmp_path),
+            "--bot-repo",
+            str(tmp_path),
+        ]
+    )
+
+    assert result == 1
+    assert outside_path.read_bytes() == outside_raw
 
 
 def test_generation_rejects_research_fixture_trailing_byte_drift(
