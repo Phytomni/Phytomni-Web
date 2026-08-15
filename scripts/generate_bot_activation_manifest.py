@@ -17,6 +17,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import check_bot_web_activation as checker
+from scripts.bounded_input import InputTooLargeError, read_bytes as read_bounded_bytes
 
 
 def _git(repository: Path, *arguments: str) -> bytes:
@@ -213,15 +214,21 @@ def _generate_binding(
     }
 
 
-def _load_manifest(path: Path) -> dict[str, Any]:
+def _load_manifest(path: Path) -> tuple[dict[str, Any], str]:
     try:
-        raw = path.read_bytes()
+        raw = read_bounded_bytes(path, checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+    except InputTooLargeError as exc:
+        raise ValueError("Web contract manifest is oversized") from exc
     except OSError as exc:
         raise ValueError("Web contract manifest cannot be read") from exc
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Web contract manifest is malformed") from exc
     value = checker._json_object(raw)
     if value is None:
         raise ValueError("Web contract manifest is malformed")
-    return value
+    return value, text
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -238,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     web_root = args.web_root.resolve()
     manifest_path = web_root / checker.BOT_CONTRACT_MANIFEST_REL
     try:
-        manifest = _load_manifest(manifest_path)
+        manifest, current_manifest_text = _load_manifest(manifest_path)
         current_binding = manifest.get("activation_source_binding")
         current_binding_commit = (
             current_binding.get("bot_commit")
@@ -264,11 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     expected["activation_source_binding"] = binding
     rendered = json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
     if args.check:
-        try:
-            current = manifest_path.read_text(encoding="utf-8")
-        except OSError:
-            current = ""
-        if current != rendered:
+        if current_manifest_text != rendered:
             print("Bot activation manifest: FAIL - committed manifest is stale")
             return 1
         print("Bot activation manifest: PASS")

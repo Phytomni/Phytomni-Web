@@ -14,12 +14,23 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.bounded_input import (
+    MAX_CONTRACT_MANIFEST_BYTES,
+    InputTooLargeError,
+    read_bytes as read_bounded_bytes,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
+MAX_BOT_CONTRACT_MANIFEST_BYTES = MAX_CONTRACT_MANIFEST_BYTES
 
 RELEASE_BOT_COMMIT = "38349aab1f6e2d65c286723beb3e5a426027e77a"
 REQUIRED_AGENT_SLUGS = (
@@ -1484,8 +1495,20 @@ def _check_result_archive_fixture(
 
 
 def _load_manifest(root: Path, violations: list[str]) -> dict[str, Any] | None:
-    raw = _read_bytes(root, MANIFEST_REL, violations)
-    if raw is None:
+    path = root / MANIFEST_REL
+    if not _within(path, root):
+        violations.append(f"refusing to read out-of-scope path: {MANIFEST_REL}")
+        return None
+    try:
+        raw = read_bounded_bytes(path, MAX_BOT_CONTRACT_MANIFEST_BYTES)
+    except InputTooLargeError:
+        violations.append("compatibility manifest is oversized")
+        return None
+    except FileNotFoundError:
+        violations.append(f"missing compatibility file: {MANIFEST_REL}")
+        return None
+    except OSError:
+        violations.append(f"cannot read compatibility file: {MANIFEST_REL}")
         return None
     try:
         value = json.loads(raw)

@@ -16,9 +16,19 @@ import binascii
 import hashlib
 import json
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.bounded_input import (
+    MAX_CONTRACT_MANIFEST_BYTES,
+    InputTooLargeError,
+    read_bytes as read_bounded_bytes,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -160,7 +170,7 @@ MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
 MAX_RESEARCH_INPUT_FIXTURE_BYTES = 256 * 1024
-MAX_BOT_CONTRACT_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_BOT_CONTRACT_MANIFEST_BYTES = MAX_CONTRACT_MANIFEST_BYTES
 MAX_BOT_SOURCE_BYTES = 512 * 1024
 
 BOT_SOURCE_PATHS = {
@@ -1317,11 +1327,20 @@ def _authenticate_bot_sources(
 def _load_bot_source_binding(
     root: Path, violations: list[str]
 ) -> _BotSourceBinding | None:
-    raw = _read_bytes(root, BOT_CONTRACT_MANIFEST_REL, violations)
-    if raw is None:
+    candidate = _safe_relative_path(root, BOT_CONTRACT_MANIFEST_REL)
+    if candidate is None:
+        violations.append("refusing to read out-of-scope activation path")
         return None
-    if len(raw) > MAX_BOT_CONTRACT_MANIFEST_BYTES:
+    try:
+        raw = read_bounded_bytes(candidate, MAX_BOT_CONTRACT_MANIFEST_BYTES)
+    except InputTooLargeError:
         violations.append("Bot source binding manifest is oversized")
+        return None
+    except FileNotFoundError:
+        violations.append("missing Web activation source")
+        return None
+    except OSError:
+        violations.append("cannot read Web activation source")
         return None
     manifest = _json_object(raw)
     binding = (

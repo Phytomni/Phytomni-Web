@@ -68,6 +68,64 @@ def _generate_with_current_sources(
     )
 
 
+def test_generation_rejects_oversized_manifest_before_unbounded_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / "contract-manifest.json"
+    with manifest_path.open("wb") as stream:
+        stream.seek(checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        stream.write(b"}")
+    original_read_bytes = Path.read_bytes
+
+    def reject_manifest_read_bytes(path: Path) -> bytes:
+        if path == manifest_path:
+            raise AssertionError("manifest used an unbounded read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_manifest_read_bytes)
+
+    with pytest.raises(ValueError, match="manifest is oversized"):
+        generator._load_manifest(manifest_path)
+
+
+def test_check_mode_reuses_bounded_manifest_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    manifest_path.write_bytes(manifest_raw)
+    binding = json.loads(manifest_raw)["activation_source_binding"]
+    monkeypatch.setattr(
+        generator,
+        "_generate_binding",
+        lambda _web_root, _bot_repository, _bot_commit: binding,
+    )
+    original_read_text = Path.read_text
+
+    def reject_manifest_read_text(path: Path, *args: Any, **kwargs: Any) -> str:
+        if path == manifest_path:
+            raise AssertionError("check mode reread the manifest without a bound")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", reject_manifest_read_text)
+
+    assert (
+        generator.main(
+            [
+                "--web-root",
+                str(tmp_path),
+                "--bot-repo",
+                str(tmp_path),
+                "--check",
+            ]
+        )
+        == 0
+    )
+
+
 def test_generation_rejects_research_fixture_trailing_byte_drift(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

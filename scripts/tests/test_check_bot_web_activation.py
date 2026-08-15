@@ -917,6 +917,29 @@ def test_checker_rejects_pinned_bot_commit_drift(tmp_path: Path) -> None:
     assert any("Bot source binding" in error for error in errors)
 
 
+def test_source_binding_rejects_oversized_manifest_before_unbounded_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / SOURCE_BINDING_MANIFEST_PATH
+    manifest_path.parent.mkdir(parents=True)
+    with manifest_path.open("wb") as stream:
+        stream.seek(checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        stream.write(b"}")
+    original_read_bytes = Path.read_bytes
+
+    def reject_manifest_read_bytes(path: Path) -> bytes:
+        if path == manifest_path:
+            raise AssertionError("manifest used an unbounded read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_manifest_read_bytes)
+    violations: list[str] = []
+
+    assert checker._load_bot_source_binding(tmp_path, violations) is None
+    assert violations == ["Bot source binding manifest is oversized"]
+
+
 def test_checker_rejects_valid_unaccepted_bot_commit_proof(tmp_path: Path) -> None:
     root = minimal_tree(tmp_path)
     manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
