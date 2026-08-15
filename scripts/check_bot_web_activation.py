@@ -187,6 +187,7 @@ RESEARCH_FIXTURE_SOURCE_PATHS = {
     "agent_capability_serializer": (
         "src/mcp_server_phytomni/api/agent_capabilities.py"
     ),
+    "upload_runtime": "src/mcp_server_phytomni/runtime/resumable_uploads.py",
     "advertised_protocols": (
         "src/mcp_server_phytomni/api/advertised_protocols.py"
     ),
@@ -194,8 +195,6 @@ RESEARCH_FIXTURE_SOURCE_PATHS = {
         "src/mcp_server_phytomni/runtime/conversation_context/models.py"
     ),
     "research_contract": "docs/contracts/research-input-resolution/catalog.json",
-    "upload_capability": "docs/contracts/resumable-upload/capability.json",
-    "resumable_upload_packet": "docs/contracts/resumable-upload/manifest.json",
 }
 
 
@@ -223,6 +222,12 @@ class _PinnedBotContract(NamedTuple):
     upload_route_family: str
     upload_routes: tuple[dict[str, str], ...]
     upload_ceiling_bytes: int
+
+
+class _RuntimeUploadCapability(NamedTuple):
+    protocol: str
+    protocol_version: int
+    descriptor: dict[str, Any]
 
 
 class _BotSourceBinding(NamedTuple):
@@ -714,6 +719,322 @@ def _dict_string_keys(node: ast.expr) -> tuple[str, ...] | None:
     return tuple(keys) if len(keys) == len(set(keys)) else None
 
 
+def _has_python_import(
+    tree: ast.Module,
+    *,
+    module: str,
+    level: int,
+    names: frozenset[str],
+) -> bool:
+    imported = {
+        alias.name
+        for statement in tree.body
+        if isinstance(statement, ast.ImportFrom)
+        and statement.module == module
+        and statement.level == level
+        for alias in statement.names
+    }
+    return names.issubset(imported)
+
+
+def _integer_expression(
+    node: ast.expr,
+    assignments: Mapping[str, ast.expr],
+    seen: frozenset[str] = frozenset(),
+) -> int | None:
+    limit = 2**63
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    ):
+        return node.value if abs(node.value) <= limit else None
+    if isinstance(node, ast.Name):
+        if node.id in seen or node.id not in assignments:
+            return None
+        return _integer_expression(
+            assignments[node.id], assignments, seen | {node.id}
+        )
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        operand = _integer_expression(node.operand, assignments, seen)
+        if operand is None:
+            return None
+        result = operand if isinstance(node.op, ast.UAdd) else -operand
+        return result if abs(result) <= limit else None
+    if not isinstance(node, ast.BinOp):
+        return None
+    left = _integer_expression(node.left, assignments, seen)
+    right = _integer_expression(node.right, assignments, seen)
+    if left is None or right is None:
+        return None
+    if isinstance(node.op, ast.Add):
+        result = left + right
+    elif isinstance(node.op, ast.Sub):
+        result = left - right
+    elif isinstance(node.op, ast.Mult):
+        result = left * right
+    elif isinstance(node.op, ast.Pow) and 0 <= right <= 12:
+        result = left**right
+    else:
+        return None
+    return result if abs(result) <= limit else None
+
+
+def _timedelta_seconds(
+    node: ast.expr,
+    assignments: Mapping[str, ast.expr],
+) -> int | None:
+    if isinstance(node, ast.Name):
+        target = assignments.get(node.id)
+        return (
+            _timedelta_seconds(target, assignments)
+            if target is not None
+            else None
+        )
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "timedelta"
+        and not node.args
+        and all(keyword.arg is not None for keyword in node.keywords)
+    ):
+        return None
+    keyword_names = [keyword.arg for keyword in node.keywords]
+    if len(keyword_names) != len(set(keyword_names)) or any(
+        name
+        not in {
+            "weeks",
+            "days",
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds",
+            "microseconds",
+        }
+        for name in keyword_names
+    ):
+        return None
+    total_microseconds = 0
+    for keyword in node.keywords:
+        assert keyword.arg is not None
+        value = _integer_expression(keyword.value, assignments)
+        if value is None:
+            return None
+        if keyword.arg == "weeks":
+            total_microseconds += value * 7 * 24 * 60 * 60 * 1_000_000
+        elif keyword.arg == "days":
+            total_microseconds += value * 24 * 60 * 60 * 1_000_000
+        elif keyword.arg == "hours":
+            total_microseconds += value * 60 * 60 * 1_000_000
+        elif keyword.arg == "minutes":
+            total_microseconds += value * 60 * 1_000_000
+        elif keyword.arg == "seconds":
+            total_microseconds += value * 1_000_000
+        elif keyword.arg == "milliseconds":
+            total_microseconds += value * 1_000
+        else:
+            total_microseconds += value
+    if total_microseconds <= 0 or total_microseconds % 1_000_000 != 0:
+        return None
+    return total_microseconds // 1_000_000
+
+
+def _upload_limit_value(
+    node: ast.expr,
+    assignments: Mapping[str, ast.expr],
+) -> int | None:
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "int"
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        return _upload_limit_value(node.args[0], assignments)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "total_seconds"
+        and not node.args
+        and not node.keywords
+    ):
+        return _timedelta_seconds(node.func.value, assignments)
+    return _integer_expression(node, assignments)
+
+
+def _parse_runtime_upload_capability(
+    serializer_source: str,
+    runtime_source: str,
+) -> _RuntimeUploadCapability | None:
+    serializer = _python_assignments(serializer_source)
+    runtime = _python_assignments(runtime_source)
+    if serializer is None or runtime is None:
+        return None
+    serializer_tree, serializer_assignments = serializer
+    runtime_tree, runtime_assignments = runtime
+    runtime_names = frozenset(
+        {
+            "CAPABILITY_TTL",
+            "MAX_ACTIVE_ASSETS",
+            "MAX_UPLOAD_BYTES",
+            "PART_SIZE_BYTES",
+            "SESSION_TTL",
+        }
+    )
+    if not _has_python_import(
+        serializer_tree,
+        module="runtime.resumable_uploads",
+        level=2,
+        names=runtime_names,
+    ) or not _has_python_import(
+        runtime_tree,
+        module="datetime",
+        level=0,
+        names=frozenset({"timedelta"}),
+    ):
+        return None
+    functions = [
+        node
+        for node in serializer_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "serialize_file_upload_capability"
+    ]
+    if len(functions) != 1:
+        return None
+    function = functions[0]
+    arguments = function.args
+    if not (
+        not arguments.posonlyargs
+        and [argument.arg for argument in arguments.args] == ["limits"]
+        and len(arguments.defaults) == 1
+        and isinstance(arguments.defaults[0], ast.Constant)
+        and arguments.defaults[0].value is None
+        and arguments.vararg is None
+        and not arguments.kwonlyargs
+        and arguments.kwarg is None
+    ):
+        return None
+    resolved_assignments = [
+        statement.value
+        for statement in function.body
+        if isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance(statement.targets[0], ast.Name)
+        and statement.targets[0].id == "resolved"
+    ]
+    returns = [
+        node for node in ast.walk(function) if isinstance(node, ast.Return)
+    ]
+    if len(resolved_assignments) != 1 or len(returns) != 1:
+        return None
+    resolved_node = resolved_assignments[0]
+    limit_fields = _dict_string_keys(resolved_node)
+    expected_limit_fields = (
+        "max_file_bytes",
+        "part_size_bytes",
+        "max_parallel_parts",
+        "max_active_assets",
+        "capability_ttl_seconds",
+        "session_ttl_seconds",
+    )
+    if not isinstance(resolved_node, ast.Dict) or limit_fields != expected_limit_fields:
+        return None
+    assignments = {**runtime_assignments, **serializer_assignments}
+    limits: dict[str, int] = {}
+    for field, value_node in zip(
+        limit_fields, resolved_node.values, strict=True
+    ):
+        value = _upload_limit_value(value_node, assignments)
+        if value is None or value < 1:
+            return None
+        limits[field] = value
+
+    return_node = returns[0].value
+    return_fields = _dict_string_keys(return_node) if return_node is not None else None
+    if not isinstance(return_node, ast.Dict) or return_fields != (
+        "route_family",
+        "routes",
+        "limits",
+    ):
+        return None
+    return_values = dict(zip(return_fields, return_node.values, strict=True))
+    route_family_node = return_values["route_family"]
+    routes_node = return_values["routes"]
+    limits_node = return_values["limits"]
+    route_family = (
+        route_family_node.value
+        if isinstance(route_family_node, ast.Constant)
+        and isinstance(route_family_node.value, str)
+        else None
+    )
+    if not (
+        isinstance(routes_node, ast.ListComp)
+        and isinstance(routes_node.elt, ast.Call)
+        and isinstance(routes_node.elt.func, ast.Name)
+        and routes_node.elt.func.id == "dict"
+        and len(routes_node.elt.args) == 1
+        and isinstance(routes_node.elt.args[0], ast.Name)
+        and routes_node.elt.args[0].id == "route"
+        and not routes_node.elt.keywords
+        and len(routes_node.generators) == 1
+        and isinstance(routes_node.generators[0].target, ast.Name)
+        and routes_node.generators[0].target.id == "route"
+        and isinstance(routes_node.generators[0].iter, ast.Name)
+        and routes_node.generators[0].iter.id == "_UPLOAD_ROUTES"
+        and not routes_node.generators[0].ifs
+        and not routes_node.generators[0].is_async
+        and isinstance(limits_node, ast.Name)
+        and limits_node.id == "resolved"
+    ):
+        return None
+    routes_assignment = serializer_assignments.get("_UPLOAD_ROUTES")
+    try:
+        routes = (
+            ast.literal_eval(routes_assignment)
+            if routes_assignment is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(routes, tuple):
+        return None
+    descriptor = {
+        "route_family": route_family,
+        "routes": list(routes),
+        "limits": limits,
+    }
+    parsed_descriptor = _parse_bot_upload_capability(
+        json.dumps(descriptor, separators=(",", ":")).encode("utf-8")
+    )
+    protocol_node = runtime_assignments.get("UPLOAD_PROTOCOL")
+    version_node = runtime_assignments.get("UPLOAD_PROTOCOL_VERSION")
+    try:
+        protocol = (
+            ast.literal_eval(protocol_node) if protocol_node is not None else None
+        )
+    except (TypeError, ValueError):
+        return None
+    version = (
+        _integer_expression(version_node, runtime_assignments)
+        if version_node is not None
+        else None
+    )
+    if (
+        parsed_descriptor is None
+        or parsed_descriptor[2] != limits["max_file_bytes"]
+        or not isinstance(protocol, str)
+        or _PROTOCOL_NAME_RE.fullmatch(protocol) is None
+        or version is None
+        or version < 1
+    ):
+        return None
+    return _RuntimeUploadCapability(
+        protocol=protocol,
+        protocol_version=version,
+        descriptor=descriptor,
+    )
+
+
 def _parse_agent_catalog_shape(
     source: str,
 ) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
@@ -816,19 +1137,21 @@ def _parse_research_descriptor_fields(source: str) -> tuple[str, ...] | None:
 def _parse_fixture_protocols(
     advertised_source: str,
     conversation_source: str,
-    packet: Mapping[str, Any],
+    upload_protocol: str,
+    upload_version: int,
     research_protocol: str,
     research_version: int,
 ) -> dict[str, list[int]] | None:
     advertised = _python_assignments(advertised_source)
     conversation = _python_assignments(conversation_source)
-    packet_protocol = packet.get("protocol")
-    packet_match = (
-        re.search(r"-v(?P<version>[1-9][0-9]*)$", packet_protocol)
-        if isinstance(packet_protocol, str)
-        else None
-    )
-    if advertised is None or conversation is None or packet_match is None:
+    if advertised is None or conversation is None:
+        return None
+    if not _has_python_import(
+        advertised[0],
+        module="runtime.resumable_uploads",
+        level=2,
+        names=frozenset({"UPLOAD_PROTOCOL", "UPLOAD_PROTOCOL_VERSION"}),
+    ):
         return None
     names = {
         "RESULT_ARCHIVE_PROTOCOL",
@@ -837,8 +1160,8 @@ def _parse_fixture_protocols(
         "RESEARCH_INPUT_PROTOCOL_VERSION",
     }
     values: dict[str, str | int] = {
-        "UPLOAD_PROTOCOL": packet_protocol,
-        "UPLOAD_PROTOCOL_VERSION": int(packet_match.group("version")),
+        "UPLOAD_PROTOCOL": upload_protocol,
+        "UPLOAD_PROTOCOL_VERSION": upload_version,
     }
     for name in names:
         node = advertised[1].get(name)
@@ -928,6 +1251,7 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
         "agent_identities",
         "agent_catalog_route",
         "agent_capability_serializer",
+        "upload_runtime",
         "advertised_protocols",
         "conversation_context",
     )
@@ -944,19 +1268,19 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
     )
     capabilities = _json_object(sources.get("agent_capabilities", b""))
     catalog = _json_object(sources.get("research_contract", b""))
-    upload = _json_object(sources.get("upload_capability", b""))
-    packet = _json_object(sources.get("resumable_upload_packet", b""))
-    contract = _parse_pinned_bot_contract(sources)
+    research = _parse_bot_research_catalog(sources.get("research_contract", b""))
+    upload = _parse_runtime_upload_capability(
+        decoded["agent_capability_serializer"],
+        decoded["upload_runtime"],
+    )
     if (
         metadata is None
         or shape is None
         or descriptor_fields is None
         or capabilities is None
         or catalog is None
+        or research is None
         or upload is None
-        or packet is None
-        or contract is None
-        or _parse_bot_upload_capability(sources["upload_capability"]) is None
     ):
         return None
     tools, remote_slugs, aliases = metadata
@@ -972,9 +1296,10 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
     protocols = _parse_fixture_protocols(
         decoded["advertised_protocols"],
         decoded["conversation_context"],
-        packet,
-        contract.research_protocol,
-        contract.research_protocol_version,
+        upload.protocol,
+        upload.protocol_version,
+        research[0],
+        research[1],
     )
     if protocols is None:
         return None
@@ -990,7 +1315,7 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
         rows.append({field: values[field] for field in row_fields})
     values = {
         "object": "list",
-        "file_upload": upload,
+        "file_upload": upload.descriptor,
         "data": rows,
         "protocols": protocols,
         "research_input_resolution": {

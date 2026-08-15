@@ -970,7 +970,7 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
         == checker.ACTIVATION_SOURCE_BOT_COMMIT
         == PINNED_ACTIVATION_BOT_COMMIT
     )
-    assert len(raw) < 256 * 1024
+    assert len(raw) < 384 * 1024
     assert len(binding["git_object_proof"]["trees"]) <= 8
     assert {(entry["role"], entry["path"]) for entry in binding["sources"]} == set(
         checker.BOT_SOURCE_PATHS.items()
@@ -988,6 +988,12 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     )
     assert {(entry["role"], entry["path"]) for entry in authority["sources"]} == set(
         checker.RESEARCH_FIXTURE_SOURCE_PATHS.items()
+    )
+    authority_paths = {entry["path"] for entry in authority["sources"]}
+    assert "src/mcp_server_phytomni/runtime/resumable_uploads.py" in authority_paths
+    assert not any(
+        path.startswith("docs/contracts/resumable-upload/")
+        for path in authority_paths
     )
     fixture_sources = {
         entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
