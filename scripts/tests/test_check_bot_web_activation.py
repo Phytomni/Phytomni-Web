@@ -16,6 +16,7 @@ from typing import Any, NotRequired, TypedDict
 import pytest
 
 from scripts import check_bot_web_activation as checker
+from scripts.bounded_input import RootedDirectory
 
 
 ROW_IDS = (
@@ -121,6 +122,21 @@ def research_input_fixture_payload() -> dict[str, object]:
     return json.loads(
         (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_text(encoding="utf-8")
     )
+
+
+def research_fixture_authority_sources() -> dict[str, bytes]:
+    manifest = json.loads(
+        (checker.ROOT / SOURCE_BINDING_MANIFEST_PATH).read_text(encoding="utf-8")
+    )
+    entries = manifest["activation_source_binding"]["research_fixture"][
+        "authority"
+    ]["sources"]
+    return {
+        entry["role"]: base64.b64decode(
+            entry["content_base64"], validate=True
+        )
+        for entry in entries
+    }
 
 
 def research_row(payload: dict[str, Any]) -> dict[str, Any]:
@@ -936,7 +952,8 @@ def test_source_binding_rejects_oversized_manifest_before_unbounded_read(
     monkeypatch.setattr(Path, "read_bytes", reject_manifest_read_bytes)
     violations: list[str] = []
 
-    assert checker._load_bot_source_binding(tmp_path, violations) is None
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_bot_source_binding(opened_root, violations) is None
     assert violations == ["Bot source binding manifest is oversized"]
 
 
@@ -970,7 +987,7 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
         == checker.ACTIVATION_SOURCE_BOT_COMMIT
         == PINNED_ACTIVATION_BOT_COMMIT
     )
-    assert len(raw) < 384 * 1024
+    assert len(raw) < 512 * 1024
     assert len(binding["git_object_proof"]["trees"]) <= 8
     assert {(entry["role"], entry["path"]) for entry in binding["sources"]} == set(
         checker.BOT_SOURCE_PATHS.items()
@@ -991,6 +1008,7 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     )
     authority_paths = {entry["path"] for entry in authority["sources"]}
     assert "src/mcp_server_phytomni/runtime/resumable_uploads.py" in authority_paths
+    assert all(path.startswith("src/") for path in authority_paths)
     assert not any(
         path.startswith("docs/contracts/resumable-upload/")
         for path in authority_paths
@@ -1002,6 +1020,36 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     expected_raw = checker._research_fixture_bytes(fixture_sources)
     assert expected_raw == (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()
     assert hashlib.sha256(expected_raw).hexdigest() == fixture["sha256"]
+
+
+def test_research_fixture_authority_rejects_wrong_agent_route_return() -> None:
+    sources = research_fixture_authority_sources()
+    route = sources["agent_catalog_route"].decode("utf-8")
+    accepted = "        return JSONResponse(payload)"
+    assert route.count(accepted) == 1
+    sources["agent_catalog_route"] = route.replace(
+        accepted,
+        "        return JSONResponse({\"object\": \"disabled\"})",
+    ).encode("utf-8")
+
+    assert checker._research_fixture_bytes(sources) is None
+
+
+def test_research_fixture_authority_rejects_disabled_upload_protocol() -> None:
+    sources = research_fixture_authority_sources()
+    protocols = sources["advertised_protocols"].decode("utf-8")
+    accepted = (
+        "def _upload_enabled() -> bool:\n"
+        "    \"\"\"Upload routes are always available once registered.\"\"\"\n"
+        "    return True"
+    )
+    assert protocols.count(accepted) == 1
+    sources["advertised_protocols"] = protocols.replace(
+        accepted,
+        accepted.replace("return True", "return False"),
+    ).encode("utf-8")
+
+    assert checker._research_fixture_bytes(sources) is None
 
 
 def test_checker_rejects_research_fixture_authority_blob_drift(

@@ -26,8 +26,10 @@ if __package__ in {None, ""}:
 
 from scripts.bounded_input import (
     MAX_CONTRACT_MANIFEST_BYTES,
+    InputChangedError,
     InputTooLargeError,
-    read_bytes as read_bounded_bytes,
+    RootedDirectory,
+    UnsafeInputPathError,
 )
 
 
@@ -182,20 +184,35 @@ BOT_SOURCE_PATHS = {
 
 RESEARCH_FIXTURE_SOURCE_PATHS = {
     "agent_identities": "src/mcp_server_phytomni/api/app.py",
-    "agent_capabilities": "docs/contracts/agents/capabilities.json",
     "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
+    "agent_route_factory": "src/mcp_server_phytomni/api/factory.py",
     "agent_capability_serializer": (
         "src/mcp_server_phytomni/api/agent_capabilities.py"
     ),
     "upload_runtime": "src/mcp_server_phytomni/runtime/resumable_uploads.py",
+    "upload_runtime_wrapper": "src/mcp_server_phytomni/api/upload_runtime.py",
     "advertised_protocols": (
         "src/mcp_server_phytomni/api/advertised_protocols.py"
     ),
     "conversation_context": (
         "src/mcp_server_phytomni/runtime/conversation_context/models.py"
     ),
-    "research_contract": "docs/contracts/research-input-resolution/catalog.json",
+    "api_config": "src/mcp_server_phytomni/config/models/api.py",
+    "api_limits_config": "src/mcp_server_phytomni/config/api_limits.py",
+    "config_defaults": "src/mcp_server_phytomni/config/defaults.py",
+    "research_formats": (
+        "src/mcp_server_phytomni/agents/research/scientific_formats.py"
+    ),
+    "research_readiness": "src/mcp_server_phytomni/api/research_input.py",
+    "research_runtime_capability": (
+        "src/mcp_server_phytomni/api/research_capabilities.py"
+    ),
+    "relay_mode": "src/mcp_server_phytomni/config/relay_mode.py",
 }
+
+_RESEARCH_RESPONSE_AST_SHA256 = (
+    "c2205e1a2c54932b1dbaf002309d5276f7e93f35b2c0d071106385197d4f9e2b"
+)
 
 
 class _ResearchGoContract(NamedTuple):
@@ -299,6 +316,7 @@ _PRIVATE_DELIVERY_FIELDS = frozenset(
     }
 )
 _FIXTURE_DEPTH_LIMIT_MARKER = "__fixture_depth_limit__"
+_UNSUPPORTED_RUNTIME_NODE = object()
 _RESULT_ARCHIVE_REF_RE = re.compile(r"^result-archive:sha256:[0-9a-f]{64}$")
 _RESULT_ARCHIVE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -307,35 +325,21 @@ def _has_forbidden_part(path: Path) -> bool:
     return any(part.casefold() in _FORBIDDEN_PARTS for part in path.parts)
 
 
-def _resolve(path: Path) -> Path | None:
-    try:
-        return path.resolve()
-    except (OSError, RuntimeError):
-        return None
-
-
-def _safe_relative_path(root: Path, relative: Path) -> Path | None:
-    candidate = root / relative
-    resolved_root = _resolve(root)
-    resolved_candidate = _resolve(candidate)
-    if resolved_root is None or resolved_candidate is None:
-        return None
-    try:
-        resolved_candidate.relative_to(resolved_root)
-    except ValueError:
-        return None
-    if _has_forbidden_part(resolved_candidate):
-        return None
-    return candidate
-
-
-def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | None:
-    candidate = _safe_relative_path(root, relative)
-    if candidate is None:
+def _read_bytes(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+    max_bytes: int = MAX_BOT_SOURCE_BYTES,
+) -> bytes | None:
+    if _has_forbidden_part(relative):
         violations.append("refusing to read out-of-scope activation path")
         return None
     try:
-        return candidate.read_bytes()
+        return root.read_bytes(relative, max_bytes)
+    except InputTooLargeError:
+        violations.append("Web activation source is oversized")
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
     except FileNotFoundError:
         violations.append("missing Web activation source")
     except OSError:
@@ -344,7 +348,11 @@ def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | No
     return None
 
 
-def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
+def _read_text(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> str | None:
     raw = _read_bytes(root, relative, violations)
     if raw is None:
         return None
@@ -398,6 +406,31 @@ def _python_assignments(source: str) -> tuple[ast.Module, dict[str, ast.expr]] |
             return None
         assignments[name] = value
     return tree, assignments
+
+
+def _research_response_ast_sha256(sources: Mapping[str, str]) -> str | None:
+    """Seal the executable syntax of every authenticated response authority."""
+
+    payload = bytearray()
+    for role in sorted(RESEARCH_FIXTURE_SOURCE_PATHS):
+        source = sources.get(role)
+        if source is None:
+            return None
+        try:
+            tree = ast.parse(source)
+        except (SyntaxError, ValueError):
+            return None
+        payload.extend(role.encode("ascii"))
+        payload.append(0)
+        payload.extend(
+            ast.dump(
+                tree,
+                annotate_fields=True,
+                include_attributes=False,
+            ).encode("utf-8")
+        )
+        payload.append(0)
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _parse_bot_agent_tools(source: str) -> dict[str, str] | None:
@@ -780,6 +813,165 @@ def _integer_expression(
     return result if abs(result) <= limit else None
 
 
+def _class_assignments(
+    source: str,
+    class_name: str,
+) -> tuple[ast.Module, dict[str, ast.expr]] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    ]
+    if len(classes) != 1:
+        return None
+    assignments: dict[str, ast.expr] = {}
+    for statement in classes[0].body:
+        if not (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.value is not None
+        ):
+            continue
+        name = statement.target.id
+        if name in assignments:
+            return None
+        assignments[name] = statement.value
+    return tree, assignments
+
+
+def _field_default_expression(node: ast.expr) -> ast.expr | None:
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "Field"
+        and not node.args
+    ):
+        return None
+    defaults = [keyword.value for keyword in node.keywords if keyword.arg == "default"]
+    return defaults[0] if len(defaults) == 1 else None
+
+
+def _parse_api_upload_defaults(source: str) -> dict[str, int] | None:
+    parsed = _class_assignments(source, "ApiConfig")
+    if parsed is None:
+        return None
+    _, assignments = parsed
+    module_assignments = _python_assignments(source)
+    if module_assignments is None:
+        return None
+    fields = {
+        "max_file_bytes": "API_UPLOAD_V2_MAX_BYTES",
+        "part_size_bytes": "API_UPLOAD_V2_PART_SIZE_BYTES",
+        "max_parallel_parts": "API_UPLOAD_V2_MAX_PARALLEL_PARTS",
+        "capability_ttl_seconds": "API_UPLOAD_V2_CAPABILITY_TTL_SECONDS",
+        "session_ttl_seconds": "API_UPLOAD_V2_SESSION_TTL_SECONDS",
+    }
+    values: dict[str, int] = {}
+    for output_name, config_name in fields.items():
+        node = assignments.get(config_name)
+        default = _field_default_expression(node) if node is not None else None
+        value = (
+            _integer_expression(default, module_assignments[1])
+            if default is not None
+            else None
+        )
+        if value is None or value < 1:
+            return None
+        values[output_name] = value
+    return values
+
+
+def _parse_api_research_defaults(source: str) -> dict[str, int] | None:
+    parsed = _class_assignments(source, "ApiLimitsConfig")
+    module = _python_assignments(source)
+    if parsed is None or module is None:
+        return None
+    fields = {
+        "max_user_query_chars": "API_MAX_USER_QUERY_CHARS",
+        "max_attachments_per_request": "API_MAX_ATTACHMENTS_PER_REQUEST",
+        "max_research_dataset_paths": "API_MAX_RESEARCH_DATASET_PATHS",
+        "max_research_input_references": "API_MAX_RESEARCH_INPUT_REFERENCES",
+    }
+    values: dict[str, int] = {}
+    for output_name, config_name in fields.items():
+        node = parsed[1].get(config_name)
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_api_bounded_int"
+            and len(node.args) == 1
+        ):
+            return None
+        value = _integer_expression(node.args[0], module[1])
+        if value is None or value < 1:
+            return None
+        values[output_name] = value
+    return values
+
+
+def _parse_upload_runtime_wrapper(source: str) -> dict[str, str] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "UploadRuntime"
+    ]
+    if len(classes) != 1:
+        return None
+    methods = [
+        node
+        for node in classes[0].body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "serialize_file_upload_capability"
+    ]
+    if len(methods) != 1:
+        return None
+    returns = [
+        statement
+        for statement in methods[0].body
+        if isinstance(statement, ast.Return)
+    ]
+    if len(returns) != 1:
+        return None
+    call = returns[0].value
+    if not (
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "_serialize_file_upload_capability"
+        and len(call.args) == 1
+        and not call.keywords
+        and isinstance(call.args[0], ast.Dict)
+    ):
+        return None
+    keys = _dict_string_keys(call.args[0])
+    if keys is None:
+        return None
+    mapping: dict[str, str] = {}
+    for key, value in zip(keys, call.args[0].values, strict=True):
+        if not (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "config"
+        ):
+            return None
+        mapping[key] = value.attr
+    expected = {
+        "max_file_bytes": "API_UPLOAD_V2_MAX_BYTES",
+        "part_size_bytes": "API_UPLOAD_V2_PART_SIZE_BYTES",
+        "max_parallel_parts": "API_UPLOAD_V2_MAX_PARALLEL_PARTS",
+        "capability_ttl_seconds": "API_UPLOAD_V2_CAPABILITY_TTL_SECONDS",
+        "session_ttl_seconds": "API_UPLOAD_V2_SESSION_TTL_SECONDS",
+    }
+    return mapping if mapping == expected else None
+
+
 def _timedelta_seconds(
     node: ast.expr,
     assignments: Mapping[str, ast.expr],
@@ -865,10 +1057,19 @@ def _upload_limit_value(
 def _parse_runtime_upload_capability(
     serializer_source: str,
     runtime_source: str,
+    wrapper_source: str,
+    api_config_source: str,
 ) -> _RuntimeUploadCapability | None:
     serializer = _python_assignments(serializer_source)
     runtime = _python_assignments(runtime_source)
-    if serializer is None or runtime is None:
+    configured_limits = _parse_api_upload_defaults(api_config_source)
+    wrapper_fields = _parse_upload_runtime_wrapper(wrapper_source)
+    if (
+        serializer is None
+        or runtime is None
+        or configured_limits is None
+        or wrapper_fields is None
+    ):
         return None
     serializer_tree, serializer_assignments = serializer
     runtime_tree, runtime_assignments = runtime
@@ -948,6 +1149,7 @@ def _parse_runtime_upload_capability(
         if value is None or value < 1:
             return None
         limits[field] = value
+    limits.update(configured_limits)
 
     return_node = returns[0].value
     return_fields = _dict_string_keys(return_node) if return_node is not None else None
@@ -1073,6 +1275,22 @@ def _parse_agent_catalog_shape(
     top_fields = _dict_string_keys(payload_node) if payload_node is not None else None
     if not isinstance(payload_node, ast.Dict) or top_fields is None:
         return None
+    direct_returns = [
+        statement.value
+        for statement in function.body
+        if isinstance(statement, ast.Return)
+    ]
+    if not (
+        len(direct_returns) == 1
+        and isinstance(direct_returns[0], ast.Call)
+        and isinstance(direct_returns[0].func, ast.Name)
+        and direct_returns[0].func.id == "JSONResponse"
+        and len(direct_returns[0].args) == 1
+        and isinstance(direct_returns[0].args[0], ast.Name)
+        and direct_returns[0].args[0].id == "payload"
+        and not direct_returns[0].keywords
+    ):
+        return None
     field_values = dict(zip(top_fields, payload_node.values, strict=True))
     data_node = field_values.get("data")
     row_fields = (
@@ -1134,6 +1352,221 @@ def _parse_research_descriptor_fields(source: str) -> tuple[str, ...] | None:
     return fields if fields == expected else None
 
 
+def _parse_runtime_research_formats(source: str) -> tuple[str, ...] | None:
+    parsed = _python_assignments(source)
+    if parsed is None:
+        return None
+    expression = parsed[1].get("_SCIENTIFIC_FORMATS")
+
+    def suffixes(node: ast.expr) -> tuple[str, ...] | None:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left = suffixes(node.left)
+            right = suffixes(node.right)
+            return None if left is None or right is None else left + right
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_formats"
+            and len(node.args) == 3
+            and isinstance(node.args[0], ast.Tuple)
+            and all(
+                isinstance(item, ast.Constant)
+                and isinstance(item.value, str)
+                and item.value.startswith(".")
+                for item in node.args[0].elts
+            )
+            and all(
+                isinstance(item, ast.Constant) and isinstance(item.value, str)
+                for item in node.args[1:]
+            )
+            and all(
+                keyword.arg == "archive"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+                for keyword in node.keywords
+            )
+            and len(node.keywords) <= 1
+        ):
+            return None
+        return tuple(item.value for item in node.args[0].elts)
+
+    values = suffixes(expression) if expression is not None else None
+    if values is None or not values or len(values) != len(set(values)):
+        return None
+    advertised = tuple(sorted(value.removeprefix(".") for value in values))
+    return advertised if all(advertised) else None
+
+
+def _parse_runtime_agent_capabilities(
+    source: str,
+    research_formats: tuple[str, ...],
+    research_defaults: Mapping[str, int],
+) -> dict[str, dict[str, Any]] | None:
+    parsed = _python_assignments(source)
+    if parsed is None:
+        return None
+    assignments = parsed[1]
+    limits: dict[str, int] = {}
+    for name in ("MAX_FILE_BYTES", "MAX_FILES", "MAX_TOTAL_BYTES"):
+        node = assignments.get(name)
+        value = (
+            _integer_expression(node, assignments) if node is not None else None
+        )
+        if value is None or value < 1:
+            return None
+        limits[name] = value
+
+    def document(max_files: int) -> dict[str, Any]:
+        return {
+            "argument": "obs_file_list",
+            "max_file_bytes": limits["MAX_FILE_BYTES"],
+            "max_files": max_files,
+            "max_total_bytes": limits["MAX_TOTAL_BYTES"],
+        }
+
+    def dataset(max_files: int, *, research: bool) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "argument": "data_list",
+            "max_file_bytes": limits["MAX_FILE_BYTES"],
+            "max_files": max_files,
+            "max_total_bytes": limits["MAX_TOTAL_BYTES"],
+        }
+        if research:
+            value["formats"] = list(research_formats)
+        return value
+
+    def channel(node: ast.expr, slug: str) -> dict[str, Any] | None | object:
+        if isinstance(node, ast.Constant) and node.value is None:
+            return None
+        if not isinstance(node, ast.Name):
+            return _UNSUPPORTED_RUNTIME_NODE
+        if node.id == "_DOCUMENTS":
+            max_files = (
+                research_defaults["max_attachments_per_request"]
+                if slug == "research"
+                else limits["MAX_FILES"]
+            )
+            return document(max_files)
+        if node.id == "_DATASETS" and slug != "research":
+            return dataset(limits["MAX_FILES"], research=False)
+        if node.id == "_RESEARCH_DATASETS" and slug == "research":
+            return dataset(
+                min(
+                    research_defaults["max_attachments_per_request"],
+                    research_defaults["max_research_dataset_paths"],
+                ),
+                research=True,
+            )
+        return _UNSUPPORTED_RUNTIME_NODE
+
+    def attachments(node: ast.expr, slug: str) -> dict[str, Any] | None:
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "AttachmentCapability"
+            and len(node.args) == 3
+            and not node.keywords
+            and isinstance(node.args[2], ast.Constant)
+            and isinstance(node.args[2].value, bool)
+        ):
+            return None
+        documents = channel(node.args[0], slug)
+        datasets = channel(node.args[1], slug)
+        if (
+            documents is _UNSUPPORTED_RUNTIME_NODE
+            or datasets is _UNSUPPORTED_RUNTIME_NODE
+        ):
+            return None
+        return {
+            "document_context": documents,
+            "datasets": datasets,
+            "expert_forwarding": node.args[2].value,
+        }
+
+    def capability(node: ast.expr, slug: str) -> dict[str, Any] | None:
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "AgentCapability"
+            and not node.args
+            and all(keyword.arg is not None for keyword in node.keywords)
+        ):
+            return None
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+        allowed = {
+            "streaming",
+            "interactive",
+            "report_states",
+            "artifacts",
+            "degraded_outcomes",
+            "attachments",
+        }
+        if len(keywords) != len(node.keywords) or set(keywords) - allowed:
+            return None
+        result: dict[str, Any] = {
+            "streaming": False,
+            "interactive": False,
+            "report_states": [],
+            "artifacts": False,
+            "degraded_outcomes": False,
+            "attachments": {
+                "document_context": None,
+                "datasets": None,
+                "expert_forwarding": False,
+            },
+        }
+        for field in (
+            "streaming",
+            "interactive",
+            "artifacts",
+            "degraded_outcomes",
+        ):
+            value_node = keywords.get(field)
+            if value_node is None:
+                continue
+            if not (
+                isinstance(value_node, ast.Constant)
+                and isinstance(value_node.value, bool)
+            ):
+                return None
+            result[field] = value_node.value
+        report_node = keywords.get("report_states")
+        if report_node is not None:
+            try:
+                reports = ast.literal_eval(report_node)
+            except (TypeError, ValueError):
+                return None
+            if not (
+                isinstance(reports, tuple)
+                and all(isinstance(item, str) and item for item in reports)
+            ):
+                return None
+            result["report_states"] = list(reports)
+        attachment_node = keywords.get("attachments")
+        if attachment_node is not None:
+            serialized = attachments(attachment_node, slug)
+            if serialized is None:
+                return None
+            result["attachments"] = serialized
+        return result
+
+    capabilities_node = assignments.get("_CAPABILITIES")
+    keys = (
+        _dict_string_keys(capabilities_node)
+        if isinstance(capabilities_node, ast.Dict)
+        else None
+    )
+    if keys is None or not isinstance(capabilities_node, ast.Dict):
+        return None
+    result: dict[str, dict[str, Any]] = {}
+    for slug, node in zip(keys, capabilities_node.values, strict=True):
+        serialized = capability(node, slug)
+        if serialized is None:
+            return None
+        result[slug] = serialized
+    return result
+
+
 def _parse_fixture_protocols(
     advertised_source: str,
     conversation_source: str,
@@ -1151,6 +1584,19 @@ def _parse_fixture_protocols(
         module="runtime.resumable_uploads",
         level=2,
         names=frozenset({"UPLOAD_PROTOCOL", "UPLOAD_PROTOCOL_VERSION"}),
+    ):
+        return None
+    upload_predicates = [
+        node
+        for node in advertised[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "_upload_enabled"
+    ]
+    if not (
+        len(upload_predicates) == 1
+        and len(upload_predicates[0].body) == 2
+        and isinstance(upload_predicates[0].body[-1], ast.Return)
+        and isinstance(upload_predicates[0].body[-1].value, ast.Constant)
+        and upload_predicates[0].body[-1].value.value is True
     ):
         return None
     names = {
@@ -1247,50 +1693,77 @@ def _parse_fixture_protocols(
 
 
 def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
-    python_roles = (
-        "agent_identities",
-        "agent_catalog_route",
-        "agent_capability_serializer",
-        "upload_runtime",
-        "advertised_protocols",
-        "conversation_context",
-    )
     decoded: dict[str, str] = {}
     try:
-        for role in python_roles:
+        for role in RESEARCH_FIXTURE_SOURCE_PATHS:
             decoded[role] = sources[role].decode("utf-8")
     except (KeyError, UnicodeDecodeError):
+        return None
+    if (
+        _research_response_ast_sha256(decoded)
+        != _RESEARCH_RESPONSE_AST_SHA256
+    ):
         return None
     metadata = _parse_fixture_agent_metadata(decoded["agent_identities"])
     shape = _parse_agent_catalog_shape(decoded["agent_catalog_route"])
     descriptor_fields = _parse_research_descriptor_fields(
         decoded["agent_capability_serializer"]
     )
-    capabilities = _json_object(sources.get("agent_capabilities", b""))
-    catalog = _json_object(sources.get("research_contract", b""))
-    research = _parse_bot_research_catalog(sources.get("research_contract", b""))
+    research_defaults = _parse_api_research_defaults(
+        decoded["api_limits_config"]
+    )
+    research_formats = _parse_runtime_research_formats(
+        decoded["research_formats"]
+    )
+    capabilities = (
+        _parse_runtime_agent_capabilities(
+            decoded["agent_capability_serializer"],
+            research_formats,
+            research_defaults,
+        )
+        if research_formats is not None and research_defaults is not None
+        else None
+    )
     upload = _parse_runtime_upload_capability(
         decoded["agent_capability_serializer"],
         decoded["upload_runtime"],
+        decoded["upload_runtime_wrapper"],
+        decoded["api_config"],
     )
+    protocol_source = _python_assignments(decoded["advertised_protocols"])
+    protocol_values: dict[str, str | int] = {}
+    if protocol_source is not None:
+        for name in (
+            "RESEARCH_INPUT_PROTOCOL",
+            "RESEARCH_INPUT_PROTOCOL_VERSION",
+        ):
+            node = protocol_source[1].get(name)
+            try:
+                value = ast.literal_eval(node) if node is not None else None
+            except (TypeError, ValueError):
+                value = None
+            if isinstance(value, (str, int)) and not isinstance(value, bool):
+                protocol_values[name] = value
+    research_protocol = protocol_values.get("RESEARCH_INPUT_PROTOCOL")
+    research_version = protocol_values.get("RESEARCH_INPUT_PROTOCOL_VERSION")
     if (
         metadata is None
         or shape is None
         or descriptor_fields is None
         or capabilities is None
-        or catalog is None
-        or research is None
+        or research_defaults is None
+        or research_formats is None
         or upload is None
+        or not isinstance(research_protocol, str)
+        or not isinstance(research_version, int)
     ):
         return None
     tools, remote_slugs, aliases = metadata
     top_fields, row_fields = shape
-    descriptor = catalog.get("descriptor")
     if (
         set(capabilities) != set(tools)
         or any(not isinstance(value, dict) for value in capabilities.values())
-        or not isinstance(descriptor, dict)
-        or set(descriptor) != set(descriptor_fields)
+        or set(research_defaults) != set(descriptor_fields) - {"dataset_formats"}
     ):
         return None
     protocols = _parse_fixture_protocols(
@@ -1298,8 +1771,8 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
         decoded["conversation_context"],
         upload.protocol,
         upload.protocol_version,
-        research[0],
-        research[1],
+        research_protocol,
+        research_version,
     )
     if protocols is None:
         return None
@@ -1319,7 +1792,8 @@ def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
         "data": rows,
         "protocols": protocols,
         "research_input_resolution": {
-            field: descriptor[field] for field in descriptor_fields
+            **research_defaults,
+            "dataset_formats": list(research_formats),
         },
     }
     payload = {field: values[field] for field in top_fields}
@@ -1650,16 +2124,18 @@ def _authenticate_bot_sources(
 
 
 def _load_bot_source_binding(
-    root: Path, violations: list[str]
+    root: RootedDirectory, violations: list[str]
 ) -> _BotSourceBinding | None:
-    candidate = _safe_relative_path(root, BOT_CONTRACT_MANIFEST_REL)
-    if candidate is None:
-        violations.append("refusing to read out-of-scope activation path")
-        return None
     try:
-        raw = read_bounded_bytes(candidate, MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        raw = root.read_bytes(
+            BOT_CONTRACT_MANIFEST_REL,
+            MAX_BOT_CONTRACT_MANIFEST_BYTES,
+        )
     except InputTooLargeError:
         violations.append("Bot source binding manifest is oversized")
+        return None
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
         return None
     except FileNotFoundError:
         violations.append("missing Web activation source")
@@ -2224,7 +2700,7 @@ def _bounded_integer(value: Any, floor: int, ceiling: int) -> bool:
 
 
 def _check_research_input_contract(
-    root: Path,
+    root: RootedDirectory,
     source_binding: _BotSourceBinding | None,
     format_source: str | None,
     limit_source: str | None,
@@ -2242,7 +2718,12 @@ def _check_research_input_contract(
         upload_contract_source,
         violations,
     )
-    fixture_raw = _read_bytes(root, RESEARCH_INPUT_FIXTURE_REL, violations)
+    fixture_raw = _read_bytes(
+        root,
+        RESEARCH_INPUT_FIXTURE_REL,
+        violations,
+        MAX_RESEARCH_INPUT_FIXTURE_BYTES,
+    )
     if fixture_raw is None:
         violations.append("research_input_resolution_v1.json is missing")
         return
@@ -2647,7 +3128,11 @@ def _fixture_field_names(value: Any, depth: int = 0) -> set[str]:
     return set()
 
 
-def _load_fixture_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+def _load_fixture_json(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> Any | None:
     text = _read_text(root, relative, violations)
     if text is None:
         return None
@@ -2658,7 +3143,11 @@ def _load_fixture_json(root: Path, relative: Path, violations: list[str]) -> Any
         return None
 
 
-def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -> None:
+def _check_product_fixture(
+    root: RootedDirectory,
+    fixture_id: str,
+    violations: list[str],
+) -> None:
     payload = _load_fixture_json(root, PRODUCT_FIXTURE_PATHS[fixture_id], violations)
     if not isinstance(payload, dict):
         if payload is not None:
@@ -2718,7 +3207,10 @@ def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -
 
 
 def _check_rc_web_004_local_readiness(
-    root: Path, readiness: Any, rows: Any, violations: list[str]
+    root: RootedDirectory,
+    readiness: Any,
+    rows: Any,
+    violations: list[str],
 ) -> None:
     if not isinstance(readiness, dict):
         return
@@ -3118,15 +3610,7 @@ def _sanitize_failure(message: str) -> str:
     return compact
 
 
-def check(root: Path) -> list[str]:
-    """Return deterministic, bounded activation violations for ``root``."""
-
-    requested_root = Path(root)
-    if _has_forbidden_part(requested_root):
-        return ["refusing to read out-of-scope activation root"]
-    root = _resolve(requested_root)
-    if root is None or _has_forbidden_part(root):
-        return ["refusing to read out-of-scope activation root"]
+def _check_open_root(root: RootedDirectory) -> list[str]:
     violations: list[str] = []
     source_binding = _load_bot_source_binding(root, violations)
     matrix_text = _read_text(root, MATRIX_REL, violations)
@@ -3173,6 +3657,22 @@ def check(root: Path) -> list[str]:
     )
     _check_defaults(source, violations)
     return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
+
+
+def check(root: Path) -> list[str]:
+    """Return deterministic, bounded activation violations for ``root``."""
+
+    requested_root = Path(root)
+    if _has_forbidden_part(requested_root):
+        return ["refusing to read out-of-scope activation root"]
+    try:
+        opened_root = RootedDirectory(requested_root)
+    except OSError:
+        return ["refusing to read out-of-scope activation root"]
+    with opened_root:
+        if _has_forbidden_part(opened_root.path):
+            return ["refusing to read out-of-scope activation root"]
+        return _check_open_root(opened_root)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -23,14 +23,17 @@ if __package__ in {None, ""}:
 
 from scripts.bounded_input import (
     MAX_CONTRACT_MANIFEST_BYTES,
+    InputChangedError,
     InputTooLargeError,
-    read_bytes as read_bounded_bytes,
+    RootedDirectory,
+    UnsafeInputPathError,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_REL = Path("apps/web/tests/fixtures/bot-head/contract-manifest.json")
 MAX_BOT_CONTRACT_MANIFEST_BYTES = MAX_CONTRACT_MANIFEST_BYTES
+MAX_COMPATIBILITY_INPUT_BYTES = 512 * 1024
 
 RELEASE_BOT_COMMIT = "38349aab1f6e2d65c286723beb3e5a426027e77a"
 REQUIRED_AGENT_SLUGS = (
@@ -373,21 +376,17 @@ def validate_manifest(manifest: Any) -> list[str]:
     return violations
 
 
-def _within(path: Path, root: Path) -> bool:
+def _read_bytes(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> bytes | None:
     try:
-        path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return False
-    return True
-
-
-def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | None:
-    path = root / relative
-    if not _within(path, root):
+        return root.read_bytes(relative, MAX_COMPATIBILITY_INPUT_BYTES)
+    except InputTooLargeError:
+        violations.append(f"compatibility file is oversized: {relative}")
+    except (InputChangedError, UnsafeInputPathError):
         violations.append(f"refusing to read out-of-scope path: {relative}")
-        return None
-    try:
-        return path.read_bytes()
     except FileNotFoundError:
         violations.append(f"missing compatibility file: {relative}")
     except OSError:
@@ -395,7 +394,11 @@ def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | No
     return None
 
 
-def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
+def _read_text(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> str | None:
     raw = _read_bytes(root, relative, violations)
     if raw is None:
         return None
@@ -406,7 +409,11 @@ def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
         return None
 
 
-def _load_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+def _load_json(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> Any | None:
     raw = _read_bytes(root, relative, violations)
     if raw is None:
         return None
@@ -1226,7 +1233,12 @@ def _iter_keys(value: Any) -> Iterable[str]:
             yield from _iter_keys(child)
 
 
-def _check_fixture(root: Path, fixture_id: str, relative: Path, violations: list[str]) -> None:
+def _check_fixture(
+    root: RootedDirectory,
+    fixture_id: str,
+    relative: Path,
+    violations: list[str],
+) -> None:
     payload = _load_json(root, relative, violations)
     if payload is None:
         return
@@ -1361,7 +1373,11 @@ def _check_conversation_text_fields(
             )
 
 
-def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: list[str]) -> None:
+def _check_fixtures(
+    root: RootedDirectory,
+    manifest: dict[str, Any] | None,
+    violations: list[str],
+) -> None:
     if manifest is None:
         return
     fixtures = manifest.get("fixtures")
@@ -1380,7 +1396,9 @@ def _check_fixtures(root: Path, manifest: dict[str, Any] | None, violations: lis
 
 
 def _check_result_archive_fixtures(
-    root: Path, manifest: dict[str, Any], violations: list[str]
+    root: RootedDirectory,
+    manifest: dict[str, Any],
+    violations: list[str],
 ) -> None:
     archive_v1 = manifest.get("result_archive_v1")
     if not isinstance(archive_v1, dict):
@@ -1494,15 +1512,20 @@ def _check_result_archive_fixture(
         violations.append("result archive fixture must contain exactly one archive")
 
 
-def _load_manifest(root: Path, violations: list[str]) -> dict[str, Any] | None:
-    path = root / MANIFEST_REL
-    if not _within(path, root):
-        violations.append(f"refusing to read out-of-scope path: {MANIFEST_REL}")
-        return None
+def _load_manifest(
+    root: RootedDirectory,
+    violations: list[str],
+) -> dict[str, Any] | None:
     try:
-        raw = read_bounded_bytes(path, MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        raw = root.read_bytes(
+            MANIFEST_REL,
+            MAX_BOT_CONTRACT_MANIFEST_BYTES,
+        )
     except InputTooLargeError:
         violations.append("compatibility manifest is oversized")
+        return None
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append(f"refusing to read out-of-scope path: {MANIFEST_REL}")
         return None
     except FileNotFoundError:
         violations.append(f"missing compatibility file: {MANIFEST_REL}")
@@ -1530,10 +1553,7 @@ def _sanitize_failure(message: str) -> str:
     return compact
 
 
-def check(root: Path) -> list[str]:
-    """Return bounded, deterministic violations for a checkout."""
-
-    root = root.resolve()
+def _check_open_root(root: RootedDirectory) -> list[str]:
     violations: list[str] = []
     manifest = _load_manifest(root, violations)
     _check_fixtures(root, manifest, violations)
@@ -1552,6 +1572,17 @@ def check(root: Path) -> list[str]:
     # Keep output bounded even if a malformed checkout causes several related
     # checks to fail at once. The full payloads are never included.
     return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
+
+
+def check(root: Path) -> list[str]:
+    """Return bounded, deterministic violations for a checkout."""
+
+    try:
+        opened_root = RootedDirectory(root)
+    except OSError:
+        return ["cannot safely open compatibility root"]
+    with opened_root:
+        return _check_open_root(opened_root)
 
 
 def main(argv: list[str] | None = None) -> int:

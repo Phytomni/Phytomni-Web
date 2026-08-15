@@ -7,7 +7,6 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
@@ -20,8 +19,9 @@ if __package__ in {None, ""}:
 from scripts import check_bot_web_activation as checker
 from scripts.bounded_input import (
     FileIdentity,
+    InputChangedError,
     InputTooLargeError,
-    read_snapshot as read_bounded_snapshot,
+    RootedDirectory,
 )
 
 
@@ -159,7 +159,7 @@ def _generate_source_authority(
 
 
 def _generate_binding(
-    web_root: Path,
+    web_root: RootedDirectory,
     bot_repository: Path,
     bot_commit: str,
 ) -> dict[str, Any]:
@@ -173,10 +173,14 @@ def _generate_binding(
     if contract is None:
         raise ValueError("pinned Bot sources do not expose the required contract")
 
-    fixture_path = web_root / checker.RESEARCH_INPUT_FIXTURE_REL
     try:
-        fixture_raw = fixture_path.read_bytes()
+        fixture_raw = web_root.read_bytes(
+            checker.RESEARCH_INPUT_FIXTURE_REL,
+            checker.MAX_RESEARCH_INPUT_FIXTURE_BYTES,
+        )
         fixture_text = fixture_raw.decode("utf-8")
+    except InputTooLargeError as exc:
+        raise ValueError("Web Research fixture is oversized") from exc
     except (OSError, UnicodeDecodeError) as exc:
         raise ValueError("Web Research fixture cannot be read") from exc
     fixture_authority, fixture_sources = _generate_source_authority(
@@ -225,32 +229,11 @@ def _generate_binding(
     }
 
 
-def _manifest_path(web_root: Path) -> Path:
-    relative = checker.BOT_CONTRACT_MANIFEST_REL
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError("Web contract manifest path escapes the Web root")
-    candidate = web_root / relative
-    current = web_root
-    for part in relative.parts:
-        current /= part
-        if current.is_symlink():
-            raise ValueError("Web contract manifest path uses a symlink")
+def _load_manifest(web_root: RootedDirectory) -> _ManifestSnapshot:
     try:
-        resolved = candidate.resolve(strict=False)
-        resolved.relative_to(web_root)
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise ValueError("Web contract manifest path escapes the Web root") from exc
-    if resolved != candidate:
-        raise ValueError("Web contract manifest path uses a symlink")
-    return candidate
-
-
-def _load_manifest(path: Path) -> _ManifestSnapshot:
-    try:
-        snapshot = read_bounded_snapshot(
-            path,
+        snapshot = web_root.read_snapshot(
+            checker.BOT_CONTRACT_MANIFEST_REL,
             checker.MAX_BOT_CONTRACT_MANIFEST_BYTES,
-            no_follow=True,
         )
     except InputTooLargeError as exc:
         raise ValueError("Web contract manifest is oversized") from exc
@@ -268,38 +251,20 @@ def _load_manifest(path: Path) -> _ManifestSnapshot:
 
 
 def _write_manifest(
-    path: Path,
+    web_root: RootedDirectory,
     raw: bytes,
     expected_identity: FileIdentity,
 ) -> None:
-    flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise ValueError("Web contract manifest cannot be written") from exc
-    try:
-        metadata = os.fstat(descriptor)
-        identity = FileIdentity(
-            device=metadata.st_dev,
-            inode=metadata.st_ino,
-            mode=metadata.st_mode,
-            size=metadata.st_size,
-            modified_ns=metadata.st_mtime_ns,
-            changed_ns=metadata.st_ctime_ns,
+        web_root.write_bytes(
+            checker.BOT_CONTRACT_MANIFEST_REL,
+            raw,
+            expected_identity,
         )
-        if identity != expected_identity:
-            raise ValueError("Web contract manifest changed during generation")
-        with os.fdopen(descriptor, "wb") as stream:
-            descriptor = -1
-            stream.seek(0)
-            stream.truncate()
-            stream.write(raw)
+    except InputChangedError as exc:
+        raise ValueError("Web contract manifest changed during generation") from exc
     except OSError as exc:
         raise ValueError("Web contract manifest cannot be written") from exc
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -315,48 +280,48 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         try:
-            web_root = args.web_root.resolve(strict=True)
-        except (OSError, RuntimeError) as exc:
-            raise ValueError("Web root cannot be resolved") from exc
-        if not web_root.is_dir():
-            raise ValueError("Web root is not a directory")
-        manifest_path = _manifest_path(web_root)
-        initial = _load_manifest(manifest_path)
-        manifest = initial.value
-        current_binding = manifest.get("activation_source_binding")
-        current_binding_commit = (
-            current_binding.get("bot_commit")
-            if isinstance(current_binding, dict)
-            else None
-        )
-        bot_commit = (
-            args.bot_commit or current_binding_commit or manifest.get("bot_commit")
-        )
-        if not isinstance(bot_commit, str):
-            raise ValueError("Web contract manifest has no pinned Bot commit")
-        bot_repository = (
-            args.bot_repo.resolve()
-            if args.bot_repo is not None
-            else web_root.parent / "Phytomni-Bot"
-        )
-        binding = _generate_binding(web_root, bot_repository, bot_commit)
+            web_root = RootedDirectory(args.web_root)
+        except OSError as exc:
+            raise ValueError("Web root cannot be opened safely") from exc
+        with web_root:
+            initial = _load_manifest(web_root)
+            manifest = initial.value
+            current_binding = manifest.get("activation_source_binding")
+            current_binding_commit = (
+                current_binding.get("bot_commit")
+                if isinstance(current_binding, dict)
+                else None
+            )
+            bot_commit = (
+                args.bot_commit
+                or current_binding_commit
+                or manifest.get("bot_commit")
+            )
+            if not isinstance(bot_commit, str):
+                raise ValueError("Web contract manifest has no pinned Bot commit")
+            bot_repository = (
+                args.bot_repo.resolve()
+                if args.bot_repo is not None
+                else web_root.path.parent / "Phytomni-Bot"
+            )
+            binding = _generate_binding(web_root, bot_repository, bot_commit)
 
-        expected = dict(manifest)
-        expected["activation_source_binding"] = binding
-        rendered = (json.dumps(expected, ensure_ascii=False, indent=2) + "\n").encode(
-            "utf-8"
-        )
-        manifest_path = _manifest_path(web_root)
-        final = _load_manifest(manifest_path)
-        if final.identity != initial.identity or final.raw != initial.raw:
-            raise ValueError("Web contract manifest changed during generation")
-        if args.check:
-            if final.raw != rendered:
-                raise ValueError("committed manifest is stale")
-            print("Bot activation manifest: PASS")
-            return 0
-        _manifest_path(web_root)
-        _write_manifest(manifest_path, rendered, final.identity)
+            expected = dict(manifest)
+            expected["activation_source_binding"] = binding
+            rendered = (
+                json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
+            ).encode("utf-8")
+            if len(rendered) > checker.MAX_BOT_CONTRACT_MANIFEST_BYTES:
+                raise ValueError("generated Web contract manifest is oversized")
+            final = _load_manifest(web_root)
+            if final.identity != initial.identity or final.raw != initial.raw:
+                raise ValueError("Web contract manifest changed during generation")
+            if args.check:
+                if final.raw != rendered:
+                    raise ValueError("committed manifest is stale")
+                print("Bot activation manifest: PASS")
+                return 0
+            _write_manifest(web_root, rendered, final.identity)
     except ValueError as exc:
         print(f"Bot activation manifest: FAIL - {exc}", file=sys.stderr)
         return 1
