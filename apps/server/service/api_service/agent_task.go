@@ -170,14 +170,14 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			return nil, projectionErr
 		}
 		historyRow.Delivery = agentTaskDeliveryDTO(projection)
-		if row.Status == statusSucceeded {
-			if projection.ResultArchiveV1 || len(projection.Artifacts.Paths) > 0 {
-				links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
-				if linkErr != nil {
-					return nil, linkErr
-				}
-				historyRow.Artifacts = links
+		if projection.ResultArchiveV1 || len(projection.Artifacts.Paths) > 0 {
+			links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
+			if linkErr != nil {
+				return nil, linkErr
 			}
+			historyRow.Artifacts = links
+		}
+		if row.Status == statusSucceeded {
 			if private.Stage != nil {
 				historyRow.ContextRebuilt = private.Stage.ContextRebuilt
 				historyRow.ContextDegraded = private.Stage.ContextDegraded

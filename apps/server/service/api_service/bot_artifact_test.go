@@ -51,7 +51,7 @@ func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T
 	if err != nil || len(links) != 1 {
 		t.Fatalf("links=%#v err=%v", links, err)
 	}
-	if links[0].Name != "report.pdf" || links[0].Kind != "report" {
+	if links[0].Name != "report.pdf" || links[0].Kind != "report" || links[0].MediaType != "application/pdf" {
 		t.Fatalf("link=%#v", links[0])
 	}
 	encoded, err := json.Marshal(links)
@@ -59,6 +59,7 @@ func TestConversationArtifactLinksRequireOwnerDialogueAndMessageRow(t *testing.T
 		t.Fatal(err)
 	}
 	if strings.Contains(string(encoded), "download_url") ||
+		strings.Contains(string(encoded), "display_url") ||
 		strings.Contains(string(encoded), "obs://") ||
 		strings.Contains(string(encoded), "bucket") {
 		t.Fatalf("browser DTO leaked storage path: %s", encoded)
@@ -212,7 +213,9 @@ func TestConversationArtifactLinksUseOnlyReadyResultArchiveV1(t *testing.T) {
 	if err != nil || len(links) != 1 {
 		t.Fatalf("links=%#v err=%v", links, err)
 	}
-	if links[0].Name != "analyst-results.zip" || links[0].Kind != "archive" || links[0].ID == conversationArtifactID(122, "obs://bucket/alice/run-archive/report.pdf") {
+	if links[0].Name != "analyst-results.zip" || links[0].Kind != "archive" ||
+		links[0].MediaType != "application/zip" ||
+		links[0].ID == conversationArtifactID(122, "obs://bucket/alice/run-archive/report.pdf") {
 		t.Fatalf("archive link=%#v", links[0])
 	}
 	encoded, err := json.Marshal(links)
@@ -388,5 +391,138 @@ func TestDownloadAnalystAgentObsImagesRejectsMalformedPathBeforeLookup(t *testin
 	setupTestDB(t)
 	if _, err := NewService().DownloadAnalystAgentObsImages(context.Background(), "alice", "../escape"); err == nil {
 		t.Fatal("expected malformed path to be rejected")
+	}
+}
+
+func TestConversationArtifactLinksIncludeOwnedNonSucceededRows(t *testing.T) {
+	gdb := setupTestDB(t)
+	service := NewService()
+	for index, status := range []string{
+		"FAILED",
+		"CANCELLED",
+		"RUNNING",
+		"TIMED_OUT",
+		"INPUT_REQUIRED",
+		"failed",
+	} {
+		rowID := int64(200 + index)
+		raw, err := marshalPersistedProjection(BotRunProjection{
+			ReportRevision: 1,
+			Artifacts: ProjectionArtifacts{
+				Directories: []string{"obs://bucket/alice/run-failed"},
+				Paths:       []string{"obs://bucket/alice/run-failed/figure.png"},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := gdb.Exec(`INSERT INTO question_agent_logs
+			(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+			VALUES (?, 'dlg-failed-artifacts', 0, 'alice', ?, ?, 1, '2026-01-01 00:00:00')`,
+			rowID, status, raw).Error; err != nil {
+			t.Fatal(err)
+		}
+		links, err := service.conversationArtifactLinks(
+			context.Background(), "alice", "dlg-failed-artifacts", rowID,
+		)
+		if err != nil || len(links) != 1 {
+			t.Fatalf("status=%s links=%#v err=%v", status, links, err)
+		}
+		if links[0].Name != "figure.png" || links[0].Kind != "image" || links[0].MediaType != "image/png" {
+			t.Fatalf("status=%s link=%#v", status, links[0])
+		}
+		encoded, err := json.Marshal(links)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "obs://") ||
+			strings.Contains(string(encoded), "download_url") ||
+			strings.Contains(string(encoded), "display_url") {
+			t.Fatalf("status=%s leaked storage: %s", status, encoded)
+		}
+		if _, err := service.conversationArtifactLinks(
+			context.Background(), "bob", "dlg-failed-artifacts", rowID,
+		); !errors.Is(err, ErrConversationArtifactOwnership) {
+			t.Fatalf("status=%s foreign links err=%v", status, err)
+		}
+	}
+}
+
+func TestConversationArtifactLinksClassifyCifAndMediaType(t *testing.T) {
+	gdb := setupTestDB(t)
+	raw, err := marshalPersistedProjection(BotRunProjection{
+		ReportRevision: 1,
+		Artifacts: ProjectionArtifacts{
+			Directories: []string{"obs://bucket/alice/run-cif"},
+			Paths: []string{
+				"obs://bucket/alice/run-cif/structure.cif",
+				"obs://bucket/alice/run-cif/model.mmcif",
+				"obs://bucket/alice/run-cif/fold.pdb",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+		VALUES (210, 'dlg-cif', 0, 'alice', 'FAILED', ?, 1, '2026-01-01 00:00:00')`, raw).Error; err != nil {
+		t.Fatal(err)
+	}
+	links, err := NewService().conversationArtifactLinks(context.Background(), "alice", "dlg-cif", 210)
+	if err != nil || len(links) != 3 {
+		t.Fatalf("links=%#v err=%v", links, err)
+	}
+	want := map[string][2]string{
+		"structure.cif": {"cif", "chemical/x-cif"},
+		"model.mmcif":   {"cif", "chemical/x-cif"},
+		"fold.pdb":      {"cif", "chemical/x-pdb"},
+	}
+	for _, link := range links {
+		got, ok := want[link.Name]
+		if !ok || link.Kind != got[0] || link.MediaType != got[1] {
+			t.Fatalf("link=%#v want=%v", link, got)
+		}
+	}
+}
+
+func TestAnswerCheckAttachesArtifactsForFailedHistory(t *testing.T) {
+	gdb := setupTestDB(t)
+	raw, err := marshalPersistedProjection(BotRunProjection{
+		ReportRevision: 2,
+		Artifacts: ProjectionArtifacts{
+			Directories: []string{"obs://bucket/alice/run-history"},
+			Paths:       []string{"obs://bucket/alice/run-history/structure.cif"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, bot_projection_json, bot_report_revision, created_at)
+		VALUES (211, 'dlg-history-failed', 0, 'alice', 'FAILED', ?, 2, '2026-01-01 00:00:00')`, raw).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-history-failed")
+	if err != nil || len(rows) != 1 || len(rows[0].Artifacts) != 1 {
+		t.Fatalf("rows=%#v err=%v", rows, err)
+	}
+	if rows[0].Artifacts[0].Name != "structure.cif" ||
+		rows[0].Artifacts[0].Kind != "cif" ||
+		rows[0].Artifacts[0].MediaType != "chemical/x-cif" {
+		t.Fatalf("artifact=%#v", rows[0].Artifacts[0])
+	}
+	encoded, err := json.Marshal(rows[0].Artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "obs://") ||
+		strings.Contains(string(encoded), "download_url") ||
+		strings.Contains(string(encoded), "display_url") {
+		t.Fatalf("history DTO leaked storage: %s", encoded)
+	}
+	foreign, err := NewService().AnswerCheck(context.Background(), "bob", "dlg-history-failed")
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("foreign history=%#v err=%v", foreign, err)
 	}
 }

@@ -786,10 +786,8 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 		return nil, err
 	}
 	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
-	if row.Status == statusSucceeded {
-		if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
-			return nil, err
-		}
+	if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

@@ -36,9 +36,10 @@ const (
 )
 
 type ConversationArtifactLink struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	MediaType string `json:"media_type,omitempty"`
 }
 
 // geneObsfsDir returns the configured obsfs mount root if it is a readable
@@ -363,10 +364,63 @@ func conversationArtifactKind(name string) string {
 		return "table"
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
 		return "image"
+	case ".cif", ".mmcif", ".pdb":
+		return "cif"
 	case ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz":
 		return "archive"
 	default:
 		return "file"
+	}
+}
+
+func conversationArtifactMediaType(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".pdf":
+		return "application/pdf"
+	case ".md":
+		return "text/markdown"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".html", ".htm":
+		return "text/html"
+	case ".csv":
+		return "text/csv"
+	case ".tsv":
+		return "text/tab-separated-values"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".parquet":
+		return "application/vnd.apache.parquet"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".cif", ".mmcif":
+		return "chemical/x-cif"
+	case ".pdb":
+		return "chemical/x-pdb"
+	case ".zip":
+		return "application/zip"
+	case ".tar":
+		return "application/x-tar"
+	case ".gz", ".tgz":
+		return "application/gzip"
+	case ".bz2":
+		return "application/x-bzip2"
+	case ".xz":
+		return "application/x-xz"
+	default:
+		return "application/octet-stream"
 	}
 }
 
@@ -411,8 +465,9 @@ func conversationArtifactPathContained(projection BotRunProjection, artifactPath
 }
 
 // conversationArtifacts returns only opaque identity and display metadata for
-// the authenticated, successful message row. It deliberately does not sign
-// or serialize any storage path.
+// the authenticated owner/dialogue/message row, including failed and
+// historical statuses. It deliberately does not sign or serialize any
+// storage path.
 func (ps *Service) conversationArtifacts(
 	ctx context.Context,
 	username string,
@@ -423,11 +478,10 @@ func (ps *Service) conversationArtifacts(
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Select("id, user_name, dialogue_id, status, bot_projection_json, bot_report_revision").
 		Where(
-			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND UPPER(status) = ?",
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL",
 			rowID,
 			username,
 			dialogueID,
-			statusSucceeded,
 		).
 		Take(&row)
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
@@ -463,9 +517,10 @@ func (ps *Service) conversationArtifacts(
 		}
 		artifacts = append(artifacts, conversationArtifact{
 			link: ConversationArtifactLink{
-				ID:   conversationArtifactID(rowID, artifactPath),
-				Name: name,
-				Kind: conversationArtifactKind(name),
+				ID:        conversationArtifactID(rowID, artifactPath),
+				Name:      name,
+				Kind:      conversationArtifactKind(name),
+				MediaType: conversationArtifactMediaType(name),
 			},
 			path: artifactPath,
 		})
@@ -489,9 +544,10 @@ func resultArchiveConversationArtifact(rowID int64, projection BotRunProjection)
 	}
 	return []conversationArtifact{{
 		link: ConversationArtifactLink{
-			ID:   conversationArtifactID(rowID, delivery.ArchiveRef),
-			Name: delivery.ArchiveName,
-			Kind: "archive",
+			ID:        conversationArtifactID(rowID, delivery.ArchiveRef),
+			Name:      delivery.ArchiveName,
+			Kind:      "archive",
+			MediaType: conversationArtifactMediaType(delivery.ArchiveName),
 		},
 		path: delivery.ArchiveRef,
 	}}, nil
