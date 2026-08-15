@@ -33,7 +33,6 @@ from scripts.bounded_input import (
 )
 from scripts.strict_json import StrictJsonError, loads_strict_json
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVATION_SOURCE_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
 RESEARCH_FIXTURE_BOT_COMMIT = "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
@@ -53,13 +52,9 @@ RESEARCH_LIMIT_SOURCE_REL = Path("apps/server/external/bot/input_limits.go")
 RESEARCH_CONTRACT_SOURCE_REL = Path(
     "apps/server/external/bot/research_input_contract.go"
 )
-AGENT_CANONICAL_SOURCE_REL = Path(
-    "apps/server/external/bot/agent_canonical.go"
-)
+AGENT_CANONICAL_SOURCE_REL = Path("apps/server/external/bot/agent_canonical.go")
 AGENT_MAP_SOURCE_REL = Path("apps/server/external/bot/agent_map.go")
-UPLOAD_CONTRACT_SOURCE_REL = Path(
-    "apps/server/external/bot/upload_contract.go"
-)
+UPLOAD_CONTRACT_SOURCE_REL = Path("apps/server/external/bot/upload_contract.go")
 _RESEARCH_INPUT_LIMIT_DECLARATIONS = {
     "max_user_query_chars": (
         "DefaultMaxUserQueryChars",
@@ -184,6 +179,8 @@ BOT_SOURCE_PATHS = {
 }
 
 RESEARCH_FIXTURE_SOURCE_PATHS = {
+    "project_definition": "pyproject.toml",
+    "dependency_lock": "uv.lock",
     "agent_identities": "src/mcp_server_phytomni/api/app.py",
     "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
     "agent_capability_serializer": (
@@ -191,9 +188,7 @@ RESEARCH_FIXTURE_SOURCE_PATHS = {
     ),
     "upload_runtime": "src/mcp_server_phytomni/runtime/resumable_uploads.py",
     "upload_runtime_wrapper": "src/mcp_server_phytomni/api/upload_runtime.py",
-    "advertised_protocols": (
-        "src/mcp_server_phytomni/api/advertised_protocols.py"
-    ),
+    "advertised_protocols": ("src/mcp_server_phytomni/api/advertised_protocols.py"),
     "conversation_context": (
         "src/mcp_server_phytomni/runtime/conversation_context/models.py"
     ),
@@ -215,6 +210,12 @@ RESEARCH_FIXTURE_EXECUTION = {
     "path": "/v1/agents",
     "authenticated": True,
     "network_allowed": False,
+    "offline_enforcement": "seccomp_socket_deny_v1",
+    "environment": {
+        "installer": "uv_sync_frozen_offline_v1",
+        "project_source": "pyproject.toml",
+        "lock_source": "uv.lock",
+    },
     "bot_commit": RESEARCH_FIXTURE_BOT_COMMIT,
 }
 
@@ -657,6 +658,7 @@ def _expected_fixture_contract(contract: _PinnedBotContract) -> dict[str, Any]:
         },
     }
 
+
 def _fixture_contract_value(
     value: Mapping[str, Any], contract: _PinnedBotContract
 ) -> dict[str, Any] | None:
@@ -922,9 +924,7 @@ def _authenticate_bot_sources(
             return None
         trees[oid] = payload
 
-    if not isinstance(source_entries, list) or len(source_entries) != len(
-        source_paths
-    ):
+    if not isinstance(source_entries, list) or len(source_entries) != len(source_paths):
         violations.append(f"{label} source inventory is incomplete")
         return None
     sources: dict[str, bytes] = {}
@@ -1324,9 +1324,7 @@ def _parse_go_string_set_map(source: str, name: str) -> set[str] | None:
         return None
 
     body = _strip_go_comments(source[opening + 1 : closing])
-    entry = re.compile(
-        r'\s*"(?P<key>\.?[a-z0-9][a-z0-9.]*)"\s*:\s*\{\s*\}\s*,?'
-    )
+    entry = re.compile(r'\s*"(?P<key>\.?[a-z0-9][a-z0-9.]*)"\s*:\s*\{\s*\}\s*,?')
     values: set[str] = set()
     position = 0
     while position < len(body):
@@ -1382,15 +1380,11 @@ def _load_research_go_contract(
         for declaration_names in _RESEARCH_INPUT_LIMIT_DECLARATIONS.values()
         for name in declaration_names
     )
-    limit_values = _parse_go_named_const_literals(
-        limit_source, limit_names
-    )
+    limit_values = _parse_go_named_const_literals(limit_source, limit_names)
     contract_values = _parse_go_named_const_literals(
         contract_source, _RESEARCH_CONTRACT_DECLARATIONS
     )
-    agent_tools = _parse_go_string_map(
-        agent_canonical_source, "CanonicalAgentTool"
-    )
+    agent_tools = _parse_go_string_map(agent_canonical_source, "CanonicalAgentTool")
     descriptor_values = _parse_go_named_const_literals(
         agent_map_source, ("maxBotAgentDescriptors",)
     )
@@ -1663,9 +1657,13 @@ def _check_research_input_contract(
         violations.append("research capability row count must be one")
         return
     capabilities = research_rows[0].get("capabilities")
-    attachments = capabilities.get("attachments") if isinstance(capabilities, Mapping) else None
+    attachments = (
+        capabilities.get("attachments") if isinstance(capabilities, Mapping) else None
+    )
     document_context = (
-        attachments.get("document_context") if isinstance(attachments, Mapping) else None
+        attachments.get("document_context")
+        if isinstance(attachments, Mapping)
+        else None
     )
     datasets = attachments.get("datasets") if isinstance(attachments, Mapping) else None
     attachment_floor, attachment_ceiling = go_contract.limit_bounds[
@@ -1684,13 +1682,9 @@ def _check_research_input_contract(
     max_files = datasets["max_files"]
     max_file_bytes = datasets.get("max_file_bytes")
     max_total_bytes = datasets.get("max_total_bytes")
-    if not _bounded_integer(
-        max_file_bytes, 1, go_contract.max_dataset_file_bytes
-    ):
+    if not _bounded_integer(max_file_bytes, 1, go_contract.max_dataset_file_bytes):
         violations.append("research datasets.max_file_bytes is outside Web bounds")
-    max_total_bytes_ceiling = (
-        go_contract.max_dataset_file_bytes * attachment_ceiling
-    )
+    max_total_bytes_ceiling = go_contract.max_dataset_file_bytes * attachment_ceiling
     if (
         not isinstance(max_total_bytes, int)
         or isinstance(max_total_bytes, bool)
@@ -1851,7 +1845,10 @@ def activation_errors(
         if requested is not True:
             continue
         accepted = FEATURE_ACCEPTED_STATUSES[flag]
-        if any(statuses.get(row_id) not in accepted for row_id in FEATURE_REQUIREMENTS[flag]):
+        if any(
+            statuses.get(row_id) not in accepted
+            for row_id in FEATURE_REQUIREMENTS[flag]
+        ):
             errors.append(f"{flag} requires {_requirement_label(flag)} reviewed")
     return errors
 
@@ -1926,14 +1923,18 @@ def validate_local_readiness(value: Any) -> list[str]:
         for item in fixture_ids
     ):
         errors.append("RC-WEB-004 local fixture ids must be bounded metadata")
-    elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(fixture_ids):
+    elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(
+        fixture_ids
+    ):
         errors.append("RC-WEB-004 requires four distinct product fixture ids")
     elif set(fixture_ids) != set(PRODUCT_FIXTURE_IDS):
         errors.append("RC-WEB-004 product fixture ids are incomplete")
 
     shared_test = entry.get("shared_report_surface_test")
     if shared_test != SHARED_REPORT_SURFACE_TEST.as_posix():
-        errors.append("RC-WEB-004 shared report-surface test is not the Web contract test")
+        errors.append(
+            "RC-WEB-004 shared report-surface test is not the Web contract test"
+        )
     return errors
 
 
@@ -2008,30 +2009,57 @@ def _check_product_fixture(
         return
     delivery = execution.get("delivery")
     if not isinstance(delivery, dict):
-        violations.append("RC-WEB-004 product fixture execution delivery must be an object")
+        violations.append(
+            "RC-WEB-004 product fixture execution delivery must be an object"
+        )
         return
     if delivery.get("schema_version") != 1:
-        violations.append("RC-WEB-004 product fixture delivery protocol_version must be 1")
+        violations.append(
+            "RC-WEB-004 product fixture delivery protocol_version must be 1"
+        )
     if delivery.get("required") is not True or delivery.get("status") != "ready":
-        violations.append("RC-WEB-004 product fixture delivery must be required and ready")
+        violations.append(
+            "RC-WEB-004 product fixture delivery must be required and ready"
+        )
     archive = delivery.get("archive")
     if not isinstance(archive, dict):
-        violations.append("RC-WEB-004 product fixture delivery archive must be an object")
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive must be an object"
+        )
         return
-    if archive.get("role") != "result_archive" or archive.get("name") != f"{fixture_id}-results.zip":
-        violations.append("RC-WEB-004 product fixture delivery archive identity is invalid")
+    if (
+        archive.get("role") != "result_archive"
+        or archive.get("name") != f"{fixture_id}-results.zip"
+    ):
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive identity is invalid"
+        )
     if not isinstance(archive.get("size_bytes"), int) or archive["size_bytes"] <= 0:
-        violations.append("RC-WEB-004 product fixture delivery archive size_bytes is invalid")
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive size_bytes is invalid"
+        )
     download_ref = archive.get("download_ref")
-    if not isinstance(download_ref, str) or not _RESULT_ARCHIVE_REF_RE.fullmatch(download_ref):
-        violations.append("RC-WEB-004 product fixture delivery archive download_ref is unsafe")
+    if not isinstance(download_ref, str) or not _RESULT_ARCHIVE_REF_RE.fullmatch(
+        download_ref
+    ):
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive download_ref is unsafe"
+        )
     digest = delivery.get("inventory_digest")
     if not isinstance(digest, str) or not _RESULT_ARCHIVE_DIGEST_RE.fullmatch(digest):
         violations.append("RC-WEB-004 product fixture delivery digest is invalid")
     artifacts = execution.get("artifacts")
     if not isinstance(artifacts, list):
-        violations.append("RC-WEB-004 product fixture execution artifacts must be a list")
-    elif sum(isinstance(item, dict) and item.get("role") == "result_archive" for item in artifacts) != 0:
+        violations.append(
+            "RC-WEB-004 product fixture execution artifacts must be a list"
+        )
+    elif (
+        sum(
+            isinstance(item, dict) and item.get("role") == "result_archive"
+            for item in artifacts
+        )
+        != 0
+    ):
         violations.append("RC-WEB-004 product fixture must contain exactly one archive")
 
 
@@ -2058,13 +2086,17 @@ def _check_rc_web_004_local_readiness(
                 violations.append("RC-WEB-004 shared report-surface test is missing")
             for fixture_id in PRODUCT_FIXTURE_IDS:
                 if fixture_id not in source:
-                    violations.append("RC-WEB-004 shared report-surface test lacks product fixture coverage")
+                    violations.append(
+                        "RC-WEB-004 shared report-surface test lacks product fixture coverage"
+                    )
 
     if isinstance(rows, list):
         for row in rows:
             if isinstance(row, dict) and row.get("id") == "RC-WEB-004":
                 if row.get("status") != "External Pending":
-                    violations.append("RC-WEB-004 external status must remain External Pending")
+                    violations.append(
+                        "RC-WEB-004 external status must remain External Pending"
+                    )
                 break
 
 
@@ -2157,9 +2189,7 @@ def _mask_yaml_block_scalars(text: str) -> str:
             ):
                 if required is None:
                     block_content_indent = indent
-                output.append(
-                    "".join(char if char in "\r\n" else " " for char in line)
-                )
+                output.append("".join(char if char in "\r\n" else " " for char in line))
                 continue
             block_parent_indent = None
             block_content_indent = None
@@ -2416,7 +2446,9 @@ def validate_matrix(value: Any) -> list[str]:
     errors.extend(validate_local_readiness(local_readiness))
 
     rollback = value.get("rollback")
-    if not isinstance(rollback, list) or any(not isinstance(item, str) for item in rollback):
+    if not isinstance(rollback, list) or any(
+        not isinstance(item, str) for item in rollback
+    ):
         errors.append("activation matrix rollback markers must be a list")
     else:
         if set(ROLLBACK_MARKERS) - set(rollback):
@@ -2466,13 +2498,9 @@ def _check_open_root(root: RootedDirectory) -> list[str]:
     format_source = _read_text(root, RESEARCH_FORMAT_SOURCE_REL, violations)
     limit_source = _read_text(root, RESEARCH_LIMIT_SOURCE_REL, violations)
     contract_source = _read_text(root, RESEARCH_CONTRACT_SOURCE_REL, violations)
-    agent_canonical_source = _read_text(
-        root, AGENT_CANONICAL_SOURCE_REL, violations
-    )
+    agent_canonical_source = _read_text(root, AGENT_CANONICAL_SOURCE_REL, violations)
     agent_map_source = _read_text(root, AGENT_MAP_SOURCE_REL, violations)
-    upload_contract_source = _read_text(
-        root, UPLOAD_CONTRACT_SOURCE_REL, violations
-    )
+    upload_contract_source = _read_text(root, UPLOAD_CONTRACT_SOURCE_REL, violations)
     _check_research_input_contract(
         root,
         source_binding,

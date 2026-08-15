@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import base64
 import copy
+import errno
+import hashlib
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -16,7 +20,6 @@ from scripts import check_bot_web_activation as checker
 from scripts import bounded_input
 from scripts import generate_bot_activation_manifest as generator
 from scripts import run_pinned_bot_agent_catalog as catalog_runner
-
 
 MANIFEST_PATH = checker.ROOT / checker.BOT_CONTRACT_MANIFEST_REL
 FIXTURE_PATH = checker.ROOT / checker.RESEARCH_INPUT_FIXTURE_REL
@@ -31,13 +34,139 @@ def test_catalog_runner_rejects_python_311_without_parsing_bot_source(
     monkeypatch.setattr(
         catalog_runner,
         "_execute",
-        lambda _source_root: pytest.fail("Python 3.11 executed fixed Bot source"),
+        lambda _source_root, _environment_root: pytest.fail(
+            "Python 3.11 executed fixed Bot source"
+        ),
     )
 
-    result = catalog_runner.main(["--source-root", str(tmp_path)])
+    result = catalog_runner.main(
+        [
+            "--source-root",
+            str(tmp_path),
+            "--environment-root",
+            str(tmp_path),
+        ]
+    )
 
     assert result == 1
     assert "requires Python 3.12 or newer" in capsys.readouterr().err
+
+
+def test_catalog_runner_enforces_process_level_offline_network_block() -> None:
+    program = r"""
+import errno
+import json
+import socket
+from scripts.run_pinned_bot_agent_catalog import _install_network_block
+
+try:
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+except OSError as exc:
+    if exc.errno != errno.EPERM:
+        raise
+    _install_network_block()
+    print(json.dumps({"already_blocked": errno.EPERM}))
+    raise SystemExit(0)
+raw_connect_ex = socket.socket.connect_ex
+raw_sendto = socket.socket.sendto
+_install_network_block()
+result = {}
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+except OSError as exc:
+    result["socket"] = exc.errno
+result["connect_ex"] = raw_connect_ex(tcp, ("127.0.0.1", 9))
+try:
+    raw_sendto(udp, b"x", ("127.0.0.1", 9))
+except OSError as exc:
+    result["sendto"] = exc.errno
+try:
+    socket.getaddrinfo("example.com", 443)
+except RuntimeError as exc:
+    result["dns"] = str(exc)
+tcp.close()
+udp.close()
+print(json.dumps(result, sort_keys=True))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.defpath, "PYTHONPATH": str(checker.ROOT)},
+    )
+
+    observed = json.loads(result.stdout)
+    if observed == {"already_blocked": errno.EPERM}:
+        return
+    assert observed == {
+        "connect_ex": errno.EPERM,
+        "dns": "network is disabled for catalog execution",
+        "sendto": errno.EPERM,
+        "socket": errno.EPERM,
+    }
+
+
+def test_limited_command_rejects_oversized_and_hanging_children(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="exceeded its bound"):
+        generator._run_limited(
+            [sys.executable, "-c", "import sys; sys.stdout.write('x' * 1025)"],
+            max_stdout_bytes=1024,
+            timeout_seconds=5,
+        )
+
+    pid_path = tmp_path / "child.pid"
+    with pytest.raises(ValueError, match="exceeded its bound"):
+        generator._run_limited(
+            [
+                sys.executable,
+                "-c",
+                "import os, pathlib, time; "
+                f"pathlib.Path({str(pid_path)!r}).write_text(str(os.getpid())); "
+                "time.sleep(30)",
+            ],
+            max_stdout_bytes=1024,
+            timeout_seconds=1,
+        )
+    pid = int(pid_path.read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+def test_isolated_environment_rejects_poisoned_current_bot_source_pth(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source"
+    package = source_root / "src/mcp_server_phytomni"
+    package.mkdir(parents=True)
+    environment_root = source_root / ".venv"
+    site_packages = environment_root / "lib/python3.12/site-packages"
+    site_packages.mkdir(parents=True)
+    (site_packages / "poison.pth").write_text(
+        "/mutable/current/Phytomni-Bot/src\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="mutable path injection"):
+        generator._assert_isolated_environment(environment_root, source_root)
+
+
+def test_archive_execution_contract_rejects_unauthenticated_lock_bytes(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_bytes(b"[project]\nname='fixed'\n")
+    (tmp_path / "uv.lock").write_bytes(b"changed\n")
+    with pytest.raises(ValueError, match="not authenticated"):
+        generator._verify_archive_execution_contract(
+            tmp_path,
+            {
+                "project_definition": b"[project]\nname='fixed'\n",
+                "dependency_lock": b"expected\n",
+            },
+        )
 
 
 def _install_manifest_parent_swap(
@@ -50,7 +179,7 @@ def _install_manifest_parent_swap(
     manifest_path = root / checker.BOT_CONTRACT_MANIFEST_REL
     inside_parent = manifest_path.parent
     parked_parent = inside_parent.with_name(f"{inside_parent.name}-parked")
-    real_open = bounded_input.os.open
+    real_openat2 = bounded_input._openat2
     component_swapped = False
 
     def swap_to_outside() -> None:
@@ -64,34 +193,21 @@ def _install_manifest_parent_swap(
             parked_parent.rename(inside_parent)
 
     def racing_open(
-        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        directory: int,
+        relative: str,
         flags: int,
         mode: int = 0o777,
-        *,
-        dir_fd: int | None = None,
     ) -> int:
         nonlocal component_swapped
-        path_value = os.fspath(path)
-        if dir_fd is None and path_value == os.fspath(manifest_path):
-            swap_to_outside()
-            try:
-                return real_open(path, flags, mode)
-            finally:
-                restore()
         if (
-            dir_fd is not None
-            and path_value == inside_parent.name
+            relative == checker.BOT_CONTRACT_MANIFEST_REL.as_posix()
             and not component_swapped
         ):
-            descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
             swap_to_outside()
             component_swapped = True
-            return descriptor
-        if dir_fd is None:
-            return real_open(path, flags, mode)
-        return real_open(path, flags, mode, dir_fd=dir_fd)
+        return real_openat2(directory, relative, flags, mode)
 
-    monkeypatch.setattr(bounded_input.os, "open", racing_open)
+    monkeypatch.setattr(bounded_input, "_openat2", racing_open)
     return manifest_path, restore
 
 
@@ -106,6 +222,7 @@ def _committed_authority(commit: str) -> dict[str, Any]:
 
 def _source_objects(
     commit: str,
+    source_paths: dict[str, str],
 ) -> tuple[bytes, dict[str, bytes], list[dict[str, str]]]:
     authority = _committed_authority(commit)
     proof = authority["git_object_proof"]
@@ -114,7 +231,22 @@ def _source_objects(
         entry["oid"]: base64.b64decode(entry["content_base64"], validate=True)
         for entry in proof["trees"]
     }
-    return commit, trees, copy.deepcopy(authority["sources"])
+    sources = copy.deepcopy(authority["sources"])
+    known_roles = {entry["role"] for entry in sources}
+    for role, path in source_paths.items():
+        if role in known_roles:
+            continue
+        payload = f"synthetic authenticated {path}\n".encode("utf-8")
+        sources.append(
+            {
+                "role": role,
+                "path": path,
+                "git_blob_oid": "0" * 40,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "content_base64": base64.b64encode(payload).decode("ascii"),
+            }
+        )
+    return commit, trees, sources
 
 
 def _generation_root(tmp_path: Path, fixture_raw: bytes) -> Path:
@@ -127,7 +259,7 @@ def _generation_root(tmp_path: Path, fixture_raw: bytes) -> Path:
 def _generate_with_current_sources(
     monkeypatch: pytest.MonkeyPatch,
     root: Path,
-    execute: Callable[[Path, str], bytes] | None = None,
+    execute: Callable[[Path, str, dict[str, bytes]], bytes] | None = None,
 ) -> dict[str, object]:
     monkeypatch.setattr(
         generator,
@@ -137,12 +269,12 @@ def _generate_with_current_sources(
     monkeypatch.setattr(
         generator,
         "_source_objects",
-        lambda _repository, commit, _paths: _source_objects(commit),
+        lambda _repository, commit, paths: _source_objects(commit, paths),
     )
     monkeypatch.setattr(
         generator,
         "_execute_bot_agent_catalog",
-        execute or (lambda _repository, _commit: FIXTURE_PATH.read_bytes()),
+        execute or (lambda _repository, _commit, _sources: FIXTURE_PATH.read_bytes()),
     )
     with bounded_input.RootedDirectory(root) as opened_root:
         return generator._generate_binding(
@@ -216,9 +348,7 @@ def test_generator_rejects_hardlink_added_during_generation(
     manifest_raw = MANIFEST_PATH.read_bytes()
     manifest_path.write_bytes(manifest_raw)
     outside_path = tmp_path.parent / f"{tmp_path.name}-racing-hardlink.json"
-    binding = copy.deepcopy(
-        json.loads(manifest_raw)["activation_source_binding"]
-    )
+    binding = copy.deepcopy(json.loads(manifest_raw)["activation_source_binding"])
     binding["racing_marker"] = True
 
     def add_hardlink(*_args: object) -> dict[str, object]:
@@ -432,9 +562,7 @@ def test_check_mode_rejects_manifest_parent_swap_during_open(
         "_generate_binding",
         lambda _web_root, _bot_repository, _bot_commit: binding,
     )
-    _, restore = _install_manifest_parent_swap(
-        monkeypatch, tmp_path, outside_parent
-    )
+    _, restore = _install_manifest_parent_swap(monkeypatch, tmp_path, outside_parent)
 
     try:
         result = generator.main(
@@ -460,9 +588,7 @@ def test_write_mode_rejects_manifest_parent_swap_without_touching_outside(
     manifest_path.parent.mkdir(parents=True)
     manifest_raw = MANIFEST_PATH.read_bytes()
     manifest_path.write_bytes(manifest_raw)
-    binding = copy.deepcopy(
-        json.loads(manifest_raw)["activation_source_binding"]
-    )
+    binding = copy.deepcopy(json.loads(manifest_raw)["activation_source_binding"])
     binding["round_two_review_marker"] = True
     outside_parent = tmp_path.parent / f"{tmp_path.name}-outside-write"
     outside_parent.mkdir()
@@ -473,9 +599,7 @@ def test_write_mode_rejects_manifest_parent_swap_without_touching_outside(
         "_generate_binding",
         lambda _web_root, _bot_repository, _bot_commit: binding,
     )
-    _, restore = _install_manifest_parent_swap(
-        monkeypatch, tmp_path, outside_parent
-    )
+    _, restore = _install_manifest_parent_swap(monkeypatch, tmp_path, outside_parent)
 
     try:
         result = generator.main(
@@ -511,8 +635,14 @@ def test_generation_uses_authenticated_endpoint_execution_bytes(
     root = _generation_root(tmp_path, fixture_raw)
     calls: list[tuple[Path, str]] = []
 
-    def execute(repository: Path, commit: str) -> bytes:
+    def execute(
+        repository: Path,
+        commit: str,
+        sources: dict[str, bytes],
+    ) -> bytes:
         calls.append((repository, commit))
+        assert sources["project_definition"]
+        assert sources["dependency_lock"]
         return fixture_raw
 
     binding = _generate_with_current_sources(monkeypatch, root, execute)
@@ -527,6 +657,12 @@ def test_generation_uses_authenticated_endpoint_execution_bytes(
         "path": "/v1/agents",
         "authenticated": True,
         "network_allowed": False,
+        "offline_enforcement": "seccomp_socket_deny_v1",
+        "environment": {
+            "installer": "uv_sync_frozen_offline_v1",
+            "project_source": "pyproject.toml",
+            "lock_source": "uv.lock",
+        },
         "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
     }
 
@@ -580,9 +716,7 @@ def test_write_mode_rejects_oversized_generated_manifest(
     manifest_path.parent.mkdir(parents=True)
     manifest_raw = MANIFEST_PATH.read_bytes()
     manifest_path.write_bytes(manifest_raw)
-    oversized_binding = {
-        "padding": "x" * checker.MAX_BOT_CONTRACT_MANIFEST_BYTES
-    }
+    oversized_binding = {"padding": "x" * checker.MAX_BOT_CONTRACT_MANIFEST_BYTES}
     monkeypatch.setattr(
         generator,
         "_generate_binding",
