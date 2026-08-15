@@ -27,9 +27,8 @@ capture() {
     agent-browser --session "${SESSION}" wait --fn \
         "(() => { const root = document.querySelector('[data-testid=deep-genome-visual-root]'); return root?.dataset.fixtureReady === 'true' || Boolean(root?.dataset.fixtureError); })()"
     agent-browser --session "${SESSION}" eval \
-        "(() => { const root = document.querySelector('[data-testid=deep-genome-visual-root]'); if (root?.dataset.fixtureError) throw new Error(root.dataset.fixtureError); return window.assertScientificMarkdownVisualContract?.(); })()" \
+        "(() => { const root = document.querySelector('[data-testid=deep-genome-visual-root]'); if (root?.dataset.fixtureError) throw new Error(root.dataset.fixtureError); if (typeof window.assertScientificMarkdownVisualContract !== 'function') throw new Error('scientific Markdown visual contract: oracle unavailable'); const result = window.assertScientificMarkdownVisualContract(); if (typeof result !== 'object' || result === null || result.pass !== true) throw new Error('scientific Markdown visual contract: oracle did not pass'); return result; })()" \
         >"${OUTPUT_DIR}/${stem}.contract.json"
-    test -s "${OUTPUT_DIR}/${stem}.contract.json"
     agent-browser --session "${SESSION}" screenshot "${OUTPUT_DIR}/${stem}.png"
 }
 

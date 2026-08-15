@@ -172,8 +172,18 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(CAPTURE_RUNNER_SOURCE).toContain("for theme in light dark");
     expect(CAPTURE_RUNNER_SOURCE).toContain("dataset.fixtureReady === 'true'");
     expect(CAPTURE_RUNNER_SOURCE).toContain(
-      "window.assertScientificMarkdownVisualContract"
+      "typeof window.assertScientificMarkdownVisualContract !== 'function'"
     );
+    expect(CAPTURE_RUNNER_SOURCE).toContain(
+      "const result = window.assertScientificMarkdownVisualContract();"
+    );
+    expect(CAPTURE_RUNNER_SOURCE).toContain(
+      "typeof result !== 'object' || result === null || result.pass !== true"
+    );
+    expect(CAPTURE_RUNNER_SOURCE).not.toContain(
+      "window.assertScientificMarkdownVisualContract?.()"
+    );
+    expect(CAPTURE_RUNNER_SOURCE).not.toContain("test -s");
     expect(CAPTURE_RUNNER_SOURCE).toContain("/tmp/phytomni-research-visual");
   });
 
