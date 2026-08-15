@@ -16,13 +16,27 @@ import binascii
 import hashlib
 import json
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.bounded_input import (
+    MAX_CONTRACT_MANIFEST_BYTES,
+    InputChangedError,
+    InputTooLargeError,
+    RootedDirectory,
+    UnsafeInputPathError,
+)
+from scripts.strict_json import StrictJsonError, loads_strict_json
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVATION_SOURCE_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
+RESEARCH_FIXTURE_BOT_COMMIT = "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
 MATRIX_REL = Path("docs/reference/bot-web-activation-matrix.md")
 BOT_CONTRACT_MANIFEST_REL = Path(
     "apps/web/tests/fixtures/bot-head/contract-manifest.json"
@@ -159,7 +173,7 @@ MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
 MAX_RESEARCH_INPUT_FIXTURE_BYTES = 256 * 1024
-MAX_BOT_CONTRACT_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_BOT_CONTRACT_MANIFEST_BYTES = MAX_CONTRACT_MANIFEST_BYTES
 MAX_BOT_SOURCE_BYTES = 512 * 1024
 
 BOT_SOURCE_PATHS = {
@@ -167,6 +181,41 @@ BOT_SOURCE_PATHS = {
     "research_contract": ("docs/contracts/research-input-resolution/catalog.json"),
     "upload_capability": ("docs/contracts/resumable-upload/capability.json"),
     "resumable_upload_packet": ("docs/contracts/resumable-upload/manifest.json"),
+}
+
+RESEARCH_FIXTURE_SOURCE_PATHS = {
+    "agent_identities": "src/mcp_server_phytomni/api/app.py",
+    "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
+    "agent_capability_serializer": (
+        "src/mcp_server_phytomni/api/agent_capabilities.py"
+    ),
+    "upload_runtime": "src/mcp_server_phytomni/runtime/resumable_uploads.py",
+    "upload_runtime_wrapper": "src/mcp_server_phytomni/api/upload_runtime.py",
+    "advertised_protocols": (
+        "src/mcp_server_phytomni/api/advertised_protocols.py"
+    ),
+    "conversation_context": (
+        "src/mcp_server_phytomni/runtime/conversation_context/models.py"
+    ),
+    "api_config": "src/mcp_server_phytomni/config/models/api.py",
+    "api_limits_config": "src/mcp_server_phytomni/config/api_limits.py",
+    "config_defaults": "src/mcp_server_phytomni/config/defaults.py",
+    "research_formats": (
+        "src/mcp_server_phytomni/agents/research/scientific_formats.py"
+    ),
+    "research_readiness": "src/mcp_server_phytomni/api/research_input.py",
+    "research_runtime_capability": (
+        "src/mcp_server_phytomni/api/research_capabilities.py"
+    ),
+    "relay_mode": "src/mcp_server_phytomni/config/relay_mode.py",
+}
+RESEARCH_FIXTURE_EXECUTION = {
+    "profile": "full_readiness_offline_v1",
+    "method": "GET",
+    "path": "/v1/agents",
+    "authenticated": True,
+    "network_allowed": False,
+    "bot_commit": RESEARCH_FIXTURE_BOT_COMMIT,
 }
 
 
@@ -200,6 +249,11 @@ class _BotSourceBinding(NamedTuple):
     contract: _PinnedBotContract
     fixture_sha256: str
     fixture_contract_sha256: str
+
+
+class _AuthenticatedBotSources(NamedTuple):
+    values: dict[str, bytes]
+    digests: dict[str, str]
 
 
 class _GoLexicalView(NamedTuple):
@@ -268,35 +322,21 @@ def _has_forbidden_part(path: Path) -> bool:
     return any(part.casefold() in _FORBIDDEN_PARTS for part in path.parts)
 
 
-def _resolve(path: Path) -> Path | None:
-    try:
-        return path.resolve()
-    except (OSError, RuntimeError):
-        return None
-
-
-def _safe_relative_path(root: Path, relative: Path) -> Path | None:
-    candidate = root / relative
-    resolved_root = _resolve(root)
-    resolved_candidate = _resolve(candidate)
-    if resolved_root is None or resolved_candidate is None:
-        return None
-    try:
-        resolved_candidate.relative_to(resolved_root)
-    except ValueError:
-        return None
-    if _has_forbidden_part(resolved_candidate):
-        return None
-    return candidate
-
-
-def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | None:
-    candidate = _safe_relative_path(root, relative)
-    if candidate is None:
+def _read_bytes(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+    max_bytes: int = MAX_BOT_SOURCE_BYTES,
+) -> bytes | None:
+    if _has_forbidden_part(relative):
         violations.append("refusing to read out-of-scope activation path")
         return None
     try:
-        return candidate.read_bytes()
+        return root.read_bytes(relative, max_bytes)
+    except InputTooLargeError:
+        violations.append("Web activation source is oversized")
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
     except FileNotFoundError:
         violations.append("missing Web activation source")
     except OSError:
@@ -305,7 +345,11 @@ def _read_bytes(root: Path, relative: Path, violations: list[str]) -> bytes | No
     return None
 
 
-def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
+def _read_text(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> str | None:
     raw = _read_bytes(root, relative, violations)
     if raw is None:
         return None
@@ -317,17 +361,9 @@ def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
 
 
 def _json_object(raw: bytes) -> dict[str, Any] | None:
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        value: dict[str, Any] = {}
-        for key, item in pairs:
-            if key in value:
-                raise ValueError("duplicate key")
-            value[key] = item
-        return value
-
     try:
-        value = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
-    except (RecursionError, TypeError, ValueError):
+        value = loads_strict_json(raw)
+    except StrictJsonError:
         return None
     return value if isinstance(value, dict) else None
 
@@ -621,7 +657,6 @@ def _expected_fixture_contract(contract: _PinnedBotContract) -> dict[str, Any]:
         },
     }
 
-
 def _fixture_contract_value(
     value: Mapping[str, Any], contract: _PinnedBotContract
 ) -> dict[str, Any] | None:
@@ -816,20 +851,156 @@ def _resumable_packet_metadata(raw: bytes, source_sha256: str) -> dict[str, Any]
     }
 
 
-def _load_bot_source_binding(
-    root: Path, violations: list[str]
-) -> _BotSourceBinding | None:
-    raw = _read_bytes(root, BOT_CONTRACT_MANIFEST_REL, violations)
-    if raw is None:
+def _authenticate_bot_sources(
+    bot_commit: Any,
+    proof: Any,
+    source_entries: Any,
+    expected_commit: str,
+    source_paths: Mapping[str, str],
+    violations: list[str],
+    label: str,
+) -> _AuthenticatedBotSources | None:
+    if (
+        not isinstance(bot_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
         return None
-    if len(raw) > MAX_BOT_CONTRACT_MANIFEST_BYTES:
+    if bot_commit != expected_commit:
+        violations.append(f"{label} does not use the accepted Bot commit")
+        return None
+    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_entry = proof.get("commit")
+    tree_entries = proof.get("trees")
+    if (
+        not isinstance(commit_entry, dict)
+        or set(commit_entry) != {"oid", "content_base64"}
+        or commit_entry.get("oid") != bot_commit
+        or not isinstance(tree_entries, list)
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_payload = _decode_object_payload(
+        commit_entry.get("content_base64"), 64 * 1024
+    )
+    if (
+        commit_payload is None
+        or _git_object_oid("commit", commit_payload) != bot_commit
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    tree_headers = [
+        line
+        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
+        if line.startswith(b"tree ")
+    ]
+    if (
+        len(tree_headers) != 1
+        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    root_tree = tree_headers[0][5:].decode("ascii")
+
+    trees: dict[str, bytes] = {}
+    for entry in tree_entries:
+        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        oid = entry.get("oid")
+        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
+        if (
+            not isinstance(oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
+            or payload is None
+            or _git_object_oid("tree", payload) != oid
+            or oid in trees
+        ):
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        trees[oid] = payload
+
+    if not isinstance(source_entries, list) or len(source_entries) != len(
+        source_paths
+    ):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    sources: dict[str, bytes] = {}
+    source_digests: dict[str, str] = {}
+    used_trees: set[str] = set()
+    for entry in source_entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "role",
+            "path",
+            "git_blob_oid",
+            "sha256",
+            "content_base64",
+        }:
+            violations.append(f"{label} source inventory is malformed")
+            return None
+        role = entry.get("role")
+        path = entry.get("path")
+        blob_oid = entry.get("git_blob_oid")
+        digest = entry.get("sha256")
+        payload = _decode_object_payload(
+            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
+        )
+        if (
+            not isinstance(role, str)
+            or role not in source_paths
+            or role in sources
+            or path != source_paths[role]
+            or not isinstance(path, str)
+            or not _safe_git_path(path)
+            or not isinstance(blob_oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or payload is None
+            or _git_object_oid("blob", payload) != blob_oid
+            or hashlib.sha256(payload).hexdigest() != digest
+        ):
+            violations.append(f"{label} source inventory is malformed or drifted")
+            return None
+        resolved = _resolve_git_blob(root_tree, path, trees)
+        if resolved is None or resolved[0] != blob_oid:
+            violations.append(f"{label} source is not in the pinned Git commit")
+            return None
+        used_trees.update(resolved[1])
+        sources[role] = payload
+        source_digests[role] = digest
+    if set(sources) != set(source_paths) or used_trees != set(trees):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    return _AuthenticatedBotSources(sources, source_digests)
+
+
+def _load_bot_source_binding(
+    root: RootedDirectory, violations: list[str]
+) -> _BotSourceBinding | None:
+    try:
+        raw = root.read_bytes(
+            BOT_CONTRACT_MANIFEST_REL,
+            MAX_BOT_CONTRACT_MANIFEST_BYTES,
+        )
+    except InputTooLargeError:
         violations.append("Bot source binding manifest is oversized")
+        return None
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
+        return None
+    except FileNotFoundError:
+        violations.append("missing Web activation source")
+        return None
+    except OSError:
+        violations.append("cannot read Web activation source")
         return None
     manifest = _json_object(raw)
     binding = (
         manifest.get("activation_source_binding") if manifest is not None else None
     )
-    bot_commit = binding.get("bot_commit") if isinstance(binding, dict) else None
     if (
         not isinstance(binding, dict)
         or set(binding)
@@ -845,126 +1016,22 @@ def _load_bot_source_binding(
         }
         or binding.get("schema_version") != 1
         or binding.get("object_format") != "sha1"
-        or not isinstance(bot_commit, str)
-        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
     ):
         violations.append("Bot source binding manifest is malformed or drifted")
         return None
-    if bot_commit != ACTIVATION_SOURCE_BOT_COMMIT:
-        violations.append("Bot source binding does not use the accepted Bot commit")
-        return None
-
-    proof = binding.get("git_object_proof")
-    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
-        violations.append("Bot source binding manifest is malformed or drifted")
-        return None
-    commit_entry = proof.get("commit")
-    tree_entries = proof.get("trees")
-    if (
-        not isinstance(commit_entry, dict)
-        or set(commit_entry) != {"oid", "content_base64"}
-        or commit_entry.get("oid") != bot_commit
-        or not isinstance(tree_entries, list)
-    ):
-        violations.append("Bot source binding manifest is malformed or drifted")
-        return None
-    commit_payload = _decode_object_payload(
-        commit_entry.get("content_base64"), 64 * 1024
+    authenticated = _authenticate_bot_sources(
+        binding.get("bot_commit"),
+        binding.get("git_object_proof"),
+        binding.get("sources"),
+        ACTIVATION_SOURCE_BOT_COMMIT,
+        BOT_SOURCE_PATHS,
+        violations,
+        "Bot source binding",
     )
-    if (
-        commit_payload is None
-        or _git_object_oid("commit", commit_payload) != bot_commit
-    ):
-        violations.append("Bot source binding Git commit proof is invalid")
+    if authenticated is None:
         return None
-    tree_headers = [
-        line
-        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
-        if line.startswith(b"tree ")
-    ]
-    if (
-        len(tree_headers) != 1
-        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
-    ):
-        violations.append("Bot source binding Git commit proof is invalid")
-        return None
-    root_tree = tree_headers[0][5:].decode("ascii")
-
-    trees: dict[str, bytes] = {}
-    for entry in tree_entries:
-        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
-            violations.append("Bot source binding Git tree proof is invalid")
-            return None
-        oid = entry.get("oid")
-        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
-        if (
-            not isinstance(oid, str)
-            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
-            or payload is None
-            or _git_object_oid("tree", payload) != oid
-            or oid in trees
-        ):
-            violations.append("Bot source binding Git tree proof is invalid")
-            return None
-        trees[oid] = payload
-
-    source_entries = binding.get("sources")
-    if not isinstance(source_entries, list) or len(source_entries) != len(
-        BOT_SOURCE_PATHS
-    ):
-        violations.append("Bot source binding source inventory is incomplete")
-        return None
-    sources: dict[str, bytes] = {}
-    source_digests: dict[str, str] = {}
-    used_trees: set[str] = set()
-    for entry in source_entries:
-        if not isinstance(entry, dict) or set(entry) != {
-            "role",
-            "path",
-            "git_blob_oid",
-            "sha256",
-            "content_base64",
-        }:
-            violations.append("Bot source binding source inventory is malformed")
-            return None
-        role = entry.get("role")
-        path = entry.get("path")
-        blob_oid = entry.get("git_blob_oid")
-        digest = entry.get("sha256")
-        payload = _decode_object_payload(
-            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
-        )
-        if (
-            not isinstance(role, str)
-            or role not in BOT_SOURCE_PATHS
-            or role in sources
-            or path != BOT_SOURCE_PATHS[role]
-            or not isinstance(path, str)
-            or not _safe_git_path(path)
-            or not isinstance(blob_oid, str)
-            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
-            or not isinstance(digest, str)
-            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
-            or payload is None
-            or _git_object_oid("blob", payload) != blob_oid
-            or hashlib.sha256(payload).hexdigest() != digest
-        ):
-            violations.append(
-                "Bot source binding source inventory is malformed or drifted"
-            )
-            return None
-        resolved = _resolve_git_blob(root_tree, path, trees)
-        if resolved is None or resolved[0] != blob_oid:
-            violations.append(
-                "Bot source binding source is not in the pinned Git commit"
-            )
-            return None
-        used_trees.update(resolved[1])
-        sources[role] = payload
-        source_digests[role] = digest
-    if set(sources) != set(BOT_SOURCE_PATHS) or used_trees != set(trees):
-        violations.append("Bot source binding source inventory is incomplete")
-        return None
+    sources = authenticated.values
+    source_digests = authenticated.digests
 
     contract = _parse_pinned_bot_contract(sources)
     if contract is None or binding.get("contract") != _pinned_bot_contract_value(
@@ -990,13 +1057,42 @@ def _load_bot_source_binding(
     )
     if (
         not isinstance(fixture, dict)
-        or set(fixture) != {"path", "sha256", "contract_sha256"}
+        or set(fixture)
+        != {"path", "sha256", "contract_sha256", "execution", "authority"}
         or fixture.get("path") != RESEARCH_INPUT_FIXTURE_REL.as_posix()
         or not isinstance(fixture.get("sha256"), str)
         or re.fullmatch(r"[0-9a-f]{64}", fixture["sha256"]) is None
         or fixture.get("contract_sha256") != expected_contract_sha256
+        or fixture.get("execution") != RESEARCH_FIXTURE_EXECUTION
     ):
         violations.append("Bot source binding Research fixture is malformed or drifted")
+        return None
+    authority = fixture.get("authority")
+    if (
+        not isinstance(authority, dict)
+        or set(authority)
+        != {
+            "schema_version",
+            "bot_commit",
+            "object_format",
+            "git_object_proof",
+            "sources",
+        }
+        or authority.get("schema_version") != 1
+        or authority.get("object_format") != "sha1"
+    ):
+        violations.append("Research fixture authority is malformed or drifted")
+        return None
+    fixture_sources = _authenticate_bot_sources(
+        authority.get("bot_commit"),
+        authority.get("git_object_proof"),
+        authority.get("sources"),
+        RESEARCH_FIXTURE_BOT_COMMIT,
+        RESEARCH_FIXTURE_SOURCE_PATHS,
+        violations,
+        "Research fixture authority",
+    )
+    if fixture_sources is None:
         return None
     return _BotSourceBinding(
         contract=contract,
@@ -1398,18 +1494,9 @@ def _load_research_go_contract(
 def _parse_research_input_fixture(text: str) -> Mapping[str, Any] | None:
     if len(text.encode("utf-8")) > MAX_RESEARCH_INPUT_FIXTURE_BYTES:
         return None
-
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        value: dict[str, Any] = {}
-        for key, item in pairs:
-            if key in value:
-                raise ValueError("duplicate key")
-            value[key] = item
-        return value
-
     try:
-        value = json.loads(text, object_pairs_hook=reject_duplicate_keys)
-    except (RecursionError, TypeError, ValueError):
+        value = loads_strict_json(text)
+    except StrictJsonError:
         return None
     return value if isinstance(value, Mapping) else None
 
@@ -1442,7 +1529,7 @@ def _bounded_integer(value: Any, floor: int, ceiling: int) -> bool:
 
 
 def _check_research_input_contract(
-    root: Path,
+    root: RootedDirectory,
     source_binding: _BotSourceBinding | None,
     format_source: str | None,
     limit_source: str | None,
@@ -1460,7 +1547,12 @@ def _check_research_input_contract(
         upload_contract_source,
         violations,
     )
-    fixture_raw = _read_bytes(root, RESEARCH_INPUT_FIXTURE_REL, violations)
+    fixture_raw = _read_bytes(
+        root,
+        RESEARCH_INPUT_FIXTURE_REL,
+        violations,
+        MAX_RESEARCH_INPUT_FIXTURE_BYTES,
+    )
     if fixture_raw is None:
         violations.append("research_input_resolution_v1.json is missing")
         return
@@ -1690,8 +1782,8 @@ def parse_matrix(text: str) -> Any | None:
     if in_string or depth != 0:
         return None
     try:
-        return json.loads(block)
-    except (RecursionError, TypeError, ValueError):
+        return loads_strict_json(block, max_depth=MAX_MATRIX_JSON_DEPTH)
+    except StrictJsonError:
         return None
 
 
@@ -1865,18 +1957,26 @@ def _fixture_field_names(value: Any, depth: int = 0) -> set[str]:
     return set()
 
 
-def _load_fixture_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+def _load_fixture_json(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> Any | None:
     text = _read_text(root, relative, violations)
     if text is None:
         return None
     try:
-        return json.loads(text)
-    except (RecursionError, TypeError, ValueError):
+        return loads_strict_json(text)
+    except StrictJsonError:
         violations.append("RC-WEB-004 product fixture JSON is malformed")
         return None
 
 
-def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -> None:
+def _check_product_fixture(
+    root: RootedDirectory,
+    fixture_id: str,
+    violations: list[str],
+) -> None:
     payload = _load_fixture_json(root, PRODUCT_FIXTURE_PATHS[fixture_id], violations)
     if not isinstance(payload, dict):
         if payload is not None:
@@ -1936,7 +2036,10 @@ def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -
 
 
 def _check_rc_web_004_local_readiness(
-    root: Path, readiness: Any, rows: Any, violations: list[str]
+    root: RootedDirectory,
+    readiness: Any,
+    rows: Any,
+    violations: list[str],
 ) -> None:
     if not isinstance(readiness, dict):
         return
@@ -2336,15 +2439,7 @@ def _sanitize_failure(message: str) -> str:
     return compact
 
 
-def check(root: Path) -> list[str]:
-    """Return deterministic, bounded activation violations for ``root``."""
-
-    requested_root = Path(root)
-    if _has_forbidden_part(requested_root):
-        return ["refusing to read out-of-scope activation root"]
-    root = _resolve(requested_root)
-    if root is None or _has_forbidden_part(root):
-        return ["refusing to read out-of-scope activation root"]
+def _check_open_root(root: RootedDirectory) -> list[str]:
     violations: list[str] = []
     source_binding = _load_bot_source_binding(root, violations)
     matrix_text = _read_text(root, MATRIX_REL, violations)
@@ -2391,6 +2486,22 @@ def check(root: Path) -> list[str]:
     )
     _check_defaults(source, violations)
     return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
+
+
+def check(root: Path) -> list[str]:
+    """Return deterministic, bounded activation violations for ``root``."""
+
+    requested_root = Path(root)
+    if _has_forbidden_part(requested_root):
+        return ["refusing to read out-of-scope activation root"]
+    try:
+        opened_root = RootedDirectory(requested_root)
+    except OSError:
+        return ["refusing to read out-of-scope activation root"]
+    with opened_root:
+        if _has_forbidden_part(opened_root.path):
+            return ["refusing to read out-of-scope activation root"]
+        return _check_open_root(opened_root)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -11,11 +11,25 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.bounded_input import (
+    InputChangedError,
+    InputTooLargeError,
+    RootedDirectory,
+    UnsafeInputPathError,
+)
+from scripts.strict_json import (
+    DEFAULT_MAX_JSON_DEPTH,
+    StrictJsonError,
+    loads_strict_json,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT_REL = Path("apps/web/tests/fixtures/a2ui")
@@ -37,6 +51,8 @@ ALLOWED_CONTRACT_KINDS = {
 }
 FORBIDDEN_PATH_PARTS = {"evidence", "handoff", "bot", "ops", "operations"}
 PASS_LINE = "A2UI activation contract: PASS"
+MAX_A2UI_INPUT_BYTES = 2 * 1024 * 1024
+MAX_A2UI_JSON_DEPTH = DEFAULT_MAX_JSON_DEPTH
 
 ACTION_ROUTE_RE = re.compile(
     r"(?m)^\s*(?P<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*POST\s*"
@@ -78,7 +94,7 @@ UNBACKED_ENVIRONMENT_CLAIM_RE = re.compile(
 
 def _within(path: Path, parent: Path) -> bool:
     try:
-        path.resolve().relative_to(parent.resolve())
+        path.relative_to(parent)
     except ValueError:
         return False
     return True
@@ -86,7 +102,7 @@ def _within(path: Path, parent: Path) -> bool:
 
 def _has_forbidden_part(path: Path, root: Path) -> bool:
     try:
-        relative = path.resolve().relative_to(root.resolve())
+        relative = path.relative_to(root)
     except ValueError:
         return True
     parts = relative.parts
@@ -103,21 +119,35 @@ def _has_forbidden_part(path: Path, root: Path) -> bool:
     return False
 
 
-def _safe_bytes(path: Path, root: Path, violations: list[str]) -> bytes | None:
+def _safe_bytes(
+    opened_root: RootedDirectory,
+    path: Path,
+    root: Path,
+    violations: list[str],
+) -> bytes | None:
     if not _within(path, root) or _has_forbidden_part(path, root):
         violations.append(f"refusing to read out-of-scope path: {path}")
         return None
     try:
-        return path.read_bytes()
+        return opened_root.read_bytes(path.relative_to(root), MAX_A2UI_INPUT_BYTES)
     except FileNotFoundError:
         violations.append(f"missing file: {path}")
+    except InputTooLargeError:
+        violations.append(f"file exceeds byte limit: {path}")
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append(f"refusing to read unsafe path: {path}")
     except OSError as exc:
         violations.append(f"cannot read file {path}: {exc}")
     return None
 
 
-def _safe_text(path: Path, root: Path, violations: list[str]) -> str | None:
-    raw = _safe_bytes(path, root, violations)
+def _safe_text(
+    opened_root: RootedDirectory,
+    path: Path,
+    root: Path,
+    violations: list[str],
+) -> str | None:
+    raw = _safe_bytes(opened_root, path, root, violations)
     if raw is None:
         return None
     try:
@@ -128,16 +158,19 @@ def _safe_text(path: Path, root: Path, violations: list[str]) -> str | None:
 
 
 def _load_manifest(
-    root: Path, fixture_root: Path, violations: list[str]
+    opened_root: RootedDirectory,
+    root: Path,
+    fixture_root: Path,
+    violations: list[str],
 ) -> tuple[dict[str, Any] | None, bytes | None]:
     manifest_path = fixture_root / "manifest.json"
-    raw = _safe_bytes(manifest_path, root, violations)
+    raw = _safe_bytes(opened_root, manifest_path, root, violations)
     if raw is None:
         return None, None
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        violations.append(f"invalid manifest JSON: {exc}")
+        value = loads_strict_json(raw, max_depth=MAX_A2UI_JSON_DEPTH)
+    except StrictJsonError:
+        violations.append("invalid manifest JSON")
         return None, raw
     if not isinstance(value, dict):
         violations.append("manifest root must be an object")
@@ -171,7 +204,11 @@ def _resolve_fixture_path(
 
 
 def _check_manifest(
-    root: Path, fixture_root: Path, manifest: dict[str, Any] | None, violations: list[str]
+    opened_root: RootedDirectory,
+    root: Path,
+    fixture_root: Path,
+    manifest: dict[str, Any] | None,
+    violations: list[str],
 ) -> None:
     if manifest is None:
         return
@@ -214,15 +251,14 @@ def _check_manifest(
         else:
             seen_files.add(relative)
 
-        if not resolved.is_file():
-            violations.append(f"missing fixture: {relative}")
-            continue
-        raw = _safe_bytes(resolved, root, violations)
+        raw = _safe_bytes(opened_root, resolved, root, violations)
         if raw is None:
             continue
         expected_hash = entry.get("sha256")
         actual_hash = hashlib.sha256(raw).hexdigest()
-        if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
+        if not isinstance(expected_hash, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{64}", expected_hash
+        ):
             violations.append(f"invalid sha256 digest for fixture: {fixture_id}")
         elif actual_hash.lower() != expected_hash.lower():
             violations.append(
@@ -256,7 +292,9 @@ def _check_action_transport(text: str, violations: list[str]) -> None:
 def _check_api_router(text: str, violations: list[str]) -> None:
     routes = list(ACTION_ROUTE_RE.finditer(text))
     if len(routes) != 1:
-        violations.append(f"action route count must be exactly one; found {len(routes)}")
+        violations.append(
+            f"action route count must be exactly one; found {len(routes)}"
+        )
         return
 
     route_start = routes[0].start()
@@ -320,7 +358,9 @@ def _check_design_system(text: str, violations: list[str]) -> None:
     for marker in REQUIRED_DESIGN_MARKERS:
         normalized_marker = re.sub(r"\s+", " ", marker.casefold())
         if normalized_marker not in lowered:
-            violations.append(f"frontend-design-system.md missing lifecycle marker: {marker}")
+            violations.append(
+                f"frontend-design-system.md missing lifecycle marker: {marker}"
+            )
 
     normalized = re.sub(r"\s+", " ", text)
     for match in UNBACKED_ENVIRONMENT_CLAIM_RE.finditer(normalized):
@@ -338,14 +378,18 @@ def check(root: Path) -> list[str]:
     root = root.resolve()
     violations: list[str] = []
     fixture_root = root / FIXTURE_ROOT_REL
-    manifest, _ = _load_manifest(root, fixture_root, violations)
-    _check_manifest(root, fixture_root, manifest, violations)
+    try:
+        with RootedDirectory(root) as opened_root:
+            manifest, _ = _load_manifest(opened_root, root, fixture_root, violations)
+            _check_manifest(opened_root, root, fixture_root, manifest, violations)
 
-    source_text: dict[str, str] = {}
-    for name, relative in SCOPED_FILES.items():
-        text = _safe_text(root / relative, root, violations)
-        if text is not None:
-            source_text[name] = text
+            source_text: dict[str, str] = {}
+            for name, relative in SCOPED_FILES.items():
+                text = _safe_text(opened_root, root / relative, root, violations)
+                if text is not None:
+                    source_text[name] = text
+    except OSError as exc:
+        return [f"cannot open activation root safely: {exc}"]
 
     if "action_transport" in source_text:
         _check_action_transport(source_text["action_transport"], violations)

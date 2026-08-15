@@ -16,6 +16,7 @@ from typing import Any, NotRequired, TypedDict
 import pytest
 
 from scripts import check_bot_web_activation as checker
+from scripts.bounded_input import RootedDirectory
 
 
 ROW_IDS = (
@@ -49,6 +50,9 @@ SOURCE_BINDING_MANIFEST_PATH = Path(
     "apps/web/tests/fixtures/bot-head/contract-manifest.json"
 )
 PINNED_ACTIVATION_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
+PINNED_RESEARCH_FIXTURE_BOT_COMMIT = (
+    "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
+)
 
 
 class MatrixValue(TypedDict):
@@ -118,6 +122,26 @@ def research_input_fixture_payload() -> dict[str, object]:
     return json.loads(
         (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_text(encoding="utf-8")
     )
+
+
+def test_activation_json_rejects_duplicate_keys_and_deep_nesting() -> None:
+    assert checker._json_object(b'{"outer":{"value":1,"value":2}}') is None
+    deep = ("[" * 65 + "0" + "]" * 65).encode()
+    assert checker._json_object(b'{"value":' + deep + b"}") is None
+
+
+def test_activation_matrix_rejects_duplicate_keys() -> None:
+    text = "\n".join(
+        (
+            checker.MATRIX_JSON_START,
+            "```json",
+            '{"schema_version":1,"schema_version":1}',
+            "```",
+            checker.MATRIX_JSON_END,
+        )
+    )
+
+    assert checker.parse_matrix(text) is None
 
 
 def research_row(payload: dict[str, Any]) -> dict[str, Any]:
@@ -914,6 +938,30 @@ def test_checker_rejects_pinned_bot_commit_drift(tmp_path: Path) -> None:
     assert any("Bot source binding" in error for error in errors)
 
 
+def test_source_binding_rejects_oversized_manifest_before_unbounded_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / SOURCE_BINDING_MANIFEST_PATH
+    manifest_path.parent.mkdir(parents=True)
+    with manifest_path.open("wb") as stream:
+        stream.seek(checker.MAX_BOT_CONTRACT_MANIFEST_BYTES)
+        stream.write(b"}")
+    original_read_bytes = Path.read_bytes
+
+    def reject_manifest_read_bytes(path: Path) -> bytes:
+        if path == manifest_path:
+            raise AssertionError("manifest used an unbounded read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_manifest_read_bytes)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_bot_source_binding(opened_root, violations) is None
+    assert violations == ["Bot source binding manifest is oversized"]
+
+
 def test_checker_rejects_valid_unaccepted_bot_commit_proof(tmp_path: Path) -> None:
     root = minimal_tree(tmp_path)
     manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
@@ -944,7 +992,7 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
         == checker.ACTIVATION_SOURCE_BOT_COMMIT
         == PINNED_ACTIVATION_BOT_COMMIT
     )
-    assert len(raw) < 96 * 1024
+    assert len(raw) < 512 * 1024
     assert len(binding["git_object_proof"]["trees"]) <= 8
     assert {(entry["role"], entry["path"]) for entry in binding["sources"]} == set(
         checker.BOT_SOURCE_PATHS.items()
@@ -952,6 +1000,53 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     packet = binding["resumable_upload_packet"]
     assert all(set(entry) == {"path", "sha256"} for entry in packet["files"])
     assert not ({"owner_subject", "filename", "capability"} & set(packet))
+
+    fixture = binding["research_fixture"]
+    authority = fixture["authority"]
+    assert (
+        authority["bot_commit"]
+        == checker.RESEARCH_FIXTURE_BOT_COMMIT
+        == PINNED_RESEARCH_FIXTURE_BOT_COMMIT
+    )
+    assert {(entry["role"], entry["path"]) for entry in authority["sources"]} == set(
+        checker.RESEARCH_FIXTURE_SOURCE_PATHS.items()
+    )
+    authority_paths = {entry["path"] for entry in authority["sources"]}
+    assert "src/mcp_server_phytomni/runtime/resumable_uploads.py" in authority_paths
+    assert all(path.startswith("src/") for path in authority_paths)
+    assert not any(
+        path.startswith("docs/contracts/resumable-upload/")
+        for path in authority_paths
+    )
+    fixture_raw = (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()
+    assert fixture["execution"] == checker.RESEARCH_FIXTURE_EXECUTION
+    assert hashlib.sha256(fixture_raw).hexdigest() == fixture["sha256"]
+
+
+def test_research_fixture_authority_has_no_ast_response_synthesis() -> None:
+    source = Path(checker.__file__).read_text(encoding="utf-8")
+
+    assert "_RESEARCH_RESPONSE_AST_SHA256" not in source
+    assert "_research_response_ast_sha256" not in source
+    assert "_research_fixture_bytes" not in source
+    assert "ast.dump(" not in source
+
+
+def test_checker_rejects_research_fixture_authority_blob_drift(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source = manifest["activation_source_binding"]["research_fixture"]["authority"][
+        "sources"
+    ][0]
+    payload = base64.b64decode(source["content_base64"], validate=True)
+    source["content_base64"] = base64.b64encode(payload + b"\n").decode("ascii")
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("Research fixture authority" in error for error in errors)
 
 
 def test_checker_rejects_pinned_bot_blob_payload_drift(tmp_path: Path) -> None:

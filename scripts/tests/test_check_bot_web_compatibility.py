@@ -14,6 +14,7 @@ from typing import Any, Callable
 import pytest
 
 import check_bot_web_compatibility as checker
+from scripts.bounded_input import RootedDirectory
 
 
 RELEASE_SHA = "38349aab1f6e2d65c286723beb3e5a426027e77a"
@@ -46,6 +47,7 @@ ADVERSARIAL_PROSE = (
     "Routine assistant prose contains a sensitive finding without provider markers."
     + " x" * 1000
 )
+MANIFEST_LIMIT_BYTES = 2 * 1024 * 1024
 
 
 def release_manifest() -> dict[str, object]:
@@ -114,6 +116,71 @@ def test_manifest_rejects_raw_fixture_payloads():
     violations = checker.validate_manifest(manifest)
     assert any("fixture" in violation and "id" in violation for violation in violations)
     assert all("secret" not in violation for violation in violations)
+
+
+def test_manifest_rejects_oversized_input_before_unbounded_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    with manifest_path.open("wb") as stream:
+        stream.seek(MANIFEST_LIMIT_BYTES)
+        stream.write(b"}")
+    original_read_bytes = Path.read_bytes
+
+    def reject_manifest_read_bytes(path: Path) -> bytes:
+        if path == manifest_path:
+            raise AssertionError("manifest used an unbounded read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_manifest_read_bytes)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_manifest(opened_root, violations) is None
+    assert violations == ["compatibility manifest is oversized"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"schema_version":2,"schema_version":2}',
+        ("[" * 10_000 + "0" + "]" * 10_000).encode(),
+        ("[" * 65 + "0" + "]" * 65).encode(),
+    ],
+)
+def test_manifest_rejects_non_strict_json(tmp_path: Path, raw: bytes) -> None:
+    manifest_path = tmp_path / checker.MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_bytes(raw)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_manifest(opened_root, violations) is None
+
+    assert violations == ["invalid compatibility manifest JSON"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"value":1,"value":2}',
+        ("[" * 10_000 + "0" + "]" * 10_000).encode(),
+        ("[" * 65 + "0" + "]" * 65).encode(),
+    ],
+)
+def test_fixture_loader_rejects_non_strict_json(
+    tmp_path: Path, raw: bytes
+) -> None:
+    relative = Path("fixture.json")
+    (tmp_path / relative).write_bytes(raw)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_json(opened_root, relative, violations) is None
+
+    assert violations == [f"invalid compatibility fixture JSON: {relative}"]
 
 
 def test_current_checkout_passes_without_printing_fixture_payloads():
@@ -1206,12 +1273,13 @@ def test_conversation_context_fixture_rejects_raw_context_fields(tmp_path: Path)
     fixture_path.write_text(json.dumps(payload), encoding="utf-8")
 
     violations: list[str] = []
-    checker._check_fixture(
-        tmp_path,
-        "conversation_context_v1",
-        checker.FIXTURE_PATHS["conversation_context_v1"][0],
-        violations,
-    )
+    with RootedDirectory(tmp_path) as opened_root:
+        checker._check_fixture(
+            opened_root,
+            "conversation_context_v1",
+            checker.FIXTURE_PATHS["conversation_context_v1"][0],
+            violations,
+        )
     assert any("conversation_context_v1" in violation for violation in violations)
     assert all("private" not in violation for violation in violations)
 
@@ -1267,12 +1335,13 @@ def test_conversation_context_fixture_rejects_valid_shaped_ordinary_raw_text(
     fixture_path.write_text(json.dumps(payload), encoding="utf-8")
 
     violations: list[str] = []
-    checker._check_fixture(
-        tmp_path,
-        "conversation_context_v1",
-        checker.FIXTURE_PATHS["conversation_context_v1"][0],
-        violations,
-    )
+    with RootedDirectory(tmp_path) as opened_root:
+        checker._check_fixture(
+            opened_root,
+            "conversation_context_v1",
+            checker.FIXTURE_PATHS["conversation_context_v1"][0],
+            violations,
+        )
     assert violations
     assert all(ADVERSARIAL_PROSE not in violation for violation in violations)
     assert len(violations) <= checker.MAX_FAILURE_LINES
@@ -1294,10 +1363,13 @@ def test_conversation_context_fixture_rejects_valid_shaped_ordinary_raw_text(
 
 @pytest.mark.parametrize("fixture_id", ["chat_completion_run_id", "deep_genome_revision"])
 def test_legacy_response_fixtures_allow_documented_output_fields(fixture_id: str):
-    for relative in checker.FIXTURE_PATHS[fixture_id]:
-        violations: list[str] = []
-        checker._check_fixture(checker.ROOT, fixture_id, relative, violations)
-        assert violations == []
+    with RootedDirectory(checker.ROOT) as opened_root:
+        for relative in checker.FIXTURE_PATHS[fixture_id]:
+            violations: list[str] = []
+            checker._check_fixture(
+                opened_root, fixture_id, relative, violations
+            )
+            assert violations == []
 
 
 def test_default_off_gate_is_required(tmp_path: Path):

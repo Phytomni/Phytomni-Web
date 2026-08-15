@@ -5,18 +5,50 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
-from typing import Any
+from pathlib import PurePosixPath
+from typing import Any, NamedTuple
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import check_bot_web_activation as checker
+from scripts.bounded_input import (
+    FileIdentity,
+    InputChangedError,
+    InputTooLargeError,
+    RootedDirectory,
+)
+from scripts.strict_json import StrictJsonError, loads_strict_json
+
+
+BOT_CATALOG_PROFILE = "full_readiness_offline_v1"
+MAX_BOT_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_BOT_ARCHIVE_FILES = 8_192
+MAX_CATALOG_RUNNER_OUTPUT_BYTES = 256 * 1024
+BOT_CATALOG_ARCHIVE_PATHS = (
+    "conftest.py",
+    "src",
+    "tests/__init__.py",
+    "tests/support/__init__.py",
+    "tests/support/outbound_fakes.py",
+)
+
+
+class _ManifestSnapshot(NamedTuple):
+    value: dict[str, Any]
+    raw: bytes
+    identity: FileIdentity
 
 
 def _git(repository: Path, *arguments: str) -> bytes:
@@ -54,7 +86,9 @@ def _root_tree_oid(commit_payload: bytes) -> str:
 
 
 def _source_objects(
-    repository: Path, commit_oid: str
+    repository: Path,
+    commit_oid: str,
+    source_paths: dict[str, str],
 ) -> tuple[bytes, dict[str, bytes], list[dict[str, str]]]:
     commit_payload = _git(repository, "cat-file", "commit", commit_oid)
     if checker._git_object_oid("commit", commit_payload) != commit_oid:
@@ -63,7 +97,7 @@ def _source_objects(
     trees: dict[str, bytes] = {}
     entries: list[dict[str, str]] = []
 
-    for role, path in checker.BOT_SOURCE_PATHS.items():
+    for role, path in source_paths.items():
         current_tree = root_tree
         blob_oid: str | None = None
         for index, part in enumerate(path.split("/")):
@@ -102,29 +136,223 @@ def _source_objects(
     return commit_payload, trees, entries
 
 
-def _generate_binding(
-    web_root: Path,
-    bot_repository: Path,
-    bot_commit: str,
-) -> dict[str, Any]:
-    commit_oid = _commit_oid(bot_repository, bot_commit)
-    if commit_oid != checker.ACTIVATION_SOURCE_BOT_COMMIT:
-        raise ValueError("Bot commit is not the accepted activation source SHA")
-    commit_payload, trees, source_entries = _source_objects(bot_repository, commit_oid)
+def _generate_source_authority(
+    repository: Path,
+    revision: str,
+    expected_commit: str,
+    source_paths: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    commit_oid = _commit_oid(repository, revision)
+    if commit_oid != expected_commit:
+        raise ValueError("Bot commit is not the accepted source SHA")
+    commit_payload, trees, source_entries = _source_objects(
+        repository, commit_oid, source_paths
+    )
     sources = {
         entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
         for entry in source_entries
     }
+    return (
+        {
+            "schema_version": 1,
+            "bot_commit": commit_oid,
+            "object_format": "sha1",
+            "git_object_proof": {
+                "commit": {
+                    "oid": commit_oid,
+                    "content_base64": base64.b64encode(commit_payload).decode(
+                        "ascii"
+                    ),
+                },
+                "trees": [
+                    {
+                        "oid": oid,
+                        "content_base64": base64.b64encode(payload).decode("ascii"),
+                    }
+                    for oid, payload in sorted(trees.items())
+                ],
+            },
+            "sources": source_entries,
+        },
+        sources,
+    )
+
+
+def _safe_archive_path(name: str) -> PurePosixPath | None:
+    path = PurePosixPath(name)
+    if path.is_absolute() or not path.parts or any(
+        part in {"", ".", ".."} for part in path.parts
+    ):
+        return None
+    if path.as_posix() == "conftest.py" or path.parts[0] == "src":
+        return path
+    allowed_test_entries = {
+        "tests",
+        "tests/__init__.py",
+        "tests/support",
+        "tests/support/__init__.py",
+        "tests/support/outbound_fakes.py",
+    }
+    return path if path.as_posix() in allowed_test_entries else None
+
+
+def _extract_bot_archive(raw: bytes, destination: Path) -> None:
+    count = 0
+    total = 0
+    try:
+        archive = tarfile.open(fileobj=io.BytesIO(raw), mode="r:")
+    except tarfile.TarError as exc:
+        raise ValueError("fixed Bot source archive is malformed") from exc
+    with archive:
+        for member in archive:
+            count += 1
+            total += max(member.size, 0)
+            relative = _safe_archive_path(member.name)
+            if (
+                count > MAX_BOT_ARCHIVE_FILES
+                or total > MAX_BOT_ARCHIVE_BYTES
+                or relative is None
+                or not (member.isdir() or member.isfile())
+            ):
+                raise ValueError("fixed Bot source archive is unsafe")
+            target = destination.joinpath(*relative.parts)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                raise ValueError("fixed Bot source archive is malformed")
+            payload = source.read(member.size + 1)
+            if len(payload) != member.size:
+                raise ValueError("fixed Bot source archive is malformed")
+            target.write_bytes(payload)
+
+
+def _bot_python(repository: Path) -> Path:
+    candidate = repository.resolve() / ".venv" / "bin" / "python"
+    try:
+        candidate.stat()
+    except OSError as exc:
+        raise ValueError("Bot Python environment is unavailable") from exc
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        raise ValueError("Bot Python environment is unavailable")
+    return candidate
+
+
+def _execute_bot_agent_catalog(repository: Path, commit: str) -> bytes:
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "archive",
+                "--format=tar",
+                commit,
+                "--",
+                *BOT_CATALOG_ARCHIVE_PATHS,
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("cannot archive the fixed Bot commit") from exc
+    if result.returncode != 0 or len(result.stdout) > MAX_BOT_ARCHIVE_BYTES:
+        raise ValueError("cannot archive the fixed Bot commit")
+
+    runner = Path(__file__).with_name("run_pinned_bot_agent_catalog.py")
+    with tempfile.TemporaryDirectory(prefix="pinned-bot-catalog-") as directory:
+        source_root = Path(directory)
+        _extract_bot_archive(result.stdout, source_root)
+        try:
+            execution = subprocess.run(
+                [
+                    str(_bot_python(repository)),
+                    "-I",
+                    str(runner),
+                    "--source-root",
+                    str(source_root),
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={"PATH": "/usr/bin:/bin", "TMPDIR": "/tmp"},
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ValueError("fixed Bot catalog endpoint cannot be executed") from exc
+    if (
+        execution.returncode != 0
+        or len(execution.stdout) > MAX_CATALOG_RUNNER_OUTPUT_BYTES
+    ):
+        raise ValueError("fixed Bot catalog endpoint cannot be executed")
+    try:
+        receipt = loads_strict_json(execution.stdout)
+        encoded = receipt.get("body_base64") if isinstance(receipt, dict) else None
+        raw = (
+            base64.b64decode(encoded, validate=True)
+            if isinstance(encoded, str)
+            else None
+        )
+    except (StrictJsonError, ValueError, binascii.Error) as exc:
+        raise ValueError("fixed Bot catalog execution receipt is malformed") from exc
+    expected = {
+        "profile": BOT_CATALOG_PROFILE,
+        "method": "GET",
+        "path": "/v1/agents",
+        "authenticated": True,
+        "network_allowed": False,
+        "body_base64": encoded,
+    }
+    if (
+        receipt != expected
+        or raw is None
+        or len(raw) > checker.MAX_RESEARCH_INPUT_FIXTURE_BYTES
+    ):
+        raise ValueError("fixed Bot catalog execution receipt is malformed")
+    return raw
+
+
+def _generate_binding(
+    web_root: RootedDirectory,
+    bot_repository: Path,
+    bot_commit: str,
+) -> dict[str, Any]:
+    authority, sources = _generate_source_authority(
+        bot_repository,
+        bot_commit,
+        checker.ACTIVATION_SOURCE_BOT_COMMIT,
+        checker.BOT_SOURCE_PATHS,
+    )
     contract = checker._parse_pinned_bot_contract(sources)
     if contract is None:
         raise ValueError("pinned Bot sources do not expose the required contract")
 
-    fixture_path = web_root / checker.RESEARCH_INPUT_FIXTURE_REL
     try:
-        fixture_raw = fixture_path.read_bytes()
+        fixture_raw = web_root.read_bytes(
+            checker.RESEARCH_INPUT_FIXTURE_REL,
+            checker.MAX_RESEARCH_INPUT_FIXTURE_BYTES,
+        )
         fixture_text = fixture_raw.decode("utf-8")
+    except InputTooLargeError as exc:
+        raise ValueError("Web Research fixture is oversized") from exc
     except (OSError, UnicodeDecodeError) as exc:
         raise ValueError("Web Research fixture cannot be read") from exc
+    fixture_authority, _fixture_sources = _generate_source_authority(
+        bot_repository,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+        checker.RESEARCH_FIXTURE_SOURCE_PATHS,
+    )
+    expected_fixture_raw = _execute_bot_agent_catalog(
+        bot_repository,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+    )
+    if fixture_raw != expected_fixture_raw:
+        raise ValueError("Web Research fixture differs from exact Bot-authoritative bytes")
     fixture = checker._parse_research_input_fixture(fixture_text)
     fixture_contract = (
         checker._fixture_contract_value(fixture, contract)
@@ -135,6 +363,7 @@ def _generate_binding(
     if fixture_contract != expected_fixture_contract:
         raise ValueError("Web Research fixture differs from pinned Bot sources")
 
+    source_entries = authority["sources"]
     packet_entry = next(
         entry for entry in source_entries if entry["role"] == "resumable_upload_packet"
     )
@@ -145,23 +374,7 @@ def _generate_binding(
         raise ValueError("pinned resumable-upload packet manifest is malformed")
 
     return {
-        "schema_version": 1,
-        "bot_commit": commit_oid,
-        "object_format": "sha1",
-        "git_object_proof": {
-            "commit": {
-                "oid": commit_oid,
-                "content_base64": base64.b64encode(commit_payload).decode("ascii"),
-            },
-            "trees": [
-                {
-                    "oid": oid,
-                    "content_base64": base64.b64encode(payload).decode("ascii"),
-                }
-                for oid, payload in sorted(trees.items())
-            ],
-        },
-        "sources": source_entries,
+        **authority,
         "contract": checker._pinned_bot_contract_value(contract),
         "research_fixture": {
             "path": checker.RESEARCH_INPUT_FIXTURE_REL.as_posix(),
@@ -169,20 +382,56 @@ def _generate_binding(
             "contract_sha256": checker._canonical_json_sha256(
                 expected_fixture_contract
             ),
+            "execution": {
+                "profile": BOT_CATALOG_PROFILE,
+                "method": "GET",
+                "path": "/v1/agents",
+                "authenticated": True,
+                "network_allowed": False,
+                "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
+            },
+            "authority": fixture_authority,
         },
         "resumable_upload_packet": packet,
     }
 
 
-def _load_manifest(path: Path) -> dict[str, Any]:
+def _load_manifest(web_root: RootedDirectory) -> _ManifestSnapshot:
     try:
-        raw = path.read_bytes()
+        snapshot = web_root.read_snapshot(
+            checker.BOT_CONTRACT_MANIFEST_REL,
+            checker.MAX_BOT_CONTRACT_MANIFEST_BYTES,
+        )
+    except InputTooLargeError as exc:
+        raise ValueError("Web contract manifest is oversized") from exc
     except OSError as exc:
         raise ValueError("Web contract manifest cannot be read") from exc
+    raw = snapshot.value
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Web contract manifest is malformed") from exc
     value = checker._json_object(raw)
     if value is None:
         raise ValueError("Web contract manifest is malformed")
-    return value
+    return _ManifestSnapshot(value=value, raw=raw, identity=snapshot.identity)
+
+
+def _write_manifest(
+    web_root: RootedDirectory,
+    raw: bytes,
+    expected_identity: FileIdentity,
+) -> None:
+    try:
+        web_root.write_bytes(
+            checker.BOT_CONTRACT_MANIFEST_REL,
+            raw,
+            expected_identity,
+        )
+    except InputChangedError as exc:
+        raise ValueError("Web contract manifest changed during generation") from exc
+    except OSError as exc:
+        raise ValueError("Web contract manifest cannot be written") from exc
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -196,45 +445,53 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    web_root = args.web_root.resolve()
-    manifest_path = web_root / checker.BOT_CONTRACT_MANIFEST_REL
     try:
-        manifest = _load_manifest(manifest_path)
-        current_binding = manifest.get("activation_source_binding")
-        current_binding_commit = (
-            current_binding.get("bot_commit")
-            if isinstance(current_binding, dict)
-            else None
-        )
-        bot_commit = (
-            args.bot_commit or current_binding_commit or manifest.get("bot_commit")
-        )
-        if not isinstance(bot_commit, str):
-            raise ValueError("Web contract manifest has no pinned Bot commit")
-        bot_repository = (
-            args.bot_repo.resolve()
-            if args.bot_repo is not None
-            else web_root.parent / "Phytomni-Bot"
-        )
-        binding = _generate_binding(web_root, bot_repository, bot_commit)
+        try:
+            web_root = RootedDirectory(args.web_root)
+        except OSError as exc:
+            raise ValueError("Web root cannot be opened safely") from exc
+        with web_root:
+            initial = _load_manifest(web_root)
+            manifest = initial.value
+            current_binding = manifest.get("activation_source_binding")
+            current_binding_commit = (
+                current_binding.get("bot_commit")
+                if isinstance(current_binding, dict)
+                else None
+            )
+            bot_commit = (
+                args.bot_commit
+                or current_binding_commit
+                or manifest.get("bot_commit")
+            )
+            if not isinstance(bot_commit, str):
+                raise ValueError("Web contract manifest has no pinned Bot commit")
+            bot_repository = (
+                args.bot_repo.resolve()
+                if args.bot_repo is not None
+                else web_root.path.parent / "Phytomni-Bot"
+            )
+            binding = _generate_binding(web_root, bot_repository, bot_commit)
+
+            expected = dict(manifest)
+            expected["activation_source_binding"] = binding
+            rendered = (
+                json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
+            ).encode("utf-8")
+            if len(rendered) > checker.MAX_BOT_CONTRACT_MANIFEST_BYTES:
+                raise ValueError("generated Web contract manifest is oversized")
+            final = _load_manifest(web_root)
+            if final.identity != initial.identity or final.raw != initial.raw:
+                raise ValueError("Web contract manifest changed during generation")
+            if args.check:
+                if final.raw != rendered:
+                    raise ValueError("committed manifest is stale")
+                print("Bot activation manifest: PASS")
+                return 0
+            _write_manifest(web_root, rendered, final.identity)
     except ValueError as exc:
         print(f"Bot activation manifest: FAIL - {exc}", file=sys.stderr)
         return 1
-
-    expected = dict(manifest)
-    expected["activation_source_binding"] = binding
-    rendered = json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
-    if args.check:
-        try:
-            current = manifest_path.read_text(encoding="utf-8")
-        except OSError:
-            current = ""
-        if current != rendered:
-            print("Bot activation manifest: FAIL - committed manifest is stale")
-            return 1
-        print("Bot activation manifest: PASS")
-        return 0
-    manifest_path.write_text(rendered, encoding="utf-8")
     print("Bot activation manifest: generated")
     return 0
 
