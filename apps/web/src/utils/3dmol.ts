@@ -2,6 +2,7 @@ export interface ThreeDMolViewer {
   addModel(content: string, format: string): void;
   setStyle(selection: Record<string, never>, style: unknown): void;
   zoomTo(): void;
+  resize(): void;
   render(): void;
   animate(): void;
   stopAnimate?(): void;

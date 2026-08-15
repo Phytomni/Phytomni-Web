@@ -28,6 +28,14 @@ const FIXTURE_ENTRY_SOURCE = readFileSync(
   resolve(WEB_ROOT, "tests/visual/research/main.ts"),
   "utf8"
 );
+const CAPTURE_RUNNER_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "tests/visual/research/capture-contract.sh"),
+  "utf8"
+);
+const SCIENTIFIC_CIF_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "src/components/scientific/ScientificCifViewer.vue"),
+  "utf8"
+);
 const MARKDOWN_CSS_SOURCE = readFileSync(
   resolve(WEB_ROOT, "src/styles/markdown.css"),
   "utf8"
@@ -137,14 +145,21 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(figure?.displayUrl).not.toMatch(/^data:/);
   });
 
-  it("locks computed foreground, CIF containment, and image browser assertions", () => {
+  it("locks the bounded visual oracle and its executable capture runner", () => {
     expect(FIXTURE_ENTRY_SOURCE).toContain(
       "assertScientificMarkdownVisualContract"
     );
     expect(FIXTURE_ENTRY_SOURCE).toContain("getComputedStyle(paragraph).color");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("--phy-color-fill-subtle");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("--phy-color-bg-elevated");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("contrastRatio");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("opaqueBackground");
     expect(FIXTURE_ENTRY_SOURCE).toContain(
-      "getComputedStyle(row).backgroundColor"
+      "__scientificMarkdownHostileImageExecuted"
     );
+    expect(FIXTURE_ENTRY_SOURCE).toContain("VISUAL_READINESS_TIMEOUT_MS");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("scientificCifReady");
+    expect(SCIENTIFIC_CIF_SOURCE).toContain("data-scientific-cif-ready");
     expect(FIXTURE_ENTRY_SOURCE).toContain("canvas.offsetParent !== viewer");
     expect(FIXTURE_ENTRY_SOURCE).toContain(
       "imageUrl.origin !== window.location.origin"
@@ -152,6 +167,14 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(FIXTURE_ENTRY_SOURCE).toContain(
       "document.documentElement.scrollWidth"
     );
+    expect(CAPTURE_RUNNER_SOURCE).toContain("1440 900");
+    expect(CAPTURE_RUNNER_SOURCE).toContain("390 844");
+    expect(CAPTURE_RUNNER_SOURCE).toContain("for theme in light dark");
+    expect(CAPTURE_RUNNER_SOURCE).toContain("dataset.fixtureReady === 'true'");
+    expect(CAPTURE_RUNNER_SOURCE).toContain(
+      "window.assertScientificMarkdownVisualContract"
+    );
+    expect(CAPTURE_RUNNER_SOURCE).toContain("/tmp/phytomni-research-visual");
   });
 
   it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {

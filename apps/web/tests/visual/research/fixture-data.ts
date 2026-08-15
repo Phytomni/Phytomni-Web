@@ -23,7 +23,7 @@ export const CONTRACT_DEEP_GENOME_MARKDOWN = [
   "",
   "<sup>1</sup> <sup>[1-2]</sup>",
   "",
-  '<img src="/private/report.png" onerror="alert(1)">',
+  '<img src="/private/report.png" onerror="window.__scientificMarkdownHostileImageExecuted = true">',
   "",
   "![Authorized figure](figures/authorized-figure.svg)",
   "",

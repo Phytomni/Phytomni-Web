@@ -17,6 +17,14 @@ const params = new URLSearchParams(window.location.search);
 const locale = params.get("locale") === "zh-CN" ? "zh-CN" : "en-US";
 const theme = params.get("theme") === "dark" ? "dark" : "light";
 const fixtureCase = params.get("case") === "contract" ? "contract" : "real";
+const VISUAL_READINESS_TIMEOUT_MS = 5_000;
+
+declare global {
+  interface Window {
+    __scientificMarkdownHostileImageExecuted?: boolean;
+    assertScientificMarkdownVisualContract?: () => unknown;
+  }
+}
 
 function requiredElement<T extends Element>(
   selector: string,
@@ -27,6 +35,60 @@ function requiredElement<T extends Element>(
     throw new Error(`scientific Markdown visual contract: missing ${selector}`);
   }
   return element;
+}
+
+function tokenColor(
+  root: HTMLElement,
+  property: "backgroundColor" | "color",
+  token: string
+): string {
+  const probe = document.createElement("span");
+  probe.style[property] = `var(${token})`;
+  root.append(probe);
+  const color = getComputedStyle(probe)[property];
+  probe.remove();
+  return color;
+}
+
+function opaqueBackground(element: Element): string {
+  for (
+    let current: Element | null = element;
+    current;
+    current = current.parentElement
+  ) {
+    const color = getComputedStyle(current).backgroundColor;
+    if (color !== "rgba(0, 0, 0, 0)" && color !== "transparent") return color;
+  }
+  throw new Error("scientific Markdown visual contract: no opaque background");
+}
+
+function relativeLuminance(color: string): number {
+  const channels = color
+    .match(/\d+(?:\.\d+)?/g)
+    ?.slice(0, 3)
+    .map(Number);
+  if (!channels || channels.length !== 3) {
+    throw new Error(
+      `scientific Markdown visual contract: unsupported color ${color}`
+    );
+  }
+  const linear = channels.map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const light = Math.max(
+    relativeLuminance(foreground),
+    relativeLuminance(background)
+  );
+  const dark = Math.min(
+    relativeLuminance(foreground),
+    relativeLuminance(background)
+  );
+  return (light + 0.05) / (dark + 0.05);
 }
 
 function assertScientificMarkdownVisualContract() {
@@ -51,11 +113,7 @@ function assertScientificMarkdownVisualContract() {
     markdown
   );
 
-  const foregroundProbe = document.createElement("span");
-  foregroundProbe.style.color = "var(--phy-color-text)";
-  root.append(foregroundProbe);
-  const expectedForeground = getComputedStyle(foregroundProbe).color;
-  foregroundProbe.remove();
+  const expectedForeground = tokenColor(root, "color", "--phy-color-text");
   const paragraphForeground = getComputedStyle(paragraph).color;
   if (paragraphForeground !== expectedForeground) {
     throw new Error(
@@ -63,17 +121,80 @@ function assertScientificMarkdownVisualContract() {
     );
   }
 
+  const tableHeaders = [
+    ...markdown.querySelectorAll<HTMLTableCellElement>("thead th"),
+  ];
   const tableRows = [
     ...markdown.querySelectorAll<HTMLTableRowElement>("tbody tr"),
   ];
+  const tableCells = [
+    ...markdown.querySelectorAll<HTMLTableCellElement>("tbody td"),
+  ];
+  const expectedHeaderBackground = tokenColor(
+    root,
+    "backgroundColor",
+    "--phy-color-fill-subtle"
+  );
+  const expectedBodyBackground = tokenColor(
+    root,
+    "backgroundColor",
+    "--phy-color-bg-elevated"
+  );
+  if (!tableHeaders.length || !tableRows.length || !tableCells.length) {
+    throw new Error(
+      "scientific Markdown visual contract: evidence table is incomplete"
+    );
+  }
+  for (const header of tableHeaders) {
+    const style = getComputedStyle(header);
+    if (
+      style.color !== expectedForeground ||
+      style.backgroundColor !== expectedHeaderBackground
+    ) {
+      throw new Error(
+        "scientific Markdown visual contract: table header misses semantic tokens"
+      );
+    }
+    if (contrastRatio(style.color, style.backgroundColor) < 4.5) {
+      throw new Error(
+        "scientific Markdown visual contract: table header contrast is insufficient"
+      );
+    }
+  }
+  for (const row of tableRows) {
+    if (opaqueBackground(row) !== expectedBodyBackground) {
+      throw new Error(
+        "scientific Markdown visual contract: report row misses semantic background"
+      );
+    }
+  }
+  for (const cell of tableCells) {
+    const style = getComputedStyle(cell);
+    const background = opaqueBackground(cell);
+    if (
+      style.color !== expectedForeground ||
+      background !== expectedBodyBackground
+    ) {
+      throw new Error(
+        "scientific Markdown visual contract: table cell misses semantic tokens"
+      );
+    }
+    if (contrastRatio(style.color, background) < 4.5) {
+      throw new Error(
+        "scientific Markdown visual contract: table cell contrast is insufficient"
+      );
+    }
+  }
+
+  const hostileMarkup =
+    '<img src="/private/report.png" onerror="window.__scientificMarkdownHostileImageExecuted = true">';
   if (
-    theme === "dark" &&
-    tableRows.some(
-      (row) => getComputedStyle(row).backgroundColor === "rgb(255, 255, 255)"
-    )
+    !markdown.textContent?.includes(hostileMarkup) ||
+    markdown.querySelector('img[src="/private/report.png"], img[onerror]') ||
+    window.__scientificMarkdownHostileImageExecuted
   ) {
     throw new Error(
-      "scientific Markdown visual contract: dark report row keeps a light background"
+      "scientific Markdown visual contract: hostile raw image executed"
     );
   }
 
@@ -124,6 +245,50 @@ function assertScientificMarkdownVisualContract() {
 
 Object.assign(window, { assertScientificMarkdownVisualContract });
 
+function waitForVisualReadiness(root: HTMLElement): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const deadline = performance.now() + VISUAL_READINESS_TIMEOUT_MS;
+    const check = () => {
+      const image = root.querySelector<HTMLImageElement>(
+        ".scientific-image__thumbnail"
+      );
+      const viewer = root.querySelector<HTMLElement>(".scientific-cif-viewer");
+      const canvas = viewer?.querySelector<HTMLCanvasElement>("canvas");
+      if (
+        image?.complete &&
+        image.naturalWidth > 0 &&
+        viewer?.dataset.scientificCifReady === "true" &&
+        canvas &&
+        canvas.width > 0 &&
+        canvas.height > 0
+      ) {
+        resolve();
+        return;
+      }
+      if (image?.complete && image.naturalWidth === 0) {
+        reject(
+          new Error(
+            "scientific Markdown visual fixture: authorized image failed"
+          )
+        );
+        return;
+      }
+      if (!viewer && root.textContent?.includes("Structure unavailable")) {
+        reject(new Error("scientific Markdown visual fixture: CIF failed"));
+        return;
+      }
+      if (performance.now() >= deadline) {
+        reject(
+          new Error("scientific Markdown visual fixture: readiness timed out")
+        );
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 async function boot() {
   const app = createApp(DeepGenomeArtifactVisualFixtureApp);
   const pinia = createPinia();
@@ -132,6 +297,7 @@ async function boot() {
   app.use(i18n);
   app.use(ElementPlus, { size: "default" });
 
+  window.__scientificMarkdownHostileImageExecuted = false;
   useThemeStore().setTheme(theme);
   await setLanguage(locale);
 
@@ -141,12 +307,21 @@ async function boot() {
     await document.fonts.ready;
   }
 
-  document
-    .querySelector<HTMLElement>("[data-testid=deep-genome-visual-root]")
-    ?.setAttribute("data-fixture-ready", "true");
-  document
-    .querySelector<HTMLElement>("[data-testid=deep-genome-visual-root]")
-    ?.setAttribute("data-fixture-case", fixtureCase);
+  const root = requiredElement<HTMLElement>(
+    "[data-testid=deep-genome-visual-root]"
+  );
+  root.setAttribute("data-fixture-case", fixtureCase);
+  await waitForVisualReadiness(root);
+  root.setAttribute("data-fixture-ready", "true");
 }
 
-void boot();
+void boot().catch((error: unknown) => {
+  const root = document.querySelector<HTMLElement>(
+    "[data-testid=deep-genome-visual-root]"
+  );
+  root?.setAttribute(
+    "data-fixture-error",
+    error instanceof Error ? error.message : String(error)
+  );
+  console.error(error);
+});

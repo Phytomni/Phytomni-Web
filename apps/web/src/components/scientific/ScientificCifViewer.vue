@@ -32,6 +32,7 @@ let disposed = false;
 function releaseResources(): void {
   controller?.abort();
   controller = undefined;
+  container.value?.removeAttribute("data-scientific-cif-ready");
   resizeObserver?.disconnect();
   resizeObserver = undefined;
   viewer?.stopAnimate?.();
@@ -48,6 +49,7 @@ async function renderStructure(): Promise<void> {
   const target = container.value;
   const url = displayUrl.value;
   if (!target || !url) return;
+  target.dataset.scientificCifReady = "pending";
 
   try {
     const module = await load3DMol();
@@ -57,6 +59,7 @@ async function renderStructure(): Promise<void> {
     });
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
+        viewer?.resize();
         viewer?.render();
       });
       resizeObserver.observe(container.value);
@@ -67,10 +70,17 @@ async function renderStructure(): Promise<void> {
     const content = await response.text();
     if (disposed || controller.signal.aborted || !viewer) return;
     viewer.addModel(content, "cif");
-    viewer.setStyle({}, { cartoon: { color: "spectrum" } });
+    viewer.setStyle(
+      {},
+      {
+        cartoon: { color: "spectrum" },
+        stick: { colorscheme: "Jmol" },
+      }
+    );
     viewer.zoomTo();
     viewer.render();
     viewer.animate();
+    target.dataset.scientificCifReady = "true";
   } catch {
     const aborted = controller?.signal.aborted ?? false;
     releaseResources();

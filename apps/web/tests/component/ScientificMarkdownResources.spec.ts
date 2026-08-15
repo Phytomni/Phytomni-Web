@@ -6,6 +6,7 @@ const createViewer = vi.fn(() => ({
   addModel: vi.fn(),
   setStyle: vi.fn(),
   zoomTo: vi.fn(),
+  resize: vi.fn(),
   render: vi.fn(),
   animate: vi.fn(),
   stopAnimate: vi.fn(),
@@ -50,11 +51,18 @@ const resources = [
 const resizeObservers: TestResizeObserver[] = [];
 
 class TestResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+
   observe = vi.fn();
   disconnect = vi.fn();
 
-  constructor() {
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
     resizeObservers.push(this);
+  }
+
+  trigger(): void {
+    this.callback([], this as unknown as ResizeObserver);
   }
 }
 
@@ -135,9 +143,48 @@ describe("ScientificMarkdown resources", () => {
     );
     expect(createViewer).toHaveBeenCalled();
     const viewer = createViewer.mock.results[0]?.value;
+    expect(viewer.setStyle).toHaveBeenCalledWith(
+      {},
+      {
+        cartoon: { color: "spectrum" },
+        stick: { colorscheme: "Jmol" },
+      }
+    );
     wrapper.unmount();
     expect(viewer.stopAnimate).toHaveBeenCalled();
     expect(viewer.clear).toHaveBeenCalled();
+  });
+
+  it("resizes the 3Dmol drawing buffer before rendering after a container resize", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => "data_cif",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source: "![structure](structures/one.cif)",
+        citationNamespace: "resources-cif-resize",
+        resources,
+      },
+    });
+
+    await vi.dynamicImportSettled();
+    await Promise.resolve();
+    await Promise.resolve();
+    const viewer = createViewer.mock.results.at(-1)?.value;
+    viewer.resize.mockClear();
+    viewer.render.mockClear();
+
+    resizeObservers.at(-1)?.trigger();
+
+    expect(viewer.resize).toHaveBeenCalledOnce();
+    expect(viewer.render).toHaveBeenCalledOnce();
+    expect(viewer.resize.mock.invocationCallOrder[0]).toBeLessThan(
+      viewer.render.mock.invocationCallOrder[0]
+    );
+    wrapper.unmount();
   });
 
   it("aborts an authorized CIF request when the renderer unmounts", async () => {
