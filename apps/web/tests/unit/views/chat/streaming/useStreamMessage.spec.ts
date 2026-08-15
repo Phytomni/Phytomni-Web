@@ -31,6 +31,13 @@ function makeStreamState(): ChatUIState {
 
 type StreamBlock = NonNullable<ChatMessage["blocks"]>[number];
 type MarkdownBlock = Extract<StreamBlock, { type: "markdown" }>;
+type StreamFailureMarkedMessage = ChatMessage & {
+  streamTerminalFailure?: "run-error" | "interrupted" | "cancelled";
+};
+
+function streamTerminalFailure(message: ChatMessage) {
+  return (message as StreamFailureMarkedMessage).streamTerminalFailure;
+}
 
 function markdownBlock(placeholder: ChatMessage, label: string): MarkdownBlock {
   const blocks = mustGet(placeholder.blocks, `${label}: blocks`);
@@ -102,6 +109,7 @@ describe("useStreamMessage", () => {
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
     expect(chatState.agentRunLifecycles).toEqual({});
+    expect(streamTerminalFailure(placeholder)).toBeUndefined();
     expect(artifactPresentationForMessage(placeholder)).toMatchObject({
       kind: "cited-report",
       report: "hello world",
@@ -269,8 +277,9 @@ describe("useStreamMessage", () => {
     expect(placeholder.id).toBeUndefined();
   });
 
-  it("marks the placeholder errored on RunError", async () => {
+  it("marks RunError terminal copy without obscuring accumulated Markdown", async () => {
     const body = sseStream([
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"# Retained report\\n\\nEvidence."}\n\n',
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
     ]);
     mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
@@ -279,6 +288,8 @@ describe("useStreamMessage", () => {
       content: "",
       streaming: true,
       blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "run-error-with-report",
     };
     const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
@@ -294,6 +305,39 @@ describe("useStreamMessage", () => {
     expect(result.completed).toBe(false);
     expect(placeholder.streaming).toBe(false);
     expect(placeholder.content).toContain("boom");
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+    expect(artifactPresentationForMessage(placeholder)).toMatchObject({
+      report: "# Retained report\n\nEvidence.",
+      source: "message",
+    });
+  });
+
+  it("does not promote RunError copy when no report Markdown was accumulated", async () => {
+    const body = sseStream([
+      'event: RunError\ndata: {"type":"RunError","message":"upstream failure"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "run-error-no-report",
+    };
+
+    await useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (key: string) => key,
+    }).streamMessage({
+      dialogueId: "d-run-error",
+      formData: new FormData(),
+      requestId: "run-error-no-report",
+      placeholder,
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+    expect(artifactPresentationForMessage(placeholder)).toBeNull();
   });
 
   it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
@@ -321,6 +365,7 @@ describe("useStreamMessage", () => {
     expect(chatState.isStreaming).toBe(false);
     expect(chatState.streamingMessageId).toBeNull();
     expect(result.preDispatch4xx).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
   });
 
   it("rejects a blocking JSON envelope instead of reading it as SSE", async () => {
@@ -354,6 +399,7 @@ describe("useStreamMessage", () => {
     expect(placeholder.blocks).toEqual([]);
     expect(placeholder.a2uiRuntime).toBeUndefined();
     expect(chatState.isStreaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
   });
 
   it("marks a definite stream validation rejection for logical-turn cleanup", async () => {
@@ -383,6 +429,7 @@ describe("useStreamMessage", () => {
 
     expect(result.preDispatch4xx).toBe(true);
     expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
   });
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {
@@ -406,6 +453,7 @@ describe("useStreamMessage", () => {
     });
     expect(placeholder.content).toBe("chat.streamInterrupted");
     expect(placeholder.streaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
   });
 
   it("does NOT show the interrupted copy when the user aborts (AbortError)", async () => {
@@ -433,6 +481,7 @@ describe("useStreamMessage", () => {
     expect(placeholder.content).toBe("");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("cancelled");
   });
 
   it("captures phyto.references into placeholder.doc_list on finalize", async () => {

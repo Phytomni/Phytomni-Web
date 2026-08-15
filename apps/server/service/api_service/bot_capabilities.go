@@ -169,10 +169,10 @@ type BotCapabilityManifest struct {
 	ResearchInput BotResearchInputCapability `json:"research_input"`
 }
 
-// BotCapabilities returns the Web capability manifest. Bot /v1/agents is only
-// an advisory presence check: local gates and the Web-owned release table
-// remain authoritative. Any Bot/config/listing failure returns the same
-// bounded all-disabled shape so callers never receive private upstream data.
+// BotCapabilities returns the Web capability manifest. Bot /v1/agents supplies
+// the finite remote capabilities while local gates and the Web-owned release
+// table remain independent requirements. Any Bot/config/listing failure returns
+// the same bounded all-disabled shape so callers never receive private data.
 func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapabilityManifest, error) {
 	manifest := BotCapabilityManifest{
 		Agents:        disabledBotCapabilities(),
@@ -253,7 +253,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
 		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
 		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug, cfg)
-		if streamEnabledForAgent(definition.Slug, cfg) {
+		if streamEnabledForAgent(response, definition.Slug, cfg) {
 			manifest.Agents[index].Stream = true
 		}
 		if cfg.A2uiActionsEnabled && definition.Slug == "review" {
@@ -381,8 +381,12 @@ func productAttachmentCapability(slug string) bool {
 	return slug == "analyst" || slug == "research"
 }
 
-func streamEnabledForAgent(slug string, cfg *rxBot.Config) bool {
+func streamEnabledForAgent(resp *rxBot.AgentsListResponse, slug string, cfg *rxBot.Config) bool {
 	if cfg == nil || !cfg.StreamEnabled {
+		return false
+	}
+	capability, ok := rxBot.FindAgentCapability(resp, slug)
+	if !ok || !capability.Streaming {
 		return false
 	}
 	switch slug {

@@ -197,8 +197,10 @@ reviewed.
   dark (`bot.expert_enabled=false`). Instant is unaffected; any `mode=expert`
   request returns **503** while dark.
 - **Bot precondition to flip ON:** the Bot must serve
-  **`POST /v1/query/route`** (the blocking Expert routing endpoint). Expert never
-  streams — it is a blocking call regardless of the streaming flag below.
+  **`POST /v1/query/route`** for autonomous Expert routing. Forced Expert
+  Knowledge and Brief Gene may use the direct SSE path described in §11.2 only
+  when their exact `/v1/agents` descriptors advertise
+  `capabilities.streaming=true`; all other Expert routes remain blocking.
 - **Activation order:** (1) Bot deploys `/v1/query/route`; (2) ops adds the
   `question_agent_logs.mode` column (repo-reorg manual §5.6); (3) ops sets
   `bot.expert_enabled=true` and restarts Web Go. Rollback = flip the flag back
@@ -215,14 +217,26 @@ reviewed.
   `RunStarted` frame, which is what makes a streamed chat row overlay-matchable on
   reload. **If the flag is flipped before Bot persists the real answer, reloading
   a streamed conversation overwrites the real answer with the placeholder.**
-- **Activation order:** (1) Bot ships real-answer persistence in the run record;
-  (2) ops sets `bot.stream_enabled=true` **and** the frontend `VITE_STREAM_ENABLED`
-  in lockstep (a mismatch either leaves streaming dead or points a streaming SPA at
-  a blocking gateway); (3) smoke a streamed chat + reload to confirm the persisted
-  answer survives. Rollback = flip both flags back (instant; the blocking path is
-  unchanged underneath).
-- **Scope:** streaming is Instant×chat only. Expert (§11.1) and analyst/deep_genome
-  async stay non-streaming.
+- **Capability precondition:** Bot `/v1/agents` must publish
+  `capabilities.streaming=true` on each exact agent descriptor before Web may
+  advertise that stream. Missing, false, stale, absent, or mismatched descriptors
+  fail closed even when the local flags are on. Chat requires only the stream
+  gates; forced Expert Knowledge and Brief Gene additionally require
+  `bot.expert_enabled=true`. No other Expert or async agent streams.
+- **Activation order:** (1) Bot ships real-answer persistence and advertises the
+  verified per-agent streaming booleans; (2) deploy Web Go and confirm
+  `/api/v1/bot/capabilities` exposes `stream=true` only for the intended agents;
+  (3) enable `bot.expert_enabled` if forced Expert streams are intended; (4) set
+  `bot.stream_enabled=true` and the frontend `VITE_STREAM_ENABLED` in lockstep;
+  (5) smoke Instant Chat plus forced Expert Knowledge and Brief Gene, verify the
+  Brief Gene request resolves a free-form gene id, then reload each conversation
+  and confirm the accumulated answer survives. Keep unsupported descriptors and
+  denied tools on the blocking/refused path during the smoke.
+- **Rollback:** set `bot.stream_enabled=false` and
+  `VITE_STREAM_ENABLED=false`, restart Web Go and redeploy the SPA, then repeat
+  one blocking Chat and one forced Expert request. Disable `bot.expert_enabled`
+  separately only when the whole Expert surface must be rolled back. No schema
+  rollback is required.
 
 ### 11.3 A2UI actions (`bot.a2ui_actions_enabled`)
 

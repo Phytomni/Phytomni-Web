@@ -47,8 +47,8 @@ type ChatMessage struct {
 	Content string `json:"content"`
 }
 
-// ChatCompletionRequest is the body for POST /v1/chat/completions. Only
-// phyto-chat honors Stream=true; other models reject it with 400. ResolveGeneID
+// ChatCompletionRequest is the body for POST /v1/chat/completions. Streaming is
+// admitted only for the finite model allowlist advertised by Bot. ResolveGeneID
 // is honored only by phyto-brief-gene (Bot rejects it with 400 for the other
 // chat models), so it stays omitempty and is set for brief_gene alone.
 type ChatCompletionRequest struct {
@@ -223,6 +223,7 @@ type AgentDescriptorAttachments struct {
 type AgentDescriptorCapabilities struct {
 	Attachments AgentDescriptorAttachments `json:"attachments"`
 	Artifacts   bool                       `json:"artifacts"`
+	Streaming   bool                       `json:"streaming"`
 }
 
 // AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory

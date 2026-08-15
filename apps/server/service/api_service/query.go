@@ -4156,6 +4156,11 @@ func (ps *Service) QueryStream(
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		req.Conversation = submission.envelope
 	}
+	if slug == "brief_gene" {
+		// Keep the direct streaming request identical to the blocking BriefGene
+		// route: only this model opts into free-form gene-id resolution.
+		req.ResolveGeneID = true
+	}
 	var rc io.ReadCloser
 	for {
 		var meta rxBot.ResponseMeta

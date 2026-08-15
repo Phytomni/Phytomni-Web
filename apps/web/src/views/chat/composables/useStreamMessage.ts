@@ -141,6 +141,7 @@ export function useStreamMessage(opts: {
     registerAbortController(requestId, controller); // reuse the shared abort UI
     chatState.isStreaming = true;
     chatState.streamingMessageId = requestId;
+    placeholder.streamTerminalFailure = undefined;
 
     let state = initReducerState();
     let contextNotice: ConversationContextNotice = {};
@@ -162,6 +163,7 @@ export function useStreamMessage(opts: {
       }
       if (state.error) {
         placeholder.content = state.error.message;
+        placeholder.streamTerminalFailure = "run-error";
         placeholder.a2uiRuntime = undefined;
       } else if (state.done && !state.runId) {
         // A completed stream without RunStarted cannot authorize an action.
@@ -272,6 +274,7 @@ export function useStreamMessage(opts: {
 
       if (!state.done) {
         placeholder.content = t("chat.streamInterrupted");
+        placeholder.streamTerminalFailure = "interrupted";
         placeholder.a2uiRuntime = undefined;
       }
       applyTerminalState();
@@ -281,8 +284,11 @@ export function useStreamMessage(opts: {
       // event, Abort and broken streams invalidate the message-owned uplink.
       if (!state.done) {
         placeholder.a2uiRuntime = undefined;
-        if (!isAbortError(error)) {
+        if (isAbortError(error)) {
+          placeholder.streamTerminalFailure = "cancelled";
+        } else {
           placeholder.content = t("chat.streamInterrupted");
+          placeholder.streamTerminalFailure = "interrupted";
         }
       } else {
         // RunFinished and RunError are already terminal. A later transport

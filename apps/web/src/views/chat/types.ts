@@ -72,6 +72,8 @@ export type ArtifactKind = "deep-genome" | "research" | "cited-report" | null;
 
 export type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
 
+export type StreamTerminalFailure = "run-error" | "interrupted" | "cancelled";
+
 export interface ChatMessage {
   role: string;
   content: ChatContent;
@@ -106,6 +108,8 @@ export interface ChatMessage {
    * FormData, reactions, Artifact eligibility, or A2UI run identity.
    */
   streamPresentationKey?: string;
+  /** Runtime-only reason that stream-origin content is terminal UI copy. */
+  streamTerminalFailure?: StreamTerminalFailure;
   /** Runtime-only A2UI context sourced exclusively from stream response headers. */
   a2uiRuntime?: A2uiRuntimeContext;
   /** Sanitized Bot lifecycle snapshot; raw API envelopes never enter message state. */

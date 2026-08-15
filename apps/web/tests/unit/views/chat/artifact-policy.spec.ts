@@ -268,6 +268,57 @@ describe("artifact policy", () => {
     ).toBeNull();
   });
 
+  it.each(["run-error", "interrupted", "cancelled"] as const)(
+    "never promotes %s stream terminal copy without retained Markdown",
+    (streamTerminalFailure) => {
+      const message = reportMessage("KnowledgeAgent", {
+        content: "Localized stream failure copy",
+        streamPresentationKey: `terminal-${streamTerminalFailure}`,
+      }) as ChatMessage & {
+        streamTerminalFailure?: typeof streamTerminalFailure;
+      };
+      message.streamTerminalFailure = streamTerminalFailure;
+
+      expect(artifactPresentationForMessage(message)).toBeNull();
+    }
+  );
+
+  it("uses retained stream Markdown instead of RunError content", () => {
+    const message = reportMessage("BriefGeneAgent", {
+      content: "upstream failure",
+      blocks: reducedMarkdownBlocks(
+        "# Retained gene report\n\nEvidence accumulated before failure."
+      ),
+      streamPresentationKey: "failed-with-report",
+    }) as ChatMessage & { streamTerminalFailure?: "run-error" };
+    message.streamTerminalFailure = "run-error";
+
+    expect(artifactPresentationForMessage(message)).toEqual({
+      kind: "cited-report",
+      report: "# Retained gene report\n\nEvidence accumulated before failure.",
+      source: "message",
+      identity: "stream:failed-with-report",
+    });
+  });
+
+  it("keeps persisted history reports eligible without runtime failure copy", () => {
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", {
+          id: "history-failed-report",
+          status: "FAILED",
+          content: "# Persisted partial report\n\nRetained evidence.",
+          streaming: false,
+        })
+      )
+    ).toEqual({
+      kind: "cited-report",
+      report: "# Persisted partial report\n\nRetained evidence.",
+      source: "message",
+      identity: "message:history-failed-report",
+    });
+  });
+
   it.each([
     "",
     "   ",

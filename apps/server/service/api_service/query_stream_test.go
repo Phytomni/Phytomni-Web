@@ -1378,16 +1378,20 @@ func TestQueryStream_AutonomousExpertRefused(t *testing.T) {
 	}
 }
 
-func TestQueryStream_ForcedExpertChatFamilyUsesCanonicalStreamModel(t *testing.T) {
+func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 	tests := []struct {
-		tool  string
-		model string
+		name          string
+		tool          string
+		mode          string
+		model         string
+		resolveGeneID bool
 	}{
-		{tool: "KnowledgeAgent", model: "phyto-knowledge"},
-		{tool: "BriefGeneAgent", model: "phyto-brief-gene"},
+		{name: "instant chat", mode: "instant", model: "phyto-chat"},
+		{name: "expert knowledge", tool: "KnowledgeAgent", mode: "expert", model: "phyto-knowledge"},
+		{name: "expert brief gene", tool: "BriefGeneAgent", mode: "expert", model: "phyto-brief-gene", resolveGeneID: true},
 	}
 	for _, tt := range tests {
-		t.Run(tt.tool, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			gdb := setupStreamTestDB(t)
 			var captured rxBot.ChatCompletionRequest
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1418,8 +1422,8 @@ func TestQueryStream_ForcedExpertChatFamilyUsesCanonicalStreamModel(t *testing.T
 				QueryInput{
 					Query:        "forced report",
 					Tool:         tt.tool,
-					Mode:         "expert",
-					ClientTurnID: "forced-stream-" + strings.ToLower(tt.tool),
+					Mode:         tt.mode,
+					ClientTurnID: "stream-" + strings.ReplaceAll(tt.name, " ", "-"),
 				},
 				nil,
 				nil,
@@ -1430,14 +1434,21 @@ func TestQueryStream_ForcedExpertChatFamilyUsesCanonicalStreamModel(t *testing.T
 			if captured.Model != tt.model {
 				t.Fatalf("model = %q, want %q", captured.Model, tt.model)
 			}
-			if out.ToolName != tt.tool || out.Status != "SUCCEEDED" {
+			if captured.ResolveGeneID != tt.resolveGeneID {
+				t.Fatalf("resolve_gene_id = %v, want %v", captured.ResolveGeneID, tt.resolveGeneID)
+			}
+			expectedTool := tt.tool
+			if expectedTool == "" {
+				expectedTool = "ChatAgent"
+			}
+			if out.ToolName != expectedTool || out.Status != "SUCCEEDED" {
 				t.Fatalf("stream result = %#v", out)
 			}
 			var row model.QuestionAgentLog
 			if err := gdb.First(&row, out.Id).Error; err != nil {
 				t.Fatalf("load persisted row: %v", err)
 			}
-			if row.ToolName != tt.tool || row.Mode != "expert" ||
+			if row.ToolName != expectedTool || row.Mode != tt.mode ||
 				!strings.Contains(row.Answer, "# report") {
 				t.Fatalf("persisted row = %#v", row)
 			}

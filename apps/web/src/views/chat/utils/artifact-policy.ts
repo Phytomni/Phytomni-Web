@@ -21,6 +21,7 @@ export type ArtifactPolicyMessage = Pick<
   | "artifacts"
   | "delivery"
   | "streamPresentationKey"
+  | "streamTerminalFailure"
   | "botLifecycle"
   | "botProjection"
   | "blocks"
@@ -105,14 +106,20 @@ function isReportTextValid(toolName: string, value: unknown): value is string {
 function reportCandidates(
   message: ArtifactPolicyMessage
 ): readonly [ReportSource, unknown][] {
-  return [
+  const candidates: [ReportSource, unknown][] = [
     ["final", message.botLifecycle?.finalReport],
     ["final", message.botProjection?.finalReport],
     ["intermediate", message.botLifecycle?.intermediateReport],
     ["intermediate", message.botProjection?.intermediateReport],
-    ["message", typeof message.content === "string" ? message.content : ""],
-    ["message", streamMarkdownToText(message.blocks)],
   ];
+  if (!message.streamTerminalFailure) {
+    candidates.push([
+      "message",
+      typeof message.content === "string" ? message.content : "",
+    ]);
+  }
+  candidates.push(["message", streamMarkdownToText(message.blocks)]);
+  return candidates;
 }
 
 /** Select one stable, report-backed View presentation for a Chat row. */

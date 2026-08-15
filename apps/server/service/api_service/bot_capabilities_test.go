@@ -21,6 +21,7 @@ func capabilityDescriptors() []rxBot.AgentDescriptor {
 			Slug: definition.Slug,
 			Tool: definition.Tool,
 			Capabilities: rxBot.AgentDescriptorCapabilities{
+				Streaming:   true,
 				Artifacts:   resultArchiveAgent(definition.Slug),
 				Attachments: rxBot.AgentDescriptorAttachments{DocumentContext: &struct{}{}},
 			},
@@ -96,6 +97,41 @@ func capabilityManifestResponse(t *testing.T, descriptors []rxBot.AgentDescripto
 		t.Fatalf("marshal agent response: %v", err)
 	}
 	return string(body)
+}
+
+func rewriteCapabilityStreaming(
+	t *testing.T,
+	descriptors []rxBot.AgentDescriptor,
+	slug string,
+	rewrite func(map[string]interface{}),
+) string {
+	t.Helper()
+	var envelope map[string]interface{}
+	if err := json.Unmarshal([]byte(capabilityManifestResponse(t, descriptors)), &envelope); err != nil {
+		t.Fatalf("decode agent response for rewrite: %v", err)
+	}
+	data, ok := envelope["data"].([]interface{})
+	if !ok {
+		t.Fatal("agent response data is not an array")
+	}
+	for _, raw := range data {
+		descriptor, ok := raw.(map[string]interface{})
+		if !ok || descriptor["slug"] != slug {
+			continue
+		}
+		capabilities, ok := descriptor["capabilities"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s capabilities are not an object", slug)
+		}
+		rewrite(capabilities)
+		body, err := json.Marshal(envelope)
+		if err != nil {
+			t.Fatalf("encode rewritten agent response: %v", err)
+		}
+		return string(body)
+	}
+	t.Fatalf("agent response has no %s descriptor", slug)
+	return ""
 }
 
 func validResearchCapabilityCatalog() *rxBot.AgentsListResponse {
@@ -897,6 +933,79 @@ func TestBotCapabilitiesKeepExpertStreamsDarkWhenExpertGateIsOff(t *testing.T) {
 		if capabilityBySlug(rows.Agents, slug).Stream {
 			t.Fatalf("%s expert stream must stay disabled while expert gate is off", slug)
 		}
+	}
+}
+
+func TestBotCapabilitiesRequireMatchingUpstreamStreamingCapability(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     func(*testing.T) string
+		disabled string
+	}{
+		{
+			name: "old descriptor omits streaming",
+			body: func(t *testing.T) string {
+				return rewriteCapabilityStreaming(t, capabilityDescriptors(), "knowledge", func(capabilities map[string]interface{}) {
+					delete(capabilities, "streaming")
+				})
+			},
+			disabled: "knowledge",
+		},
+		{
+			name: "upstream explicitly disables stream",
+			body: func(t *testing.T) string {
+				rows := capabilityDescriptors()
+				for index := range rows {
+					if rows[index].Slug == "brief_gene" {
+						rows[index].Capabilities.Streaming = false
+					}
+				}
+				return capabilityManifestResponse(t, rows)
+			},
+			disabled: "brief_gene",
+		},
+		{
+			name: "matching descriptor absent",
+			body: func(t *testing.T) string {
+				rows := make([]rxBot.AgentDescriptor, 0, len(rxBot.WebAgentDefinitions)-1)
+				for _, row := range capabilityDescriptors() {
+					if row.Slug != "chat" {
+						rows = append(rows, row)
+					}
+				}
+				return capabilityManifestResponse(t, rows)
+			},
+			disabled: "chat",
+		},
+		{
+			name: "streaming type is malformed",
+			body: func(t *testing.T) string {
+				return rewriteCapabilityStreaming(t, capabilityDescriptors(), "chat", func(capabilities map[string]interface{}) {
+					capabilities["streaming"] = "true"
+				})
+			},
+			disabled: "chat",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := capabilityServer(t, http.StatusOK, tt.body(t), 0)
+			t.Cleanup(srv.Close)
+			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+				ProxyEnabled:  true,
+				StreamEnabled: true,
+				ExpertEnabled: true,
+			})
+
+			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if capabilityBySlug(manifest.Agents, tt.disabled).Stream {
+				t.Fatalf("%s stream capability must fail closed", tt.disabled)
+			}
+		})
 	}
 }
 
