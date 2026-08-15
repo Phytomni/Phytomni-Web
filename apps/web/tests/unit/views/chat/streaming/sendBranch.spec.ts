@@ -4,19 +4,19 @@ import { shouldStream } from "@/views/chat/streaming/sendBranch";
 describe("shouldStream", () => {
   it("streams only agents present in the enabled capability", () => {
     expect(
-      shouldStream("KnowledgeAgent", "instant", {
+      shouldStream("KnowledgeAgent", "expert", {
         enabled: true,
         agents: ["KnowledgeAgent"],
       })
     ).toBe(true);
     expect(
-      shouldStream("BriefGeneAgent", "instant", {
+      shouldStream("BriefGeneAgent", "expert", {
         enabled: false,
         agents: ["BriefGeneAgent"],
       })
     ).toBe(false);
     expect(
-      shouldStream("AnalystAgent", "instant", {
+      shouldStream("AnalystAgent", "expert", {
         enabled: true,
         agents: ["AnalystAgent"],
       })
@@ -35,11 +35,23 @@ describe("shouldStream", () => {
   it("does not stream when the flag is off", () => {
     expect(shouldStream("ChatAgent", "instant", false)).toBe(false);
   });
-  it("never streams expert mode (routes via Bot /v1/query/route)", () => {
+  it("keeps the legacy boolean path out of expert mode", () => {
     expect(shouldStream("ChatAgent", "expert", true)).toBe(false);
   });
-  it("does not stream non-chat agents even when the flag is on", () => {
+  it("rejects agents in a mode that cannot route them", () => {
     expect(shouldStream("KnowledgeAgent", "instant", true)).toBe(false);
+    expect(
+      shouldStream("KnowledgeAgent", "instant", {
+        enabled: true,
+        agents: ["KnowledgeAgent"],
+      })
+    ).toBe(false);
+    expect(
+      shouldStream("ChatAgent", "expert", {
+        enabled: true,
+        agents: ["ChatAgent"],
+      })
+    ).toBe(false);
     expect(shouldStream("DataAgent", "instant", true)).toBe(false);
   });
 });

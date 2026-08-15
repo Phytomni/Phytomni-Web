@@ -10,12 +10,27 @@ import {
   isMeaningfulDeepGenomeReport,
 } from "@/views/chat/utils/artifact-policy";
 import type { ArtifactKind, ChatMessage } from "@/views/chat/types";
+import {
+  initReducerState,
+  reduceAGUIEvent,
+} from "@/views/chat/streaming/eventReducer";
 
 const ELIGIBLE_MESSAGE: ChatMessage = {
   role: "assistant",
   content: "Completed scientific result",
   id: "42",
 };
+
+function reducedMarkdownBlocks(...deltas: string[]): ChatMessage["blocks"] {
+  let state = initReducerState();
+  for (const delta of deltas) {
+    state = reduceAGUIEvent(state, {
+      type: "TextMessageContent",
+      data: { delta },
+    });
+  }
+  return state.blocks;
+}
 
 const artifactByTool: Record<
   (typeof CANONICAL_AGENT_TOOLS)[number],
@@ -186,7 +201,8 @@ describe("artifact policy", () => {
         id: undefined,
         streaming: true,
         streamPresentationKey: `turn-${tool_name}`,
-        content,
+        content: "",
+        blocks: reducedMarkdownBlocks(content),
       });
       const completed = {
         ...streaming,
@@ -213,12 +229,44 @@ describe("artifact policy", () => {
           reportMessage(tool_name, {
             streaming: true,
             streamPresentationKey: `turn-${tool_name}`,
-            content: "# Direct response\n\nSubstantive inline content.",
+            content: "",
+            blocks: reducedMarkdownBlocks(
+              "# Direct response\n\nSubstantive inline content."
+            ),
           })
         )
       ).toBeNull();
     }
   );
+
+  it("ignores status-only Markdown and non-Markdown stream blocks", () => {
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", {
+          id: undefined,
+          content: "",
+          streaming: true,
+          streamPresentationKey: "turn-status-only",
+          blocks: reducedMarkdownBlocks("RUNNING"),
+        })
+      )
+    ).toBeNull();
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("KnowledgeAgent", {
+          id: undefined,
+          content: "",
+          streaming: true,
+          streamPresentationKey: "turn-activity-only",
+          blocks: [
+            { type: "reasoning", authority: "web", text: "private thought" },
+            { type: "step", authority: "web", label: "FAILED" },
+            { type: "tool", authority: "web", toolName: "search" },
+          ],
+        })
+      )
+    ).toBeNull();
+  });
 
   it.each([
     "",

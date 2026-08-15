@@ -225,3 +225,17 @@ export function decodeStreamContentBlocks(
     return block ? [block] : [];
   });
 }
+
+/** Join only user-visible Markdown blocks using the stream renderer's order. */
+export function streamMarkdownToText(
+  blocks: readonly StreamContentBlock[] | undefined
+): string {
+  return (blocks ?? [])
+    .filter(
+      (block): block is MarkdownContentBlock =>
+        block.type === "markdown" && typeof block.text === "string"
+    )
+    .map((block) => block.text?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n\n");
+}

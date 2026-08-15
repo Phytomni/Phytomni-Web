@@ -315,9 +315,9 @@ func streamEnabled() bool {
 // the service, and returns the row the Web app renders.
 // The Web app consumes this as JSON via axios by default. A caller can opt into
 // AG-UI SSE pass-through by sending Accept: text/event-stream; when the
-// bot.stream_enabled dark-launch flag is also on and the turn is Instant (not
-// mode=expert), the response streams as text/event-stream frames instead of the
-// blocking JSON envelope.
+// bot.stream_enabled dark-launch flag is also on and the selected route is
+// stream-capable, the response streams as text/event-stream frames instead of
+// the blocking JSON envelope.
 func (ph *Handler) Query(ctx *gin.Context) {
 	ph.queryForSurface(ctx, api_service.QuerySurfaceChat, "")
 }
@@ -615,15 +615,15 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 	// SSE branch (dark-launch). Taken when the caller accepts
-	// text/event-stream, the flag is on, and the turn is Instant. The
+	// text/event-stream and the flag is on. The
 	// stream-capability restriction is enforced downstream in QueryStream (via
 	// StreamModelFor); a non-capable slug reaching here is refused with
-	// ErrStreamUnsupported before any frame. Expert must fall through to the
-	// blocking path, which owns RouteQuery dispatch and the expert_enabled dark
-	// gate — the frontend forces tool="" in Expert, so slug alone cannot tell
-	// the two apart. The route middleware (auth, per-user rate limit) and the
-	// multipart parse above have already run, so the gate order holds.
-	if surface == api_service.QuerySurfaceChat && streamEnabled() && wantsStream(ctx) && in.Mode != "expert" {
+	// ErrStreamUnsupported before any frame. Forced stream-capable Expert turns
+	// retain the expert_enabled and permission checks in QueryStream; autonomous
+	// Expert and non-stream-capable tools fail before any SSE header is written.
+	// The route middleware (auth, per-user rate limit) and multipart parse above
+	// have already run, so the gate order holds.
+	if surface == api_service.QuerySurfaceChat && streamEnabled() && wantsStream(ctx) {
 		flusher, canFlush := ctx.Writer.(http.Flusher)
 		if canFlush {
 			// Write the SSE headers lazily — only when the first frame is

@@ -97,6 +97,20 @@ func newStreamTestRequestWithQueryAndTurn(
 	return req
 }
 
+func newForcedExpertStreamTestRequest(t *testing.T, tool string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("query", "forced report")
+	_ = mw.WriteField("mode", "expert")
+	_ = mw.WriteField("tool", tool)
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Accept", "text/event-stream")
+	return req
+}
+
 func TestQuery_FlagOffSkipsStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupStreamHandlerTestDB(t)
@@ -117,7 +131,7 @@ func TestQuery_FlagOffSkipsStream(t *testing.T) {
 	}
 }
 
-func TestQuery_ExpertModeSkipsStream(t *testing.T) {
+func TestQuery_AutonomousExpertModeSkipsStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
@@ -135,6 +149,43 @@ func TestQuery_ExpertModeSkipsStream(t *testing.T) {
 	// with ExpertEnabled unset it answers 503 JSON, never an SSE stream).
 	if ct := w.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/event-stream") {
 		t.Fatalf("expert mode must never stream; got Content-Type %q", ct)
+	}
+}
+
+func TestQuery_ForcedExpertChatFamilyUsesStreamBranch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupStreamHandlerTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-handler-expert"}` + "\n",
+			`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"# report"}` + "\n",
+			`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-handler-expert"}` + "\n",
+		}, "\n")))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true,
+		StreamEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("username", "alice@example.com")
+	c.Request = newForcedExpertStreamTestRequest(t, "KnowledgeAgent")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %q", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
 	}
 }
 

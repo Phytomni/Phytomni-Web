@@ -11,7 +11,10 @@ import type {
 } from "@/views/chat/types";
 import type { ResumableUploadItem } from "@/views/chat/upload/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
-import type { BotResearchInputCapability } from "@/views/chat/composables/useBotCapabilities";
+import type {
+  BotCapabilityByTool,
+  BotResearchInputCapability,
+} from "@/views/chat/composables/useBotCapabilities";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
 import {
   buildChatMessage,
@@ -51,7 +54,6 @@ type StreamInput = {
 
 const streamHarness = vi.hoisted(() => ({
   capturedGetChatState: undefined as ((id: string) => ChatUIState) | undefined,
-  forceStream: false,
   streamMessage: vi.fn<(input: StreamInput) => Promise<StreamResult>>(),
 }));
 
@@ -68,19 +70,6 @@ vi.mock("@/views/chat/composables/useStreamMessage", () => ({
     return { streamMessage: streamHarness.streamMessage };
   },
 }));
-
-vi.mock("@/views/chat/streaming/sendBranch", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/views/chat/streaming/sendBranch")>();
-  return {
-    ...actual,
-    shouldStream: (
-      agent: string,
-      mode: "instant" | "expert",
-      flagOn: boolean
-    ) => streamHarness.forceStream || actual.shouldStream(agent, mode, flagOn),
-  };
-});
 
 // element-plus's ElMessage/ElMessageBox are invoked on a failed pending write / the 403 dialog.
 vi.mock("element-plus", () => ({
@@ -185,7 +174,7 @@ describe("useSendMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamHarness.capturedGetChatState = undefined;
-    streamHarness.forceStream = false;
+    streamHarness.streamMessage.mockReset();
     streamHarness.streamMessage.mockResolvedValue({});
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     states = new Map();
@@ -238,9 +227,28 @@ describe("useSendMessage", () => {
   function makeComposable(
     options: {
       researchInput?: BotResearchInputCapability;
+      streamTools?: readonly (keyof BotCapabilityByTool)[];
     } = {}
   ) {
     const researchInput = options.researchInput ?? researchInputCapability();
+    const streamTools = options.streamTools ?? ["ChatAgent"];
+    const botCapabilitiesByTool = Object.fromEntries(
+      streamTools.map((tool) => [
+        tool,
+        {
+          tool,
+          slug: tool,
+          execution: tool === "BriefGeneAgent" ? "agent_run" : "chat",
+          stream: true,
+          a2ui: false,
+          resolver: false,
+          attachments: false,
+          attachmentChannels: [],
+          artifacts: false,
+          enabled: true,
+        },
+      ])
+    ) as BotCapabilityByTool;
     const composableOptions = {
       getChatState,
       currentChatId,
@@ -256,6 +264,7 @@ describe("useSendMessage", () => {
       selectChat,
       scrollToBottom,
       researchInputCapability: ref(researchInput),
+      botCapabilitiesByTool: ref(botCapabilitiesByTool),
     };
     return useSendMessage(composableOptions);
   }
@@ -2277,7 +2286,7 @@ describe("useSendMessage", () => {
   it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
     "keeps the captured %s identity on its streaming placeholder",
     async (toolName) => {
-      streamHarness.forceStream = true;
+      vi.stubEnv("VITE_STREAM_ENABLED", "true");
       const state = stateFor("A");
       state.messageInput = `stream ${toolName}`;
       state.mode = "expert";
@@ -2292,7 +2301,7 @@ describe("useSendMessage", () => {
         }
       );
 
-      await makeComposable().sendMessage();
+      await makeComposable({ streamTools: [toolName] }).sendMessage();
 
       expect(capturedPlaceholder).toMatchObject({
         role: "assistant",
@@ -2301,6 +2310,57 @@ describe("useSendMessage", () => {
       });
     }
   );
+
+  it("keeps capability-advertised expert streaming behind the Web flag", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "KnowledgeAgent";
+
+    await makeComposable({ streamTools: ["KnowledgeAgent"] }).sendMessage();
+
+    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
+    expect(mockGetQueryAbortable).toHaveBeenCalledOnce();
+  });
+
+  it("isolates concurrent Knowledge and BriefGene stream identities by dialogue", async () => {
+    const pendingA = deferred<StreamResult>();
+    const pendingB = deferred<StreamResult>();
+    const placeholders = new Map<string, ChatMessage>();
+    streamHarness.streamMessage.mockImplementation(
+      async ({ dialogueId, placeholder }) => {
+        placeholders.set(dialogueId, placeholder);
+        return dialogueId === "A" ? pendingA.promise : pendingB.promise;
+      }
+    );
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+
+    const stateA = stateFor("A");
+    stateA.mode = "expert";
+    stateA.selectedAgent = "KnowledgeAgent";
+    stateA.messageInput = "knowledge stream";
+    const composable = makeComposable({
+      streamTools: ["KnowledgeAgent", "BriefGeneAgent"],
+    });
+    const sentA = composable.sendMessage();
+    await vi.waitFor(() => expect(placeholders.has("A")).toBe(true));
+
+    currentChatId.value = "B";
+    const stateB = stateFor("B");
+    stateB.mode = "expert";
+    stateB.selectedAgent = "BriefGeneAgent";
+    stateB.messageInput = "brief gene stream";
+    const sentB = composable.sendMessage();
+    await vi.waitFor(() => expect(placeholders.has("B")).toBe(true));
+
+    expect(placeholders.get("A")?.tool_name).toBe("KnowledgeAgent");
+    expect(placeholders.get("B")?.tool_name).toBe("BriefGeneAgent");
+    expect(stateA.activeAgentName).toBe("KnowledgeAgent");
+    expect(stateB.activeAgentName).toBe("BriefGeneAgent");
+
+    pendingA.resolve({});
+    pendingB.resolve({});
+    await Promise.all([sentA, sentB]);
+  });
 
   it("keeps a streamed answer when context staging degrades", async () => {
     vi.stubEnv("VITE_STREAM_ENABLED", "true");

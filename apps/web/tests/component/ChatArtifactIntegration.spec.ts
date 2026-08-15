@@ -3,6 +3,10 @@ import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  initReducerState,
+  reduceAGUIEvent,
+} from "@/views/chat/streaming/eventReducer";
 
 const testState = vi.hoisted(() => ({
   chatStates: null as ReturnType<
@@ -669,10 +673,15 @@ describe("Chat artifact shell integration", () => {
     async (toolName) => {
       const streamKey = `turn-${toolName}`;
       const content = `# ${toolName} report\n\nAccumulated scientific evidence.`;
+      const reduced = reduceAGUIEvent(initReducerState(), {
+        type: "TextMessageContent",
+        data: { delta: content },
+      });
       const streamingMessage: ChatMessage = {
         role: "assistant",
         tool_name: toolName,
-        content,
+        content: "",
+        blocks: reduced.blocks,
         streaming: true,
         streamPresentationKey: streamKey,
       };

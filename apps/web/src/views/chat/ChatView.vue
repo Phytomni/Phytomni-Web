@@ -2107,6 +2107,7 @@ const { sendMessage } = useSendMessage({
   scrollToBottom,
   attachmentTargetBlocked,
   researchInputCapability: botCapabilities.researchInput,
+  botCapabilitiesByTool: botCapabilities.byTool,
 });
 
 const { submitAction, retryAction } = useA2uiInteraction();

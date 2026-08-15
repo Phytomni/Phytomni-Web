@@ -52,9 +52,8 @@ var ErrMissingBotRunID = errors.New("row has no bot_run_id to sync")
 var ErrInvalidA2uiSurface = errors.New("invalid a2ui input-required surface")
 
 // ErrStreamUnsupported marks a /query streaming request the SSE branch cannot
-// serve (non-chat slug, or mode=expert which routes via /v1/query/route). The
-// handler maps it to 400; expert traffic normally never reaches it because the
-// handler's stream gate already excludes mode=expert (defense in depth).
+// serve, including autonomous Expert routing and tools without an approved
+// chat-completions stream model. The handler maps pre-frame failures to 400.
 var ErrStreamUnsupported = errors.New("streaming not supported for this request")
 
 var (
@@ -4033,11 +4032,10 @@ func (ps *Service) QueryStream(
 		in.ClientTurnID = strings.TrimSpace(in.ClientTurnID)
 	}
 	ownerAllocated := ownerAllocatedSubmissionEnabled(in)
-	if in.Mode == "expert" {
-		// Expert routes via RouteQuery (POST /v1/query/route, no streaming
-		// primitive). Reject it at this direct service boundary before any
-		// permission lookup, upload, dialogue resolution, or Bot request.
-		return nil, fmt.Errorf("%w: expert mode", ErrStreamUnsupported)
+	if in.Mode == "expert" && strings.TrimSpace(in.Tool) == "" {
+		// Autonomous Expert still requires RouteQuery and has no streaming
+		// primitive. Only a forced, stream-capable chat-family tool may continue.
+		return nil, fmt.Errorf("%w: autonomous expert mode", ErrStreamUnsupported)
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
@@ -4045,14 +4043,22 @@ func (ps *Service) QueryStream(
 	if !rxBot.BotConfig.StreamEnabled {
 		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
 	}
-	// SSE is an Instant Chat surface, so it must enforce the same effective
-	// ChatAgent permission before any upload, dialogue lookup, or Bot stream.
+	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
+		return nil, ErrExpertDisabled
+	}
+	// Enforce the effective routed tool before any upload, dialogue lookup, or
+	// Bot stream. Instant is locked to ChatAgent; forced Expert retains its
+	// selected canonical tool and the same server-side permission boundary.
 	permissions, err := ps.ResolveAgentPermissions(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent permissions: %w", err)
 	}
-	if !containsAgentTool(permissions.AllowedTools, "ChatAgent") {
-		return nil, permissionFailure(permissions, "ChatAgent")
+	effectiveTool := "ChatAgent"
+	if in.Mode == "expert" {
+		effectiveTool = in.Tool
+	}
+	if !containsAgentTool(permissions.AllowedTools, effectiveTool) {
+		return nil, permissionFailure(permissions, effectiveTool)
 	}
 	var target v1SubmissionTarget
 	if ownerAllocated {
@@ -4066,7 +4072,11 @@ func (ps *Service) QueryStream(
 	if !ok {
 		return nil, fmt.Errorf("%w %q", ErrUnknownTool, in.Tool)
 	}
-	if slugToToolName[slug] != "ChatAgent" {
+	resolvedTool := slugToToolName[slug]
+	if in.Mode == "instant" && resolvedTool != "ChatAgent" {
+		return nil, ErrInvalidChatRouting
+	}
+	if in.Mode == "expert" && resolvedTool != in.Tool {
 		return nil, ErrInvalidChatRouting
 	}
 	chatModel, streamCapable := rxBot.StreamModelFor(slug)
@@ -4129,9 +4139,9 @@ func (ps *Service) QueryStream(
 	}
 	streamClient := newExecutionBotClient(
 		rxBot.BotConfig,
-		"instant",
-		"",
-		"chat",
+		in.Mode,
+		in.Tool,
+		slug,
 		permissions.AllowedTools,
 	)
 

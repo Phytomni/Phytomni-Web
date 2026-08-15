@@ -7,6 +7,7 @@ vi.mock("@/utils/request", () => ({
 }));
 
 import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
+import { artifactPresentationForMessage } from "@/views/chat/utils/artifact-policy";
 import { unregisterAbortController } from "@/utils/request";
 import type { ChatMessage, ChatUIState } from "@/views/chat/types";
 import { buildChatState } from "../../../../helpers/chatBuilders";
@@ -80,6 +81,8 @@ describe("useStreamMessage", () => {
       content: "",
       streaming: true,
       blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "turn-reducer-report",
     };
     const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
@@ -99,6 +102,12 @@ describe("useStreamMessage", () => {
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
     expect(chatState.agentRunLifecycles).toEqual({});
+    expect(artifactPresentationForMessage(placeholder)).toMatchObject({
+      kind: "cited-report",
+      report: "hello world",
+      source: "message",
+      identity: "stream:turn-reducer-report",
+    });
   });
 
   it("appends the provided logical turn ID once for direct stream callers", async () => {

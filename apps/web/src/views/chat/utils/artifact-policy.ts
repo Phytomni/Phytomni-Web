@@ -1,4 +1,5 @@
 import type { ArtifactKind, ChatMessage } from "../types";
+import { streamMarkdownToText } from "../messageTypes";
 
 export type ReportSource = "final" | "intermediate" | "message";
 
@@ -22,6 +23,7 @@ export type ArtifactPolicyMessage = Pick<
   | "streamPresentationKey"
   | "botLifecycle"
   | "botProjection"
+  | "blocks"
 >;
 
 /** The only tools whose report text is promoted to the Chat View surface. */
@@ -109,6 +111,7 @@ function reportCandidates(
     ["intermediate", message.botLifecycle?.intermediateReport],
     ["intermediate", message.botProjection?.intermediateReport],
     ["message", typeof message.content === "string" ? message.content : ""],
+    ["message", streamMarkdownToText(message.blocks)],
   ];
 }
 

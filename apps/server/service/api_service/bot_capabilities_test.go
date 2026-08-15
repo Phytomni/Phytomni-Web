@@ -877,6 +877,29 @@ func TestBotCapabilitiesLocalGatesAndRemoteDefaults(t *testing.T) {
 	}
 }
 
+func TestBotCapabilitiesKeepExpertStreamsDarkWhenExpertGateIsOff(t *testing.T) {
+	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, capabilityDescriptors()), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+		ProxyEnabled:  true,
+		StreamEnabled: true,
+		ExpertEnabled: false,
+	})
+
+	rows, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !capabilityBySlug(rows.Agents, "chat").Stream {
+		t.Fatal("instant Chat stream should remain enabled")
+	}
+	for _, slug := range []string{"knowledge", "brief_gene"} {
+		if capabilityBySlug(rows.Agents, slug).Stream {
+			t.Fatalf("%s expert stream must stay disabled while expert gate is off", slug)
+		}
+	}
+}
+
 func TestBotCapabilitiesListingFailuresFailClosed(t *testing.T) {
 	tests := []struct {
 		name   string

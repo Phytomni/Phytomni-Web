@@ -46,6 +46,7 @@ import {
   chatContentToText,
   decodeAgentSteps,
   decodeFollowUpQuestions,
+  streamMarkdownToText,
 } from "../messageTypes";
 import {
   completedUploadDisplays,
@@ -56,7 +57,10 @@ import {
   MAX_CONVERSATION_HISTORY_MESSAGES,
   projectHistoryForTransport,
 } from "../utils/chat-history-normalization";
-import type { BotResearchInputCapability } from "./useBotCapabilities";
+import type {
+  BotCapabilityByTool,
+  BotResearchInputCapability,
+} from "./useBotCapabilities";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -154,11 +158,7 @@ function historyText(message: ChatMessage): string {
   if (content.trim()) {
     return message.role === "user" ? content : content.trim();
   }
-  return (message.blocks ?? [])
-    .filter((block) => block.type === "markdown" && block.text)
-    .map((block) => block.text?.trim() ?? "")
-    .filter(Boolean)
-    .join("\n\n");
+  return streamMarkdownToText(message.blocks);
 }
 
 function historyAttachments(message: ChatMessage) {
@@ -401,6 +401,7 @@ export function useSendMessage(opts: {
   scrollToBottom: () => Promise<void>;
   attachmentTargetBlocked?: Readonly<Ref<boolean>>;
   researchInputCapability: Readonly<Ref<BotResearchInputCapability>>;
+  botCapabilitiesByTool: Readonly<Ref<BotCapabilityByTool>>;
 }) {
   const {
     getChatState,
@@ -416,6 +417,7 @@ export function useSendMessage(opts: {
     scrollToBottom,
     attachmentTargetBlocked,
     researchInputCapability,
+    botCapabilitiesByTool,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
@@ -639,7 +641,16 @@ export function useSendMessage(opts: {
       // runs the enclosing finally (request-id cleanup, history refresh via
       // coordinator, and title update) exactly once.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
-      if (shouldStream(capturedActiveAgentName, capturedMode, streamFlag)) {
+      const streamAgents = Object.values(botCapabilitiesByTool.value).flatMap(
+        (capability) =>
+          capability?.enabled && capability.stream ? [capability.tool] : []
+      );
+      if (
+        shouldStream(capturedActiveAgentName, capturedMode, {
+          enabled: streamFlag,
+          agents: streamAgents,
+        })
+      ) {
         const placeholder: ChatMessage = {
           role: "assistant",
           content: "",

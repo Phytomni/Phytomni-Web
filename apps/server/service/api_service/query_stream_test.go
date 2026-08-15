@@ -1358,7 +1358,7 @@ func TestQueryStream_ForwardErrorStillPersists(t *testing.T) {
 	}
 }
 
-func TestQueryStream_ExpertRefused(t *testing.T) {
+func TestQueryStream_AutonomousExpertRefused(t *testing.T) {
 	setupStreamTestDB(t)
 	botHits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1376,6 +1376,124 @@ func TestQueryStream_ExpertRefused(t *testing.T) {
 	if botHits != 0 {
 		t.Fatalf("expert must not touch the Bot streaming endpoint (hits=%d)", botHits)
 	}
+}
+
+func TestQueryStream_ForcedExpertChatFamilyUsesCanonicalStreamModel(t *testing.T) {
+	tests := []struct {
+		tool  string
+		model string
+	}{
+		{tool: "KnowledgeAgent", model: "phyto-knowledge"},
+		{tool: "BriefGeneAgent", model: "phyto-brief-gene"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tool, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			var captured rxBot.ChatCompletionRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/chat/completions" {
+					t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(strings.Join([]string{
+					`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-expert-stream"}` + "\n",
+					`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"# report"}` + "\n",
+					`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-expert-stream"}` + "\n",
+				}, "\n")))
+			}))
+			t.Cleanup(srv.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true,
+				StreamEnabled: true, TimeoutSeconds: 5,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := (&Service{}).QueryStream(
+				context.Background(),
+				"eve@example.com",
+				QueryInput{
+					Query:        "forced report",
+					Tool:         tt.tool,
+					Mode:         "expert",
+					ClientTurnID: "forced-stream-" + strings.ToLower(tt.tool),
+				},
+				nil,
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("QueryStream error: %v", err)
+			}
+			if captured.Model != tt.model {
+				t.Fatalf("model = %q, want %q", captured.Model, tt.model)
+			}
+			if out.ToolName != tt.tool || out.Status != "SUCCEEDED" {
+				t.Fatalf("stream result = %#v", out)
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row, out.Id).Error; err != nil {
+				t.Fatalf("load persisted row: %v", err)
+			}
+			if row.ToolName != tt.tool || row.Mode != "expert" ||
+				!strings.Contains(row.Answer, "# report") {
+				t.Fatalf("persisted row = %#v", row)
+			}
+		})
+	}
+}
+
+func TestQueryStream_ForcedExpertKeepsServerSideGates(t *testing.T) {
+	t.Run("expert gate off", func(t *testing.T) {
+		setupStreamTestDB(t)
+		previous := rxBot.BotConfig
+		rxBot.BotConfig = &rxBot.Config{
+			ProxyEnabled: true, StreamEnabled: true, ExpertEnabled: false,
+		}
+		t.Cleanup(func() { rxBot.BotConfig = previous })
+
+		_, err := (&Service{}).QueryStream(
+			context.Background(),
+			"eve@example.com",
+			QueryInput{Query: "forced report", Tool: "KnowledgeAgent", Mode: "expert"},
+			nil,
+			nil,
+		)
+		if !errors.Is(err, ErrExpertDisabled) {
+			t.Fatalf("error = %v, want ErrExpertDisabled", err)
+		}
+	})
+
+	t.Run("selected tool permission missing", func(t *testing.T) {
+		gdb := setupStreamTestDB(t)
+		seedExpertPermissionUser(t, gdb, "stream-no-knowledge@example.com", "stream-no-knowledge")
+		seedExpertPermissionTool(t, gdb, "stream-no-knowledge", "DataAgent", 1)
+		previous := rxBot.BotConfig
+		rxBot.BotConfig = &rxBot.Config{
+			ProxyEnabled: true, StreamEnabled: true, ExpertEnabled: true,
+		}
+		t.Cleanup(func() { rxBot.BotConfig = previous })
+
+		_, err := (&Service{}).QueryStream(
+			context.Background(),
+			"stream-no-knowledge@example.com",
+			QueryInput{Query: "forced report", Tool: "KnowledgeAgent", Mode: "expert"},
+			nil,
+			nil,
+		)
+		if !errors.Is(err, ErrAgentToolForbidden) {
+			t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+		}
+		var rows int64
+		if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+			t.Fatalf("count rows: %v", err)
+		}
+		if rows != 0 {
+			t.Fatalf("permission failure persisted %d rows, want zero", rows)
+		}
+	})
 }
 
 func TestQueryStream_NonChatSlugRefused(t *testing.T) {

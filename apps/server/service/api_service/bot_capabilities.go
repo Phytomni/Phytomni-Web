@@ -253,7 +253,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
 		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
 		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug, cfg)
-		if cfg.StreamEnabled && streamEligible(definition.Slug) {
+		if streamEnabledForAgent(definition.Slug, cfg) {
 			manifest.Agents[index].Stream = true
 		}
 		if cfg.A2uiActionsEnabled && definition.Slug == "review" {
@@ -381,10 +381,15 @@ func productAttachmentCapability(slug string) bool {
 	return slug == "analyst" || slug == "research"
 }
 
-func streamEligible(slug string) bool {
+func streamEnabledForAgent(slug string, cfg *rxBot.Config) bool {
+	if cfg == nil || !cfg.StreamEnabled {
+		return false
+	}
 	switch slug {
-	case "chat", "knowledge", "brief_gene":
+	case "chat":
 		return true
+	case "knowledge", "brief_gene":
+		return cfg.ExpertEnabled
 	default:
 		return false
 	}

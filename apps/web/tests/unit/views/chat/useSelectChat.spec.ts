@@ -18,6 +18,10 @@ import {
 } from "../../../helpers/apiBuilders";
 import { invalidInput } from "../../../helpers/invalidInput";
 import { deferred, mustGet } from "../../../helpers/mockFactories";
+import {
+  initReducerState,
+  reduceAGUIEvent,
+} from "@/views/chat/streaming/eventReducer";
 
 vi.mock("element-plus", () => ({
   ElMessage: { warning: vi.fn() },
@@ -850,6 +854,53 @@ describe("useSelectChat", () => {
         "message:hydrated-report",
         "stream:turn-live-report",
       ])
+    );
+  });
+
+  it("seeds the durable identity when a handled Knowledge stream hydrates", async () => {
+    const reduced = reduceAGUIEvent(initReducerState(), {
+      type: "TextMessageContent",
+      data: { delta: "# Live Knowledge report" },
+    });
+    const state = getChatState("d1");
+    state.renderedChat = {
+      dialogue_id: "d1",
+      messages: [
+        {
+          role: "assistant",
+          id: "hydrated-knowledge",
+          tool_name: "KnowledgeAgent",
+          content: "",
+          streaming: false,
+          streamPresentationKey: "turn-live-knowledge",
+          blocks: reduced.blocks,
+        },
+      ],
+    };
+    state.handledArtifactIdentities = ["stream:turn-live-knowledge"];
+    state.historyHydration = "ready";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "hydrated-knowledge",
+          query: "Knowledge query",
+          answer: JSON.stringify({ content: "# Hydrated Knowledge report" }),
+          status: "SUCCEEDED",
+          tool_name: "KnowledgeAgent",
+        }),
+      ])
+    );
+
+    await expect(makeComposable().reloadChat("d1")).resolves.toBe("applied");
+
+    expect(state.handledArtifactIdentities).toEqual(
+      expect.arrayContaining([
+        "stream:turn-live-knowledge",
+        "message:hydrated-knowledge",
+      ])
+    );
+    expect(messageAt("d1", 1, "hydrated Knowledge answer").content).toBe(
+      "# Hydrated Knowledge report"
     );
   });
 
