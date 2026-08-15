@@ -38,6 +38,10 @@ vi.mock("@/utils/network-error", () => ({
 }));
 
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
+import type {
+  BotCapabilityByTool,
+  BotResearchInputCapability,
+} from "@/views/chat/composables/useBotCapabilities";
 
 function makeState(): ChatUIState {
   return buildChatState({ messageInput: "question" });
@@ -64,6 +68,17 @@ describe("blocking Bot response identity", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  function researchInputCapability(): BotResearchInputCapability {
+    return {
+      enabled: false,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    };
+  }
 
   function makeComposable() {
     const currentChatId = ref("dialogue-a");
@@ -93,6 +108,8 @@ describe("blocking Bot response identity", () => {
         timestamp: ref(0),
         selectChat: vi.fn(),
         scrollToBottom: vi.fn().mockResolvedValue(undefined),
+        researchInputCapability: ref(researchInputCapability()),
+        botCapabilitiesByTool: ref({} as BotCapabilityByTool),
       }).sendMessage,
     };
   }
