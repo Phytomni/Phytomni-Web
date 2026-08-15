@@ -1,6 +1,19 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, delimiter, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   CONTRACT_DEEP_GENOME_MARKDOWN,
   CONTRACT_DEEP_GENOME_RESOURCES,
@@ -28,9 +41,14 @@ const FIXTURE_ENTRY_SOURCE = readFileSync(
   resolve(WEB_ROOT, "tests/visual/research/main.ts"),
   "utf8"
 );
-const CAPTURE_RUNNER_SOURCE = readFileSync(
-  resolve(WEB_ROOT, "tests/visual/research/capture-contract.sh"),
-  "utf8"
+const CAPTURE_RUNNER_PATH = resolve(
+  WEB_ROOT,
+  "tests/visual/research/capture-contract.sh"
+);
+const CAPTURE_RUNNER_SOURCE = readFileSync(CAPTURE_RUNNER_PATH, "utf8");
+const CAPTURE_AGENT_BROWSER_HARNESS_PATH = resolve(
+  WEB_ROOT,
+  "tests/visual/research/capture-contract-agent-browser.mjs"
 );
 const SCIENTIFIC_CIF_SOURCE = readFileSync(
   resolve(WEB_ROOT, "src/components/scientific/ScientificCifViewer.vue"),
@@ -64,6 +82,64 @@ const caseMediaPaths = Array.from(
   ),
   (match) => match[1]
 );
+
+type CaptureHarnessOracleMode =
+  "absent" | "non-function" | "failed-result" | "pass";
+
+const captureHarnessRoots: string[] = [];
+
+function runCaptureHarness(oracleMode: CaptureHarnessOracleMode) {
+  const harnessRoot = mkdtempSync(
+    resolve(tmpdir(), "phytomni-research-capture-")
+  );
+  captureHarnessRoots.push(harnessRoot);
+
+  const binDir = resolve(harnessRoot, "bin");
+  const outputDir = resolve(harnessRoot, "output");
+  mkdirSync(binDir);
+  symlinkSync(
+    CAPTURE_AGENT_BROWSER_HARNESS_PATH,
+    resolve(binDir, "agent-browser")
+  );
+
+  const stdoutPath = resolve(harnessRoot, "runner.stdout");
+  const stderrPath = resolve(harnessRoot, "runner.stderr");
+  const stdoutFd = openSync(stdoutPath, "w");
+  const stderrFd = openSync(stderrPath, "w");
+  const result = spawnSync("bash", [CAPTURE_RUNNER_PATH], {
+    cwd: WEB_ROOT,
+    env: {
+      ...process.env,
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
+      PHYTOMNI_CAPTURE_HARNESS_ORACLE: oracleMode,
+      PHYTOMNI_VISUAL_BASE_URL: "http://fixture.invalid/",
+      PHYTOMNI_VISUAL_OUTPUT_DIR: outputDir,
+    },
+    stdio: ["ignore", stdoutFd, stderrFd],
+  });
+  closeSync(stdoutFd);
+  closeSync(stderrFd);
+  if (result.status === null) {
+    throw result.error ?? new Error("capture harness process did not exit");
+  }
+
+  return {
+    status: result.status,
+    stdout: readFileSync(stdoutPath, "utf8"),
+    stderr: readFileSync(stderrPath, "utf8"),
+    screenshots: existsSync(outputDir)
+      ? readdirSync(outputDir)
+          .filter((name) => name.endsWith(".png"))
+          .sort()
+      : [],
+  };
+}
+
+afterEach(() => {
+  for (const harnessRoot of captureHarnessRoots.splice(0)) {
+    rmSync(harnessRoot, { recursive: true, force: true });
+  }
+});
 
 describe("Deep Genome real-content visual fixture", () => {
   it("uses the complete untrimmed Os01g0177400 report", () => {
@@ -145,7 +221,7 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(figure?.displayUrl).not.toMatch(/^data:/);
   });
 
-  it("locks the bounded visual oracle and its executable capture runner", () => {
+  it("locks the bounded visual oracle and capture matrix", () => {
     expect(FIXTURE_ENTRY_SOURCE).toContain(
       "assertScientificMarkdownVisualContract"
     );
@@ -171,20 +247,44 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(CAPTURE_RUNNER_SOURCE).toContain("390 844");
     expect(CAPTURE_RUNNER_SOURCE).toContain("for theme in light dark");
     expect(CAPTURE_RUNNER_SOURCE).toContain("dataset.fixtureReady === 'true'");
-    expect(CAPTURE_RUNNER_SOURCE).toContain(
-      "typeof window.assertScientificMarkdownVisualContract !== 'function'"
-    );
-    expect(CAPTURE_RUNNER_SOURCE).toContain(
-      "const result = window.assertScientificMarkdownVisualContract();"
-    );
-    expect(CAPTURE_RUNNER_SOURCE).toContain(
-      "typeof result !== 'object' || result === null || result.pass !== true"
-    );
-    expect(CAPTURE_RUNNER_SOURCE).not.toContain(
-      "window.assertScientificMarkdownVisualContract?.()"
-    );
-    expect(CAPTURE_RUNNER_SOURCE).not.toContain("test -s");
     expect(CAPTURE_RUNNER_SOURCE).toContain("/tmp/phytomni-research-visual");
+  });
+
+  describe("capture runner fail-closed behavior", () => {
+    it.each([
+      ["absent", "scientific Markdown visual contract: oracle unavailable"],
+      [
+        "non-function",
+        "scientific Markdown visual contract: oracle unavailable",
+      ],
+      [
+        "failed-result",
+        "scientific Markdown visual contract: oracle did not pass",
+      ],
+    ] as const)(
+      "rejects the %s oracle before screenshot capture",
+      (oracleMode, expectedError) => {
+        const result = runCaptureHarness(oracleMode);
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toBe(`Evaluation error: ${expectedError}\n`);
+        expect(result.screenshots).toEqual([]);
+      }
+    );
+
+    it("records screenshots after an explicit passing oracle", () => {
+      const result = runCaptureHarness("pass");
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.screenshots).toEqual([
+        "research-contract__1440x900__dark.png",
+        "research-contract__1440x900__light.png",
+        "research-contract__390x844__dark.png",
+        "research-contract__390x844__light.png",
+      ]);
+    });
   });
 
   it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {
