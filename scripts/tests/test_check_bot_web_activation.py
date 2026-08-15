@@ -1013,7 +1013,12 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     )
     authority_paths = {entry["path"] for entry in authority["sources"]}
     assert "src/mcp_server_phytomni/runtime/resumable_uploads.py" in authority_paths
-    assert all(path.startswith("src/") for path in authority_paths)
+    assert "pyproject.toml" in authority_paths
+    assert "environment.yml" in authority_paths
+    assert all(
+        path.startswith("src/") or path in {"pyproject.toml", "environment.yml"}
+        for path in authority_paths
+    )
     assert not any(
         path.startswith("docs/contracts/resumable-upload/")
         for path in authority_paths

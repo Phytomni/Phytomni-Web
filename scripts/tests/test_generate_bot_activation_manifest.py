@@ -158,7 +158,7 @@ def test_archive_execution_contract_rejects_unauthenticated_lock_bytes(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "pyproject.toml").write_bytes(b"[project]\nname='fixed'\n")
-    (tmp_path / "uv.lock").write_bytes(b"changed\n")
+    (tmp_path / "environment.yml").write_bytes(b"changed\n")
     with pytest.raises(ValueError, match="not authenticated"):
         generator._verify_archive_execution_contract(
             tmp_path,
@@ -659,9 +659,9 @@ def test_generation_uses_authenticated_endpoint_execution_bytes(
         "network_allowed": False,
         "offline_enforcement": "seccomp_socket_deny_v1",
         "environment": {
-            "installer": "uv_sync_frozen_offline_v1",
+            "installer": "pinned_bot_interpreter_v1",
             "project_source": "pyproject.toml",
-            "lock_source": "uv.lock",
+            "lock_source": "environment.yml",
         },
         "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
     }

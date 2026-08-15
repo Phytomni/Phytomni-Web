@@ -180,7 +180,7 @@ BOT_SOURCE_PATHS = {
 
 RESEARCH_FIXTURE_SOURCE_PATHS = {
     "project_definition": "pyproject.toml",
-    "dependency_lock": "uv.lock",
+    "dependency_lock": "environment.yml",
     "agent_identities": "src/mcp_server_phytomni/api/app.py",
     "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
     "agent_capability_serializer": (
@@ -212,9 +212,9 @@ RESEARCH_FIXTURE_EXECUTION = {
     "network_allowed": False,
     "offline_enforcement": "seccomp_socket_deny_v1",
     "environment": {
-        "installer": "uv_sync_frozen_offline_v1",
+        "installer": "pinned_bot_interpreter_v1",
         "project_source": "pyproject.toml",
-        "lock_source": "uv.lock",
+        "lock_source": "environment.yml",
     },
     "bot_commit": RESEARCH_FIXTURE_BOT_COMMIT,
 }

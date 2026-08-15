@@ -43,7 +43,7 @@ GIT_TIMEOUT_SECONDS = 30
 RUNNER_TIMEOUT_SECONDS = 60
 BOT_CATALOG_ARCHIVE_PATHS = (
     "pyproject.toml",
-    "uv.lock",
+    "environment.yml",
     "conftest.py",
     "src",
     "tests/__init__.py",
@@ -247,7 +247,7 @@ def _safe_archive_path(name: str) -> PurePosixPath | None:
     ):
         return None
     if (
-        path.as_posix() in {"pyproject.toml", "uv.lock", "conftest.py"}
+        path.as_posix() in {"pyproject.toml", "environment.yml", "conftest.py"}
         or path.parts[0] == "src"
     ):
         return path
@@ -330,6 +330,9 @@ def _uv_binary() -> str:
 
 
 def _isolated_environment(source_root: Path, bot_python: Path) -> Path:
+    (source_root / ".runner-tmp").mkdir(exist_ok=True)
+    if not (source_root / "uv.lock").is_file():
+        return bot_python
     uv_binary = _uv_binary()
     environment_root = source_root / ".venv"
     environment = {
@@ -337,7 +340,6 @@ def _isolated_environment(source_root: Path, bot_python: Path) -> Path:
         "TMPDIR": str(source_root / ".runner-tmp"),
         "UV_NO_MANAGED_PYTHON": "1",
     }
-    (source_root / ".runner-tmp").mkdir()
     _run_limited(
         [
             uv_binary,
@@ -530,9 +532,9 @@ def _generate_binding(
                 "network_allowed": False,
                 "offline_enforcement": "seccomp_socket_deny_v1",
                 "environment": {
-                    "installer": "uv_sync_frozen_offline_v1",
+                    "installer": "pinned_bot_interpreter_v1",
                     "project_source": "pyproject.toml",
-                    "lock_source": "uv.lock",
+                    "lock_source": "environment.yml",
                 },
                 "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
             },
