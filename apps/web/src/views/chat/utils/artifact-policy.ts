@@ -3,6 +3,10 @@ import {
   completedStreamMarkdownToText,
   streamMarkdownToText,
 } from "../messageTypes";
+import {
+  isApprovedReportText,
+  isDeepGenomeLedgerPlaceholder,
+} from "./valid-report-ledger";
 
 export type ReportSource = "final" | "intermediate" | "message";
 
@@ -42,27 +46,6 @@ export const REPORT_AGENT_POLICIES = Object.freeze({
   GeneNetworkAgent: "research",
 } as const satisfies Record<string, Exclude<ArtifactKind, null>>);
 
-const DEEP_GENOME_PLACEHOLDER_PATTERNS = [
-  /^Server task created:\s*.*$/iu,
-  /^Loading file content\.\.\.?$/iu,
-  /^File content is empty or failed to load$/iu,
-  /^Failed to load file/iu,
-] as const;
-
-const NON_REPORT_TEXT = new Set([
-  "PENDING",
-  "QUEUED",
-  "RUNNING",
-  "INPUT_REQUIRED",
-  "SUCCEEDED",
-  "FAILED",
-  "CANCELLED",
-  "CANCELED",
-  "TIMED_OUT",
-  "TIMEOUT",
-  "NO REFERENCES AVAILABLE.",
-]);
-
 function normalizeIdentity(value: unknown): string | null {
   if (typeof value !== "string" && typeof value !== "number") return null;
   const normalized = String(value).trim();
@@ -87,23 +70,11 @@ export function artifactIdentityForMessage(
 export function isDeepGenomeTransportPlaceholder(
   content: ChatMessage["content"]
 ): boolean {
-  if (typeof content !== "string") return false;
-  const normalized = content.trim();
-  return (
-    normalized !== "" &&
-    DEEP_GENOME_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(normalized))
-  );
+  return isDeepGenomeLedgerPlaceholder(content);
 }
 
 function isReportTextValid(toolName: string, value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim();
-  if (normalized === "" || NON_REPORT_TEXT.has(normalized.toUpperCase())) {
-    return false;
-  }
-  return (
-    toolName !== "DeepGenomeAgent" || !isDeepGenomeTransportPlaceholder(value)
-  );
+  return isApprovedReportText(toolName, value);
 }
 
 function reportCandidates(
