@@ -51,6 +51,7 @@ type StreamInput = {
 
 const streamHarness = vi.hoisted(() => ({
   capturedGetChatState: undefined as ((id: string) => ChatUIState) | undefined,
+  forceStream: false,
   streamMessage: vi.fn<(input: StreamInput) => Promise<StreamResult>>(),
 }));
 
@@ -67,6 +68,19 @@ vi.mock("@/views/chat/composables/useStreamMessage", () => ({
     return { streamMessage: streamHarness.streamMessage };
   },
 }));
+
+vi.mock("@/views/chat/streaming/sendBranch", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/views/chat/streaming/sendBranch")>();
+  return {
+    ...actual,
+    shouldStream: (
+      agent: string,
+      mode: "instant" | "expert",
+      flagOn: boolean
+    ) => streamHarness.forceStream || actual.shouldStream(agent, mode, flagOn),
+  };
+});
 
 // element-plus's ElMessage/ElMessageBox are invoked on a failed pending write / the 403 dialog.
 vi.mock("element-plus", () => ({
@@ -171,6 +185,7 @@ describe("useSendMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamHarness.capturedGetChatState = undefined;
+    streamHarness.forceStream = false;
     streamHarness.streamMessage.mockResolvedValue({});
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     states = new Map();
@@ -2258,6 +2273,34 @@ describe("useSendMessage", () => {
     expect(assistant.streamPresentationKey).toBe(capturedRequestId);
     expect(assistant.id).toBeUndefined();
   });
+
+  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
+    "keeps the captured %s identity on its streaming placeholder",
+    async (toolName) => {
+      streamHarness.forceStream = true;
+      const state = stateFor("A");
+      state.messageInput = `stream ${toolName}`;
+      state.mode = "expert";
+      state.selectedAgent = toolName;
+
+      let capturedPlaceholder: ChatMessage | undefined;
+      streamHarness.streamMessage.mockImplementationOnce(
+        async ({ placeholder }) => {
+          capturedPlaceholder = placeholder;
+          placeholder.streaming = false;
+          return {};
+        }
+      );
+
+      await makeComposable().sendMessage();
+
+      expect(capturedPlaceholder).toMatchObject({
+        role: "assistant",
+        streaming: false,
+        tool_name: toolName,
+      });
+    }
+  );
 
   it("keeps a streamed answer when context staging degrades", async () => {
     vi.stubEnv("VITE_STREAM_ENABLED", "true");

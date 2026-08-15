@@ -664,13 +664,62 @@ describe("Chat artifact shell integration", () => {
     );
   });
 
+  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
+    "auto-opens a substantive streaming %s report once across completion",
+    async (toolName) => {
+      const streamKey = `turn-${toolName}`;
+      const content = `# ${toolName} report\n\nAccumulated scientific evidence.`;
+      const streamingMessage: ChatMessage = {
+        role: "assistant",
+        tool_name: toolName,
+        content,
+        streaming: true,
+        streamPresentationKey: streamKey,
+      };
+      const { wrapper, state } = await mountProductionChat(1440, {
+        markCitedSeen: false,
+        markDeepSeen: false,
+        messagesA: [streamingMessage],
+      });
+      await nextTick();
+      await nextTick();
+
+      const identity = `stream:${streamKey}`;
+      expect(state.getChatState("A").artifactOpen).toBe(true);
+      expect(state.getChatState("A").activeArtifactIdentity).toBe(identity);
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual([
+        identity,
+      ]);
+
+      await wrapper.get("[data-test=artifact-close]").trigger("click");
+      state.getChatState("A").renderedChat = {
+        dialogue_id: "A",
+        messages: [
+          {
+            ...streamingMessage,
+            id: `row-${toolName}`,
+            streaming: false,
+          },
+        ],
+      };
+      await nextTick();
+      await nextTick();
+
+      expect(state.getChatState("A").artifactOpen).toBe(false);
+      expect(state.getChatState("A").activeArtifactIdentity).toBeNull();
+      expect(state.getChatState("A").handledArtifactIdentities).toEqual([
+        identity,
+      ]);
+    }
+  );
+
   it.each([
     {
-      name: "streaming placeholder",
+      name: "empty streaming placeholder",
       message: {
         ...deepGenomeMessage,
         id: "streaming-deep",
-        content: "partial",
+        content: "",
         streaming: true,
       },
     },

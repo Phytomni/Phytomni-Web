@@ -437,6 +437,8 @@ export function useSendMessage(opts: {
     const capturedMode = chatState.mode;
     const capturedSelectedAgent =
       capturedMode === "expert" ? chatState.selectedAgent : "";
+    const capturedActiveAgentName =
+      capturedMode === "instant" ? "ChatAgent" : capturedSelectedAgent;
     const currentMessage = chatState.messageInput;
     if (!currentMessage.trim()) return;
     if (
@@ -474,8 +476,7 @@ export function useSendMessage(opts: {
     chatState.generationStopped = false;
     chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
-    chatState.activeAgentName =
-      capturedMode === "instant" ? "ChatAgent" : capturedSelectedAgent;
+    chatState.activeAgentName = capturedActiveAgentName;
     chatState.completing = false;
     chatState.messageInput = "";
 
@@ -638,14 +639,14 @@ export function useSendMessage(opts: {
       // runs the enclosing finally (request-id cleanup, history refresh via
       // coordinator, and title update) exactly once.
       const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
-      if (shouldStream(chatState.activeAgentName, capturedMode, streamFlag)) {
+      if (shouldStream(capturedActiveAgentName, capturedMode, streamFlag)) {
         const placeholder: ChatMessage = {
           role: "assistant",
           content: "",
           streaming: true,
           blocks: [],
           instantMessage: false,
-          tool_name: "ChatAgent",
+          tool_name: capturedActiveAgentName,
           followUpQuestions: [],
           showFollowUpQuestions: false,
           showLog: false,

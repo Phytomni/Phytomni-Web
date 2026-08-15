@@ -116,7 +116,7 @@ function reportCandidates(
 export function artifactPresentationForMessage(
   message: ArtifactPolicyMessage
 ): ArtifactPresentation | null {
-  if (message.role !== "assistant" || message.streaming === true) return null;
+  if (message.role !== "assistant") return null;
 
   const toolName = message.tool_name ?? "";
   if (!Object.prototype.hasOwnProperty.call(REPORT_AGENT_POLICIES, toolName)) {

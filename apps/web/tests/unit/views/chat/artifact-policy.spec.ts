@@ -178,6 +178,48 @@ describe("artifact policy", () => {
     ).toBeNull();
   });
 
+  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
+    "keeps a substantive streaming %s report View-eligible through completion",
+    (tool_name) => {
+      const content = `# ${tool_name} report\n\nAccumulated scientific evidence.`;
+      const streaming = reportMessage(tool_name, {
+        id: undefined,
+        streaming: true,
+        streamPresentationKey: `turn-${tool_name}`,
+        content,
+      });
+      const completed = {
+        ...streaming,
+        id: `row-${tool_name}`,
+        streaming: false,
+      };
+
+      const expected = {
+        kind: "cited-report",
+        report: content,
+        source: "message",
+        identity: `stream:turn-${tool_name}`,
+      };
+      expect(artifactPresentationForMessage(streaming)).toEqual(expected);
+      expect(artifactPresentationForMessage(completed)).toEqual(expected);
+    }
+  );
+
+  it.each(["ChatAgent", "DataAgent"] as const)(
+    "keeps a substantive streaming %s response inline",
+    (tool_name) => {
+      expect(
+        artifactPresentationForMessage(
+          reportMessage(tool_name, {
+            streaming: true,
+            streamPresentationKey: `turn-${tool_name}`,
+            content: "# Direct response\n\nSubstantive inline content.",
+          })
+        )
+      ).toBeNull();
+    }
+  );
+
   it.each([
     "",
     "   ",
@@ -310,7 +352,7 @@ describe("artifact policy", () => {
     }
   );
 
-  it("marks only a succeeded meaningful DeepGenome server row complete", () => {
+  it("marks only a meaningful identified DeepGenome row complete", () => {
     expect(
       isCompletedDeepGenomeMessage({
         ...ELIGIBLE_MESSAGE,
@@ -323,12 +365,6 @@ describe("artifact policy", () => {
       {
         ...ELIGIBLE_MESSAGE,
         content: "Server task created: child-task-123",
-        tool_name: "DeepGenomeAgent",
-        status: "SUCCEEDED",
-      },
-      {
-        ...ELIGIBLE_MESSAGE,
-        streaming: true,
         tool_name: "DeepGenomeAgent",
         status: "SUCCEEDED",
       },
@@ -413,9 +449,10 @@ describe("artifact policy", () => {
       },
     },
     {
-      name: "streaming placeholder",
+      name: "empty streaming placeholder",
       message: {
         ...ELIGIBLE_MESSAGE,
+        content: "",
         streaming: true,
         tool_name: "DeepGenomeAgent",
       },

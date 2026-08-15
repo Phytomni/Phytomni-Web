@@ -185,9 +185,9 @@ describe("useArtifactPanel", () => {
 
   it.each([
     {
-      name: "streaming result",
-      requestedId: "streaming",
-      messages: [eligibleMessage("streaming", { streaming: true })],
+      name: "report requested by an unqualified server id",
+      requestedId: "unqualified",
+      messages: [eligibleMessage("unqualified")],
     },
     {
       name: "message without a server id",
@@ -281,6 +281,7 @@ describe("useArtifactPanel", () => {
       messages: [
         eligibleMessage("stream-placeholder", {
           id: undefined,
+          streaming: true,
           streamPresentationKey: "turn-7",
         }),
       ],
@@ -294,6 +295,7 @@ describe("useArtifactPanel", () => {
       dialogue_id: "A",
       messages: [
         eligibleMessage("durable-7", {
+          streaming: false,
           streamPresentationKey: "turn-7",
         }),
       ],
