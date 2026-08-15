@@ -10,6 +10,9 @@ not inspect a sibling checkout, handoff/evidence trees, or live endpoints.
 from __future__ import annotations
 
 import argparse
+import ast
+import base64
+import binascii
 import hashlib
 import json
 import re
@@ -19,7 +22,11 @@ from typing import Any, NamedTuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ACTIVATION_SOURCE_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
 MATRIX_REL = Path("docs/reference/bot-web-activation-matrix.md")
+BOT_CONTRACT_MANIFEST_REL = Path(
+    "apps/web/tests/fixtures/bot-head/contract-manifest.json"
+)
 MATRIX_JSON_START = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_START -->"
 MATRIX_JSON_END = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_END -->"
 RESEARCH_INPUT_FIXTURE_REL = Path(
@@ -152,6 +159,15 @@ MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
 MAX_RESEARCH_INPUT_FIXTURE_BYTES = 256 * 1024
+MAX_BOT_CONTRACT_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_BOT_SOURCE_BYTES = 512 * 1024
+
+BOT_SOURCE_PATHS = {
+    "agent_identities": "src/mcp_server_phytomni/api/app.py",
+    "research_contract": ("docs/contracts/research-input-resolution/catalog.json"),
+    "upload_capability": ("docs/contracts/resumable-upload/capability.json"),
+    "resumable_upload_packet": ("docs/contracts/resumable-upload/manifest.json"),
+}
 
 
 class _ResearchGoContract(NamedTuple):
@@ -165,6 +181,25 @@ class _ResearchGoContract(NamedTuple):
     canonical_agent_tools: dict[str, str]
     max_agent_descriptors: int
     max_dataset_file_bytes: int
+
+
+class _PinnedBotContract(NamedTuple):
+    canonical_agent_tools: dict[str, str]
+    research_protocol: str
+    research_protocol_version: int
+    research_limit_bounds: dict[str, tuple[int, int]]
+    research_formats: tuple[str, ...]
+    upload_protocol: str
+    upload_protocol_version: int
+    upload_route_family: str
+    upload_routes: tuple[dict[str, str], ...]
+    upload_ceiling_bytes: int
+
+
+class _BotSourceBinding(NamedTuple):
+    contract: _PinnedBotContract
+    fixture_sha256: str
+    fixture_contract_sha256: str
 
 
 class _GoLexicalView(NamedTuple):
@@ -186,6 +221,7 @@ _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _RESEARCH_FORMAT_RE = re.compile(r"^[a-z0-9][a-z0-9.+_-]*$")
 _RESEARCH_PROTOCOL_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+_PROTOCOL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _EXPERT_DEFAULT_RE = re.compile(
     r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
@@ -278,6 +314,695 @@ def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
     except UnicodeDecodeError:
         violations.append("Web activation source is not UTF-8")
         return None
+
+
+def _json_object(raw: bytes) -> dict[str, Any] | None:
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate key")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+    except (RecursionError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _python_assignments(source: str) -> tuple[ast.Module, dict[str, ast.expr]] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    assignments: dict[str, ast.expr] = {}
+    for statement in tree.body:
+        name: str | None = None
+        value: ast.expr | None = None
+        if (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+        ):
+            name = statement.targets[0].id
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            name = statement.target.id
+            value = statement.value
+        if name is None or value is None:
+            continue
+        if name in assignments:
+            return None
+        assignments[name] = value
+    return tree, assignments
+
+
+def _parse_bot_agent_tools(source: str) -> dict[str, str] | None:
+    parsed = _python_assignments(source)
+    if parsed is None:
+        return None
+    node = parsed[1].get("_AGENT_SLUG_TO_TOOL")
+    if node is None:
+        return None
+    try:
+        value = ast.literal_eval(node)
+    except (TypeError, ValueError):
+        return None
+    if (
+        not isinstance(value, dict)
+        or not value
+        or any(
+            not isinstance(key, str) or not key or not isinstance(item, str) or not item
+            for key, item in value.items()
+        )
+    ):
+        return None
+    return value
+
+
+def _parse_bot_research_catalog(
+    raw: bytes,
+) -> tuple[str, int, dict[str, tuple[int, int]], tuple[str, ...]] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {
+        "descriptor",
+        "formats",
+        "grammars",
+        "limits",
+        "protocol",
+        "stages",
+        "version",
+    }:
+        return None
+    protocol = value.get("protocol")
+    version = value.get("version")
+    descriptor = value.get("descriptor")
+    formats = value.get("formats")
+    limits = value.get("limits")
+    if (
+        not isinstance(protocol, str)
+        or _PROTOCOL_NAME_RE.fullmatch(protocol) is None
+        or not isinstance(version, int)
+        or isinstance(version, bool)
+        or version < 1
+        or not isinstance(descriptor, dict)
+        or set(descriptor)
+        != {
+            "dataset_formats",
+            "max_attachments_per_request",
+            "max_research_dataset_paths",
+            "max_research_input_references",
+            "max_user_query_chars",
+        }
+        or not isinstance(formats, list)
+        or not formats
+        or len(formats) > 512
+        or any(
+            not isinstance(item, str) or _RESEARCH_FORMAT_RE.fullmatch(item) is None
+            for item in formats
+        )
+        or formats != sorted(set(formats))
+        or descriptor.get("dataset_formats") != formats
+        or not isinstance(limits, dict)
+        or set(limits)
+        != {
+            "combined_references",
+            "document_conversion",
+            "managed_references",
+            "pasted_references",
+            "user_query_chars",
+        }
+    ):
+        return None
+    limit_sources = {
+        "max_user_query_chars": "user_query_chars",
+        "max_attachments_per_request": "managed_references",
+        "max_research_dataset_paths": "pasted_references",
+        "max_research_input_references": "combined_references",
+    }
+    bounds: dict[str, tuple[int, int]] = {}
+    for field, source_name in limit_sources.items():
+        source = limits.get(source_name)
+        if not isinstance(source, dict) or set(source) != {"default", "hard"}:
+            return None
+        default = source.get("default")
+        hard = source.get("hard")
+        if (
+            not isinstance(default, int)
+            or isinstance(default, bool)
+            or not isinstance(hard, int)
+            or isinstance(hard, bool)
+            or default < 1
+            or hard < default
+            or descriptor.get(field) != default
+        ):
+            return None
+        bounds[field] = (default, hard)
+    document_limits = limits.get("document_conversion")
+    if (
+        not isinstance(document_limits, dict)
+        or set(document_limits) != {"max_file_bytes", "max_total_bytes"}
+        or any(
+            not isinstance(item, int) or isinstance(item, bool) or item < 1
+            for item in document_limits.values()
+        )
+    ):
+        return None
+    return protocol, version, bounds, tuple(formats)
+
+
+def _parse_bot_upload_capability(
+    raw: bytes,
+) -> tuple[str, tuple[dict[str, str], ...], int] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {"route_family", "routes", "limits"}:
+        return None
+    routes = value.get("routes")
+    limits = value.get("limits")
+    if (
+        not isinstance(value.get("route_family"), str)
+        or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value["route_family"]) is None
+        or not isinstance(routes, list)
+        or not routes
+        or len(routes) > 16
+        or any(
+            not isinstance(route, dict)
+            or set(route) != {"method", "path", "plane", "auth"}
+            or any(not isinstance(item, str) or not item for item in route.values())
+            or re.fullmatch(r"[A-Z]{3,8}", route["method"]) is None
+            or not route["path"].startswith("/")
+            or len(route["path"]) > 256
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", route["plane"]) is None
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", route["auth"]) is None
+            for route in routes
+        )
+        or not isinstance(limits, dict)
+        or set(limits)
+        != {
+            "max_file_bytes",
+            "part_size_bytes",
+            "max_parallel_parts",
+            "max_active_assets",
+            "capability_ttl_seconds",
+            "session_ttl_seconds",
+        }
+        or any(
+            not isinstance(item, int) or isinstance(item, bool) or item < 1
+            for item in limits.values()
+        )
+    ):
+        return None
+    route_pairs = [(route["method"], route["path"]) for route in routes]
+    if len(route_pairs) != len(set(route_pairs)):
+        return None
+    return value["route_family"], tuple(routes), limits["max_file_bytes"]
+
+
+def _pinned_bot_contract_value(contract: _PinnedBotContract) -> dict[str, Any]:
+    return {
+        "canonical_agent_tools": contract.canonical_agent_tools,
+        "research_input": {
+            "protocol": contract.research_protocol,
+            "protocol_version": contract.research_protocol_version,
+            "limits": {
+                field: {"default": bounds[0], "hard": bounds[1]}
+                for field, bounds in contract.research_limit_bounds.items()
+            },
+            "formats": list(contract.research_formats),
+        },
+        "resumable_upload": {
+            "protocol": contract.upload_protocol,
+            "protocol_version": contract.upload_protocol_version,
+            "route_family": contract.upload_route_family,
+            "routes": list(contract.upload_routes),
+            "max_file_bytes": contract.upload_ceiling_bytes,
+        },
+    }
+
+
+def _parse_pinned_bot_contract(
+    sources: Mapping[str, bytes],
+) -> _PinnedBotContract | None:
+    try:
+        agent_source = sources["agent_identities"].decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    except KeyError:
+        return None
+    agent_tools = _parse_bot_agent_tools(agent_source)
+    research = _parse_bot_research_catalog(sources.get("research_contract", b""))
+    upload_ceiling = _parse_bot_upload_capability(sources.get("upload_capability", b""))
+    packet = _json_object(sources.get("resumable_upload_packet", b""))
+    protocol = packet.get("protocol") if packet is not None else None
+    files = packet.get("files") if packet is not None else None
+    version_match = (
+        re.search(r"-v(?P<version>[1-9][0-9]*)$", protocol)
+        if isinstance(protocol, str)
+        else None
+    )
+    if (
+        agent_tools is None
+        or research is None
+        or upload_ceiling is None
+        or not isinstance(files, dict)
+        or files.get("capability.json")
+        != hashlib.sha256(sources.get("upload_capability", b"")).hexdigest()
+        or version_match is None
+    ):
+        return None
+    assert agent_tools is not None
+    assert research is not None
+    assert isinstance(protocol, str)
+    assert version_match is not None
+    return _PinnedBotContract(
+        canonical_agent_tools=agent_tools,
+        research_protocol=research[0],
+        research_protocol_version=research[1],
+        research_limit_bounds=research[2],
+        research_formats=research[3],
+        upload_protocol=protocol,
+        upload_protocol_version=int(version_match.group("version")),
+        upload_route_family=upload_ceiling[0],
+        upload_routes=upload_ceiling[1],
+        upload_ceiling_bytes=upload_ceiling[2],
+    )
+
+
+def _canonical_json_sha256(value: object) -> str:
+    payload = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _expected_fixture_contract(contract: _PinnedBotContract) -> dict[str, Any]:
+    return {
+        "canonical_agent_tools": contract.canonical_agent_tools,
+        "protocols": {
+            contract.research_protocol: [contract.research_protocol_version],
+            contract.upload_protocol: [contract.upload_protocol_version],
+        },
+        "research_input_resolution": {
+            **{
+                field: bounds[0]
+                for field, bounds in contract.research_limit_bounds.items()
+            },
+            "dataset_formats": list(contract.research_formats),
+        },
+        "research_agent_dataset_formats": list(contract.research_formats),
+        "upload_capability": {
+            "route_family": contract.upload_route_family,
+            "routes": list(contract.upload_routes),
+            "max_file_bytes": contract.upload_ceiling_bytes,
+        },
+    }
+
+
+def _fixture_contract_value(
+    value: Mapping[str, Any], contract: _PinnedBotContract
+) -> dict[str, Any] | None:
+    data = value.get("data")
+    if not isinstance(data, list):
+        return None
+    tools: dict[str, str] = {}
+    research_rows: list[Mapping[str, Any]] = []
+    for row in data:
+        if not isinstance(row, Mapping):
+            return None
+        slug = row.get("slug")
+        tool = row.get("tool")
+        if not isinstance(slug, str) or not isinstance(tool, str) or slug in tools:
+            return None
+        tools[slug] = tool
+        if slug == "research":
+            research_rows.append(row)
+    if len(research_rows) != 1:
+        return None
+    protocols = value.get("protocols")
+    descriptor = value.get("research_input_resolution")
+    file_upload = value.get("file_upload")
+    if not (
+        isinstance(protocols, Mapping)
+        and isinstance(descriptor, Mapping)
+        and isinstance(file_upload, Mapping)
+    ):
+        return None
+    attachments = research_rows[0].get("capabilities")
+    attachments = (
+        attachments.get("attachments") if isinstance(attachments, Mapping) else None
+    )
+    datasets = attachments.get("datasets") if isinstance(attachments, Mapping) else None
+    limits = file_upload.get("limits")
+    upload_routes = file_upload.get("routes")
+    if (
+        not isinstance(datasets, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(upload_routes, list)
+    ):
+        return None
+    descriptor_fields = tuple(_RESEARCH_INPUT_LIMIT_DECLARATIONS)
+    descriptor_formats = descriptor.get("dataset_formats")
+    research_formats = datasets.get("formats")
+    if not isinstance(descriptor_formats, list) or not isinstance(
+        research_formats, list
+    ):
+        return None
+    return {
+        "canonical_agent_tools": tools,
+        "protocols": {
+            key: protocols.get(key)
+            for key in protocols
+            if key in {contract.research_protocol, contract.upload_protocol}
+        },
+        "research_input_resolution": {
+            **{field: descriptor.get(field) for field in descriptor_fields},
+            "dataset_formats": descriptor_formats,
+        },
+        "research_agent_dataset_formats": research_formats,
+        "upload_capability": {
+            "route_family": file_upload.get("route_family"),
+            "routes": upload_routes,
+            "max_file_bytes": limits.get("max_file_bytes"),
+        },
+    }
+
+
+def _safe_git_path(value: str) -> bool:
+    parts = value.split("/")
+    return (
+        bool(value)
+        and not value.startswith("/")
+        and "\\" not in value
+        and all(part not in {"", ".", ".."} for part in parts)
+    )
+
+
+def _decode_object_payload(value: Any, limit: int) -> bytes | None:
+    if not isinstance(value, str) or len(value) > (limit * 4 // 3) + 8:
+        return None
+    try:
+        payload = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return payload if len(payload) <= limit else None
+
+
+def _git_object_oid(kind: str, payload: bytes) -> str:
+    framed = f"{kind} {len(payload)}\0".encode("ascii") + payload
+    return hashlib.sha1(framed, usedforsecurity=False).hexdigest()
+
+
+def _parse_git_tree(payload: bytes) -> dict[str, tuple[str, str]] | None:
+    entries: dict[str, tuple[str, str]] = {}
+    position = 0
+    while position < len(payload):
+        space = payload.find(b" ", position)
+        nul = payload.find(b"\0", space + 1)
+        if space <= position or nul <= space or nul + 21 > len(payload):
+            return None
+        try:
+            mode = payload[position:space].decode("ascii")
+            name = payload[space + 1 : nul].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        if (
+            not re.fullmatch(r"[0-7]{5,6}", mode)
+            or not name
+            or "/" in name
+            or name in entries
+        ):
+            return None
+        oid = payload[nul + 1 : nul + 21].hex()
+        entries[name] = (mode, oid)
+        position = nul + 21
+    return entries if entries else None
+
+
+def _resolve_git_blob(
+    root_tree: str,
+    path: str,
+    trees: Mapping[str, bytes],
+) -> tuple[str, set[str]] | None:
+    current = root_tree
+    used: set[str] = set()
+    parts = path.split("/")
+    for index, part in enumerate(parts):
+        payload = trees.get(current)
+        parsed = _parse_git_tree(payload) if payload is not None else None
+        if parsed is None or part not in parsed:
+            return None
+        used.add(current)
+        mode, oid = parsed[part]
+        if index == len(parts) - 1:
+            if mode not in {"100644", "100755"}:
+                return None
+            return oid, used
+        if mode not in {"40000", "040000"}:
+            return None
+        current = oid
+    return None
+
+
+def _resumable_packet_metadata(raw: bytes, source_sha256: str) -> dict[str, Any] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {"protocol", "fixture_version", "files"}:
+        return None
+    protocol = value.get("protocol")
+    fixture_version = value.get("fixture_version")
+    files = value.get("files")
+    if (
+        not isinstance(protocol, str)
+        or _PROTOCOL_NAME_RE.fullmatch(protocol) is None
+        or not isinstance(fixture_version, str)
+        or not fixture_version
+        or not isinstance(files, dict)
+        or not files
+    ):
+        return None
+    entries: list[dict[str, str]] = []
+    for path, digest in sorted(files.items()):
+        if (
+            not isinstance(path, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{0,126}\.json", path)
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            return None
+        entries.append({"path": path, "sha256": digest})
+    required_prefixes = (
+        "capability",
+        "create_",
+        "renew_",
+        "head_",
+        "part_",
+        "complete_",
+        "abort_",
+    )
+    if any(
+        not any(item["path"].startswith(prefix) for item in entries)
+        for prefix in required_prefixes
+    ):
+        return None
+    return {
+        "manifest_path": BOT_SOURCE_PATHS["resumable_upload_packet"],
+        "manifest_sha256": source_sha256,
+        "protocol": protocol,
+        "fixture_version": fixture_version,
+        "files": entries,
+    }
+
+
+def _load_bot_source_binding(
+    root: Path, violations: list[str]
+) -> _BotSourceBinding | None:
+    raw = _read_bytes(root, BOT_CONTRACT_MANIFEST_REL, violations)
+    if raw is None:
+        return None
+    if len(raw) > MAX_BOT_CONTRACT_MANIFEST_BYTES:
+        violations.append("Bot source binding manifest is oversized")
+        return None
+    manifest = _json_object(raw)
+    binding = (
+        manifest.get("activation_source_binding") if manifest is not None else None
+    )
+    bot_commit = binding.get("bot_commit") if isinstance(binding, dict) else None
+    if (
+        not isinstance(binding, dict)
+        or set(binding)
+        != {
+            "schema_version",
+            "bot_commit",
+            "object_format",
+            "git_object_proof",
+            "sources",
+            "contract",
+            "research_fixture",
+            "resumable_upload_packet",
+        }
+        or binding.get("schema_version") != 1
+        or binding.get("object_format") != "sha1"
+        or not isinstance(bot_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
+    ):
+        violations.append("Bot source binding manifest is malformed or drifted")
+        return None
+    if bot_commit != ACTIVATION_SOURCE_BOT_COMMIT:
+        violations.append("Bot source binding does not use the accepted Bot commit")
+        return None
+
+    proof = binding.get("git_object_proof")
+    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
+        violations.append("Bot source binding manifest is malformed or drifted")
+        return None
+    commit_entry = proof.get("commit")
+    tree_entries = proof.get("trees")
+    if (
+        not isinstance(commit_entry, dict)
+        or set(commit_entry) != {"oid", "content_base64"}
+        or commit_entry.get("oid") != bot_commit
+        or not isinstance(tree_entries, list)
+    ):
+        violations.append("Bot source binding manifest is malformed or drifted")
+        return None
+    commit_payload = _decode_object_payload(
+        commit_entry.get("content_base64"), 64 * 1024
+    )
+    if (
+        commit_payload is None
+        or _git_object_oid("commit", commit_payload) != bot_commit
+    ):
+        violations.append("Bot source binding Git commit proof is invalid")
+        return None
+    tree_headers = [
+        line
+        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
+        if line.startswith(b"tree ")
+    ]
+    if (
+        len(tree_headers) != 1
+        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
+    ):
+        violations.append("Bot source binding Git commit proof is invalid")
+        return None
+    root_tree = tree_headers[0][5:].decode("ascii")
+
+    trees: dict[str, bytes] = {}
+    for entry in tree_entries:
+        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
+            violations.append("Bot source binding Git tree proof is invalid")
+            return None
+        oid = entry.get("oid")
+        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
+        if (
+            not isinstance(oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
+            or payload is None
+            or _git_object_oid("tree", payload) != oid
+            or oid in trees
+        ):
+            violations.append("Bot source binding Git tree proof is invalid")
+            return None
+        trees[oid] = payload
+
+    source_entries = binding.get("sources")
+    if not isinstance(source_entries, list) or len(source_entries) != len(
+        BOT_SOURCE_PATHS
+    ):
+        violations.append("Bot source binding source inventory is incomplete")
+        return None
+    sources: dict[str, bytes] = {}
+    source_digests: dict[str, str] = {}
+    used_trees: set[str] = set()
+    for entry in source_entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "role",
+            "path",
+            "git_blob_oid",
+            "sha256",
+            "content_base64",
+        }:
+            violations.append("Bot source binding source inventory is malformed")
+            return None
+        role = entry.get("role")
+        path = entry.get("path")
+        blob_oid = entry.get("git_blob_oid")
+        digest = entry.get("sha256")
+        payload = _decode_object_payload(
+            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
+        )
+        if (
+            not isinstance(role, str)
+            or role not in BOT_SOURCE_PATHS
+            or role in sources
+            or path != BOT_SOURCE_PATHS[role]
+            or not isinstance(path, str)
+            or not _safe_git_path(path)
+            or not isinstance(blob_oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or payload is None
+            or _git_object_oid("blob", payload) != blob_oid
+            or hashlib.sha256(payload).hexdigest() != digest
+        ):
+            violations.append(
+                "Bot source binding source inventory is malformed or drifted"
+            )
+            return None
+        resolved = _resolve_git_blob(root_tree, path, trees)
+        if resolved is None or resolved[0] != blob_oid:
+            violations.append(
+                "Bot source binding source is not in the pinned Git commit"
+            )
+            return None
+        used_trees.update(resolved[1])
+        sources[role] = payload
+        source_digests[role] = digest
+    if set(sources) != set(BOT_SOURCE_PATHS) or used_trees != set(trees):
+        violations.append("Bot source binding source inventory is incomplete")
+        return None
+
+    contract = _parse_pinned_bot_contract(sources)
+    if contract is None or binding.get("contract") != _pinned_bot_contract_value(
+        contract
+    ):
+        violations.append("Bot source binding contract does not match pinned sources")
+        return None
+    packet = _resumable_packet_metadata(
+        sources["resumable_upload_packet"],
+        source_digests["resumable_upload_packet"],
+    )
+    if (
+        packet is None
+        or packet.get("protocol") != contract.upload_protocol
+        or binding.get("resumable_upload_packet") != packet
+    ):
+        violations.append("Bot source binding resumable packet is malformed or drifted")
+        return None
+
+    fixture = binding.get("research_fixture")
+    expected_contract_sha256 = _canonical_json_sha256(
+        _expected_fixture_contract(contract)
+    )
+    if (
+        not isinstance(fixture, dict)
+        or set(fixture) != {"path", "sha256", "contract_sha256"}
+        or fixture.get("path") != RESEARCH_INPUT_FIXTURE_REL.as_posix()
+        or not isinstance(fixture.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", fixture["sha256"]) is None
+        or fixture.get("contract_sha256") != expected_contract_sha256
+    ):
+        violations.append("Bot source binding Research fixture is malformed or drifted")
+        return None
+    return _BotSourceBinding(
+        contract=contract,
+        fixture_sha256=fixture["sha256"],
+        fixture_contract_sha256=expected_contract_sha256,
+    )
 
 
 def _go_top_level_const_bodies(
@@ -718,6 +1443,7 @@ def _bounded_integer(value: Any, floor: int, ceiling: int) -> bool:
 
 def _check_research_input_contract(
     root: Path,
+    source_binding: _BotSourceBinding | None,
     format_source: str | None,
     limit_source: str | None,
     contract_source: str | None,
@@ -738,12 +1464,14 @@ def _check_research_input_contract(
     if fixture_raw is None:
         violations.append("research_input_resolution_v1.json is missing")
         return
+    fixture_digest = hashlib.sha256(fixture_raw).hexdigest()
     if (
         go_contract is not None
-        and hashlib.sha256(fixture_raw).hexdigest()
-        != go_contract.accepted_fixture_sha256
+        and fixture_digest != go_contract.accepted_fixture_sha256
     ):
         violations.append("Research fixture SHA-256 differs from accepted bytes")
+    if source_binding is not None and fixture_digest != source_binding.fixture_sha256:
+        violations.append("Research fixture SHA-256 differs from pinned Bot evidence")
     try:
         fixture_text = fixture_raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -753,8 +1481,37 @@ def _check_research_input_contract(
     if fixture is None:
         violations.append("research_input_resolution_v1.json is malformed")
         return
+    if source_binding is not None:
+        pinned = source_binding.contract
+        fixture_contract = _fixture_contract_value(fixture, pinned)
+        if (
+            fixture_contract is None
+            or _canonical_json_sha256(fixture_contract)
+            != source_binding.fixture_contract_sha256
+        ):
+            violations.append(
+                "Research fixture contract differs from pinned Bot sources"
+            )
     if go_contract is None:
         return
+    if source_binding is not None:
+        pinned = source_binding.contract
+        if go_contract.canonical_agent_tools != pinned.canonical_agent_tools:
+            violations.append(
+                "Web agent identities differ from pinned Bot agent identities"
+            )
+        if (
+            go_contract.protocol != pinned.research_protocol
+            or go_contract.protocol_version != pinned.research_protocol_version
+            or go_contract.limit_bounds != pinned.research_limit_bounds
+            or not go_contract.archive_formats.issubset(pinned.research_formats)
+            or go_contract.max_dataset_file_bytes != pinned.upload_ceiling_bytes
+        ):
+            violations.append("Web Research contract differs from pinned Bot sources")
+        if go_contract.accepted_fixture_sha256 != source_binding.fixture_sha256:
+            violations.append(
+                "Web Research fixture digest differs from pinned Bot evidence"
+            )
 
     protocols = fixture.get("protocols")
     versions = (
@@ -869,7 +1626,9 @@ def _check_research_input_contract(
         else None
     )
     if (
-        archive_formats != go_contract.archive_formats
+        archive_formats is None
+        or not archive_formats
+        or not archive_formats.issubset(go_contract.archive_formats)
         or dataset_formats is None
         or "mtx" not in dataset_formats
     ):
@@ -1587,6 +2346,7 @@ def check(root: Path) -> list[str]:
     if root is None or _has_forbidden_part(root):
         return ["refusing to read out-of-scope activation root"]
     violations: list[str] = []
+    source_binding = _load_bot_source_binding(root, violations)
     matrix_text = _read_text(root, MATRIX_REL, violations)
     if matrix_text is None:
         return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
@@ -1620,6 +2380,7 @@ def check(root: Path) -> list[str]:
     )
     _check_research_input_contract(
         root,
+        source_binding,
         format_source,
         limit_source,
         contract_source,

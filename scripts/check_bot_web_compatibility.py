@@ -185,6 +185,7 @@ _MANIFEST_FIELDS = {
     "required_agents",
     "fixtures",
     "result_archive_v1",
+    "activation_source_binding",
 }
 _FLAG_RE_TEMPLATE = r"(?m)^\s*{key}\s*:\s*(?P<value>true|false)\b"
 _SOURCE_PUNCTUATION = frozenset("[]{}():,=;")

@@ -97,6 +97,7 @@ describe("Bot HEAD compatibility contract", () => {
   it("keeps fixture entries as IDs rather than raw provider payloads", () => {
     const manifest = readManifest();
     expect(Object.keys(manifest).sort()).toEqual([
+      "activation_source_binding",
       "bot_commit",
       "fixtures",
       "required_agents",

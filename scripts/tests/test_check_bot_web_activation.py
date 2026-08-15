@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import contextlib
 import hashlib
 import io
@@ -44,6 +45,10 @@ AGENT_MAP_SOURCE_PATH = Path("apps/server/external/bot/agent_map.go")
 UPLOAD_CONTRACT_SOURCE_PATH = Path(
     "apps/server/external/bot/upload_contract.go"
 )
+SOURCE_BINDING_MANIFEST_PATH = Path(
+    "apps/web/tests/fixtures/bot-head/contract-manifest.json"
+)
+PINNED_ACTIVATION_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
 
 
 class MatrixValue(TypedDict):
@@ -139,6 +144,13 @@ def write_accepted_research_contract(root: Path) -> None:
             relative.as_posix(),
             (checker.ROOT / relative).read_text(encoding="utf-8"),
         )
+    write(
+        root,
+        SOURCE_BINDING_MANIFEST_PATH.as_posix(),
+        json.loads(
+            (checker.ROOT / SOURCE_BINDING_MANIFEST_PATH).read_text(encoding="utf-8")
+        ),
+    )
 
 
 def research_format_source() -> str:
@@ -681,7 +693,7 @@ def test_checker_does_not_accept_commented_go_format(tmp_path: Path) -> None:
     assert any("Research format maps" in error for error in errors)
 
 
-def test_checker_derives_authoritative_research_values_from_web_go(
+def test_checker_rejects_coordinated_research_drift_from_web_go(
     tmp_path: Path,
 ) -> None:
     root = local_readiness_tree(tmp_path)
@@ -765,7 +777,15 @@ def test_checker_derives_authoritative_research_values_from_web_go(
         hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
     )
 
-    assert checker.check(root) == []
+    errors = checker.check(root)
+    assert any(
+        "Web Research contract differs from pinned Bot sources" in error
+        for error in errors
+    )
+    assert any(
+        "Research fixture contract differs from pinned Bot sources" in error
+        for error in errors
+    )
 
 
 @pytest.mark.parametrize(
@@ -855,6 +875,111 @@ def test_checker_rejects_canonical_agent_tool_drift(tmp_path: Path) -> None:
 
     errors = checker.check(root)
     assert any("agent descriptor catalog" in error for error in errors)
+
+
+def test_checker_rejects_coordinated_web_drift_against_pinned_bot_source(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    replace_source_once(
+        root,
+        AGENT_CANONICAL_SOURCE_PATH,
+        '"GeneNetworkAgent"',
+        '"AlteredNetworkAgent"',
+    )
+    fixture_path = root / RESEARCH_INPUT_FIXTURE_PATH
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    network = next(row for row in payload["data"] if row.get("slug") == "network")
+    network["tool"] = "AlteredNetworkAgent"
+    write(root, RESEARCH_INPUT_FIXTURE_PATH.as_posix(), payload)
+    replace_go_const_value(
+        root,
+        RESEARCH_CONTRACT_SOURCE_PATH,
+        "acceptedResearchInputFixtureSHA256",
+        hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+    )
+
+    errors = checker.check(root)
+    assert any("pinned Bot agent identities" in error for error in errors)
+
+
+def test_checker_rejects_pinned_bot_commit_drift(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["activation_source_binding"]["bot_commit"] = "0" * 40
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("Bot source binding" in error for error in errors)
+
+
+def test_checker_rejects_valid_unaccepted_bot_commit_proof(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    binding = manifest["activation_source_binding"]
+    commit = binding["git_object_proof"]["commit"]
+    payload = base64.b64decode(commit["content_base64"], validate=True)
+    payload += b"\nWeb-only source-binding drift\n"
+    oid = checker._git_object_oid("commit", payload)
+    binding["bot_commit"] = oid
+    commit["oid"] = oid
+    commit["content_base64"] = base64.b64encode(payload).decode("ascii")
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("accepted Bot commit" in error for error in errors)
+
+
+def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects() -> (
+    None
+):
+    raw = (checker.ROOT / SOURCE_BINDING_MANIFEST_PATH).read_bytes()
+    manifest = json.loads(raw)
+    binding = manifest["activation_source_binding"]
+
+    assert (
+        binding["bot_commit"]
+        == checker.ACTIVATION_SOURCE_BOT_COMMIT
+        == PINNED_ACTIVATION_BOT_COMMIT
+    )
+    assert len(raw) < 96 * 1024
+    assert len(binding["git_object_proof"]["trees"]) <= 8
+    assert {(entry["role"], entry["path"]) for entry in binding["sources"]} == set(
+        checker.BOT_SOURCE_PATHS.items()
+    )
+    packet = binding["resumable_upload_packet"]
+    assert all(set(entry) == {"path", "sha256"} for entry in packet["files"])
+    assert not ({"owner_subject", "filename", "capability"} & set(packet))
+
+
+def test_checker_rejects_pinned_bot_blob_payload_drift(tmp_path: Path) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source = manifest["activation_source_binding"]["sources"][0]
+    payload = base64.b64decode(source["content_base64"], validate=True)
+    source["content_base64"] = base64.b64encode(payload + b"\n").decode("ascii")
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("source inventory" in error for error in errors)
+
+
+def test_checker_rejects_handwritten_normalized_contract_drift(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["activation_source_binding"]["contract"]["canonical_agent_tools"][
+        "network"
+    ] = "AlteredNetworkAgent"
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("contract does not match pinned sources" in error for error in errors)
 
 
 def test_checker_rejects_agent_descriptor_ceiling_drift(tmp_path: Path) -> None:
