@@ -166,6 +166,19 @@ bot:
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         self.assert_fails(root, "sha256 mismatch")
 
+    def test_manifest_rejects_non_strict_json(self) -> None:
+        for raw in (
+            '{"schema_version":1,"schema_version":1}',
+            "[" * 65 + "0" + "]" * 65,
+            "[" * 10_000 + "0" + "]" * 10_000,
+        ):
+            with self.subTest(length=len(raw)):
+                temporary, root = self.make_tree()
+                self.addCleanup(temporary.cleanup)
+                manifest_path = root / "apps/web/tests/fixtures/a2ui/manifest.json"
+                manifest_path.write_text(raw, encoding="utf-8")
+                self.assert_fails(root, "invalid manifest JSON")
+
     def test_missing_fixture_fails(self) -> None:
         temporary, root = self.make_tree()
         self.addCleanup(temporary.cleanup)

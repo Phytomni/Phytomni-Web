@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import secrets
 import stat
 from pathlib import Path
 from typing import NamedTuple, NoReturn
@@ -33,6 +34,7 @@ class FileIdentity(NamedTuple):
     size: int
     modified_ns: int
     changed_ns: int
+    links: int
 
 
 class BoundedRead(NamedTuple):
@@ -50,6 +52,7 @@ def _file_identity(value: os.stat_result) -> FileIdentity:
         size=value.st_size,
         modified_ns=value.st_mtime_ns,
         changed_ns=value.st_ctime_ns,
+        links=value.st_nlink,
     )
 
 
@@ -88,6 +91,14 @@ class RootedDirectory:
             raise
         self.path = resolved
         self._descriptor = descriptor
+
+    def _verify_root(self) -> None:
+        if self._descriptor < 0:
+            raise OSError("input root is closed")
+        opened = os.fstat(self._descriptor)
+        current = os.stat(self.path, follow_symlinks=False)
+        if not stat.S_ISDIR(current.st_mode) or not _same_entry(opened, current):
+            raise InputChangedError("input root changed during access")
 
     def __enter__(self) -> RootedDirectory:
         return self
@@ -135,11 +146,12 @@ class RootedDirectory:
         expected_type = stat.S_ISDIR if directory else stat.S_ISREG
         if not expected_type(opened.st_mode) or not _same_entry(opened, current):
             raise InputChangedError("input path changed during open")
+        if not directory and (opened.st_nlink != 1 or current.st_nlink != 1):
+            raise UnsafeInputPathError("input regular file has multiple links")
         return opened
 
     def _open_parent(self, relative: Path) -> tuple[int, str]:
-        if self._descriptor < 0:
-            raise OSError("input root is closed")
+        self._verify_root()
         parts = self._relative_parts(relative)
         parent = os.dup(self._descriptor)
         directory_flags = (
@@ -174,6 +186,17 @@ class RootedDirectory:
         except BaseException:
             os.close(parent)
             raise
+
+    def _revalidate_parent(self, relative: Path, parent: int) -> None:
+        fresh_parent, fresh_name = self._open_parent(relative)
+        try:
+            if (
+                fresh_name != self._relative_parts(relative)[-1]
+                or not _same_entry(os.fstat(parent), os.fstat(fresh_parent))
+            ):
+                raise InputChangedError("input parent changed during access")
+        finally:
+            os.close(fresh_parent)
 
     def _open_regular(self, relative: Path, flags: int) -> int:
         parent, name = self._open_parent(relative)
@@ -217,6 +240,7 @@ class RootedDirectory:
             raise InputChangedError("input changed during read")
         if len(value) > max_bytes:
             raise InputTooLargeError
+        self._verify_root()
         return BoundedRead(value=value, identity=after)
 
     def read_bytes(self, relative: Path, max_bytes: int) -> bytes:
@@ -230,18 +254,80 @@ class RootedDirectory:
         value: bytes,
         expected_identity: FileIdentity,
     ) -> None:
-        """Replace one existing regular file through its retained descriptor."""
+        """Atomically replace one existing regular file beneath the root."""
 
-        descriptor = self._open_regular(relative, os.O_WRONLY)
+        parent, name = self._open_parent(relative)
+        descriptor = -1
+        temporary = -1
+        temporary_name: str | None = None
         try:
-            if _file_identity(os.fstat(descriptor)) != expected_identity:
+            try:
+                descriptor = os.open(
+                    name,
+                    os.O_RDONLY
+                    | os.O_NOFOLLOW
+                    | getattr(os, "O_CLOEXEC", 0),
+                    dir_fd=parent,
+                )
+            except OSError as exc:
+                self._raise_safe_open_error(exc)
+            self._verify_opened_entry(
+                parent,
+                name,
+                descriptor,
+                directory=False,
+            )
+            opened = os.fstat(descriptor)
+            if _file_identity(opened) != expected_identity:
                 raise InputChangedError("input changed before write")
-            os.ftruncate(descriptor, 0)
+
+            temporary_name = f".{name}.tmp-{secrets.token_hex(16)}"
+            temporary = os.open(
+                temporary_name,
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | os.O_NOFOLLOW
+                | getattr(os, "O_CLOEXEC", 0),
+                stat.S_IMODE(opened.st_mode),
+                dir_fd=parent,
+            )
+            os.fchmod(temporary, stat.S_IMODE(opened.st_mode))
+            temporary_stat = os.fstat(temporary)
+            if not stat.S_ISREG(temporary_stat.st_mode) or temporary_stat.st_nlink != 1:
+                raise UnsafeInputPathError("temporary input file is unsafe")
             remaining = memoryview(value)
             while remaining:
-                written = os.write(descriptor, remaining)
+                written = os.write(temporary, remaining)
                 if written <= 0:
                     raise OSError("cannot write input file")
                 remaining = remaining[written:]
+            os.fsync(temporary)
+
+            self._revalidate_parent(relative, parent)
+            current = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            if (
+                current.st_nlink != 1
+                or not _same_entry(opened, current)
+                or _file_identity(current) != expected_identity
+            ):
+                raise InputChangedError("input changed before replacement")
+            os.replace(
+                temporary_name,
+                name,
+                src_dir_fd=parent,
+                dst_dir_fd=parent,
+            )
+            temporary_name = None
+            os.fsync(parent)
         finally:
-            os.close(descriptor)
+            if temporary >= 0:
+                os.close(temporary)
+            if descriptor >= 0:
+                os.close(descriptor)
+            if temporary_name is not None:
+                try:
+                    os.unlink(temporary_name, dir_fd=parent)
+                except FileNotFoundError:
+                    pass
+            os.close(parent)

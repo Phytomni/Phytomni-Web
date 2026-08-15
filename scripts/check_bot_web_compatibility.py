@@ -28,6 +28,7 @@ from scripts.bounded_input import (
     RootedDirectory,
     UnsafeInputPathError,
 )
+from scripts.strict_json import StrictJsonError, loads_strict_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -418,8 +419,8 @@ def _load_json(
     if raw is None:
         return None
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
+        return loads_strict_json(raw)
+    except StrictJsonError:
         violations.append(f"invalid compatibility fixture JSON: {relative}")
         return None
 
@@ -1428,8 +1429,8 @@ def _check_result_archive_fixtures(
                 "result archive fixture sha256 is not pinned to Bot release"
             )
         try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
+            payload = loads_strict_json(raw)
+        except StrictJsonError:
             violations.append("result archive fixture JSON is malformed")
             continue
         _check_result_archive_fixture(agent, payload, violations)
@@ -1534,8 +1535,8 @@ def _load_manifest(
         violations.append(f"cannot read compatibility file: {MANIFEST_REL}")
         return None
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
+        value = loads_strict_json(raw)
+    except StrictJsonError:
         violations.append("invalid compatibility manifest JSON")
         return None
     violations.extend(validate_manifest(value))

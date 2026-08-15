@@ -11,10 +11,15 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.strict_json import StrictJsonError, loads_strict_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -135,9 +140,9 @@ def _load_manifest(
     if raw is None:
         return None, None
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        violations.append(f"invalid manifest JSON: {exc}")
+        value = loads_strict_json(raw)
+    except StrictJsonError:
+        violations.append("invalid manifest JSON")
         return None, raw
     if not isinstance(value, dict):
         violations.append("manifest root must be an object")

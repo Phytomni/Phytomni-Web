@@ -124,19 +124,24 @@ def research_input_fixture_payload() -> dict[str, object]:
     )
 
 
-def research_fixture_authority_sources() -> dict[str, bytes]:
-    manifest = json.loads(
-        (checker.ROOT / SOURCE_BINDING_MANIFEST_PATH).read_text(encoding="utf-8")
-    )
-    entries = manifest["activation_source_binding"]["research_fixture"][
-        "authority"
-    ]["sources"]
-    return {
-        entry["role"]: base64.b64decode(
-            entry["content_base64"], validate=True
+def test_activation_json_rejects_duplicate_keys_and_deep_nesting() -> None:
+    assert checker._json_object(b'{"outer":{"value":1,"value":2}}') is None
+    deep = ("[" * 65 + "0" + "]" * 65).encode()
+    assert checker._json_object(b'{"value":' + deep + b"}") is None
+
+
+def test_activation_matrix_rejects_duplicate_keys() -> None:
+    text = "\n".join(
+        (
+            checker.MATRIX_JSON_START,
+            "```json",
+            '{"schema_version":1,"schema_version":1}',
+            "```",
+            checker.MATRIX_JSON_END,
         )
-        for entry in entries
-    }
+    )
+
+    assert checker.parse_matrix(text) is None
 
 
 def research_row(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1013,43 +1018,18 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
         path.startswith("docs/contracts/resumable-upload/")
         for path in authority_paths
     )
-    fixture_sources = {
-        entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
-        for entry in authority["sources"]
-    }
-    expected_raw = checker._research_fixture_bytes(fixture_sources)
-    assert expected_raw == (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()
-    assert hashlib.sha256(expected_raw).hexdigest() == fixture["sha256"]
+    fixture_raw = (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()
+    assert fixture["execution"] == checker.RESEARCH_FIXTURE_EXECUTION
+    assert hashlib.sha256(fixture_raw).hexdigest() == fixture["sha256"]
 
 
-def test_research_fixture_authority_rejects_wrong_agent_route_return() -> None:
-    sources = research_fixture_authority_sources()
-    route = sources["agent_catalog_route"].decode("utf-8")
-    accepted = "        return JSONResponse(payload)"
-    assert route.count(accepted) == 1
-    sources["agent_catalog_route"] = route.replace(
-        accepted,
-        "        return JSONResponse({\"object\": \"disabled\"})",
-    ).encode("utf-8")
+def test_research_fixture_authority_has_no_ast_response_synthesis() -> None:
+    source = Path(checker.__file__).read_text(encoding="utf-8")
 
-    assert checker._research_fixture_bytes(sources) is None
-
-
-def test_research_fixture_authority_rejects_disabled_upload_protocol() -> None:
-    sources = research_fixture_authority_sources()
-    protocols = sources["advertised_protocols"].decode("utf-8")
-    accepted = (
-        "def _upload_enabled() -> bool:\n"
-        "    \"\"\"Upload routes are always available once registered.\"\"\"\n"
-        "    return True"
-    )
-    assert protocols.count(accepted) == 1
-    sources["advertised_protocols"] = protocols.replace(
-        accepted,
-        accepted.replace("return True", "return False"),
-    ).encode("utf-8")
-
-    assert checker._research_fixture_bytes(sources) is None
+    assert "_RESEARCH_RESPONSE_AST_SHA256" not in source
+    assert "_research_response_ast_sha256" not in source
+    assert "_research_fixture_bytes" not in source
+    assert "ast.dump(" not in source
 
 
 def test_checker_rejects_research_fixture_authority_blob_drift(

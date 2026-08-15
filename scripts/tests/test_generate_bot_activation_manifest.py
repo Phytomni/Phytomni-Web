@@ -7,6 +7,7 @@ import copy
 import json
 import os
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -14,10 +15,29 @@ import pytest
 from scripts import check_bot_web_activation as checker
 from scripts import bounded_input
 from scripts import generate_bot_activation_manifest as generator
+from scripts import run_pinned_bot_agent_catalog as catalog_runner
 
 
 MANIFEST_PATH = checker.ROOT / checker.BOT_CONTRACT_MANIFEST_REL
 FIXTURE_PATH = checker.ROOT / checker.RESEARCH_INPUT_FIXTURE_REL
+
+
+def test_catalog_runner_rejects_python_311_without_parsing_bot_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(catalog_runner.sys, "version_info", (3, 11, 9))
+    monkeypatch.setattr(
+        catalog_runner,
+        "_execute",
+        lambda _source_root: pytest.fail("Python 3.11 executed fixed Bot source"),
+    )
+
+    result = catalog_runner.main(["--source-root", str(tmp_path)])
+
+    assert result == 1
+    assert "requires Python 3.12 or newer" in capsys.readouterr().err
 
 
 def _install_manifest_parent_swap(
@@ -107,6 +127,7 @@ def _generation_root(tmp_path: Path, fixture_raw: bytes) -> Path:
 def _generate_with_current_sources(
     monkeypatch: pytest.MonkeyPatch,
     root: Path,
+    execute: Callable[[Path, str], bytes] | None = None,
 ) -> dict[str, object]:
     monkeypatch.setattr(
         generator,
@@ -117,6 +138,11 @@ def _generate_with_current_sources(
         generator,
         "_source_objects",
         lambda _repository, commit, _paths: _source_objects(commit),
+    )
+    monkeypatch.setattr(
+        generator,
+        "_execute_bot_agent_catalog",
+        execute or (lambda _repository, _commit: FIXTURE_PATH.read_bytes()),
     )
     with bounded_input.RootedDirectory(root) as opened_root:
         return generator._generate_binding(
@@ -147,6 +173,72 @@ def test_generation_rejects_oversized_manifest_before_unbounded_read(
     with bounded_input.RootedDirectory(tmp_path) as opened_root:
         with pytest.raises(ValueError, match="manifest is oversized"):
             generator._load_manifest(opened_root)
+
+
+@pytest.mark.parametrize("check_flag", [[], ["--check"]])
+def test_generator_rejects_initial_hardlinked_manifest_without_modifying_inode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    check_flag: list[str],
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    outside_path = tmp_path.parent / f"{tmp_path.name}-hardlink.json"
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    outside_path.write_bytes(manifest_raw)
+    os.link(outside_path, manifest_path)
+    monkeypatch.setattr(
+        generator,
+        "_generate_binding",
+        lambda *_args: pytest.fail("hardlinked manifest reached generation"),
+    )
+
+    result = generator.main(
+        [
+            "--web-root",
+            str(tmp_path),
+            "--bot-repo",
+            str(tmp_path),
+            *check_flag,
+        ]
+    )
+
+    assert result == 1
+    assert outside_path.read_bytes() == manifest_raw
+
+
+def test_generator_rejects_hardlink_added_during_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = tmp_path / checker.BOT_CONTRACT_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_raw = MANIFEST_PATH.read_bytes()
+    manifest_path.write_bytes(manifest_raw)
+    outside_path = tmp_path.parent / f"{tmp_path.name}-racing-hardlink.json"
+    binding = copy.deepcopy(
+        json.loads(manifest_raw)["activation_source_binding"]
+    )
+    binding["racing_marker"] = True
+
+    def add_hardlink(*_args: object) -> dict[str, object]:
+        os.link(manifest_path, outside_path)
+        return binding
+
+    monkeypatch.setattr(generator, "_generate_binding", add_hardlink)
+
+    result = generator.main(
+        [
+            "--web-root",
+            str(tmp_path),
+            "--bot-repo",
+            str(tmp_path),
+        ]
+    )
+
+    assert result == 1
+    assert manifest_path.read_bytes() == manifest_raw
+    assert outside_path.read_bytes() == manifest_raw
 
 
 def test_check_mode_uses_bounded_final_manifest_reread(
@@ -409,6 +501,34 @@ def test_generation_rejects_research_fixture_trailing_byte_drift(
 
     with pytest.raises(ValueError, match="exact Bot-authoritative bytes"):
         _generate_with_current_sources(monkeypatch, root)
+
+
+def test_generation_uses_authenticated_endpoint_execution_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture_raw = FIXTURE_PATH.read_bytes()
+    root = _generation_root(tmp_path, fixture_raw)
+    calls: list[tuple[Path, str]] = []
+
+    def execute(repository: Path, commit: str) -> bytes:
+        calls.append((repository, commit))
+        return fixture_raw
+
+    binding = _generate_with_current_sources(monkeypatch, root, execute)
+
+    assert calls == [
+        (Path("/unused/bot-repository"), checker.RESEARCH_FIXTURE_BOT_COMMIT)
+    ]
+    execution = binding["research_fixture"]["execution"]
+    assert execution == {
+        "profile": "full_readiness_offline_v1",
+        "method": "GET",
+        "path": "/v1/agents",
+        "authenticated": True,
+        "network_allowed": False,
+        "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
+    }
 
 
 def test_generation_rejects_research_fixture_ignored_field_drift(

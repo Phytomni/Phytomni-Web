@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, NamedTuple
 
 if __package__ in {None, ""}:
@@ -22,6 +28,20 @@ from scripts.bounded_input import (
     InputChangedError,
     InputTooLargeError,
     RootedDirectory,
+)
+from scripts.strict_json import StrictJsonError, loads_strict_json
+
+
+BOT_CATALOG_PROFILE = "full_readiness_offline_v1"
+MAX_BOT_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_BOT_ARCHIVE_FILES = 8_192
+MAX_CATALOG_RUNNER_OUTPUT_BYTES = 256 * 1024
+BOT_CATALOG_ARCHIVE_PATHS = (
+    "conftest.py",
+    "src",
+    "tests/__init__.py",
+    "tests/support/__init__.py",
+    "tests/support/outbound_fakes.py",
 )
 
 
@@ -158,6 +178,144 @@ def _generate_source_authority(
     )
 
 
+def _safe_archive_path(name: str) -> PurePosixPath | None:
+    path = PurePosixPath(name)
+    if path.is_absolute() or not path.parts or any(
+        part in {"", ".", ".."} for part in path.parts
+    ):
+        return None
+    if path.as_posix() == "conftest.py" or path.parts[0] == "src":
+        return path
+    allowed_test_entries = {
+        "tests",
+        "tests/__init__.py",
+        "tests/support",
+        "tests/support/__init__.py",
+        "tests/support/outbound_fakes.py",
+    }
+    return path if path.as_posix() in allowed_test_entries else None
+
+
+def _extract_bot_archive(raw: bytes, destination: Path) -> None:
+    count = 0
+    total = 0
+    try:
+        archive = tarfile.open(fileobj=io.BytesIO(raw), mode="r:")
+    except tarfile.TarError as exc:
+        raise ValueError("fixed Bot source archive is malformed") from exc
+    with archive:
+        for member in archive:
+            count += 1
+            total += max(member.size, 0)
+            relative = _safe_archive_path(member.name)
+            if (
+                count > MAX_BOT_ARCHIVE_FILES
+                or total > MAX_BOT_ARCHIVE_BYTES
+                or relative is None
+                or not (member.isdir() or member.isfile())
+            ):
+                raise ValueError("fixed Bot source archive is unsafe")
+            target = destination.joinpath(*relative.parts)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                raise ValueError("fixed Bot source archive is malformed")
+            payload = source.read(member.size + 1)
+            if len(payload) != member.size:
+                raise ValueError("fixed Bot source archive is malformed")
+            target.write_bytes(payload)
+
+
+def _bot_python(repository: Path) -> Path:
+    candidate = repository.resolve() / ".venv" / "bin" / "python"
+    try:
+        candidate.stat()
+    except OSError as exc:
+        raise ValueError("Bot Python environment is unavailable") from exc
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        raise ValueError("Bot Python environment is unavailable")
+    return candidate
+
+
+def _execute_bot_agent_catalog(repository: Path, commit: str) -> bytes:
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "archive",
+                "--format=tar",
+                commit,
+                "--",
+                *BOT_CATALOG_ARCHIVE_PATHS,
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("cannot archive the fixed Bot commit") from exc
+    if result.returncode != 0 or len(result.stdout) > MAX_BOT_ARCHIVE_BYTES:
+        raise ValueError("cannot archive the fixed Bot commit")
+
+    runner = Path(__file__).with_name("run_pinned_bot_agent_catalog.py")
+    with tempfile.TemporaryDirectory(prefix="pinned-bot-catalog-") as directory:
+        source_root = Path(directory)
+        _extract_bot_archive(result.stdout, source_root)
+        try:
+            execution = subprocess.run(
+                [
+                    str(_bot_python(repository)),
+                    "-I",
+                    str(runner),
+                    "--source-root",
+                    str(source_root),
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={"PATH": "/usr/bin:/bin", "TMPDIR": "/tmp"},
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ValueError("fixed Bot catalog endpoint cannot be executed") from exc
+    if (
+        execution.returncode != 0
+        or len(execution.stdout) > MAX_CATALOG_RUNNER_OUTPUT_BYTES
+    ):
+        raise ValueError("fixed Bot catalog endpoint cannot be executed")
+    try:
+        receipt = loads_strict_json(execution.stdout)
+        encoded = receipt.get("body_base64") if isinstance(receipt, dict) else None
+        raw = (
+            base64.b64decode(encoded, validate=True)
+            if isinstance(encoded, str)
+            else None
+        )
+    except (StrictJsonError, ValueError, binascii.Error) as exc:
+        raise ValueError("fixed Bot catalog execution receipt is malformed") from exc
+    expected = {
+        "profile": BOT_CATALOG_PROFILE,
+        "method": "GET",
+        "path": "/v1/agents",
+        "authenticated": True,
+        "network_allowed": False,
+        "body_base64": encoded,
+    }
+    if (
+        receipt != expected
+        or raw is None
+        or len(raw) > checker.MAX_RESEARCH_INPUT_FIXTURE_BYTES
+    ):
+        raise ValueError("fixed Bot catalog execution receipt is malformed")
+    return raw
+
+
 def _generate_binding(
     web_root: RootedDirectory,
     bot_repository: Path,
@@ -183,15 +341,16 @@ def _generate_binding(
         raise ValueError("Web Research fixture is oversized") from exc
     except (OSError, UnicodeDecodeError) as exc:
         raise ValueError("Web Research fixture cannot be read") from exc
-    fixture_authority, fixture_sources = _generate_source_authority(
+    fixture_authority, _fixture_sources = _generate_source_authority(
         bot_repository,
         checker.RESEARCH_FIXTURE_BOT_COMMIT,
         checker.RESEARCH_FIXTURE_BOT_COMMIT,
         checker.RESEARCH_FIXTURE_SOURCE_PATHS,
     )
-    expected_fixture_raw = checker._research_fixture_bytes(fixture_sources)
-    if expected_fixture_raw is None:
-        raise ValueError("Bot fixture authority cannot reproduce the Research fixture")
+    expected_fixture_raw = _execute_bot_agent_catalog(
+        bot_repository,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+    )
     if fixture_raw != expected_fixture_raw:
         raise ValueError("Web Research fixture differs from exact Bot-authoritative bytes")
     fixture = checker._parse_research_input_fixture(fixture_text)
@@ -223,6 +382,14 @@ def _generate_binding(
             "contract_sha256": checker._canonical_json_sha256(
                 expected_fixture_contract
             ),
+            "execution": {
+                "profile": BOT_CATALOG_PROFILE,
+                "method": "GET",
+                "path": "/v1/agents",
+                "authenticated": True,
+                "network_allowed": False,
+                "bot_commit": checker.RESEARCH_FIXTURE_BOT_COMMIT,
+            },
             "authority": fixture_authority,
         },
         "resumable_upload_packet": packet,

@@ -142,6 +142,47 @@ def test_manifest_rejects_oversized_input_before_unbounded_read(
     assert violations == ["compatibility manifest is oversized"]
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"schema_version":2,"schema_version":2}',
+        ("[" * 10_000 + "0" + "]" * 10_000).encode(),
+        ("[" * 65 + "0" + "]" * 65).encode(),
+    ],
+)
+def test_manifest_rejects_non_strict_json(tmp_path: Path, raw: bytes) -> None:
+    manifest_path = tmp_path / checker.MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_bytes(raw)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_manifest(opened_root, violations) is None
+
+    assert violations == ["invalid compatibility manifest JSON"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"value":1,"value":2}',
+        ("[" * 10_000 + "0" + "]" * 10_000).encode(),
+        ("[" * 65 + "0" + "]" * 65).encode(),
+    ],
+)
+def test_fixture_loader_rejects_non_strict_json(
+    tmp_path: Path, raw: bytes
+) -> None:
+    relative = Path("fixture.json")
+    (tmp_path / relative).write_bytes(raw)
+    violations: list[str] = []
+
+    with RootedDirectory(tmp_path) as opened_root:
+        assert checker._load_json(opened_root, relative, violations) is None
+
+    assert violations == [f"invalid compatibility fixture JSON: {relative}"]
+
+
 def test_current_checkout_passes_without_printing_fixture_payloads():
     violations = checker.check(checker.ROOT)
     assert violations == []
