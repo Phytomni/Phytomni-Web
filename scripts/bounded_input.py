@@ -1,16 +1,29 @@
-"""Bounded, descriptor-rooted access to untrusted local contract inputs."""
+"""Bounded, kernel-rooted access to untrusted local contract inputs."""
 
 from __future__ import annotations
 
+import ctypes
 import errno
+import json
 import os
+import platform
 import secrets
+import shutil
 import stat
+import subprocess
+import sys
 from pathlib import Path
-from typing import NamedTuple, NoReturn
-
+from typing import NamedTuple
 
 MAX_CONTRACT_MANIFEST_BYTES = 2 * 1024 * 1024
+_SYS_OPENAT2 = 437
+_RESOLVE_NO_MAGICLINKS = 0x02
+_RESOLVE_NO_SYMLINKS = 0x04
+_RESOLVE_BENEATH = 0x08
+_RESOLVE_FLAGS = _RESOLVE_NO_MAGICLINKS | _RESOLVE_NO_SYMLINKS | _RESOLVE_BENEATH
+_AT_FDCWD = -100
+_SANDBOX_ENV = "PHYTOMNI_BOUNDED_INPUT_SANDBOXED"
+_WRITE_TIMEOUT_SECONDS = 30
 
 
 class InputTooLargeError(Exception):
@@ -23,6 +36,10 @@ class InputChangedError(OSError):
 
 class UnsafeInputPathError(OSError):
     """Raised when a descendant path crosses a symlink or non-directory."""
+
+
+class UnsupportedRootedAccessError(OSError):
+    """Raised when the kernel cannot enforce rooted descendant resolution."""
 
 
 class FileIdentity(NamedTuple):
@@ -42,6 +59,17 @@ class BoundedRead(NamedTuple):
 
     value: bytes
     identity: FileIdentity
+
+
+class _OpenHow(ctypes.Structure):
+    _fields_ = [
+        ("flags", ctypes.c_ulonglong),
+        ("mode", ctypes.c_ulonglong),
+        ("resolve", ctypes.c_ulonglong),
+    ]
+
+
+_LIBC = ctypes.CDLL(None, use_errno=True)
 
 
 def _file_identity(value: os.stat_result) -> FileIdentity:
@@ -64,27 +92,77 @@ def _same_entry(left: os.stat_result, right: os.stat_result) -> bool:
     )
 
 
+def _require_openat2() -> None:
+    if sys.platform != "linux" or platform.machine() not in {"x86_64", "aarch64"}:
+        raise UnsupportedRootedAccessError(
+            "Linux x86_64 or aarch64 openat2 support is required"
+        )
+
+
+def _openat2(directory: int, relative: str, flags: int, mode: int = 0) -> int:
+    """Open a complete relative path in one kernel-rooted resolution."""
+
+    _require_openat2()
+    how = _OpenHow(flags, mode, _RESOLVE_FLAGS)
+    result = _LIBC.syscall(
+        _SYS_OPENAT2,
+        directory,
+        os.fsencode(relative),
+        ctypes.byref(how),
+        ctypes.sizeof(how),
+    )
+    if result >= 0:
+        return int(result)
+    error = ctypes.get_errno()
+    if error in {errno.ENOSYS, errno.EINVAL}:
+        raise UnsupportedRootedAccessError(
+            "Linux kernel openat2 RESOLVE_BENEATH support is required"
+        )
+    if error in {errno.ELOOP, errno.ENOTDIR, errno.EXDEV}:
+        raise UnsafeInputPathError("input path is unsafe")
+    raise OSError(error, os.strerror(error), relative)
+
+
+def _rename_rooted(directory: int, source: str, destination: str) -> None:
+    """Rename relative paths from the trusted root without a movable parent fd."""
+
+    renameat2 = getattr(_LIBC, "renameat2", None)
+    if renameat2 is None:
+        raise UnsupportedRootedAccessError("Linux renameat2 support is required")
+    result = renameat2(
+        directory,
+        os.fsencode(source),
+        directory,
+        os.fsencode(destination),
+        0,
+    )
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error in {errno.ENOENT, errno.ENOTDIR, errno.EXDEV}:
+        raise InputChangedError("input path changed before replacement")
+    if error == errno.ELOOP:
+        raise UnsafeInputPathError("input path is unsafe")
+    raise OSError(error, os.strerror(error), destination)
+
+
 class RootedDirectory:
-    """Retain one directory descriptor and open descendants relative to it."""
+    """Resolve every descendant from a retained root descriptor in one syscall."""
 
     def __init__(self, root: Path) -> None:
+        _require_openat2()
         try:
             resolved = Path(root).resolve(strict=True)
         except (OSError, RuntimeError) as exc:
             raise OSError("input root cannot be resolved") from exc
         flags = (
-            os.O_RDONLY
-            | os.O_DIRECTORY
-            | os.O_NOFOLLOW
-            | getattr(os, "O_CLOEXEC", 0)
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         )
         descriptor = os.open(resolved, flags)
         try:
             opened = os.fstat(descriptor)
             current = os.stat(resolved, follow_symlinks=False)
-            if not stat.S_ISDIR(opened.st_mode) or not _same_entry(
-                opened, current
-            ):
+            if not stat.S_ISDIR(opened.st_mode) or not _same_entry(opened, current):
                 raise InputChangedError("input root changed during open")
         except BaseException:
             os.close(descriptor)
@@ -112,7 +190,7 @@ class RootedDirectory:
             self._descriptor = -1
 
     @staticmethod
-    def _relative_parts(relative: Path) -> tuple[str, ...]:
+    def _relative_path(relative: Path) -> str:
         path = Path(relative)
         parts = path.parts
         if (
@@ -121,108 +199,30 @@ class RootedDirectory:
             or any(part in {"", ".", ".."} or "\0" in part for part in parts)
         ):
             raise OSError("input path is not a safe relative path")
-        return parts
+        return path.as_posix()
 
     @staticmethod
-    def _raise_safe_open_error(error: OSError) -> NoReturn:
-        if error.errno in {errno.ELOOP, errno.ENOTDIR}:
-            raise UnsafeInputPathError("input path is unsafe") from error
-        raise error
-
-    @staticmethod
-    def _verify_opened_entry(
-        parent_descriptor: int,
-        name: str,
-        descriptor: int,
-        *,
-        directory: bool,
-    ) -> os.stat_result:
+    def _verify_regular(descriptor: int) -> os.stat_result:
         opened = os.fstat(descriptor)
-        current = os.stat(
-            name,
-            dir_fd=parent_descriptor,
-            follow_symlinks=False,
-        )
-        expected_type = stat.S_ISDIR if directory else stat.S_ISREG
-        if not expected_type(opened.st_mode) or not _same_entry(opened, current):
-            raise InputChangedError("input path changed during open")
-        if not directory and (opened.st_nlink != 1 or current.st_nlink != 1):
+        if not stat.S_ISREG(opened.st_mode):
+            raise UnsafeInputPathError("input path is not a regular file")
+        if opened.st_nlink != 1:
             raise UnsafeInputPathError("input regular file has multiple links")
         return opened
 
-    def _open_parent(self, relative: Path) -> tuple[int, str]:
+    def _open_regular(self, relative: Path, flags: int) -> int:
         self._verify_root()
-        parts = self._relative_parts(relative)
-        parent = os.dup(self._descriptor)
-        directory_flags = (
-            os.O_RDONLY
-            | os.O_DIRECTORY
-            | os.O_NOFOLLOW
-            | getattr(os, "O_CLOEXEC", 0)
+        descriptor = _openat2(
+            self._descriptor,
+            self._relative_path(relative),
+            flags | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
         )
         try:
-            for part in parts[:-1]:
-                try:
-                    child = os.open(
-                        part,
-                        directory_flags,
-                        dir_fd=parent,
-                    )
-                except OSError as exc:
-                    self._raise_safe_open_error(exc)
-                try:
-                    self._verify_opened_entry(
-                        parent,
-                        part,
-                        child,
-                        directory=True,
-                    )
-                except BaseException:
-                    os.close(child)
-                    raise
-                os.close(parent)
-                parent = child
-            return parent, parts[-1]
-        except BaseException:
-            os.close(parent)
-            raise
-
-    def _revalidate_parent(self, relative: Path, parent: int) -> None:
-        fresh_parent, fresh_name = self._open_parent(relative)
-        try:
-            if (
-                fresh_name != self._relative_parts(relative)[-1]
-                or not _same_entry(os.fstat(parent), os.fstat(fresh_parent))
-            ):
-                raise InputChangedError("input parent changed during access")
-        finally:
-            os.close(fresh_parent)
-
-    def _open_regular(self, relative: Path, flags: int) -> int:
-        parent, name = self._open_parent(relative)
-        descriptor = -1
-        try:
-            try:
-                descriptor = os.open(
-                    name,
-                    flags | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
-                    dir_fd=parent,
-                )
-            except OSError as exc:
-                self._raise_safe_open_error(exc)
-            self._verify_opened_entry(
-                parent,
-                name,
-                descriptor,
-                directory=False,
-            )
+            self._verify_regular(descriptor)
             return descriptor
         except BaseException:
-            if descriptor >= 0:
-                os.close(descriptor)
+            os.close(descriptor)
             raise
-        finally:
-            os.close(parent)
 
     def read_snapshot(self, relative: Path, max_bytes: int) -> BoundedRead:
         """Read one regular-file snapshot without consuming oversized input."""
@@ -230,12 +230,14 @@ class RootedDirectory:
         if max_bytes < 0:
             raise ValueError("input size bound must not be negative")
         descriptor = self._open_regular(relative, os.O_RDONLY)
-        with os.fdopen(descriptor, "rb") as stream:
-            before = _file_identity(os.fstat(stream.fileno()))
+        try:
+            before = _file_identity(self._verify_regular(descriptor))
             if before.size > max_bytes:
                 raise InputTooLargeError
-            value = stream.read(max_bytes + 1)
-            after = _file_identity(os.fstat(stream.fileno()))
+            value = os.read(descriptor, max_bytes + 1)
+            after = _file_identity(self._verify_regular(descriptor))
+        finally:
+            os.close(descriptor)
         if before != after:
             raise InputChangedError("input changed during read")
         if len(value) > max_bytes:
@@ -248,7 +250,7 @@ class RootedDirectory:
 
         return self.read_snapshot(relative, max_bytes).value
 
-    def write_bytes(
+    def _write_bytes_in_sandbox(
         self,
         relative: Path,
         value: bytes,
@@ -256,46 +258,34 @@ class RootedDirectory:
     ) -> None:
         """Atomically replace one existing regular file beneath the root."""
 
-        parent, name = self._open_parent(relative)
+        target = self._relative_path(relative)
         descriptor = -1
         temporary = -1
-        temporary_name: str | None = None
+        temporary_path: str | None = None
         try:
-            try:
-                descriptor = os.open(
-                    name,
-                    os.O_RDONLY
-                    | os.O_NOFOLLOW
-                    | getattr(os, "O_CLOEXEC", 0),
-                    dir_fd=parent,
-                )
-            except OSError as exc:
-                self._raise_safe_open_error(exc)
-            self._verify_opened_entry(
-                parent,
-                name,
-                descriptor,
-                directory=False,
-            )
-            opened = os.fstat(descriptor)
+            descriptor = self._open_regular(relative, os.O_RDONLY)
+            opened = self._verify_regular(descriptor)
             if _file_identity(opened) != expected_identity:
                 raise InputChangedError("input changed before write")
 
-            temporary_name = f".{name}.tmp-{secrets.token_hex(16)}"
-            temporary = os.open(
-                temporary_name,
+            temporary_path = (
+                f"{Path(target).parent.as_posix()}/.{Path(target).name}.tmp-"
+                f"{secrets.token_hex(16)}"
+            )
+            if temporary_path.startswith("./"):
+                temporary_path = temporary_path[2:]
+            temporary = _openat2(
+                self._descriptor,
+                temporary_path,
                 os.O_WRONLY
                 | os.O_CREAT
                 | os.O_EXCL
                 | os.O_NOFOLLOW
                 | getattr(os, "O_CLOEXEC", 0),
                 stat.S_IMODE(opened.st_mode),
-                dir_fd=parent,
             )
             os.fchmod(temporary, stat.S_IMODE(opened.st_mode))
-            temporary_stat = os.fstat(temporary)
-            if not stat.S_ISREG(temporary_stat.st_mode) or temporary_stat.st_nlink != 1:
-                raise UnsafeInputPathError("temporary input file is unsafe")
+            self._verify_regular(temporary)
             remaining = memoryview(value)
             while remaining:
                 written = os.write(temporary, remaining)
@@ -304,30 +294,121 @@ class RootedDirectory:
                 remaining = remaining[written:]
             os.fsync(temporary)
 
-            self._revalidate_parent(relative, parent)
-            current = os.stat(name, dir_fd=parent, follow_symlinks=False)
-            if (
-                current.st_nlink != 1
-                or not _same_entry(opened, current)
-                or _file_identity(current) != expected_identity
-            ):
+            current = _file_identity(self._verify_regular(descriptor))
+            if current != expected_identity:
                 raise InputChangedError("input changed before replacement")
-            os.replace(
-                temporary_name,
-                name,
-                src_dir_fd=parent,
-                dst_dir_fd=parent,
-            )
-            temporary_name = None
-            os.fsync(parent)
+            self._verify_root()
+            _rename_rooted(self._descriptor, temporary_path, target)
+            temporary_path = None
+            os.fsync(self._descriptor)
         finally:
-            if temporary >= 0:
-                os.close(temporary)
-            if descriptor >= 0:
-                os.close(descriptor)
-            if temporary_name is not None:
+            cleanup_error: OSError | None = None
+            if temporary_path is not None:
                 try:
-                    os.unlink(temporary_name, dir_fd=parent)
+                    os.unlink(temporary_path, dir_fd=self._descriptor)
                 except FileNotFoundError:
                     pass
-            os.close(parent)
+                except OSError as exc:
+                    cleanup_error = exc
+            try:
+                if temporary >= 0:
+                    os.close(temporary)
+            finally:
+                try:
+                    if descriptor >= 0:
+                        os.close(descriptor)
+                finally:
+                    if cleanup_error is not None and sys.exc_info()[0] is None:
+                        raise cleanup_error
+
+    def _write_bytes_in_private_namespace(
+        self,
+        relative: Path,
+        value: bytes,
+        expected_identity: FileIdentity,
+    ) -> None:
+        bwrap = shutil.which("bwrap")
+        if bwrap is None:
+            raise UnsupportedRootedAccessError(
+                "bubblewrap is required for rooted atomic replacement"
+            )
+        runner_root = Path(__file__).resolve().parent
+        python_root = Path(sys.executable).resolve().parents[1]
+        python = Path("/python/bin") / Path(sys.executable).resolve().name
+        worker = "/runner/rooted_atomic_replace_worker.py"
+        command = [
+            bwrap,
+            "--unshare-user",
+            "--uid",
+            "0",
+            "--gid",
+            "0",
+            "--unshare-pid",
+            "--unshare-net",
+            "--die-with-parent",
+            "--bind",
+            str(self.path),
+            "/workspace",
+            "--ro-bind",
+            str(runner_root),
+            "/runner",
+            "--ro-bind",
+            str(python_root),
+            "/python",
+            "--ro-bind",
+            "/lib",
+            "/lib",
+            "--ro-bind",
+            "/lib64",
+            "/lib64",
+            "--dev",
+            "/dev",
+            "--proc",
+            "/proc",
+            "--tmpfs",
+            "/tmp",
+            "--chdir",
+            "/workspace",
+            str(python),
+            "-I",
+            worker,
+            "--relative",
+            self._relative_path(relative),
+            "--identity",
+            json.dumps(expected_identity),
+            "--max-bytes",
+            str(MAX_CONTRACT_MANIFEST_BYTES),
+        ]
+        environment = {
+            "PATH": "/usr/bin:/bin",
+            _SANDBOX_ENV: "1",
+        }
+        try:
+            process = subprocess.run(
+                command,
+                input=value,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=environment,
+                check=False,
+                timeout=_WRITE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise UnsupportedRootedAccessError(
+                "rooted atomic replacement sandbox is unavailable"
+            ) from exc
+        if process.returncode != 0:
+            raise InputChangedError("rooted atomic replacement was refused")
+
+    def write_bytes(
+        self,
+        relative: Path,
+        value: bytes,
+        expected_identity: FileIdentity,
+    ) -> None:
+        """Atomically replace under a namespace that cannot reach root-external paths."""
+
+        if os.environ.get(_SANDBOX_ENV) == "1":
+            self._write_bytes_in_sandbox(relative, value, expected_identity)
+            return
+        self._write_bytes_in_private_namespace(relative, value, expected_identity)

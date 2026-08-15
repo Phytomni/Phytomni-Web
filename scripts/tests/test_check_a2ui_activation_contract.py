@@ -8,10 +8,11 @@ import io
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from scripts import check_a2ui_activation_contract as checker
-
+from scripts import bounded_input
 
 FIXTURE_BYTES = b'{"surface_id":"synthetic-surface","widget":"confirm"}\n'
 DOC_REQUIRED_MARKERS = (
@@ -127,7 +128,9 @@ bot:
             "apps/server/external/bot/config.go",
             "// A2uiActionsEnabled returns a local 503 while the flag is false.\n",
         )
-        self.write(root, "docs/frontend-design-system.md", "\n".join(DOC_REQUIRED_MARKERS))
+        self.write(
+            root, "docs/frontend-design-system.md", "\n".join(DOC_REQUIRED_MARKERS)
+        )
         return temporary, root
 
     @staticmethod
@@ -179,11 +182,56 @@ bot:
                 manifest_path.write_text(raw, encoding="utf-8")
                 self.assert_fails(root, "invalid manifest JSON")
 
+    def test_manifest_rejects_hardlink_and_oversized_input(self) -> None:
+        temporary, root = self.make_tree()
+        self.addCleanup(temporary.cleanup)
+        manifest = root / "apps/web/tests/fixtures/a2ui/manifest.json"
+        outside = root.parent / f"{root.name}-outside-manifest.json"
+        outside.write_bytes(manifest.read_bytes())
+        manifest.unlink()
+        manifest.hardlink_to(outside)
+        self.assert_fails(root, "unsafe path")
+
+        manifest.unlink()
+        with manifest.open("wb") as stream:
+            stream.seek(checker.MAX_A2UI_INPUT_BYTES)
+            stream.write(b"}")
+        self.assert_fails(root, "byte limit")
+
+    def test_manifest_parent_swap_is_rejected_before_read(self) -> None:
+        temporary, root = self.make_tree()
+        self.addCleanup(temporary.cleanup)
+        fixture_root = root / "apps/web/tests/fixtures/a2ui"
+        parked = fixture_root.with_name("a2ui-parked")
+        outside = root.parent / f"{root.name}-outside-a2ui"
+        outside.mkdir()
+        (outside / "manifest.json").write_text("{}", encoding="utf-8")
+        real_openat2 = bounded_input._openat2
+        swapped = False
+
+        def race_open(
+            directory: int,
+            relative: str,
+            flags: int,
+            mode: int = 0,
+        ) -> int:
+            nonlocal swapped
+            if relative.endswith("a2ui/manifest.json") and not swapped:
+                fixture_root.rename(parked)
+                fixture_root.symlink_to(outside, target_is_directory=True)
+                swapped = True
+            return real_openat2(directory, relative, flags, mode)
+
+        with mock.patch.object(bounded_input, "_openat2", race_open):
+            self.assert_fails(root, "unsafe path")
+
     def test_missing_fixture_fails(self) -> None:
         temporary, root = self.make_tree()
         self.addCleanup(temporary.cleanup)
-        (root / "apps/web/tests/fixtures/a2ui/upstream/chat_confirm/downlink.json").unlink()
-        self.assert_fails(root, "missing fixture")
+        (
+            root / "apps/web/tests/fixtures/a2ui/upstream/chat_confirm/downlink.json"
+        ).unlink()
+        self.assert_fails(root, "missing file")
 
     def test_orphan_fixture_fails(self) -> None:
         temporary, root = self.make_tree()
@@ -226,7 +274,9 @@ bot:
                 temporary, root = self.make_tree()
                 self.addCleanup(temporary.cleanup)
                 path = root / "apps/web/src/views/chat/streaming/a2uiAction.ts"
-                path.write_text(path.read_text(encoding="utf-8") + marker, encoding="utf-8")
+                path.write_text(
+                    path.read_text(encoding="utf-8") + marker, encoding="utf-8"
+                )
                 self.assert_fails(root, marker)
 
     def test_action_route_must_be_registered_exactly_once(self) -> None:
@@ -264,8 +314,8 @@ bot:
         self.assert_fails(root, "whole-payload")
 
         audit.write_text(
-            "const a2uiActionAuditMask = \"[REDACTED]\"\n"
-            "func redactA2uiActionBody(body []byte) string { return \"x\" }\n",
+            'const a2uiActionAuditMask = "[REDACTED]"\n'
+            'func redactA2uiActionBody(body []byte) string { return "x" }\n',
             encoding="utf-8",
         )
         bot = root / "apps/server/external/bot/a2ui_action.go"
@@ -336,7 +386,9 @@ bot:
         )
         self.assert_fails(root, "unbacked environment proof claim")
 
-    def test_design_system_allows_explicit_external_verification_disclaimer(self) -> None:
+    def test_design_system_allows_explicit_external_verification_disclaimer(
+        self,
+    ) -> None:
         temporary, root = self.make_tree()
         self.addCleanup(temporary.cleanup)
         doc = root / "docs/frontend-design-system.md"
