@@ -54,7 +54,9 @@ def _root_tree_oid(commit_payload: bytes) -> str:
 
 
 def _source_objects(
-    repository: Path, commit_oid: str
+    repository: Path,
+    commit_oid: str,
+    source_paths: dict[str, str],
 ) -> tuple[bytes, dict[str, bytes], list[dict[str, str]]]:
     commit_payload = _git(repository, "cat-file", "commit", commit_oid)
     if checker._git_object_oid("commit", commit_payload) != commit_oid:
@@ -63,7 +65,7 @@ def _source_objects(
     trees: dict[str, bytes] = {}
     entries: list[dict[str, str]] = []
 
-    for role, path in checker.BOT_SOURCE_PATHS.items():
+    for role, path in source_paths.items():
         current_tree = root_tree
         blob_oid: str | None = None
         for index, part in enumerate(path.split("/")):
@@ -102,19 +104,59 @@ def _source_objects(
     return commit_payload, trees, entries
 
 
+def _generate_source_authority(
+    repository: Path,
+    revision: str,
+    expected_commit: str,
+    source_paths: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    commit_oid = _commit_oid(repository, revision)
+    if commit_oid != expected_commit:
+        raise ValueError("Bot commit is not the accepted source SHA")
+    commit_payload, trees, source_entries = _source_objects(
+        repository, commit_oid, source_paths
+    )
+    sources = {
+        entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
+        for entry in source_entries
+    }
+    return (
+        {
+            "schema_version": 1,
+            "bot_commit": commit_oid,
+            "object_format": "sha1",
+            "git_object_proof": {
+                "commit": {
+                    "oid": commit_oid,
+                    "content_base64": base64.b64encode(commit_payload).decode(
+                        "ascii"
+                    ),
+                },
+                "trees": [
+                    {
+                        "oid": oid,
+                        "content_base64": base64.b64encode(payload).decode("ascii"),
+                    }
+                    for oid, payload in sorted(trees.items())
+                ],
+            },
+            "sources": source_entries,
+        },
+        sources,
+    )
+
+
 def _generate_binding(
     web_root: Path,
     bot_repository: Path,
     bot_commit: str,
 ) -> dict[str, Any]:
-    commit_oid = _commit_oid(bot_repository, bot_commit)
-    if commit_oid != checker.ACTIVATION_SOURCE_BOT_COMMIT:
-        raise ValueError("Bot commit is not the accepted activation source SHA")
-    commit_payload, trees, source_entries = _source_objects(bot_repository, commit_oid)
-    sources = {
-        entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
-        for entry in source_entries
-    }
+    authority, sources = _generate_source_authority(
+        bot_repository,
+        bot_commit,
+        checker.ACTIVATION_SOURCE_BOT_COMMIT,
+        checker.BOT_SOURCE_PATHS,
+    )
     contract = checker._parse_pinned_bot_contract(sources)
     if contract is None:
         raise ValueError("pinned Bot sources do not expose the required contract")
@@ -125,6 +167,17 @@ def _generate_binding(
         fixture_text = fixture_raw.decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise ValueError("Web Research fixture cannot be read") from exc
+    fixture_authority, fixture_sources = _generate_source_authority(
+        bot_repository,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+        checker.RESEARCH_FIXTURE_BOT_COMMIT,
+        checker.RESEARCH_FIXTURE_SOURCE_PATHS,
+    )
+    expected_fixture_raw = checker._research_fixture_bytes(fixture_sources)
+    if expected_fixture_raw is None:
+        raise ValueError("Bot fixture authority cannot reproduce the Research fixture")
+    if fixture_raw != expected_fixture_raw:
+        raise ValueError("Web Research fixture differs from exact Bot-authoritative bytes")
     fixture = checker._parse_research_input_fixture(fixture_text)
     fixture_contract = (
         checker._fixture_contract_value(fixture, contract)
@@ -135,6 +188,7 @@ def _generate_binding(
     if fixture_contract != expected_fixture_contract:
         raise ValueError("Web Research fixture differs from pinned Bot sources")
 
+    source_entries = authority["sources"]
     packet_entry = next(
         entry for entry in source_entries if entry["role"] == "resumable_upload_packet"
     )
@@ -145,23 +199,7 @@ def _generate_binding(
         raise ValueError("pinned resumable-upload packet manifest is malformed")
 
     return {
-        "schema_version": 1,
-        "bot_commit": commit_oid,
-        "object_format": "sha1",
-        "git_object_proof": {
-            "commit": {
-                "oid": commit_oid,
-                "content_base64": base64.b64encode(commit_payload).decode("ascii"),
-            },
-            "trees": [
-                {
-                    "oid": oid,
-                    "content_base64": base64.b64encode(payload).decode("ascii"),
-                }
-                for oid, payload in sorted(trees.items())
-            ],
-        },
-        "sources": source_entries,
+        **authority,
         "contract": checker._pinned_bot_contract_value(contract),
         "research_fixture": {
             "path": checker.RESEARCH_INPUT_FIXTURE_REL.as_posix(),
@@ -169,6 +207,7 @@ def _generate_binding(
             "contract_sha256": checker._canonical_json_sha256(
                 expected_fixture_contract
             ),
+            "authority": fixture_authority,
         },
         "resumable_upload_packet": packet,
     }

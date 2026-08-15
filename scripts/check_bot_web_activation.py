@@ -23,6 +23,7 @@ from typing import Any, NamedTuple
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVATION_SOURCE_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
+RESEARCH_FIXTURE_BOT_COMMIT = "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
 MATRIX_REL = Path("docs/reference/bot-web-activation-matrix.md")
 BOT_CONTRACT_MANIFEST_REL = Path(
     "apps/web/tests/fixtures/bot-head/contract-manifest.json"
@@ -169,6 +170,24 @@ BOT_SOURCE_PATHS = {
     "resumable_upload_packet": ("docs/contracts/resumable-upload/manifest.json"),
 }
 
+RESEARCH_FIXTURE_SOURCE_PATHS = {
+    "agent_identities": "src/mcp_server_phytomni/api/app.py",
+    "agent_capabilities": "docs/contracts/agents/capabilities.json",
+    "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
+    "agent_capability_serializer": (
+        "src/mcp_server_phytomni/api/agent_capabilities.py"
+    ),
+    "advertised_protocols": (
+        "src/mcp_server_phytomni/api/advertised_protocols.py"
+    ),
+    "conversation_context": (
+        "src/mcp_server_phytomni/runtime/conversation_context/models.py"
+    ),
+    "research_contract": "docs/contracts/research-input-resolution/catalog.json",
+    "upload_capability": "docs/contracts/resumable-upload/capability.json",
+    "resumable_upload_packet": "docs/contracts/resumable-upload/manifest.json",
+}
+
 
 class _ResearchGoContract(NamedTuple):
     protocol: str
@@ -200,6 +219,11 @@ class _BotSourceBinding(NamedTuple):
     contract: _PinnedBotContract
     fixture_sha256: str
     fixture_contract_sha256: str
+
+
+class _AuthenticatedBotSources(NamedTuple):
+    values: dict[str, bytes]
+    digests: dict[str, str]
 
 
 class _GoLexicalView(NamedTuple):
@@ -622,6 +646,354 @@ def _expected_fixture_contract(contract: _PinnedBotContract) -> dict[str, Any]:
     }
 
 
+def _parse_fixture_agent_metadata(
+    source: str,
+) -> tuple[dict[str, str], frozenset[str], dict[str, list[str]]] | None:
+    parsed = _python_assignments(source)
+    if parsed is None:
+        return None
+    assignments = parsed[1]
+    tools = _parse_bot_agent_tools(source)
+    aliases_node = assignments.get("_LEGACY_ALIASES")
+    remote_node = assignments.get("_REMOTE_AGENT_SLUGS")
+    if tools is None or aliases_node is None or remote_node is None:
+        return None
+    try:
+        aliases = ast.literal_eval(aliases_node)
+    except (TypeError, ValueError):
+        return None
+    if not (
+        isinstance(remote_node, ast.Call)
+        and isinstance(remote_node.func, ast.Name)
+        and remote_node.func.id == "frozenset"
+        and len(remote_node.args) == 1
+        and not remote_node.keywords
+    ):
+        return None
+    try:
+        remote_slugs = ast.literal_eval(remote_node.args[0])
+    except (TypeError, ValueError):
+        return None
+    if (
+        not isinstance(aliases, dict)
+        or set(aliases) != set(tools.values())
+        or any(
+            not isinstance(tool, str)
+            or not isinstance(values, list)
+            or any(not isinstance(value, str) or not value for value in values)
+            or len(values) != len(set(values))
+            for tool, values in aliases.items()
+        )
+        or not isinstance(remote_slugs, set)
+        or any(not isinstance(slug, str) for slug in remote_slugs)
+        or not remote_slugs.issubset(tools)
+        or len(tools.values()) != len(set(tools.values()))
+    ):
+        return None
+    return tools, frozenset(remote_slugs), aliases
+
+
+def _dict_string_keys(node: ast.expr) -> tuple[str, ...] | None:
+    if not isinstance(node, ast.Dict) or any(key is None for key in node.keys):
+        return None
+    keys: list[str] = []
+    for key in node.keys:
+        if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+            return None
+        keys.append(key.value)
+    return tuple(keys) if len(keys) == len(set(keys)) else None
+
+
+def _parse_agent_catalog_shape(
+    source: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    functions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "list_agents"
+    ]
+    if len(functions) != 1:
+        return None
+    function = functions[0]
+    route_decorators = [
+        decorator
+        for decorator in function.decorator_list
+        if isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "get"
+        and len(decorator.args) == 1
+        and isinstance(decorator.args[0], ast.Constant)
+        and decorator.args[0].value == "/v1/agents"
+    ]
+    payload_assignments = [
+        statement
+        for statement in function.body
+        if isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+        and statement.target.id == "payload"
+    ]
+    if len(route_decorators) != 1 or len(payload_assignments) != 1:
+        return None
+    payload_node = payload_assignments[0].value
+    top_fields = _dict_string_keys(payload_node) if payload_node is not None else None
+    if not isinstance(payload_node, ast.Dict) or top_fields is None:
+        return None
+    field_values = dict(zip(top_fields, payload_node.values, strict=True))
+    data_node = field_values.get("data")
+    row_fields = (
+        _dict_string_keys(data_node.elt)
+        if isinstance(data_node, ast.ListComp)
+        else None
+    )
+    appended: list[tuple[int, str]] = []
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not (
+            isinstance(target, ast.Subscript)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "payload"
+            and isinstance(target.slice, ast.Constant)
+            and isinstance(target.slice.value, str)
+        ):
+            continue
+        appended.append((node.lineno, target.slice.value))
+    appended_fields = tuple(value for _, value in sorted(appended))
+    if (
+        top_fields != ("object", "file_upload", "data")
+        or appended_fields != ("protocols", "research_input_resolution")
+        or row_fields
+        != ("slug", "tool", "origin", "legacy_aliases", "capabilities")
+    ):
+        return None
+    return top_fields + appended_fields, row_fields
+
+
+def _parse_research_descriptor_fields(source: str) -> tuple[str, ...] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        and node.name == "ResearchInputResolutionDescriptor"
+    ]
+    if len(classes) != 1:
+        return None
+    fields = tuple(
+        statement.target.id
+        for statement in classes[0].body
+        if isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+    )
+    expected = (
+        "max_user_query_chars",
+        "max_attachments_per_request",
+        "max_research_dataset_paths",
+        "max_research_input_references",
+        "dataset_formats",
+    )
+    return fields if fields == expected else None
+
+
+def _parse_fixture_protocols(
+    advertised_source: str,
+    conversation_source: str,
+    packet: Mapping[str, Any],
+    research_protocol: str,
+    research_version: int,
+) -> dict[str, list[int]] | None:
+    advertised = _python_assignments(advertised_source)
+    conversation = _python_assignments(conversation_source)
+    packet_protocol = packet.get("protocol")
+    packet_match = (
+        re.search(r"-v(?P<version>[1-9][0-9]*)$", packet_protocol)
+        if isinstance(packet_protocol, str)
+        else None
+    )
+    if advertised is None or conversation is None or packet_match is None:
+        return None
+    names = {
+        "RESULT_ARCHIVE_PROTOCOL",
+        "RESULT_ARCHIVE_PROTOCOL_VERSION",
+        "RESEARCH_INPUT_PROTOCOL",
+        "RESEARCH_INPUT_PROTOCOL_VERSION",
+    }
+    values: dict[str, str | int] = {
+        "UPLOAD_PROTOCOL": packet_protocol,
+        "UPLOAD_PROTOCOL_VERSION": int(packet_match.group("version")),
+    }
+    for name in names:
+        node = advertised[1].get(name)
+        try:
+            value = ast.literal_eval(node) if node is not None else None
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(value, (str, int)) or isinstance(value, bool):
+            return None
+        values[name] = value
+    conversation_node = conversation[1].get(
+        "CONVERSATION_CONTEXT_PROTOCOL_VERSION"
+    )
+    try:
+        conversation_version = (
+            ast.literal_eval(conversation_node)
+            if conversation_node is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(conversation_version, int) or isinstance(
+        conversation_version, bool
+    ):
+        return None
+    values["CONVERSATION_CONTEXT_PROTOCOL_VERSION"] = conversation_version
+
+    functions = [
+        node
+        for node in advertised[0].body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "advertised_protocols"
+    ]
+    if len(functions) != 1:
+        return None
+    calls = sorted(
+        (
+            node
+            for node in ast.walk(functions[0])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "AdvertisedProtocol"
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    protocols: dict[str, list[int]] = {}
+    for call in calls:
+        keywords = {keyword.arg: keyword.value for keyword in call.keywords}
+        name_node = keywords.get("name")
+        version_node = keywords.get("version")
+        name = (
+            name_node.value
+            if isinstance(name_node, ast.Constant)
+            and isinstance(name_node.value, str)
+            else values.get(name_node.id)
+            if isinstance(name_node, ast.Name)
+            else None
+        )
+        version = (
+            version_node.value
+            if isinstance(version_node, ast.Constant)
+            and isinstance(version_node.value, int)
+            and not isinstance(version_node.value, bool)
+            else values.get(version_node.id)
+            if isinstance(version_node, ast.Name)
+            else None
+        )
+        if (
+            not isinstance(name, str)
+            or not isinstance(version, int)
+            or isinstance(version, bool)
+            or name in protocols
+        ):
+            return None
+        protocols[name] = [version]
+    if (
+        values.get("RESEARCH_INPUT_PROTOCOL") != research_protocol
+        or values.get("RESEARCH_INPUT_PROTOCOL_VERSION") != research_version
+        or len(protocols) != 4
+    ):
+        return None
+    return protocols
+
+
+def _research_fixture_bytes(sources: Mapping[str, bytes]) -> bytes | None:
+    python_roles = (
+        "agent_identities",
+        "agent_catalog_route",
+        "agent_capability_serializer",
+        "advertised_protocols",
+        "conversation_context",
+    )
+    decoded: dict[str, str] = {}
+    try:
+        for role in python_roles:
+            decoded[role] = sources[role].decode("utf-8")
+    except (KeyError, UnicodeDecodeError):
+        return None
+    metadata = _parse_fixture_agent_metadata(decoded["agent_identities"])
+    shape = _parse_agent_catalog_shape(decoded["agent_catalog_route"])
+    descriptor_fields = _parse_research_descriptor_fields(
+        decoded["agent_capability_serializer"]
+    )
+    capabilities = _json_object(sources.get("agent_capabilities", b""))
+    catalog = _json_object(sources.get("research_contract", b""))
+    upload = _json_object(sources.get("upload_capability", b""))
+    packet = _json_object(sources.get("resumable_upload_packet", b""))
+    contract = _parse_pinned_bot_contract(sources)
+    if (
+        metadata is None
+        or shape is None
+        or descriptor_fields is None
+        or capabilities is None
+        or catalog is None
+        or upload is None
+        or packet is None
+        or contract is None
+        or _parse_bot_upload_capability(sources["upload_capability"]) is None
+    ):
+        return None
+    tools, remote_slugs, aliases = metadata
+    top_fields, row_fields = shape
+    descriptor = catalog.get("descriptor")
+    if (
+        set(capabilities) != set(tools)
+        or any(not isinstance(value, dict) for value in capabilities.values())
+        or not isinstance(descriptor, dict)
+        or set(descriptor) != set(descriptor_fields)
+    ):
+        return None
+    protocols = _parse_fixture_protocols(
+        decoded["advertised_protocols"],
+        decoded["conversation_context"],
+        packet,
+        contract.research_protocol,
+        contract.research_protocol_version,
+    )
+    if protocols is None:
+        return None
+    rows: list[dict[str, Any]] = []
+    for slug, tool in tools.items():
+        values = {
+            "slug": slug,
+            "tool": tool,
+            "origin": "remote" if slug in remote_slugs else "local",
+            "legacy_aliases": aliases[tool],
+            "capabilities": capabilities[slug],
+        }
+        rows.append({field: values[field] for field in row_fields})
+    values = {
+        "object": "list",
+        "file_upload": upload,
+        "data": rows,
+        "protocols": protocols,
+        "research_input_resolution": {
+            field: descriptor[field] for field in descriptor_fields
+        },
+    }
+    payload = {field: values[field] for field in top_fields}
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return raw if len(raw) <= MAX_RESEARCH_INPUT_FIXTURE_BYTES else None
+
+
 def _fixture_contract_value(
     value: Mapping[str, Any], contract: _PinnedBotContract
 ) -> dict[str, Any] | None:
@@ -816,6 +1188,132 @@ def _resumable_packet_metadata(raw: bytes, source_sha256: str) -> dict[str, Any]
     }
 
 
+def _authenticate_bot_sources(
+    bot_commit: Any,
+    proof: Any,
+    source_entries: Any,
+    expected_commit: str,
+    source_paths: Mapping[str, str],
+    violations: list[str],
+    label: str,
+) -> _AuthenticatedBotSources | None:
+    if (
+        not isinstance(bot_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    if bot_commit != expected_commit:
+        violations.append(f"{label} does not use the accepted Bot commit")
+        return None
+    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_entry = proof.get("commit")
+    tree_entries = proof.get("trees")
+    if (
+        not isinstance(commit_entry, dict)
+        or set(commit_entry) != {"oid", "content_base64"}
+        or commit_entry.get("oid") != bot_commit
+        or not isinstance(tree_entries, list)
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_payload = _decode_object_payload(
+        commit_entry.get("content_base64"), 64 * 1024
+    )
+    if (
+        commit_payload is None
+        or _git_object_oid("commit", commit_payload) != bot_commit
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    tree_headers = [
+        line
+        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
+        if line.startswith(b"tree ")
+    ]
+    if (
+        len(tree_headers) != 1
+        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    root_tree = tree_headers[0][5:].decode("ascii")
+
+    trees: dict[str, bytes] = {}
+    for entry in tree_entries:
+        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        oid = entry.get("oid")
+        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
+        if (
+            not isinstance(oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
+            or payload is None
+            or _git_object_oid("tree", payload) != oid
+            or oid in trees
+        ):
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        trees[oid] = payload
+
+    if not isinstance(source_entries, list) or len(source_entries) != len(
+        source_paths
+    ):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    sources: dict[str, bytes] = {}
+    source_digests: dict[str, str] = {}
+    used_trees: set[str] = set()
+    for entry in source_entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "role",
+            "path",
+            "git_blob_oid",
+            "sha256",
+            "content_base64",
+        }:
+            violations.append(f"{label} source inventory is malformed")
+            return None
+        role = entry.get("role")
+        path = entry.get("path")
+        blob_oid = entry.get("git_blob_oid")
+        digest = entry.get("sha256")
+        payload = _decode_object_payload(
+            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
+        )
+        if (
+            not isinstance(role, str)
+            or role not in source_paths
+            or role in sources
+            or path != source_paths[role]
+            or not isinstance(path, str)
+            or not _safe_git_path(path)
+            or not isinstance(blob_oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or payload is None
+            or _git_object_oid("blob", payload) != blob_oid
+            or hashlib.sha256(payload).hexdigest() != digest
+        ):
+            violations.append(f"{label} source inventory is malformed or drifted")
+            return None
+        resolved = _resolve_git_blob(root_tree, path, trees)
+        if resolved is None or resolved[0] != blob_oid:
+            violations.append(f"{label} source is not in the pinned Git commit")
+            return None
+        used_trees.update(resolved[1])
+        sources[role] = payload
+        source_digests[role] = digest
+    if set(sources) != set(source_paths) or used_trees != set(trees):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    return _AuthenticatedBotSources(sources, source_digests)
+
+
 def _load_bot_source_binding(
     root: Path, violations: list[str]
 ) -> _BotSourceBinding | None:
@@ -829,7 +1327,6 @@ def _load_bot_source_binding(
     binding = (
         manifest.get("activation_source_binding") if manifest is not None else None
     )
-    bot_commit = binding.get("bot_commit") if isinstance(binding, dict) else None
     if (
         not isinstance(binding, dict)
         or set(binding)
@@ -845,126 +1342,22 @@ def _load_bot_source_binding(
         }
         or binding.get("schema_version") != 1
         or binding.get("object_format") != "sha1"
-        or not isinstance(bot_commit, str)
-        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
     ):
         violations.append("Bot source binding manifest is malformed or drifted")
         return None
-    if bot_commit != ACTIVATION_SOURCE_BOT_COMMIT:
-        violations.append("Bot source binding does not use the accepted Bot commit")
-        return None
-
-    proof = binding.get("git_object_proof")
-    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
-        violations.append("Bot source binding manifest is malformed or drifted")
-        return None
-    commit_entry = proof.get("commit")
-    tree_entries = proof.get("trees")
-    if (
-        not isinstance(commit_entry, dict)
-        or set(commit_entry) != {"oid", "content_base64"}
-        or commit_entry.get("oid") != bot_commit
-        or not isinstance(tree_entries, list)
-    ):
-        violations.append("Bot source binding manifest is malformed or drifted")
-        return None
-    commit_payload = _decode_object_payload(
-        commit_entry.get("content_base64"), 64 * 1024
+    authenticated = _authenticate_bot_sources(
+        binding.get("bot_commit"),
+        binding.get("git_object_proof"),
+        binding.get("sources"),
+        ACTIVATION_SOURCE_BOT_COMMIT,
+        BOT_SOURCE_PATHS,
+        violations,
+        "Bot source binding",
     )
-    if (
-        commit_payload is None
-        or _git_object_oid("commit", commit_payload) != bot_commit
-    ):
-        violations.append("Bot source binding Git commit proof is invalid")
+    if authenticated is None:
         return None
-    tree_headers = [
-        line
-        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
-        if line.startswith(b"tree ")
-    ]
-    if (
-        len(tree_headers) != 1
-        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
-    ):
-        violations.append("Bot source binding Git commit proof is invalid")
-        return None
-    root_tree = tree_headers[0][5:].decode("ascii")
-
-    trees: dict[str, bytes] = {}
-    for entry in tree_entries:
-        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
-            violations.append("Bot source binding Git tree proof is invalid")
-            return None
-        oid = entry.get("oid")
-        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
-        if (
-            not isinstance(oid, str)
-            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
-            or payload is None
-            or _git_object_oid("tree", payload) != oid
-            or oid in trees
-        ):
-            violations.append("Bot source binding Git tree proof is invalid")
-            return None
-        trees[oid] = payload
-
-    source_entries = binding.get("sources")
-    if not isinstance(source_entries, list) or len(source_entries) != len(
-        BOT_SOURCE_PATHS
-    ):
-        violations.append("Bot source binding source inventory is incomplete")
-        return None
-    sources: dict[str, bytes] = {}
-    source_digests: dict[str, str] = {}
-    used_trees: set[str] = set()
-    for entry in source_entries:
-        if not isinstance(entry, dict) or set(entry) != {
-            "role",
-            "path",
-            "git_blob_oid",
-            "sha256",
-            "content_base64",
-        }:
-            violations.append("Bot source binding source inventory is malformed")
-            return None
-        role = entry.get("role")
-        path = entry.get("path")
-        blob_oid = entry.get("git_blob_oid")
-        digest = entry.get("sha256")
-        payload = _decode_object_payload(
-            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
-        )
-        if (
-            not isinstance(role, str)
-            or role not in BOT_SOURCE_PATHS
-            or role in sources
-            or path != BOT_SOURCE_PATHS[role]
-            or not isinstance(path, str)
-            or not _safe_git_path(path)
-            or not isinstance(blob_oid, str)
-            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
-            or not isinstance(digest, str)
-            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
-            or payload is None
-            or _git_object_oid("blob", payload) != blob_oid
-            or hashlib.sha256(payload).hexdigest() != digest
-        ):
-            violations.append(
-                "Bot source binding source inventory is malformed or drifted"
-            )
-            return None
-        resolved = _resolve_git_blob(root_tree, path, trees)
-        if resolved is None or resolved[0] != blob_oid:
-            violations.append(
-                "Bot source binding source is not in the pinned Git commit"
-            )
-            return None
-        used_trees.update(resolved[1])
-        sources[role] = payload
-        source_digests[role] = digest
-    if set(sources) != set(BOT_SOURCE_PATHS) or used_trees != set(trees):
-        violations.append("Bot source binding source inventory is incomplete")
-        return None
+    sources = authenticated.values
+    source_digests = authenticated.digests
 
     contract = _parse_pinned_bot_contract(sources)
     if contract is None or binding.get("contract") != _pinned_bot_contract_value(
@@ -990,13 +1383,58 @@ def _load_bot_source_binding(
     )
     if (
         not isinstance(fixture, dict)
-        or set(fixture) != {"path", "sha256", "contract_sha256"}
+        or set(fixture) != {"path", "sha256", "contract_sha256", "authority"}
         or fixture.get("path") != RESEARCH_INPUT_FIXTURE_REL.as_posix()
         or not isinstance(fixture.get("sha256"), str)
         or re.fullmatch(r"[0-9a-f]{64}", fixture["sha256"]) is None
         or fixture.get("contract_sha256") != expected_contract_sha256
     ):
         violations.append("Bot source binding Research fixture is malformed or drifted")
+        return None
+    authority = fixture.get("authority")
+    if (
+        not isinstance(authority, dict)
+        or set(authority)
+        != {
+            "schema_version",
+            "bot_commit",
+            "object_format",
+            "git_object_proof",
+            "sources",
+        }
+        or authority.get("schema_version") != 1
+        or authority.get("object_format") != "sha1"
+    ):
+        violations.append("Research fixture authority is malformed or drifted")
+        return None
+    fixture_sources = _authenticate_bot_sources(
+        authority.get("bot_commit"),
+        authority.get("git_object_proof"),
+        authority.get("sources"),
+        RESEARCH_FIXTURE_BOT_COMMIT,
+        RESEARCH_FIXTURE_SOURCE_PATHS,
+        violations,
+        "Research fixture authority",
+    )
+    if fixture_sources is None:
+        return None
+    expected_fixture_raw = _research_fixture_bytes(fixture_sources.values)
+    expected_fixture = (
+        _parse_research_input_fixture(expected_fixture_raw.decode("utf-8"))
+        if expected_fixture_raw is not None
+        else None
+    )
+    expected_fixture_value = (
+        _fixture_contract_value(expected_fixture, contract)
+        if expected_fixture is not None
+        else None
+    )
+    if (
+        expected_fixture_raw is None
+        or expected_fixture_value != _expected_fixture_contract(contract)
+        or fixture["sha256"] != hashlib.sha256(expected_fixture_raw).hexdigest()
+    ):
+        violations.append("Research fixture authority does not reproduce exact bytes")
         return None
     return _BotSourceBinding(
         contract=contract,

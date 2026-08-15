@@ -49,6 +49,9 @@ SOURCE_BINDING_MANIFEST_PATH = Path(
     "apps/web/tests/fixtures/bot-head/contract-manifest.json"
 )
 PINNED_ACTIVATION_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
+PINNED_RESEARCH_FIXTURE_BOT_COMMIT = (
+    "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
+)
 
 
 class MatrixValue(TypedDict):
@@ -944,7 +947,7 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
         == checker.ACTIVATION_SOURCE_BOT_COMMIT
         == PINNED_ACTIVATION_BOT_COMMIT
     )
-    assert len(raw) < 96 * 1024
+    assert len(raw) < 256 * 1024
     assert len(binding["git_object_proof"]["trees"]) <= 8
     assert {(entry["role"], entry["path"]) for entry in binding["sources"]} == set(
         checker.BOT_SOURCE_PATHS.items()
@@ -952,6 +955,41 @@ def test_committed_source_binding_uses_accepted_bot_commit_and_minimal_objects()
     packet = binding["resumable_upload_packet"]
     assert all(set(entry) == {"path", "sha256"} for entry in packet["files"])
     assert not ({"owner_subject", "filename", "capability"} & set(packet))
+
+    fixture = binding["research_fixture"]
+    authority = fixture["authority"]
+    assert (
+        authority["bot_commit"]
+        == checker.RESEARCH_FIXTURE_BOT_COMMIT
+        == PINNED_RESEARCH_FIXTURE_BOT_COMMIT
+    )
+    assert {(entry["role"], entry["path"]) for entry in authority["sources"]} == set(
+        checker.RESEARCH_FIXTURE_SOURCE_PATHS.items()
+    )
+    fixture_sources = {
+        entry["role"]: base64.b64decode(entry["content_base64"], validate=True)
+        for entry in authority["sources"]
+    }
+    expected_raw = checker._research_fixture_bytes(fixture_sources)
+    assert expected_raw == (checker.ROOT / RESEARCH_INPUT_FIXTURE_PATH).read_bytes()
+    assert hashlib.sha256(expected_raw).hexdigest() == fixture["sha256"]
+
+
+def test_checker_rejects_research_fixture_authority_blob_drift(
+    tmp_path: Path,
+) -> None:
+    root = minimal_tree(tmp_path)
+    manifest_path = root / SOURCE_BINDING_MANIFEST_PATH
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source = manifest["activation_source_binding"]["research_fixture"]["authority"][
+        "sources"
+    ][0]
+    payload = base64.b64decode(source["content_base64"], validate=True)
+    source["content_base64"] = base64.b64encode(payload + b"\n").decode("ascii")
+    write(root, SOURCE_BINDING_MANIFEST_PATH.as_posix(), manifest)
+
+    errors = checker.check(root)
+    assert any("Research fixture authority" in error for error in errors)
 
 
 def test_checker_rejects_pinned_bot_blob_payload_drift(tmp_path: Path) -> None:
