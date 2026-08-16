@@ -519,6 +519,50 @@ func (metadata botInteropMetadata) projection() *InteropProvenance {
 	return nil
 }
 
+// applyDeepGenomeMetadataFallback copies current Bot HTTP snapshot fields
+// from formatted.metadata.deep_genome when the compatibility top-level
+// report_* keys are absent. Current Bot owner-reads keep those values
+// only in the formatted envelope.
+func applyDeepGenomeMetadataFallback(envelope *projectionEnvelope) {
+	if envelope == nil || len(bytes.TrimSpace(envelope.Formatted)) == 0 {
+		return
+	}
+	var formatted struct {
+		Metadata struct {
+			DeepGenome struct {
+				Stage        string          `json:"stage"`
+				Completeness string          `json:"completeness"`
+				Revision     *int64          `json:"revision"`
+				UpdatedAt    string          `json:"updated_at"`
+				Progress     json.RawMessage `json:"progress"`
+				Degraded     bool            `json:"degraded"`
+			} `json:"deep_genome"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(envelope.Formatted, &formatted); err != nil {
+		return
+	}
+	meta := formatted.Metadata.DeepGenome
+	if envelope.ReportStage == "" {
+		envelope.ReportStage = meta.Stage
+	}
+	if envelope.ReportCompleteness == "" {
+		envelope.ReportCompleteness = meta.Completeness
+	}
+	if envelope.ReportRevision == nil {
+		envelope.ReportRevision = meta.Revision
+	}
+	if envelope.ReportUpdatedAt == "" {
+		envelope.ReportUpdatedAt = meta.UpdatedAt
+	}
+	if len(bytes.TrimSpace(envelope.Progress)) == 0 {
+		envelope.Progress = meta.Progress
+	}
+	if !envelope.Degraded && meta.Degraded {
+		envelope.Degraded = true
+	}
+}
+
 func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return projectionEnvelope{}, nil
@@ -531,6 +575,7 @@ func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 }
 
 func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, envelope projectionEnvelope, noTaskIDs bool) (BotRunProjection, error) {
+	applyDeepGenomeMetadataFallback(&envelope)
 	revision := int64(-1)
 	if envelope.ReportRevision != nil {
 		if *envelope.ReportRevision < 0 {

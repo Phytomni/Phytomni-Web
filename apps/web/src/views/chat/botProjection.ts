@@ -229,7 +229,34 @@ function projectionSources(input: JsonRecord): JsonRecord[] {
       seen.add(value);
     }
   }
+  const remapped = remapDeepGenomeMetadata(sources);
+  if (remapped !== null && !seen.has(remapped)) {
+    sources.push(remapped);
+  }
   return sources;
+}
+
+function remapDeepGenomeMetadata(
+  sources: readonly JsonRecord[]
+): JsonRecord | null {
+  for (const source of sources) {
+    const formatted = source.formatted;
+    if (!isJsonRecord(formatted)) continue;
+    const metadata = formatted.metadata;
+    if (!isJsonRecord(metadata)) continue;
+    const deepGenome = metadata.deep_genome;
+    if (!isJsonRecord(deepGenome)) continue;
+    return {
+      report_stage: deepGenome.stage,
+      report_completeness: deepGenome.completeness,
+      report_revision: deepGenome.revision,
+      report_updated_at: deepGenome.updated_at,
+      progress: deepGenome.progress,
+      degraded: deepGenome.degraded,
+      answer: formatted.answer,
+    };
+  }
+  return null;
 }
 
 function readField(

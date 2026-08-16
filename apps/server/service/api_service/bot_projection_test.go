@@ -352,6 +352,26 @@ func TestDecodeRunProjectionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "canonical formatted deep_genome snapshot",
+			record: rxBot.RunRecord{
+				RunID:  "run-canonical-dg",
+				Agent:  "deep_genome",
+				Status: "running",
+				Answer: "",
+				Result: json.RawMessage(`{"formatted":{"answer":"# BriefGene\n","metadata":{"deep_genome":{"stage":"intermediate","completeness":"partial","revision":23,"updated_at":"2026-08-16T13:55:24Z","progress":{"brief_gene_status":"succeeded","total":12,"running":11},"degraded":false}}},"execution":{"tracking":{"degraded":true},"report":{"state":"intermediate","degraded":false,"source_artifact_count":0}}}`),
+			},
+			wantStatus: "RUNNING",
+			wantReport: "# BriefGene\n",
+			check: func(t *testing.T, got BotRunProjection) {
+				if got.ReportStage != "intermediate" || got.ReportCompleteness != "partial" || got.ReportRevision != 23 {
+					t.Fatalf("canonical snapshot=%#v", got)
+				}
+				if got.Progress.BriefGeneStatus != "succeeded" || got.Progress.Total != 12 {
+					t.Fatalf("progress=%#v", got.Progress)
+				}
+			},
+		},
+		{
 			name: "blank report",
 			record: rxBot.RunRecord{
 				RunID:  "run-blank-report",

@@ -43,6 +43,34 @@ describe("parseBotProjection", () => {
     expect(projection.workStage).toBeNull();
   });
 
+  it("reads current Bot formatted.metadata.deep_genome when top-level report fields are absent", () => {
+    const projection = parseBotProjection({
+      status: "RUNNING",
+      agent: "deep_genome",
+      answer: "# BriefGene",
+      result: {
+        formatted: {
+          answer: "# BriefGene",
+          metadata: {
+            deep_genome: {
+              stage: "intermediate",
+              completeness: "partial",
+              revision: 23,
+              updated_at: "2026-08-16T13:55:24Z",
+              progress: { brief_gene_status: "succeeded", total: 12 },
+              degraded: false,
+            },
+          },
+        },
+      },
+    });
+
+    expect(projection.reportStage).toBe("intermediate");
+    expect(projection.reportCompleteness).toBe("partial");
+    expect(projection.reportRevision).toBe(23);
+    expect(visibleBotReport(projection)).toBe("# BriefGene");
+  });
+
   it("prefers final report and keeps revision metadata", () => {
     const projection = parseBotProjection(intermediateFixture);
 
