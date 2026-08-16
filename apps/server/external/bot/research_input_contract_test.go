@@ -96,6 +96,21 @@ func TestValidateResearchInputContract(t *testing.T) {
 	}
 }
 
+func TestValidateResearchInputContractAcceptsDescriptorDatasetFormats(t *testing.T) {
+	response := validResearchCatalog()
+	response.Data[0].Capabilities.Attachments.Datasets.Formats = nil
+	response.ResearchInputResolution.DatasetFormats = []string{"vcf", " CSV ", "fastq.gz"}
+
+	got, err := ValidateResearchInputContract(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFormats := []string{"csv", "fastq.gz", "vcf"}
+	if !reflect.DeepEqual(got.DatasetFormats, wantFormats) {
+		t.Fatalf("DatasetFormats=%v, want %v", got.DatasetFormats, wantFormats)
+	}
+}
+
 func TestValidateResearchInputContractUsesLowerAttachmentAdvertisement(t *testing.T) {
 	tests := []struct {
 		name                  string

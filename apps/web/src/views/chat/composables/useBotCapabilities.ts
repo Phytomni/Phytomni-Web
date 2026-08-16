@@ -240,14 +240,10 @@ function parseUploadCapability(value: unknown): BotUploadCapability {
 }
 
 function parseResearchInputCapability(
-  value: unknown,
-  agents: readonly BotCapability[]
+  value: unknown
 ): BotResearchInputCapability {
   const disabled = disabledBotResearchInputCapability();
   if (
-    !agents.some(
-      (agent) => agent.tool === "InSilicoResearchAgent" && agent.enabled
-    ) ||
     !isRecord(value) ||
     value.enabled !== true ||
     value.protocol !== RESEARCH_INPUT_PROTOCOL
@@ -377,10 +373,7 @@ export function parseCapabilityResponse(
   return {
     agents: applyUploadAttachmentPolicy(agents, upload),
     upload,
-    researchInput: parseResearchInputCapability(
-      payload.data.research_input,
-      agents
-    ),
+    researchInput: parseResearchInputCapability(payload.data.research_input),
   };
 }
 

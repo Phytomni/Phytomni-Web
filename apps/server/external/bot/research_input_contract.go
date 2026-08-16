@@ -23,10 +23,11 @@ var acceptedResearchArchiveFormats = map[string]struct{}{
 // ResearchInputResolutionDescriptor is the bounded limit descriptor advertised
 // beside the Bot protocol-version arrays.
 type ResearchInputResolutionDescriptor struct {
-	MaxUserQueryChars int `json:"max_user_query_chars"`
-	MaxAttachments    int `json:"max_attachments_per_request"`
-	MaxDatasetPaths   int `json:"max_research_dataset_paths"`
-	MaxReferences     int `json:"max_research_input_references"`
+	MaxUserQueryChars int      `json:"max_user_query_chars"`
+	MaxAttachments    int      `json:"max_attachments_per_request"`
+	MaxDatasetPaths   int      `json:"max_research_dataset_paths"`
+	MaxReferences     int      `json:"max_research_input_references"`
+	DatasetFormats    []string `json:"dataset_formats,omitempty"`
 }
 
 // ResearchInputContract is the finite, detached projection used by Web-owned
@@ -113,7 +114,11 @@ func ValidateResearchInputContract(response *AgentsListResponse) (ResearchInputC
 		exceedsPositiveProduct(dataset.MaxTotalBytes, dataset.MaxFileBytes, dataset.MaxFiles) {
 		return ResearchInputContract{}, fmt.Errorf("invalid Research dataset total-byte limit")
 	}
-	formats, err := normalizeResearchDatasetFormats(dataset.Formats)
+	rawFormats := dataset.Formats
+	if len(rawFormats) == 0 {
+		rawFormats = descriptor.DatasetFormats
+	}
+	formats, err := normalizeResearchDatasetFormats(rawFormats)
 	if err != nil {
 		return ResearchInputContract{}, err
 	}

@@ -374,7 +374,7 @@ describe("useBotCapabilities", () => {
     expect(parsedResearchInput).not.toHaveProperty("upstream_private_field");
   });
 
-  it("disables Research input when the Research Agent is disabled", () => {
+  it("keeps Research input when the Research Agent row is dark", () => {
     const parsed = parseCapabilityResponse(
       manifestPayload(
         [record("InSilicoResearchAgent", false)],
@@ -383,7 +383,8 @@ describe("useBotCapabilities", () => {
       )
     );
 
-    expect(parsed.researchInput).toEqual(disabledBotResearchInputCapability());
+    expect(parsed.researchInput.enabled).toBe(true);
+    expect(parsed.researchInput.max_user_query_chars).toBe(131072);
   });
 
   it("clones Research input limits across cache reads", async () => {
