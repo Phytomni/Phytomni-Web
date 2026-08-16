@@ -14,6 +14,22 @@ type FileDownloader interface {
 	Download(format string, answer string) ([]byte, string, error)
 }
 
+func parseKnowledgeAnswer(answer string) knowledge_agent.Document {
+	var doc knowledge_agent.Document
+	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
+		return knowledge_agent.Document{Content: answer}
+	}
+	return doc
+}
+
+func parseReviewAnswer(answer string) review_agent.Document {
+	var doc review_agent.Document
+	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
+		return review_agent.Document{Content: answer}
+	}
+	return doc
+}
+
 func NewAgent(toolName string) (FileDownloader, error) {
 	switch toolName {
 	case "ChatAgent":
@@ -59,10 +75,7 @@ func (a *ChatAgent) Download(format string, answer string) ([]byte, string, erro
 type KnowledgeAgent struct{}
 
 func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string, error) {
-	var doc knowledge_agent.Document
-	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return nil, "", fmt.Errorf("failed to parse answer: %v", err)
-	}
+	doc := parseKnowledgeAnswer(answer)
 
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("knowledge_%d", timestamp)
@@ -117,10 +130,7 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 type ReviewAgent struct{}
 
 func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
-	var doc review_agent.Document
-	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return nil, "", fmt.Errorf("failed to parse answer: %v", err)
-	}
+	doc := parseReviewAnswer(answer)
 
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("review_%d", timestamp)

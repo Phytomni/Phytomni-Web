@@ -3,15 +3,21 @@ package review_agent
 import (
 	"bytes"
 	"fmt"
+	"strings"
+
 	"github.com/jung-kurt/gofpdf"
 	"github.com/nguyenthenguyen/docx"
-	"os"
-	"strings"
+	"phytomni-server/common/document_format/external_format"
 )
 
 type Document struct {
 	Content string                   `json:"content"`
 	DocList []map[string]interface{} `json:"doc_list"`
+}
+
+func refTitle(item map[string]interface{}) string {
+	title, _ := item["title"].(string)
+	return title
 }
 
 func GenerateMarkdown(doc Document) ([]byte, error) {
@@ -23,8 +29,9 @@ func GenerateMarkdown(doc Document) ([]byte, error) {
 	fullContent.WriteString("\n\n## references\n")
 
 	for i, item := range doc.DocList {
-		title := item["title"].(string)
-		fullContent.WriteString(fmt.Sprintf("%d. %s\n", i+1, title))
+		if title := refTitle(item); title != "" {
+			fullContent.WriteString(fmt.Sprintf("%d. %s\n", i+1, title))
+		}
 	}
 
 	return []byte(fullContent.String()), nil
@@ -37,24 +44,16 @@ func GenerateWord(doc Document) ([]byte, error) {
 	var references strings.Builder
 	references.WriteString("\nreferences\n")
 	for i, item := range doc.DocList {
-		title := item["title"].(string)
-		references.WriteString(fmt.Sprintf("%d. %s\n", i+1, title))
-	}
-
-	templateFile := "template.docx"
-
-	if _, err := os.Stat(templateFile); os.IsNotExist(err) {
-		r, err := docx.ReadDocxFile("./common/document_format/knowledge_agent/template.docx")
-		if err != nil {
-			return nil, fmt.Errorf("failed to read empty template: %v", err)
-		}
-		docx1 := r.Editable()
-		docx1.Replace("old", "{{content}}", -1)
-		if err := docx1.WriteToFile(templateFile); err != nil {
-			return nil, fmt.Errorf("failed to create template file: %v", err)
+		if title := refTitle(item); title != "" {
+			references.WriteString(fmt.Sprintf("%d. %s\n", i+1, title))
 		}
 	}
 
+	templateFile, cleanup, err := external_format.WordTemplatePath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template file: %v", err)
+	}
+	defer cleanup()
 	r, err := docx.ReadDocxFile(templateFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read template file: %v", err)
@@ -79,9 +78,12 @@ func GeneratePDF(doc Document) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
 
-	fontPath := "./common/document_format/external_format/msyh.ttf"
-	pdf.AddUTF8Font("msyh", "", fontPath)
-	pdf.AddUTF8Font("msyh", "B", fontPath)
+	if err := external_format.RegisterCJKFont(pdf, "msyh", "", "msyh.ttf"); err != nil {
+		return nil, err
+	}
+	if err := external_format.RegisterCJKFont(pdf, "msyh", "B", "msyh.ttf"); err != nil {
+		return nil, err
+	}
 
 	pdf.SetFont("msyh", "", 12)
 	pdf.MultiCell(0, 10, cleanContent, "", "", false)

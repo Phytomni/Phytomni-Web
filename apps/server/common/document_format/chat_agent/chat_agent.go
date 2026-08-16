@@ -3,8 +3,10 @@ package chat_agent
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/jung-kurt/gofpdf"
 	"github.com/nguyenthenguyen/docx"
+	"phytomni-server/common/document_format/external_format"
 )
 
 func GenerateMarkdown(content string) ([]byte, error) {
@@ -12,7 +14,12 @@ func GenerateMarkdown(content string) ([]byte, error) {
 }
 
 func GenerateWord(content string) ([]byte, error) {
-	r, err := docx.ReadDocxFile("./common/document_format/external_format/empty.docx")
+	templatePath, cleanup, err := external_format.EmptyWordPath()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read template file: %v", err)
+	}
+	defer cleanup()
+	r, err := docx.ReadDocxFile(templatePath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read template file: %v", err)
 	}
@@ -31,9 +38,9 @@ func GenerateWord(content string) ([]byte, error) {
 func GeneratePDF(content string) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
-
-	// Register a CJK-capable font (a font file is required); simsun is the example here.
-	pdf.AddUTF8Font("simsun", "", "./common/document_format/external_format/simsun.ttf")
+	if err := external_format.RegisterCJKFont(pdf, "simsun", "", "simsun.ttf"); err != nil {
+		return nil, err
+	}
 	pdf.SetFont("simsun", "", 12)
 
 	pdf.MultiCell(0, 10, content, "", "", false)
