@@ -37,6 +37,8 @@ const baseProps = () => ({
   showModeSelector: false,
   fileList: [],
   hasBlockingUploads: false,
+  attachmentTargetAvailable: true,
+  attachmentTargetBlocked: false,
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
