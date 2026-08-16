@@ -163,6 +163,8 @@ describe("ChatView lifecycle cleanup", () => {
     const row = wrapper.get('[data-message-id="research-running-1"]');
     expect(row.find(".research-artifact-preview").exists()).toBe(true);
     expect(row.get(".agent-lifecycle").text()).toBe("Running");
+    expect(row.get(".research-artifact-preview__title").text()).toBe("Running");
+    expect(row.text()).not.toContain("Finished");
 
     state.getChatState("research-dialogue").renderedChat = {
       dialogue_id: "research-dialogue",

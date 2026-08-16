@@ -739,6 +739,8 @@ import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import {
   artifactIdentityForMessage,
   artifactPresentationForMessage,
+  artifactPreviewTitleKey,
+  researchRowLifecycleStatus,
 } from "./utils/artifact-policy";
 import type {
   ArtifactTab,
@@ -1181,8 +1183,13 @@ function artifactPreviewForMessage(message: ChatMessage) {
 
   const tool = canonicalAgentTool(message.tool_name);
   if (!tool) return null;
+  const titleKey = artifactPreviewTitleKey(
+    message,
+    agentRunLifecycleForMessage(message)
+  );
+  if (titleKey === null) return null;
   return {
-    title: t("common.finished"),
+    title: t(titleKey),
     kind: artifactAgentLabel(message),
     summary: t(CANONICAL_AGENT_I18N_KEYS[tool]),
     openLabel: t("common.view"),
@@ -1269,21 +1276,10 @@ function lifecycleFromMessage(
   }
   if (!projection) {
     if (presentation?.kind !== "research") return null;
-    const status = String(message.status ?? "")
-      .trim()
-      .toUpperCase();
+    const status = researchRowLifecycleStatus(String(message.status ?? ""));
     return {
       runId: null,
-      status:
-        status === "FAILED"
-          ? "FAILED"
-          : status === "CANCELLED" || status === "CANCELED"
-            ? "CANCELLED"
-            : status === "TIMED_OUT" || status === "TIMEOUT"
-              ? "TIMED_OUT"
-              : status === "INPUT_REQUIRED"
-                ? "INPUT_REQUIRED"
-                : "SUCCEEDED",
+      status,
       reportRevision: 0,
       visibleReport: "",
       intermediateReport: "",
@@ -1462,7 +1458,9 @@ const currentArtifactEmptyReportLabel = computed(() => {
 
 const currentArtifactStatusLabel = computed(() => {
   const state = currentArtifactLifecycle.value;
-  return state ? botReportLabelForLifecycle(state) : t("common.finished");
+  return state
+    ? botReportLabelForLifecycle(state)
+    : t("chat.botReport.waiting");
 });
 
 const reconcileMatchedDialogue = (

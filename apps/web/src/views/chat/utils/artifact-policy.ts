@@ -10,6 +10,86 @@ import {
 
 export type ReportSource = "final" | "intermediate" | "message";
 
+export type ArtifactPreviewLifecycle = {
+  phase: string;
+  terminal: boolean;
+};
+
+const NON_TERMINAL_RUN_STATUSES = new Set([
+  "PENDING",
+  "QUEUED",
+  "ACCEPTED",
+  "SUBMITTING",
+  "PREPARING",
+  "RESOLVING_INPUTS",
+  "PLANNING",
+  "RUNNING",
+  "INPUT_REQUIRED",
+  "FINALIZING",
+]);
+
+function normalizedRunStatus(message: ArtifactPolicyMessage): string {
+  return String(
+    message.botLifecycle?.status ??
+      message.botProjection?.status ??
+      message.status ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+export function researchRowLifecycleStatus(
+  status: string
+):
+  | "RUNNING"
+  | "INPUT_REQUIRED"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED"
+  | "TIMED_OUT" {
+  const normalized = status.trim().toUpperCase();
+  if (normalized === "FAILED") return "FAILED";
+  if (normalized === "CANCELLED" || normalized === "CANCELED") {
+    return "CANCELLED";
+  }
+  if (normalized === "TIMED_OUT" || normalized === "TIMEOUT") {
+    return "TIMED_OUT";
+  }
+  if (normalized === "INPUT_REQUIRED") return "INPUT_REQUIRED";
+  if (normalized === "SUCCEEDED") return "SUCCEEDED";
+  return "RUNNING";
+}
+
+function lifecycleTitleKey(phase: string): string {
+  const normalized = phase.trim().toLowerCase();
+  if (normalized === "input_required") return "chat.botReport.inputRequired";
+  return `chat.lifecycle.${normalized}`;
+}
+
+/** Preview card title for a report-backed row; never Finished while still running. */
+export function artifactPreviewTitleKey(
+  message: ArtifactPolicyMessage,
+  lifecycle?: ArtifactPreviewLifecycle | null
+): string | null {
+  if (artifactPresentationForMessage(message) === null) return null;
+  if (lifecycle && !lifecycle.terminal) {
+    return lifecycleTitleKey(lifecycle.phase);
+  }
+  const status = normalizedRunStatus(message);
+  if (NON_TERMINAL_RUN_STATUSES.has(status)) {
+    return lifecycleTitleKey(status);
+  }
+  if (status === "FAILED") return "chat.botReport.failed";
+  if (status === "TIMED_OUT" || status === "TIMEOUT") {
+    return "chat.lifecycle.timed_out";
+  }
+  if (status === "CANCELLED" || status === "CANCELED") {
+    return "chat.lifecycle.cancelled";
+  }
+  return "common.finished";
+}
+
 export interface ArtifactPresentation {
   kind: Exclude<ArtifactKind, null>;
   report: string;

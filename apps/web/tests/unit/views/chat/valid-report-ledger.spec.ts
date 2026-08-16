@@ -45,8 +45,27 @@ describe("valid report ledger", () => {
   it("encodes only the approved generic and DeepGenome placeholder sets", () => {
     expect(Object.keys(TOOL_REPORT_PLACEHOLDERS)).toEqual(["DeepGenomeAgent"]);
     expect(
-      GENERIC_REPORT_PLACEHOLDERS.every((rule) => rule.match === "exact")
-    ).toBe(true);
+      GENERIC_REPORT_PLACEHOLDERS.map((rule) => `${rule.match}:${rule.value}`)
+    ).toEqual([
+      "exact:PENDING",
+      "exact:QUEUED",
+      "exact:RUNNING",
+      "exact:INPUT_REQUIRED",
+      "exact:SUCCEEDED",
+      "exact:FAILED",
+      "exact:CANCELLED",
+      "exact:CANCELED",
+      "exact:TIMED_OUT",
+      "exact:TIMEOUT",
+      "exact:NO REFERENCES AVAILABLE.",
+      "exact:Sorry, I cannot answer this question.",
+      "exact:Task created",
+      "prefix:Task created:",
+      "prefix:Task created successfully",
+      "prefix:Tasks created successfully:",
+      "prefix:Task submission failed:",
+      "prefix:Server task created:",
+    ]);
     expect(
       deepGenomeRules.map((rule) => `${rule.match}:${rule.value}`)
     ).toEqual([
@@ -118,6 +137,41 @@ describe("valid report ledger", () => {
         report: content,
         source: "message",
       });
+    }
+  );
+
+  it("rejects the expert send fallback so a running Research row cannot look finished", () => {
+    const content = "Sorry, I cannot answer this question.";
+    expect(isApprovedReportText("InSilicoResearchAgent", content)).toBe(false);
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("InSilicoResearchAgent", content, { status: "RUNNING" })
+      )
+    ).toBeNull();
+    for (const tool_name of REPORT_TOOLS) {
+      expect(isApprovedReportText(tool_name, content)).toBe(false);
+    }
+  });
+
+  it.each([
+    "Task created",
+    "Task created: child-1",
+    "Task created successfully:d6470062-99ac-11f1-bbb4-fa163e7f72d1",
+    "Tasks created successfully: child-1,child-2",
+    "Task submission failed: missing task_id",
+    "Task submission failed: no task ids",
+    "Server task created: dg-child-1",
+  ])(
+    "rejects transport acknowledgement %j for every report tool",
+    (content) => {
+      for (const tool_name of REPORT_TOOLS) {
+        expect(isApprovedReportText(tool_name, content)).toBe(false);
+        expect(
+          artifactPresentationForMessage(
+            reportMessage(tool_name, content, { status: "RUNNING" })
+          )
+        ).toBeNull();
+      }
     }
   );
 

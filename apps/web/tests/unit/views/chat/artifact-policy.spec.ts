@@ -3,6 +3,8 @@ import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
   artifactIdentityForMessage,
   artifactPresentationForMessage,
+  artifactPreviewTitleKey,
+  researchRowLifecycleStatus,
   artifactKindForMessage,
   isCompletedDeepGenomeMessage,
   isCompletedResearchMessage,
@@ -678,5 +680,66 @@ describe("artifact policy", () => {
     const message = { ...ELIGIBLE_MESSAGE, tool_name: toolName };
 
     expect(artifactKindForMessage(message)).toBeNull();
+  });
+
+  it("does not title a still-running Research preview Finished", () => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "InSilicoResearchAgent",
+      status: "RUNNING",
+      content: "# Intermediate research notes\n\nOne section is available.",
+    };
+    expect(artifactPresentationForMessage(message)).not.toBeNull();
+    expect(
+      artifactPreviewTitleKey(message, { phase: "RUNNING", terminal: false })
+    ).toBe("chat.lifecycle.running");
+    expect(artifactPreviewTitleKey(message)).toBe("chat.lifecycle.running");
+  });
+
+  it.each([
+    "AnalystAgent",
+    "InSilicoResearchAgent",
+    "DigitalDesignAgent",
+    "GeneNetworkAgent",
+    "DeepGenomeAgent",
+  ] as const)(
+    "does not title a still-running %s preview Finished",
+    (tool_name) => {
+      const message = {
+        ...ELIGIBLE_MESSAGE,
+        tool_name,
+        status: "RUNNING",
+        content: "# Intermediate notes\n\nOne section is available.",
+      };
+      expect(artifactPreviewTitleKey(message)).toBe("chat.lifecycle.running");
+    }
+  );
+
+  it.each([
+    ["RUNNING", "RUNNING"],
+    ["PENDING", "RUNNING"],
+    ["", "RUNNING"],
+    ["INPUT_REQUIRED", "INPUT_REQUIRED"],
+    ["SUCCEEDED", "SUCCEEDED"],
+    ["FAILED", "FAILED"],
+    ["TIMEOUT", "TIMED_OUT"],
+    ["CANCELLED", "CANCELLED"],
+  ] as const)(
+    "does not promote a research row status %j to a finished lifecycle",
+    (status, expected) => {
+      expect(researchRowLifecycleStatus(status)).toBe(expected);
+    }
+  );
+
+  it("titles a succeeded Research preview Finished", () => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      content: "# Final research report\n\nThe analysis is complete.",
+    };
+    expect(
+      artifactPreviewTitleKey(message, { phase: "SUCCEEDED", terminal: true })
+    ).toBe("common.finished");
   });
 });

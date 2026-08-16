@@ -4,7 +4,7 @@ export type ReportPlaceholderRule =
   | { readonly match: "exact"; readonly value: string }
   | { readonly match: "prefix"; readonly value: string };
 
-/** Lifecycle tokens and the one generic non-report acknowledgement. */
+/** Lifecycle tokens plus Web/BFF/Bot transport acknowledgements. */
 export const GENERIC_REPORT_PLACEHOLDERS = [
   { match: "exact", value: "PENDING" },
   { match: "exact", value: "QUEUED" },
@@ -17,6 +17,13 @@ export const GENERIC_REPORT_PLACEHOLDERS = [
   { match: "exact", value: "TIMED_OUT" },
   { match: "exact", value: "TIMEOUT" },
   { match: "exact", value: "NO REFERENCES AVAILABLE." },
+  { match: "exact", value: "Sorry, I cannot answer this question." },
+  { match: "exact", value: "Task created" },
+  { match: "prefix", value: "Task created:" },
+  { match: "prefix", value: "Task created successfully" },
+  { match: "prefix", value: "Tasks created successfully:" },
+  { match: "prefix", value: "Task submission failed:" },
+  { match: "prefix", value: "Server task created:" },
 ] as const satisfies readonly ReportPlaceholderRule[];
 
 /**

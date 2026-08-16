@@ -1520,6 +1520,8 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("focusReferences(activation.indices)");
     expect(CHAT_SOURCE).not.toContain("<CitationReferenceList");
     expect(CHAT_SOURCE).toContain("artifactPreviewForMessage(message)");
+    expect(CHAT_SOURCE).toContain("artifactPreviewTitleKey(");
+    expect(CHAT_SOURCE).not.toContain('title: t("common.finished")');
     expect(CONTENT_SOURCE).toContain("<ResearchArtifactPreview");
     expect(CONTENT_SOURCE).toContain("@open=\"emit('open-artifact')\"");
   });
