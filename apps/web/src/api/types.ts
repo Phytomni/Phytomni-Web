@@ -192,6 +192,7 @@ export interface QueryData extends ConversationContextNotice {
   attachments?: AssetAttachmentRef[];
   result_archive_v1?: boolean;
   delivery?: AgentResultDelivery;
+  route_reason_code?: string;
 }
 
 export interface ConversationSummary {
@@ -1152,6 +1153,7 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     "dialogue_id",
     "task_id",
     "query",
+    "route_reason_code",
   ];
   const decodedFields = result as unknown as Record<string, unknown>;
   stringFields.forEach((key) => {

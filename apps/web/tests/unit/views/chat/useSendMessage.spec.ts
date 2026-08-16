@@ -612,6 +612,25 @@ describe("useSendMessage", () => {
     expect(ElMessage.warning).toHaveBeenCalledWith("chat.contextDegraded");
   });
 
+  it("keeps the Expert route reason on the assistant message", async () => {
+    stateFor("A").messageInput = "hello";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "ChatAgent",
+          answer: "plain chat",
+          id: "msg-fallback",
+          route_reason_code: "CHAT_FALLBACK",
+        },
+      })
+    );
+
+    await makeComposable().sendMessage();
+
+    const assistant = lastMessageFor(stateFor("A"), "plain chat");
+    expect(assistant.route_reason_code).toBe("CHAT_FALLBACK");
+  });
+
   it("reuses a client turn id across a same-draft network retry while request keys change", async () => {
     const { isNetworkError } = await import("@/utils/network-error");
     vi.mocked(isNetworkError).mockReturnValueOnce(true);

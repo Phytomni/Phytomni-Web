@@ -427,6 +427,43 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
     ).toBe("Answer remains visible");
   });
 
+  it("shows a chat-fallback routing notice", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "plain chat answer",
+      tool_name: "ChatAgent",
+      route_reason_code: "CHAT_FALLBACK",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toMatch(
+      /routingFallbackChat|fell back to Chat/
+    );
+  });
+
+  it("shows the selected agent after a successful Expert route", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "knowledge answer",
+      tool_name: "KnowledgeAgent",
+      route_reason_code: "ROUTER_SELECTED",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toMatch(
+      /Knowledge Agent|routingSelectedAgent/
+    );
+  });
+
+  it("hides routing notices for instant chat", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "instant answer",
+      tool_name: "ChatAgent",
+      route_reason_code: "INSTANT_LOCK",
+    });
+
+    expect(wrapper.find('[data-testid="routing-notice"]').exists()).toBe(false);
+  });
+
   it("keeps rebuilt-only context notices silent", () => {
     const wrapper = mountContent({
       role: "assistant",

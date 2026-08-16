@@ -148,6 +148,7 @@ type ConversationHistoryRow struct {
 	Delivery        *AgentTaskDeliveryDTO      `json:"delivery,omitempty"`
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
+	RouteReasonCode string                     `json:"route_reason_code,omitempty"`
 }
 
 func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) ([]*ConversationHistoryRow, error) {
@@ -183,6 +184,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			if private.Stage != nil {
 				historyRow.ContextRebuilt = private.Stage.ContextRebuilt
 				historyRow.ContextDegraded = private.Stage.ContextDegraded
+				historyRow.RouteReasonCode = private.Stage.RouteReasonCode
 			}
 			if private.SettlementState == conversationSettlementRebuildRequired {
 				historyRow.ContextDegraded = true

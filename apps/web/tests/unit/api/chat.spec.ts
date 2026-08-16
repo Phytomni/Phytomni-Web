@@ -262,6 +262,17 @@ describe("QueryData — interop wire contract", () => {
     ).toThrow("Invalid chat response");
   });
 
+  it("keeps a public Expert route reason on the query payload", () => {
+    const result = decodeQueryData({
+      id: 9,
+      answer: "saved",
+      tool_name: "ChatAgent",
+      route_reason_code: "CHAT_FALLBACK",
+    });
+
+    expect(result.route_reason_code).toBe("CHAT_FALLBACK");
+  });
+
   it("accepts only boolean context notice fields", () => {
     expect(
       decodeConversationContextNotice({

@@ -552,6 +552,25 @@ describe("useSelectChat", () => {
     expect("context_version" in assistant).toBe(false);
   });
 
+  it("hydrates the Expert route reason from history", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "route-history-1",
+          query: "Historical question",
+          answer: "Historical answer",
+          tool_name: "ChatAgent",
+          route_reason_code: "CHAT_FALLBACK",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    const assistant = messageAt("d1", 1, "history route reason");
+    expect(assistant.route_reason_code).toBe("CHAT_FALLBACK");
+  });
+
   it("resets reaction state before loading: stale entries are cleared before hydration", async () => {
     // Seed a stale reaction (pointing to the same d1 record)
     const stale = getChatState("d1");

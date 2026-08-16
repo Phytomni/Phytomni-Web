@@ -743,6 +743,13 @@ export function useSelectChat(opts: {
             if (contextNotice && lastMessage?.role === "assistant") {
               lastMessage.contextNotice = contextNotice;
             }
+            if (
+              lastMessage?.role === "assistant" &&
+              typeof item.route_reason_code === "string" &&
+              item.route_reason_code
+            ) {
+              lastMessage.route_reason_code = item.route_reason_code;
+            }
             if (resultArchiveV1) {
               messages
                 .slice(rowMessageStart)

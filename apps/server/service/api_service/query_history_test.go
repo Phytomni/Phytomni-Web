@@ -365,6 +365,9 @@ func TestHistoryReturnsAuthorizedArtifactLinksWithoutPrivateContext(t *testing.T
 	if !history[0].ContextRebuilt || history[0].ContextDegraded {
 		t.Fatalf("context notice=%#v", history[0])
 	}
+	if history[0].RouteReasonCode != stage.RouteReasonCode {
+		t.Fatalf("route reason=%q want %q", history[0].RouteReasonCode, stage.RouteReasonCode)
+	}
 	encoded, err := json.Marshal(history)
 	if err != nil {
 		t.Fatal(err)

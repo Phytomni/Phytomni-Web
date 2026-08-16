@@ -90,6 +90,8 @@ export interface ChatMessage {
   download_path?: string; // download path
   original?: string;
   tool_name?: string;
+  /** Expert routing reason from Bot conversation_context. */
+  route_reason_code?: string;
   followUpQuestions?: string[]; // follow-up questions list
   showFollowUpQuestions?: boolean; // whether to show follow-up questions
   showLog?: boolean;
@@ -185,6 +187,7 @@ export interface ChatResponse extends ConversationContextNotice {
   request_id?: string | null;
   context_rebuilt?: boolean;
   context_degraded?: boolean;
+  route_reason_code?: string;
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
   artifacts?: ConversationArtifactLink[];

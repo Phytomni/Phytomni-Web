@@ -349,6 +349,9 @@ export default {
       "The request timed out. Try narrowing your query or retry later.",
     contextDegraded:
       "Answer saved. Conversation context will be rebuilt on the next message.",
+    routingFallbackChat:
+      "No specialized agent was identified; this turn fell back to Chat.",
+    routingSelectedAgent: "This turn was answered by {agent}",
     requestId: "Request ID",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",

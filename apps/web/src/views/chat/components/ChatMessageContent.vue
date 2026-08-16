@@ -1,5 +1,13 @@
 <template>
   <div
+    v-if="routingNotice"
+    class="routing-notice"
+    role="status"
+    data-testid="routing-notice"
+  >
+    {{ routingNotice }}
+  </div>
+  <div
     v-if="message.contextNotice?.degraded"
     class="context-degraded"
     role="status"
@@ -294,8 +302,14 @@ import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import StreamMessage from "./StreamMessage.vue";
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_ZH_NAMES,
+  type CanonicalAgentTool,
+} from "@/constants/agents";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
@@ -333,9 +347,29 @@ const emit = defineEmits<{
   "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
+const { t, locale } = useI18n();
+
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
+
+const routingNotice = computed(() => {
+  if (props.message.role !== "assistant") return "";
+  const reason = props.message.route_reason_code;
+  if (reason === "CHAT_FALLBACK") {
+    return t("chat.routingFallbackChat");
+  }
+  if (reason !== "ROUTER_SELECTED" && reason !== "EXPLICIT_SELECTION") {
+    return "";
+  }
+  const tool = props.message.tool_name;
+  if (!tool || !(tool in CANONICAL_AGENT_ZH_NAMES)) return "";
+  const agent =
+    locale.value === "zh-CN"
+      ? CANONICAL_AGENT_ZH_NAMES[tool as CanonicalAgentTool]
+      : CANONICAL_AGENT_DISPLAY_NAMES[tool as CanonicalAgentTool];
+  return t("chat.routingSelectedAgent", { agent });
+});
 
 // Canonical tool_name spelling: 'DeepGenomeAgent'.
 const isDeepGenomeMessage = computed(
@@ -490,6 +524,7 @@ const shouldShowSpecializedNoData = computed(() => {
 </script>
 
 <style scoped lang="scss">
+.routing-notice,
 .context-degraded {
   margin: 0 0 var(--phy-space-8);
   color: var(--phy-color-text-muted);

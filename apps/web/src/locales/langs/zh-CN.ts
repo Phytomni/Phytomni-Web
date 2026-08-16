@@ -348,6 +348,8 @@ export default {
     sendFailed: "发送消息失败，请稍后重试。",
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     contextDegraded: "回答已保存。系统将在下一条消息时重建对话上下文。",
+    routingFallbackChat: "未能识别专用智能体，已降级为对话智能体。",
+    routingSelectedAgent: "本轮由{agent}回答",
     requestId: "请求 ID",
     sendAriaLabel: "发送",
     abortAriaLabel: "中止回答",

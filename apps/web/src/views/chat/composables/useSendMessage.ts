@@ -1020,6 +1020,10 @@ export function useSendMessage(opts: {
         if (assistantMessage) {
           if (completedReviewAnswer) assistantMessage.status = "SUCCEEDED";
           if (contextNotice) assistantMessage.contextNotice = contextNotice;
+          if (response.data.route_reason_code) {
+            assistantMessage.route_reason_code =
+              response.data.route_reason_code;
+          }
           attachBlockingLegacyFields(
             assistantMessage,
             responseData,
@@ -1071,6 +1075,10 @@ export function useSendMessage(opts: {
             showLog: false,
           };
           if (contextNotice) assistantMessage.contextNotice = contextNotice;
+          if (response.data?.route_reason_code) {
+            assistantMessage.route_reason_code =
+              response.data.route_reason_code;
+          }
           attachBlockingLegacyFields(
             assistantMessage,
             responseData,

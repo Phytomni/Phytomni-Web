@@ -1912,6 +1912,7 @@ type QueryData struct {
 	Attachments       []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ContextRebuilt    bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded   bool                       `json:"context_degraded,omitempty"`
+	RouteReasonCode   string                     `json:"route_reason_code,omitempty"`
 }
 
 func (ps *Service) decorateConversationQueryData(
@@ -1942,6 +1943,7 @@ func (ps *Service) decorateConversationQueryData(
 	if private.Stage != nil {
 		out.ContextRebuilt = private.Stage.ContextRebuilt
 		out.ContextDegraded = private.Stage.ContextDegraded
+		out.RouteReasonCode = private.Stage.RouteReasonCode
 	}
 	if private.SettlementState == conversationSettlementRebuildRequired {
 		out.ContextDegraded = true
