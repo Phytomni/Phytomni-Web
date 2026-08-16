@@ -29,7 +29,7 @@ interface IState {
   permission: string;
   login_status: string; // login status field
   seen_tutorial: string; // UX-only flag, decoupled from password state
-  expertEnabled: boolean; // Expert routing dark-launch flag (server-delivered)
+  expertEnabled: boolean; // server-delivered Expert availability; always true
   rolesLoading: boolean;
   rolesLoadFailed: boolean;
 }
@@ -58,7 +58,7 @@ export default defineStore("user", {
     // from change-password.vue) or from the sidebar's "Start Tutorial" button
     // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
-    expertEnabled: false,
+    expertEnabled: true,
     rolesLoading: true,
     rolesLoadFailed: false,
   }),
@@ -81,7 +81,7 @@ export default defineStore("user", {
           permission: res.data.permission,
           roles: effectiveToolList(res.data.tool_list),
           permission_list: res.data.permission_list || [],
-          expertEnabled: res.data.expert_enabled ?? false,
+          expertEnabled: res.data.expert_enabled ?? true,
           rolesLoadFailed: false,
         });
         return true;

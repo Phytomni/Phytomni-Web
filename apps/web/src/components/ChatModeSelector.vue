@@ -10,18 +10,12 @@
         data-test="chat-mode-instant"
         >{{ $t("chat.mode.instant") }}</el-radio-button
       >
-      <el-tooltip
-        v-if="!expertEnabled"
-        :content="$t('chat.mode.comingSoon')"
-        placement="top"
+      <el-radio-button
+        value="expert"
+        :disabled="!expertEnabled"
+        data-test="chat-mode-expert"
+        >{{ $t("chat.mode.expert") }}</el-radio-button
       >
-        <el-radio-button value="expert" disabled data-test="chat-mode-expert">
-          {{ $t("chat.mode.expert") }}
-        </el-radio-button>
-      </el-tooltip>
-      <el-radio-button v-else value="expert" data-test="chat-mode-expert">{{
-        $t("chat.mode.expert")
-      }}</el-radio-button>
     </el-radio-group>
   </div>
 </template>

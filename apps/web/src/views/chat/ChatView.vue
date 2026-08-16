@@ -870,9 +870,7 @@ const pickerOptions = allowedAgentOptions;
 const instantModeEnabled = computed(() =>
   authorizedAgentTools.value.includes("ChatAgent")
 );
-const expertModeEnabled = computed(
-  () => userStore().expertEnabled && authorizedAgentTools.value.length > 0
-);
+const expertModeEnabled = computed(() => authorizedAgentTools.value.length > 0);
 const activeModeEnabled = computed(() =>
   chatMode.value === "instant"
     ? instantModeEnabled.value

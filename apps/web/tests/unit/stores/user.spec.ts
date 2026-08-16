@@ -68,8 +68,8 @@ describe("userStore.expertEnabled", () => {
     vi.clearAllMocks();
   });
 
-  it("defaults to false", () => {
-    expect(userStore().expertEnabled).toBe(false);
+  it("defaults to true", () => {
+    expect(userStore().expertEnabled).toBe(true);
   });
 
   it("is set from the tool-permissions expert_enabled flag", async () => {

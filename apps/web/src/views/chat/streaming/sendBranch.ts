@@ -1,8 +1,6 @@
-// StreamCapability is the typed DTO exchanged by the gateway for the stream
-// dark launch. The gateway owns the enabled agent list; the Web branch accepts
-// only the canonical mode for each listed agent.
+// StreamCapability is the typed DTO exchanged by the gateway. The Web branch
+// accepts only the canonical mode for each Bot-advertised stream agent.
 export interface StreamCapability {
-  enabled: boolean;
   agents: readonly string[];
 }
 
@@ -32,7 +30,6 @@ export function shouldStream(
   capability: StreamCapability
 ): boolean {
   return (
-    capability.enabled === true &&
     Array.isArray(capability.agents) &&
     STREAM_CAPABLE.has(agent) &&
     modeRoutesStreamAgent(agent, mode) &&

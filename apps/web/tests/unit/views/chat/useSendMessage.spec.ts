@@ -231,7 +231,9 @@ describe("useSendMessage", () => {
     } = {}
   ) {
     const researchInput = options.researchInput ?? researchInputCapability();
-    const streamTools = options.streamTools ?? ["ChatAgent"];
+    const streamTools =
+      options.streamTools ??
+      (import.meta.env.VITE_STREAM_ENABLED === "true" ? ["ChatAgent"] : []);
     const botCapabilitiesByTool = Object.fromEntries(
       streamTools.map((tool) => [
         tool,
@@ -405,38 +407,6 @@ describe("useSendMessage", () => {
       })
     );
     await sendPromise;
-  });
-
-  it("fails a disabled or malformed-decoded forced Research capability closed before mutation", async () => {
-    const draft = "preserve this unavailable Research draft";
-    const state = stateFor("A");
-    state.messageInput = draft;
-    state.mode = "expert";
-    state.selectedAgent = "InSilicoResearchAgent";
-    const originalRenderedChat = state.renderedChat;
-
-    await makeComposable({
-      researchInput: researchInputCapability({
-        enabled: false,
-        max_user_query_chars: 0,
-        max_attachments_per_request: 0,
-        max_research_dataset_paths: 0,
-        max_research_input_references: 0,
-      }),
-    }).sendMessage();
-
-    expect(mockGetQueryAbortable).not.toHaveBeenCalled();
-    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
-    expect(state.messageInput).toBe(draft);
-    expect(state.renderedChat).toBe(originalRenderedChat);
-    expect(currentChat.value?.messages).toEqual([]);
-    expect(state.isSending).toBe(false);
-    expect(state.activeRequestId).toBe("");
-    expect(state.pendingTurnId).toBeNull();
-    expect(state.pendingTurnFingerprint).toBeNull();
-    expect(ElMessage.warning).toHaveBeenCalledWith(
-      "agents.research.unavailableMessage"
-    );
   });
 
   it("does not apply a disabled Research capability to autonomous Expert routing", async () => {
@@ -748,17 +718,21 @@ describe("useSendMessage", () => {
     consoleError.mockRestore();
   });
 
-  it("reuses a client turn id when an unchanged retry switches from blocking to stream", async () => {
-    mockGetQueryAbortable.mockRejectedValueOnce(new Error("blocking failure"));
+  it("reuses a client turn id when an unchanged retry stays on stream", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
-    const { sendMessage } = makeComposable();
+    streamHarness.streamMessage.mockRejectedValueOnce(
+      new Error("stream failure")
+    );
+    const { sendMessage } = makeComposable({ streamTools: ["ChatAgent"] });
     await sendMessage();
-    const firstCall = queryCallAt(0, "blocking attempt");
-    const firstTurnId = (firstCall[0] as FormData).get("client_turn_id");
-    const firstRequestId = firstCall[1];
+    const firstCall = mustGet(
+      streamHarness.streamMessage.mock.calls[0],
+      "first stream attempt"
+    )[0];
+    const firstTurnId = firstCall.clientTurnId;
+    const firstRequestId = firstCall.requestId;
 
     stateFor("A").messageInput = "hi";
-    vi.stubEnv("VITE_STREAM_ENABLED", "true");
     streamHarness.streamMessage.mockResolvedValueOnce({
       messageId: "22",
       completed: true,
@@ -766,7 +740,7 @@ describe("useSendMessage", () => {
     await sendMessage();
 
     const streamCall = mustGet(
-      streamHarness.streamMessage.mock.calls[0],
+      streamHarness.streamMessage.mock.calls[1],
       "stream retry"
     )[0];
     expect(streamCall.clientTurnId).toBe(firstTurnId);
@@ -2310,17 +2284,6 @@ describe("useSendMessage", () => {
       });
     }
   );
-
-  it("keeps capability-advertised expert streaming behind the Web flag", async () => {
-    const state = stateFor("A");
-    state.mode = "expert";
-    state.selectedAgent = "KnowledgeAgent";
-
-    await makeComposable({ streamTools: ["KnowledgeAgent"] }).sendMessage();
-
-    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
-    expect(mockGetQueryAbortable).toHaveBeenCalledOnce();
-  });
 
   it("isolates concurrent Knowledge and BriefGene stream identities by dialogue", async () => {
     const pendingA = deferred<StreamResult>();

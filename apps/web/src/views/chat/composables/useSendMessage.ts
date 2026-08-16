@@ -447,12 +447,8 @@ export function useSendMessage(opts: {
       capturedMode === "expert" &&
       capturedSelectedAgent === "InSilicoResearchAgent"
     ) {
-      const capability = researchInputCapability.value;
-      if (!capability.enabled) {
-        ElMessage.warning(t("agents.research.unavailableMessage"));
-        return;
-      }
-      if (!queryWithinLimit(currentMessage, capability.max_user_query_chars)) {
+      const limit = researchInputCapability.value.max_user_query_chars;
+      if (limit > 0 && !queryWithinLimit(currentMessage, limit)) {
         ElMessage.warning(t("agents.research.questionTooLong"));
         return;
       }
@@ -636,18 +632,15 @@ export function useSendMessage(opts: {
       }
       queryData.append("attachments", JSON.stringify(attachmentRefs));
 
-      // Stream branch: chat-family + instant mode + dark-launch flag. The
-      // insertion point is inside the existing try, so returning here still
-      // runs the enclosing finally (request-id cleanup, history refresh via
-      // coordinator, and title update) exactly once.
-      const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
+      // Stream branch: chat-family + the mode that can route that agent.
+      // Insertion is inside the existing try, so returning here still runs
+      // the enclosing finally exactly once.
       const streamAgents = Object.values(botCapabilitiesByTool.value).flatMap(
         (capability) =>
           capability?.enabled && capability.stream ? [capability.tool] : []
       );
       if (
         shouldStream(capturedActiveAgentName, capturedMode, {
-          enabled: streamFlag,
           agents: streamAgents,
         })
       ) {

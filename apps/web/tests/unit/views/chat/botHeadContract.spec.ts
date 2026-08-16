@@ -121,14 +121,14 @@ describe("Bot HEAD compatibility contract", () => {
       "stream_enabled",
       "a2ui_actions_enabled",
     ]) {
-      expect(config).toMatch(new RegExp(`^\\s*${key}: false\\b`, "m"));
+      expect(config).not.toMatch(new RegExp(`^\\s*${key}:`, "m"));
     }
 
     const userStore = readFileSync(
       resolve(repoRoot, "apps/web/src/stores/user.ts"),
       "utf8"
     );
-    expect(userStore).toMatch(/^\s*expertEnabled: false\b/m);
+    expect(userStore).toMatch(/^\s*expertEnabled: true\b/m);
 
     const sendMessage = readFileSync(
       resolve(
@@ -137,8 +137,6 @@ describe("Bot HEAD compatibility contract", () => {
       ),
       "utf8"
     );
-    expect(sendMessage).toContain(
-      'import.meta.env.VITE_STREAM_ENABLED === "true"'
-    );
+    expect(sendMessage).not.toContain("VITE_STREAM_ENABLED");
   });
 });
