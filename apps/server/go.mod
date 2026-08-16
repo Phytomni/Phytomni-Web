@@ -17,14 +17,15 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/gomutex/godocx v0.1.5
 	github.com/google/uuid v1.4.0
 	github.com/jung-kurt/gofpdf v1.16.2
-	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/viper v1.19.0
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/xuri/excelize/v2 v2.9.1
+	github.com/yuin/goldmark v1.7.13
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.38.0
 	golang.org/x/text v0.25.0

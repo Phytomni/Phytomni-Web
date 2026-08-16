@@ -698,7 +698,9 @@ func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format 
 	if err := db.Where("id = ?", id).First(&questionAgentLog).Error; err != nil {
 		return nil, "", err
 	}
-	agent, err := document_format.NewAgent(questionAgentLog.ToolName)
+	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
+		FetchImage: newDocumentImageFetcher(ctx, questionAgentLog),
+	})
 	if err != nil {
 		return nil, "", err
 	}

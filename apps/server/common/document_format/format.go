@@ -6,12 +6,19 @@ import (
 	"phytomni-server/common/document_format/chat_agent"
 	"phytomni-server/common/document_format/data_agent"
 	"phytomni-server/common/document_format/knowledge_agent"
+	"phytomni-server/common/document_format/mdoc"
 	"phytomni-server/common/document_format/review_agent"
 	"time"
 )
 
 type FileDownloader interface {
 	Download(format string, answer string) ([]byte, string, error)
+}
+
+// AgentOptions carries per-download helpers. FetchImage is optional; a nil
+// fetcher leaves Markdown images as alt text.
+type AgentOptions struct {
+	FetchImage mdoc.ImageFetcher
 }
 
 func parseKnowledgeAnswer(answer string) knowledge_agent.Document {
@@ -31,24 +38,29 @@ func parseReviewAnswer(answer string) review_agent.Document {
 }
 
 func NewAgent(toolName string) (FileDownloader, error) {
+	return NewAgentWithOptions(toolName, AgentOptions{})
+}
+
+func NewAgentWithOptions(toolName string, opts AgentOptions) (FileDownloader, error) {
 	switch toolName {
 	case "ChatAgent":
-		return &ChatAgent{}, nil
+		return &ChatAgent{opts: opts}, nil
 	case "KnowledgeAgent":
-		return &KnowledgeAgent{}, nil
+		return &KnowledgeAgent{opts: opts}, nil
 	case "DataAgent":
 		return &DataAgent{}, nil
 	case "BriefGeneAgent", "ReviewAgent":
 		// BriefGeneAgent and ReviewAgent share the same formatter; both are
 		// canonical Bot-side tool names, otherwise /v1/download/* reports "unknown tool".
-		return &ReviewAgent{}, nil
+		return &ReviewAgent{opts: opts}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
 }
 
-// ChatAgent implementation
-type ChatAgent struct{}
+type ChatAgent struct {
+	opts AgentOptions
+}
 
 func (a *ChatAgent) Download(format string, answer string) ([]byte, string, error) {
 	timestamp := time.Now().Unix()
@@ -56,11 +68,11 @@ func (a *ChatAgent) Download(format string, answer string) ([]byte, string, erro
 	switch format {
 	case "Word":
 		filename += ".docx"
-		content, err := chat_agent.GenerateWord(answer)
+		content, err := chat_agent.GenerateWord(answer, a.opts.FetchImage)
 		return content, filename, err
 	case "PDF":
 		filename += ".pdf"
-		content, err := chat_agent.GeneratePDF(answer)
+		content, err := chat_agent.GeneratePDF(answer, a.opts.FetchImage)
 		return content, filename, err
 	case "Markdown":
 		filename += ".md"
@@ -71,8 +83,9 @@ func (a *ChatAgent) Download(format string, answer string) ([]byte, string, erro
 	}
 }
 
-// KnowledgeAgent implementation
-type KnowledgeAgent struct{}
+type KnowledgeAgent struct {
+	opts AgentOptions
+}
 
 func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string, error) {
 	doc := parseKnowledgeAnswer(answer)
@@ -83,11 +96,11 @@ func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string,
 	switch format {
 	case "Word":
 		filename += ".docx"
-		content, err := knowledge_agent.GenerateWord(doc)
+		content, err := knowledge_agent.GenerateWord(doc, a.opts.FetchImage)
 		return content, filename, err
 	case "PDF":
 		filename += ".pdf"
-		content, err := knowledge_agent.GeneratePDF(doc)
+		content, err := knowledge_agent.GeneratePDF(doc, a.opts.FetchImage)
 		return content, filename, err
 	case "Markdown":
 		filename += ".md"
@@ -127,7 +140,9 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 	}
 }
 
-type ReviewAgent struct{}
+type ReviewAgent struct {
+	opts AgentOptions
+}
 
 func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
 	doc := parseReviewAnswer(answer)
@@ -138,11 +153,11 @@ func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, er
 	switch format {
 	case "Word":
 		filename += ".docx"
-		content, err := review_agent.GenerateWord(doc)
+		content, err := review_agent.GenerateWord(doc, a.opts.FetchImage)
 		return content, filename, err
 	case "PDF":
 		filename += ".pdf"
-		content, err := review_agent.GeneratePDF(doc)
+		content, err := review_agent.GeneratePDF(doc, a.opts.FetchImage)
 		return content, filename, err
 	case "Markdown":
 		filename += ".md"

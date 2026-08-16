@@ -35,7 +35,7 @@ func TestChatAgentDownloadsWordAndPDF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	answer := "Rice genomics is a short fixture for download regression."
+	answer := "# Rice genomics\n\nA **short** fixture for download regression."
 	for _, format := range []string{"Word", "PDF"} {
 		content, filename, err := agent.Download(format, answer)
 		if err != nil {
@@ -49,6 +49,9 @@ func TestChatAgentDownloadsWordAndPDF(t *testing.T) {
 		}
 		if format == "PDF" && !bytes.HasPrefix(content, []byte("%PDF")) {
 			t.Fatalf("PDF payload missing %%PDF header, filename=%s", filename)
+		}
+		if bytes.Contains(content, []byte("# Rice genomics")) {
+			t.Fatalf("%s still contains raw markdown heading", format)
 		}
 	}
 }
