@@ -206,6 +206,7 @@ func ValidateAgents(ctx context.Context, c *Client) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("bot /v1/agents missing required slugs: %v", missing)
 	}
+	NoteConversationContextV1(resp)
 	return nil
 }
 
@@ -227,9 +228,8 @@ func ChatModelFor(slug string) (string, bool) {
 }
 
 // StreamModelFor returns the Web-owned AG-UI model for a stream-capable slug.
-// The caller still has to pass the process-wide StreamEnabled gate; this
-// lookup only enforces the canonical model/slug pair and fails closed for all
-// other agents.
+// This lookup only enforces the canonical model/slug pair and fails closed for
+// all other agents.
 func StreamModelFor(slug string) (string, bool) {
 	model, ok := slugToStreamModel[slug]
 	return model, ok

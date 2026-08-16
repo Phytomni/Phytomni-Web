@@ -36,6 +36,7 @@ func setupQueryTestDB(t *testing.T) *gorm.DB {
 }
 
 func TestQueryModeLockRejectsConflictingOwnerTurnBeforeAllocation(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, f_id, user_name, query, mode, status)
@@ -47,7 +48,7 @@ func TestQueryModeLockRejectsConflictingOwnerTurnBeforeAllocation(t *testing.T) 
 
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled: true, ExpertEnabled: true, MultiturnV1Enabled: true,
+		ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

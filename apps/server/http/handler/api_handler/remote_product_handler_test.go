@@ -164,7 +164,6 @@ func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
 		name string
 	}{
 		{tool: "AnalystAgent", name: "analyst"},
-		{tool: "InSilicoResearchAgent", name: "research"},
 		{tool: "DigitalDesignAgent", name: "design"},
 		{tool: "GeneNetworkAgent", name: "network"},
 	}
@@ -178,17 +177,10 @@ func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
 				wantCode int
 			}{
 				{
-					name:     "disabled",
-					email:    "remote@example.com",
-					code:     "admin",
-					config:   &rxBot.Config{ProxyEnabled: true},
-					wantCode: http.StatusServiceUnavailable,
-				},
-				{
 					name:     "permission denied",
 					email:    "denied@example.com",
 					code:     "ordinary",
-					config:   &rxBot.Config{ProxyEnabled: true, AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true},
+					config:   &rxBot.Config{ProxyEnabled: true},
 					wantCode: http.StatusNotFound,
 				},
 			} {
@@ -227,44 +219,6 @@ func TestAgentProductRunRejectsBeforeReadingAttachmentOrBot(t *testing.T) {
 	}
 }
 
-func TestAgentProductRunFlagOffReturns503BeforeBot(t *testing.T) {
-	gdb := setupRemoteProductHandlerDB(t)
-	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "remote@example.com", "admin", 5).Error; err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
-	previousConfig := rxBot.BotConfig
-	hits := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
-	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
-	previousQuota := viper.Get("chatlimit.enforce")
-	viper.Set("chatlimit.enforce", false)
-	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
-
-	c, w := newRemoteProductHandlerRequest(t, "InSilicoResearchAgent", nil)
-	c.Set("username", "remote@example.com")
-	NewHandler().AgentProductRun(c)
-
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("flag-off status = %d, body = %s; want 503", w.Code, w.Body.String())
-	}
-	var response struct {
-		Code int `json:"code"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode flag-off body %s: %v", w.Body.String(), err)
-	}
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("flag-off body code = %d, want 503", response.Code)
-	}
-	if hits != 0 {
-		t.Fatalf("flag-off request reached Bot %d time(s)", hits)
-	}
-}
-
 func TestAgentProductRunPermissionDeniedReturns404BeforeBot(t *testing.T) {
 	gdb := setupRemoteProductHandlerDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, code, chat_limit) VALUES (?, ?, ?)`, "denied@example.com", "ordinary", 5).Error; err != nil {
@@ -276,7 +230,7 @@ func TestAgentProductRunPermissionDeniedReturns404BeforeBot(t *testing.T) {
 		hits++
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
 	viper.Set("chatlimit.enforce", false)
@@ -382,7 +336,7 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 				_, _ = w.Write([]byte(`{"id":"` + runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"` + tc.upstreamState + `","task_ids":["` + taskID + `"],"result":{}}`))
 			}))
 			t.Cleanup(srv.Close)
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
 			viper.Set("chatlimit.enforce", false)
@@ -491,7 +445,7 @@ func TestAgentProductResolverRejectsBeforeBot(t *testing.T) {
 				hits++
 			}))
 			t.Cleanup(srv.Close)
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
 			viper.Set("chatlimit.enforce", false)
@@ -531,11 +485,8 @@ func TestAgentProductRunRejectsFilePartsBeforeBot(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL:         srv.URL,
-				ProxyEnabled:    true,
-				ResearchEnabled: true,
-				DesignEnabled:   true,
-				NetworkEnabled:  true,
+				BaseURL:      srv.URL,
+				ProxyEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
@@ -572,7 +523,7 @@ func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
 				_, _ = w.Write([]byte("Bot implementation detail"))
 			}))
 			t.Cleanup(srv.Close)
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
 			viper.Set("chatlimit.enforce", false)

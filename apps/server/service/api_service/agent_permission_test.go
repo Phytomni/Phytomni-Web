@@ -69,7 +69,7 @@ func seedAgentPermissionTool(t *testing.T, gdb *gorm.DB, code, tool string, id i
 }
 
 func allAgentFlags() *rxBot.Config {
-	return &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+	return &rxBot.Config{}
 }
 
 func TestResolveAgentPermissions(t *testing.T) {
@@ -159,36 +159,20 @@ func TestResolveAgentPermissions(t *testing.T) {
 		}
 	})
 
-	for _, tc := range []struct {
-		name     string
-		config   *rxBot.Config
-		disabled string
-	}{
-		{"research flag", &rxBot.Config{AnalystEnabled: true, DesignEnabled: true, NetworkEnabled: true}, "InSilicoResearchAgent"},
-		{"design flag", &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, NetworkEnabled: true}, "DigitalDesignAgent"},
-		{"network flag", &rxBot.Config{AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true}, "GeneNetworkAgent"},
-	} {
-		t.Run(tc.name+" filters only its product", func(t *testing.T) {
-			gdb := setupAgentPermissionDB(t)
-			seedAgentPermissionUser(t, gdb, "flags@example.com", "admin")
-			rxBot.BotConfig = tc.config
-			got, err := NewService().ResolveAgentPermissions(context.Background(), "flags@example.com")
-			if err != nil {
-				t.Fatalf("resolve: %v", err)
+	t.Run("remote products remain allowed without product flags", func(t *testing.T) {
+		gdb := setupAgentPermissionDB(t)
+		seedAgentPermissionUser(t, gdb, "flags@example.com", "admin")
+		rxBot.BotConfig = &rxBot.Config{}
+		got, err := NewService().ResolveAgentPermissions(context.Background(), "flags@example.com")
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		for _, tool := range []string{"InSilicoResearchAgent", "AnalystAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+			if !containsAgentTool(got.AllowedTools, tool) {
+				t.Fatalf("%s missing from allowed = %#v", tool, got.AllowedTools)
 			}
-			if !reflect.DeepEqual(got.GrantedTools, rxBot.CanonicalAgentDisplayTools()) {
-				t.Fatalf("granted = %#v", got.GrantedTools)
-			}
-			for _, tool := range got.AllowedTools {
-				if tool == tc.disabled {
-					t.Fatalf("disabled tool remained allowed: %s", tool)
-				}
-			}
-			if len(got.AllowedTools) != len(rxBot.CanonicalAgentDisplayOrder)-1 {
-				t.Fatalf("allowed = %#v", got.AllowedTools)
-			}
-		})
-	}
+		}
+	})
 
 	t.Run("all ten canonical names are granted in display order", func(t *testing.T) {
 		gdb := setupAgentPermissionDB(t)

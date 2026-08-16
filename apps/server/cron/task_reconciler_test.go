@@ -124,7 +124,7 @@ func TestReconciler_CleansTombstonesAndStaleSubmissionsWithoutSyncingSubmitting(
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 1,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -192,7 +192,7 @@ func TestReconciler_TombstoneFailureDoesNotStopBatch(t *testing.T) {
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 1,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

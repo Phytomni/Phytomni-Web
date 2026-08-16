@@ -191,6 +191,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 	if err != nil {
 		return manifest, nil
 	}
+	rxBot.NoteConversationContextV1(response)
 	presence, err := rxBot.ValidateWebAgentDescriptors(response)
 	if err != nil {
 		return manifest, nil
@@ -244,8 +245,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		attachmentPurposes := attachmentPurposesFor(agentPresence)
 		if productAttachmentCapability(definition.Slug) && len(attachmentPurposes) == 0 {
 			// Analyst and Research are attachment-enabled product surfaces. Their
-			// browser records remain dark until local product flags and Bot
-			// channel evidence agree.
+			// browser records remain dark until Bot channel evidence is present.
 			continue
 		}
 
@@ -253,13 +253,13 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
 		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
 		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug)
-		if streamEnabledForAgent(response, definition.Slug, cfg) {
+		if streamEnabledForAgent(response, definition.Slug) {
 			manifest.Agents[index].Stream = true
 		}
-		if cfg.A2uiActionsEnabled && definition.Slug == "review" {
+		if definition.Slug == "review" {
 			manifest.Agents[index].A2UI = true
 		}
-		if cfg.ExpertEnabled && definition.Slug == "chat" {
+		if definition.Slug == "chat" {
 			manifest.Agents[index].Resolver = true
 		}
 	}
@@ -355,45 +355,30 @@ func disabledBotCapabilities() []BotCapability {
 
 func stableWebAgent(slug string) bool {
 	switch slug {
-	case "chat", "knowledge", "data", "review", "brief_gene":
+	case "chat", "knowledge", "data", "review", "brief_gene", "research",
+		"analyst", "design", "network":
 		return true
 	default:
 		return false
 	}
 }
 
-func localCapabilityEnabled(slug string, cfg *rxBot.Config) bool {
-	switch slug {
-	case "analyst":
-		return cfg != nil && cfg.AnalystEnabled
-	case "research":
-		return cfg != nil && cfg.ResearchEnabled
-	case "design":
-		return cfg != nil && cfg.DesignEnabled
-	case "network":
-		return cfg != nil && cfg.NetworkEnabled
-	default:
-		return stableWebAgent(slug)
-	}
+func localCapabilityEnabled(slug string, _ *rxBot.Config) bool {
+	return stableWebAgent(slug)
 }
 
 func productAttachmentCapability(slug string) bool {
 	return slug == "analyst" || slug == "research"
 }
 
-func streamEnabledForAgent(resp *rxBot.AgentsListResponse, slug string, cfg *rxBot.Config) bool {
-	if cfg == nil || !cfg.StreamEnabled {
-		return false
-	}
+func streamEnabledForAgent(resp *rxBot.AgentsListResponse, slug string) bool {
 	capability, ok := rxBot.FindAgentCapability(resp, slug)
 	if !ok || !capability.Streaming {
 		return false
 	}
 	switch slug {
-	case "chat":
+	case "chat", "knowledge", "brief_gene":
 		return true
-	case "knowledge", "brief_gene":
-		return cfg.ExpertEnabled
 	default:
 		return false
 	}

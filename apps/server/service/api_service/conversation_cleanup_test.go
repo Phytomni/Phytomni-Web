@@ -50,7 +50,7 @@ func TestDrainPendingConversationTombstones_IsBoundedAndIsolatesFailures(t *test
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

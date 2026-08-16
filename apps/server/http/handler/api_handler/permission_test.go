@@ -70,7 +70,7 @@ func permissionUserToolRecorder(t *testing.T, email string) *httptest.ResponseRe
 func TestPermissionUserToolReturnsEffectivePartialOrderedList(t *testing.T) {
 	previous := rxBot.BotConfig
 	t.Cleanup(func() { rxBot.BotConfig = previous })
-	rxBot.BotConfig = &rxBot.Config{ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{}
 	gdb := setupPermissionUserToolDB(t)
 	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, ?)`, "partial@example.com", "user").Error; err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -102,7 +102,7 @@ func TestPermissionUserToolReturnsEffectivePartialOrderedList(t *testing.T) {
 			"permission": "user",
 			"tool_list": ["ChatAgent", "DeepGenomeAgent"],
 			"permission_list": ["Profile management"],
-			"expert_enabled": false
+			"expert_enabled": true
 		}
 	}`, recorder.Body.String())
 }
@@ -124,7 +124,7 @@ func TestPermissionUserToolReturnsValidEmptyList(t *testing.T) {
 			"permission": "user",
 			"tool_list": [],
 			"permission_list": [],
-			"expert_enabled": false
+			"expert_enabled": true
 		}
 	}`, recorder.Body.String())
 }

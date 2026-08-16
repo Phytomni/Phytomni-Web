@@ -59,14 +59,14 @@ func setupInteropServiceDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-func configureInteropServiceBot(t *testing.T, baseURL string, enabled bool) {
+func configureInteropServiceBot(t *testing.T, baseURL string, _ bool) {
 	t.Helper()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL:        baseURL,
 		UserAPIKey:     "ptm-interop-test",
+		ProxyEnabled:   true,
 		TimeoutSeconds: 1,
-		InteropEnabled: enabled,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 }
@@ -138,23 +138,6 @@ func TestInteropCapabilitiesStripEndpointAndCredentialFields(t *testing.T) {
 	}
 	if got := atomic.LoadInt64(&hits); got != 1 {
 		t.Fatalf("Bot calls = %d, want 1", got)
-	}
-}
-
-func TestInteropCapabilitiesFlagOffReturnsBeforeBot(t *testing.T) {
-	gdb := setupInteropServiceDB(t)
-	seedInteropUser(t, gdb, "admin@example.com", "admin")
-	hits := int64(0)
-	srv := interopResponseServer(t, http.StatusOK, `{"object":"list","data":[],"errors":[]}`, &hits)
-	t.Cleanup(srv.Close)
-	configureInteropServiceBot(t, srv.URL, false)
-
-	_, err := NewService().InteropCapabilities(context.Background(), "admin@example.com")
-	if !errors.Is(err, ErrInteropDisabled) {
-		t.Fatalf("flag-off error = %v, want ErrInteropDisabled", err)
-	}
-	if got := atomic.LoadInt64(&hits); got != 0 {
-		t.Fatalf("flag-off Bot calls = %d, want 0", got)
 	}
 }
 

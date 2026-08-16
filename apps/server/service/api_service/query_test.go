@@ -89,7 +89,7 @@ func TestQueryPreservesAttachmentsAcrossBlockingAndStreamChat(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			previous := rxBot.BotConfig
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: tc.stream, TimeoutSeconds: 5}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
 			refs := []rxBot.AssetAttachmentRef{{AssetID: "file_counts"}}
@@ -191,6 +191,7 @@ func assertV1ContextDoesNotReplayOutput(
 }
 
 func TestQueryContextPrebuildsForNonContiguousLedgerRow(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	var (
 		envelopes []rxBot.ConversationEnvelopeV1
@@ -318,6 +319,7 @@ func TestToolNameMapCoversAgents(t *testing.T) {
 }
 
 func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	var chatCalls, settleCalls int
 	var stagedLedgerVersion string
@@ -394,8 +396,8 @@ func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -430,6 +432,7 @@ func TestQueryBlockingContextSettlementPersistsBeforeAcknowledgment(t *testing.T
 }
 
 func TestQueryBlockingContextRejectsInvalidMetadata(t *testing.T) {
+	useConversationV1(t)
 	tests := []struct {
 		name   string
 		mutate func(*rxBot.ContextStageMetadata)
@@ -479,7 +482,7 @@ func TestQueryBlockingContextRejectsInvalidMetadata(t *testing.T) {
 			defer server.Close()
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+				BaseURL: server.URL, ProxyEnabled: true,
 				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -506,6 +509,7 @@ func TestQueryBlockingContextRejectsInvalidMetadata(t *testing.T) {
 }
 
 func TestQueryAckPendingFinalizesBeforeNextEnvelope(t *testing.T) {
+	useConversationV1(t)
 	setupExpertTestDB(t)
 	var chatCalls, settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -575,7 +579,7 @@ func TestQueryAckPendingFinalizesBeforeNextEnvelope(t *testing.T) {
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -606,6 +610,7 @@ func TestQueryAckPendingFinalizesBeforeNextEnvelope(t *testing.T) {
 }
 
 func TestQueryBlockingContextDegradedPreservesAnswerAndForcesRebuild(t *testing.T) {
+	useConversationV1(t)
 	setupExpertTestDB(t)
 	var settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -636,7 +641,7 @@ func TestQueryBlockingContextDegradedPreservesAnswerAndForcesRebuild(t *testing.
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -658,6 +663,7 @@ func TestQueryBlockingContextDegradedPreservesAnswerAndForcesRebuild(t *testing.
 }
 
 func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
+	useConversationV1(t)
 	t.Run("rebuild succeeds", func(t *testing.T) {
 		setupExpertTestDB(t)
 		var calls int
@@ -716,7 +722,7 @@ func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
 		defer server.Close()
 		previous := rxBot.BotConfig
 		rxBot.BotConfig = &rxBot.Config{
-			BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+			BaseURL: server.URL, ProxyEnabled: true,
 			TimeoutSeconds: 2,
 		}
 		t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -756,7 +762,7 @@ func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
 		defer server.Close()
 		previous := rxBot.BotConfig
 		rxBot.BotConfig = &rxBot.Config{
-			BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+			BaseURL: server.URL, ProxyEnabled: true,
 			TimeoutSeconds: 2,
 		}
 		t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -778,6 +784,7 @@ func TestQueryContextRebuildRetriesExactlyOnceWithDurableTurn(t *testing.T) {
 }
 
 func TestQueryContextRebuildRecoversPendingAcknowledgment(t *testing.T) {
+	useConversationV1(t)
 	setupExpertTestDB(t)
 	var chatCalls, settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -834,7 +841,7 @@ func TestQueryContextRebuildRecoversPendingAcknowledgment(t *testing.T) {
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -866,6 +873,7 @@ func TestQueryContextRebuildRecoversPendingAcknowledgment(t *testing.T) {
 }
 
 func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	dialogueID := "33333333-3333-4333-8333-333333333333"
 	oldInput := QueryInput{
@@ -1008,7 +1016,7 @@ func TestQueryRefreshReplaceStagesUntilTerminalSuccess(t *testing.T) {
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -1088,7 +1096,7 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -1155,9 +1163,6 @@ func TestQueryReplacementPostDispatchDefiniteFailureIsIdempotent(t *testing.T) {
 				w.WriteHeader(tc.statusCode)
 				_, _ = w.Write([]byte(tc.body))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 			input := QueryInput{
 				Query: "replacement with deterministic dispatch failure", Mode: "expert",
@@ -1223,9 +1228,6 @@ func TestQueryDirectAgentResponseRejectsMissingOrMismatchedAgent(t *testing.T) {
 						`","task_ids":[],"result":{"formatted":{"answer":"must not persist"}}}`,
 				))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 			input := QueryInput{
 				Query: "strict direct agent identity", Mode: "expert",
@@ -1274,9 +1276,6 @@ func TestQueryDirectAgentResponseAcceptsCanonicalAgent(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"run-direct-agent-match","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.AnalystEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 	input := QueryInput{
 		Query: "matching direct Research response", Mode: "expert",
@@ -1293,6 +1292,7 @@ func TestQueryDirectAgentResponseAcceptsCanonicalAgent(t *testing.T) {
 }
 
 func TestConversationContextIntegrationBlockingSettlementRedactsOutput(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	username := "alice"
 	dialogueID := "55555555-5555-4555-8555-555555555555"
@@ -1373,7 +1373,7 @@ func TestConversationContextIntegrationBlockingSettlementRedactsOutput(t *testin
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

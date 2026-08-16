@@ -22,6 +22,12 @@ import (
 	"phytomni-server/model"
 )
 
+func useConversationV1(t *testing.T) {
+	t.Helper()
+	rxBot.SetConversationContextV1Advertised(true)
+	t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
+}
+
 func v1SubmissionServer(
 	t *testing.T,
 	handler func(http.ResponseWriter, *http.Request),
@@ -31,8 +37,8 @@ func v1SubmissionServer(
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		StreamEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	return server
@@ -146,8 +152,7 @@ func TestV1AllocationAcceptsWorstCaseJSONEscapingForAppendAndReplace(t *testing.
 	gdb := setupExpertTestDB(t)
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		MaxQueryChars:      rxBot.HardMaxUserQueryChars,
-		MultiturnV1Enabled: true,
+		MaxQueryChars: rxBot.HardMaxUserQueryChars,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
@@ -251,6 +256,7 @@ func TestQueryStreamRetainsDefaultAttachmentLimit(t *testing.T) {
 }
 
 func TestQuerySubmissionPersistsBeforeBotAndUsesStableTurnIdentity(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	rawQuery := "\n\t  Rice root atlas   reproduction \n" + strings.Repeat("x", 500)
 	var (
@@ -423,7 +429,6 @@ func TestOwnerSubmissionFingerprintRejectsBehaviorMutation(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"id":"run-fingerprint","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"fingerprinted"}}]}`))
 			})
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			input := tc.initial
 			input.Query = "fingerprint request"
 			input.ClientTurnID = "fingerprint-" + strings.ReplaceAll(tc.name, " ", "-")
@@ -460,6 +465,7 @@ func TestOwnerSubmissionFingerprintRejectsBehaviorMutation(t *testing.T) {
 }
 
 func TestV1ArtifactMutationConflictsWithAcceptedClientTurn(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	const dialogueID = "67676767-6767-4676-8676-676767676767"
 	seedV1ConversationRoot(t, gdb, "alice", dialogueID)
@@ -539,8 +545,6 @@ func TestOwnerSubmissionFingerprintRejectsResolverMutation(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-resolver-fingerprint","object":"agent.run","agent":"design","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.MultiturnV1Enabled = false
-	rxBot.BotConfig.DesignEnabled = true
 	input := QueryInput{
 		Query: "design a guide", Tool: "DigitalDesignAgent", Mode: "expert",
 		Surface: QuerySurfaceChat, ClientTurnID: "resolver-fingerprint-key",
@@ -581,7 +585,6 @@ func TestLongResearchSubmissionPreservesRawQueryAndDuplicateClientTurn(t *testin
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-long-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-long-research"],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -630,6 +633,7 @@ func TestLongResearchSubmissionPreservesRawQueryAndDuplicateClientTurn(t *testin
 }
 
 func TestDedicatedResearchSubmissionReusesClientTurnRowAndRun(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	var (
 		calls    int
@@ -647,7 +651,6 @@ func TestDedicatedResearchSubmissionReusesClientTurnRowAndRun(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-dedicated-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-dedicated-research"],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -713,7 +716,6 @@ func TestDedicatedResearchTerminalSubmissionPersistsExecutionProjection(t *testi
 			}
 		}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -763,8 +765,6 @@ func TestDedicatedResearchSubmissionReusesClientTurnWithoutConversationV1(t *tes
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-research-no-conversation-v1","object":"agent.run","agent":"research","status":"running","task_ids":["child-research-no-conversation-v1"],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -812,8 +812,6 @@ func TestForcedChatResearchRequiresClientTurnWithoutConversationV1(t *testing.T)
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"unexpected-run","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -849,6 +847,8 @@ func TestForcedChatResearchSubmissionUsesOwnerAllocation(t *testing.T) {
 		{name: "conversation V1", conversationV1: true, wantConversation: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			rxBot.SetConversationContextV1Advertised(tc.conversationV1)
+			t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
 			gdb := setupExpertTestDB(t)
 			var (
 				calls    int
@@ -866,8 +866,6 @@ func TestForcedChatResearchSubmissionUsesOwnerAllocation(t *testing.T) {
 				w.WriteHeader(http.StatusAccepted)
 				_, _ = w.Write([]byte(`{"id":"run-forced-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-forced-research"],"result":{}}`))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = tc.conversationV1
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -965,8 +963,6 @@ func TestForcedChatResearchClientTurnUsesRequestedInteropFingerprint(t *testing.
 			setupExpertTestDB(t)
 			h := newInteropDelegationServer(t, http.StatusServiceUnavailable, "unavailable")
 			h.configure(t)
-			rxBot.BotConfig.ExpertEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -1075,9 +1071,8 @@ func TestAcceptedResearchRetryBypassesLiveInteropDiscovery(t *testing.T) {
 			defer server.Close()
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-				ResearchEnabled: true, InteropEnabled: true,
-				MultiturnV1Enabled: false, TimeoutSeconds: 2,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 			service := &Service{
@@ -1185,8 +1180,6 @@ func TestAcceptedResearchRetryBypassesLiveCapabilityAndLimitDrift(t *testing.T) 
 					w.WriteHeader(http.StatusAccepted)
 					_, _ = w.Write([]byte(`{"id":"run-capability-drift","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 				})
-				rxBot.BotConfig.ResearchEnabled = true
-				rxBot.BotConfig.MultiturnV1Enabled = false
 				reader := &countingResearchCatalogReader{
 					response: researchCatalogWithLimits(32, rxBot.DefaultMaxAssetAttachmentRefs),
 				}
@@ -1303,9 +1296,8 @@ func TestResearchDiscoveryFailureRechecksConcurrentAcceptedTurn(t *testing.T) {
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		ResearchEnabled: true, InteropEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	service := &Service{
@@ -1371,6 +1363,8 @@ func TestResearchClientTurnCannotCrossIntoNonResearchRouting(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			rxBot.SetConversationContextV1Advertised(tc.conversationV1)
+			t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
 			gdb := setupExpertTestDB(t)
 			var botCalls atomic.Int64
 			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -1389,9 +1383,6 @@ func TestResearchClientTurnCannotCrossIntoNonResearchRouting(t *testing.T) {
 					http.NotFound(w, r)
 				}
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = tc.conversationV1
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -1443,6 +1434,8 @@ func TestResearchOwnerAllocationModeLockTracksConversationV1(t *testing.T) {
 		{name: "conversation V1 enforces mode lock", conversationV1: true, wantConflict: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			rxBot.SetConversationContextV1Advertised(tc.conversationV1)
+			t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
 			gdb := setupExpertTestDB(t)
 			if err := gdb.Exec(`INSERT INTO question_agent_logs
 				(id, dialogue_id, f_id, user_name, query, tool_name, mode, status)
@@ -1466,8 +1459,6 @@ func TestResearchOwnerAllocationModeLockTracksConversationV1(t *testing.T) {
 				w.WriteHeader(http.StatusAccepted)
 				_, _ = w.Write([]byte(`{"id":"run-research-legacy-append","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = tc.conversationV1
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -1546,9 +1537,6 @@ func TestResearchSubmissionAmbiguousRetryFailsClosedWithoutRedispatch(t *testing
 				w.WriteHeader(http.StatusAccepted)
 				_, _ = w.Write([]byte(`{"id":"run-duplicate-after-lease","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -1648,9 +1636,6 @@ func TestAmbiguousResearchReplacementUsesReplacementIdentity(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.AnalystEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	reader := &countingResearchCatalogReader{response: validResearchCapabilityCatalog()}
 	service := &Service{catalogReader: reader}
 	input := QueryInput{
@@ -1734,9 +1719,6 @@ func TestAcceptedResearchReplacementStagesPrivateCandidate(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-accepted-research-replacement","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.AnalystEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	reader := &countingResearchCatalogReader{response: validResearchCapabilityCatalog()}
 	service := &Service{catalogReader: reader}
 	input := QueryInput{
@@ -1825,9 +1807,6 @@ func TestConcurrentBaseAndReplacementKeysShareOneRowAndDispatch(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-concurrent-replacement","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.AnalystEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 	replacementInput := QueryInput{
 		Query: "concurrent replacement", Mode: "expert",
@@ -1966,9 +1945,6 @@ func TestTerminalResearchReplacementPreservesAcceptedBaseAndOwnIdentity(t *testi
 					},
 				})
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 			input := QueryInput{
 				Query: "terminal Research replacement", Mode: "expert",
@@ -2047,9 +2023,6 @@ func TestTerminalReplacementIdentityRetiresBeforeNewReplacement(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`{"id":"run-after-terminal","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.AnalystEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 	terminalInput := QueryInput{
 		Query: "terminal replacement before another attempt", Mode: "expert",
@@ -2127,7 +2100,6 @@ func TestKeyedV0ReservationNeverPersistsConversationV1Lifecycle(t *testing.T) {
 					_, _ = w.Write([]byte(`{"id":"run-v0-private","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"settled"}}]}`))
 				}
 			})
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			clientTurnID := "v0-private-" + strings.ReplaceAll(tc.name, " ", "-")
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{
 				Query: "V0 private state", Mode: "instant", ClientTurnID: clientTurnID,
@@ -2179,7 +2151,6 @@ func TestDedicatedResearchClientTurnRejectsChangedInteropFingerprint(t *testing.
 				`{"object":"list","data":[{"target_id":"mcp-peer","kind":"mcp"},{"target_id":"mcp-other","kind":"mcp"}],"errors":[]}`,
 			)
 			h.configure(t)
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -2224,8 +2195,6 @@ func TestDedicatedResearchClientTurnNormalizesOffInteropFingerprint(t *testing.T
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-research-off","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{
 		catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 	}
@@ -2274,8 +2243,6 @@ func TestDedicatedResearchClientTurnRejectsConflictingFingerprint(t *testing.T) 
 				w.WriteHeader(http.StatusAccepted)
 				_, _ = w.Write([]byte(`{"id":"run-dedicated-conflict","object":"agent.run","agent":"research","status":"running","task_ids":["child-dedicated-conflict"],"result":{}}`))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.MultiturnV1Enabled = false
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()},
 			}
@@ -2465,8 +2432,6 @@ func TestConcurrentResearchAndLegacyChatAtomicallyClaimClientTurn(t *testing.T) 
 		}
 	})
 	_ = server
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	reader := &gatedResearchCatalogReader{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
@@ -2543,7 +2508,6 @@ func TestClientTurnReservationLockIsReleasedBeforeBotDispatch(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"chat-unlocked-dispatch","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"formatted":{"answer":"ok"}}`))
 	})
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := NewService()
 	const clientTurnID = "reservation-released-before-bot"
 	type result struct {
@@ -2676,8 +2640,6 @@ func TestResearchReservationWinsBeforeInstantAndDoesNotHoldBotLock(t *testing.T)
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"id":"run-research-reservation-winner","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 	})
-	rxBot.BotConfig.ResearchEnabled = true
-	rxBot.BotConfig.MultiturnV1Enabled = false
 	service := &Service{catalogReader: staticResearchCatalogReader{response: validResearchCapabilityCatalog()}}
 	const clientTurnID = "research-reserves-before-instant"
 	type result struct {
@@ -3031,7 +2993,6 @@ func TestQuerySubmissionResearchMissingRunIDBeforePersistence(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`))
 			})
-			rxBot.BotConfig.ResearchEnabled = true
 			service := &Service{
 				catalogReader: staticResearchCatalogReader{
 					response: validResearchCapabilityCatalog(),
@@ -3109,7 +3070,6 @@ func TestStaleSubmittingClientTurnNeverRedispatchesAfterAllowlistDrift(t *testin
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 2,
-		MultiturnV1Enabled: false,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

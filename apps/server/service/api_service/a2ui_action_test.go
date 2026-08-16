@@ -30,7 +30,7 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"run-review-1","run_id":"run-review-1","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"draft":"summary","a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{}}`))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := (&Service{}).Query(context.Background(), "alice@x.com", QueryInput{
@@ -94,7 +94,7 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -362,7 +362,7 @@ func configureA2uiActionRunServer(
 	}))
 	t.Cleanup(server.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, A2uiActionsEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		UserAPIKey: "test-user-key", TimeoutSeconds: 5,
 	}
 }
@@ -647,7 +647,7 @@ func TestA2uiAction_PrivateReplacementRunIsAuthorizedAndOldPublicRunIsRetired(t 
 	}))
 	t.Cleanup(server.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, A2uiActionsEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 		UserAPIKey: "test-user-key", TimeoutSeconds: 2,
 	}
 
@@ -688,7 +688,7 @@ func TestA2uiAction_OwnershipMiss404(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setupA2uiActionTest(t)
-			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, A2uiActionsEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
 
 			outcome, err := (&Service{}).A2uiAction(
 				context.Background(), tt.username, "dlg-1", []byte(tt.body),
@@ -713,11 +713,10 @@ func TestA2uiAction_RunMismatchDoesNotCallBot(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:       true,
-		A2uiActionsEnabled: true,
-		BaseURL:            srv.URL,
-		UserAPIKey:         "test-user-key",
-		TimeoutSeconds:     5,
+		ProxyEnabled:   true,
+		BaseURL:        srv.URL,
+		UserAPIKey:     "test-user-key",
+		TimeoutSeconds: 5,
 	}
 
 	outcome, err := (&Service{}).A2uiAction(
@@ -736,42 +735,10 @@ func TestA2uiAction_RunMismatchDoesNotCallBot(t *testing.T) {
 	}
 }
 
-func TestA2uiAction_FlagOffReturnsGatewayDisabled(t *testing.T) {
-	setupA2uiActionTest(t)
-	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:       true,
-		A2uiActionsEnabled: false,
-		BaseURL:            srv.URL,
-		UserAPIKey:         "test-user-key",
-		TimeoutSeconds:     5,
-	}
-
-	outcome, err := (&Service{}).A2uiAction(
-		context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody),
-	)
-
-	if outcome != nil {
-		t.Fatalf("outcome = %#v, want nil", outcome)
-	}
-	if !errors.Is(err, ErrGatewayDisabled) {
-		t.Fatalf("error = %v, want ErrGatewayDisabled", err)
-	}
-	if got := hits.Load(); got != 0 {
-		t.Fatalf("Bot hits = %d, want 0", got)
-	}
-}
-
 func TestA2uiAction_ProxyDisabled503(t *testing.T) {
 	setupA2uiActionTest(t)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:       false,
-		A2uiActionsEnabled: true,
+		ProxyEnabled: false,
 	}
 
 	outcome, err := (&Service{}).A2uiAction(
@@ -804,11 +771,10 @@ func TestA2uiAction_FlagOnPassthrough(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:       true,
-		A2uiActionsEnabled: true,
-		BaseURL:            srv.URL,
-		UserAPIKey:         "test-user-key",
-		TimeoutSeconds:     5,
+		ProxyEnabled:   true,
+		BaseURL:        srv.URL,
+		UserAPIKey:     "test-user-key",
+		TimeoutSeconds: 5,
 	}
 
 	outcome, err := (&Service{}).A2uiAction(
@@ -902,7 +868,7 @@ func TestA2uiAction_UpstreamValidation(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+				ProxyEnabled: true, BaseURL: srv.URL,
 				UserAPIKey: "test-user-key", TimeoutSeconds: 5,
 			}
 
@@ -950,7 +916,7 @@ func TestA2uiAction_UpstreamOversizeReturnsSentinel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+		ProxyEnabled: true, BaseURL: srv.URL,
 		UserAPIKey: "test-user-key", TimeoutSeconds: 5,
 	}
 
@@ -967,7 +933,7 @@ func TestA2uiAction_UpstreamOversizeReturnsSentinel(t *testing.T) {
 
 func TestA2uiAction_BadEnvelope(t *testing.T) {
 	setupA2uiActionTest(t)
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, A2uiActionsEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
 
 	outcome, err := (&Service{}).A2uiAction(
 		context.Background(),
@@ -1062,7 +1028,7 @@ func TestValidateA2uiPayload_Matrix(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				ProxyEnabled: true, A2uiActionsEnabled: true, BaseURL: srv.URL,
+				ProxyEnabled: true, BaseURL: srv.URL,
 				UserAPIKey: "test-user-key", TimeoutSeconds: 5,
 			}
 

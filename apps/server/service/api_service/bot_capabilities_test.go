@@ -187,7 +187,6 @@ func TestBotCapabilitiesResearchFormatMatrixFailsClosedOnlyForResearch(t *testin
 			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
 				ProxyEnabled:       true,
 				UploadPublicOrigin: "https://upload.example",
-				ResearchEnabled:    true,
 				MaxQueryChars:      131_072,
 			})
 
@@ -248,7 +247,6 @@ func TestBotCapabilitiesProjectsResearchInputContract(t *testing.T) {
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
 		ProxyEnabled:       true,
 		UploadPublicOrigin: "https://upload.example",
-		ResearchEnabled:    true,
 		MaxQueryChars:      131_072,
 	})
 
@@ -296,7 +294,7 @@ func TestBotCapabilitiesProjectsLowerAttachmentAdvertisement(t *testing.T) {
 			t.Cleanup(server.Close)
 			useCapabilityBotConfig(t, server.URL, rxBot.Config{
 				ProxyEnabled:       true,
-				UploadPublicOrigin: "https://upload.example", ResearchEnabled: true,
+				UploadPublicOrigin: "https://upload.example",
 			})
 
 			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -351,7 +349,6 @@ func TestBotCapabilitiesMalformedResearchInputDisablesOnlyResearch(t *testing.T)
 			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
 				ProxyEnabled:       true,
 				UploadPublicOrigin: "https://upload.example",
-				ResearchEnabled:    true,
 				MaxQueryChars:      131_072,
 			})
 
@@ -376,13 +373,41 @@ func TestBotCapabilitiesMalformedResearchInputDisablesOnlyResearch(t *testing.T)
 	}
 }
 
+func TestBotCapabilitiesAcceptsDescriptorDatasetFormatsWithoutResearchFlag(t *testing.T) {
+	response := validResearchCapabilityCatalog()
+	for index := range response.Data {
+		if response.Data[index].Slug != "research" {
+			continue
+		}
+		response.Data[index].Capabilities.Attachments.Datasets.Formats = nil
+	}
+	response.ResearchInputResolution.DatasetFormats = RequiredResearchDatasetFormats()
+
+	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
+		ProxyEnabled:  true,
+		MaxQueryChars: 131_072,
+	})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.ResearchInput.Enabled {
+		t.Fatalf("research input stayed dark: %#v", manifest.ResearchInput)
+	}
+	if !capabilityBySlug(manifest.Agents, "research").Enabled {
+		t.Fatalf("research agent stayed dark: %#v", capabilityBySlug(manifest.Agents, "research"))
+	}
+}
+
 func TestBotCapabilitiesResearchInputDoesNotEnableDisabledUpload(t *testing.T) {
 	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, validResearchCapabilityCatalog()), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:    true,
-		ResearchEnabled: true,
-		MaxQueryChars:   131_072,
+		ProxyEnabled:  true,
+		MaxQueryChars: 131_072,
 	})
 
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -453,7 +478,7 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 		}
 	}
 	if got := capabilityBySlug(rows.Agents, "research"); got.Enabled {
-		t.Fatal("new remote research capability must stay dark")
+		t.Fatal("research must stay dark without the Bot research-input contract")
 	}
 }
 
@@ -471,8 +496,6 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
 		ProxyEnabled:       true,
 		UploadPublicOrigin: "https://upload.example",
-		AnalystEnabled:     true,
-		ResearchEnabled:    true,
 	})
 
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -500,8 +523,6 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	useCapabilityBotConfig(t, srvNoDataset.URL, rxBot.Config{
 		ProxyEnabled:       true,
 		UploadPublicOrigin: "https://upload.example",
-		AnalystEnabled:     true,
-		ResearchEnabled:    true,
 	})
 	manifest, err = NewService().BotCapabilities(context.Background(), "alice@example.com")
 	if err != nil {
@@ -538,8 +559,11 @@ func TestBotCapabilitiesProjectsAdvertisedAttachmentChannelsForEveryEnabledAgent
 		t.Fatalf("data attachment purposes = %q, want document,dataset", got)
 	}
 	design := capabilityBySlug(manifest.Agents, "design")
-	if design.Enabled || design.Attachments || len(design.AttachmentPurposes) != 0 {
-		t.Fatalf("disabled design capability = %#v", design)
+	if !design.Enabled || !design.Attachments {
+		t.Fatalf("design capability = %#v", design)
+	}
+	if got := strings.Join(design.AttachmentPurposes, ","); got != "document,dataset" {
+		t.Fatalf("design attachment purposes = %q, want document,dataset", got)
 	}
 }
 
@@ -548,13 +572,8 @@ func TestResultArchiveV1Effective(t *testing.T) {
 		cfg := &rxBot.Config{}
 		switch slug {
 		case "analyst":
-			cfg.AnalystEnabled = true
-		case "research":
-			cfg.ResearchEnabled = true
 		case "network":
-			cfg.NetworkEnabled = true
 		case "design":
-			cfg.DesignEnabled = true
 		}
 		return cfg
 	}
@@ -596,16 +615,11 @@ func TestResultArchiveV1Effective(t *testing.T) {
 	}
 }
 
-func TestLocalCapabilityEnabledUsesDedicatedRemoteFlags(t *testing.T) {
-	cfg := &rxBot.Config{DesignEnabled: true, NetworkEnabled: false}
-	if !localCapabilityEnabled("design", cfg) {
-		t.Fatal("design must use DesignEnabled")
-	}
-	if localCapabilityEnabled("network", cfg) {
-		t.Fatal("network must use NetworkEnabled")
-	}
-	if localCapabilityEnabled("design", &rxBot.Config{}) || localCapabilityEnabled("network", &rxBot.Config{}) {
-		t.Fatal("network and design must not fall through to stable Web agents")
+func TestLocalCapabilityEnabledIsAlwaysOnForKnownAgents(t *testing.T) {
+	for _, slug := range []string{"chat", "research", "analyst", "design", "network"} {
+		if !localCapabilityEnabled(slug, &rxBot.Config{}) || !localCapabilityEnabled(slug, nil) {
+			t.Fatalf("%s must be locally enabled without a product flag", slug)
+		}
 	}
 }
 
@@ -615,10 +629,6 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 	config := rxBot.Config{
 		ProxyEnabled:       true,
 		UploadPublicOrigin: "https://upload.example",
-		AnalystEnabled:     true,
-		ResearchEnabled:    true,
-		NetworkEnabled:     true,
-		DesignEnabled:      true,
 	}
 	protocols := func(resultArchive bool) map[string][]int {
 		values := map[string][]int{
@@ -666,13 +676,6 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 			config:    config,
 			want:      map[string]bool{"analyst": true, "research": true, "network": false, "design": true},
 		},
-		{
-			name:        "dedicated release flag disabled",
-			descriptors: descriptors,
-			protocols:   protocols(true),
-			config:      func() rxBot.Config { cfg := config; cfg.DesignEnabled = false; return cfg }(),
-			want:        map[string]bool{"analyst": true, "research": true, "network": true, "design": false},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -707,51 +710,25 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 	}
 }
 
-func TestBotCapabilitiesAnalystResearchRequireIndependentLocalFlags(t *testing.T) {
-	descriptors := capabilityDescriptors()
-	for index := range descriptors {
-		if descriptors[index].Slug == "analyst" || descriptors[index].Slug == "research" {
-			descriptors[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{}
+func TestBotCapabilitiesAnalystAndResearchEnableWithoutLocalFlags(t *testing.T) {
+	response := validResearchCapabilityCatalog()
+	for index := range response.Data {
+		if response.Data[index].Slug == "analyst" {
+			response.Data[index].Capabilities.Attachments.Datasets = &rxBot.AgentDescriptorDatasetCapability{}
 		}
 	}
-	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
+	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 	t.Cleanup(srv.Close)
-	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:   true,
-		AnalystEnabled: true,
-	})
-
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: true})
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Upload.Enabled {
-		t.Fatalf("upload enabled without a public origin: %#v", manifest.Upload)
-	}
-	analyst := capabilityBySlug(manifest.Agents, "analyst")
-	if !analyst.Enabled || !analyst.Attachments {
-		t.Fatalf("Analyst stayed dark despite Bot attachment ads: %#v", analyst)
-	}
-	if got := strings.Join(analyst.AttachmentPurposes, ","); got != "document,dataset" {
-		t.Fatalf("analyst attachment purposes = %q, want document,dataset", got)
-	}
-
-	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:       true,
-		UploadPublicOrigin: "https://upload.example",
-		AnalystEnabled:     true,
-	})
-
-	manifest, err = NewService().BotCapabilities(context.Background(), "alice@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !capabilityBySlug(manifest.Agents, "analyst").Enabled {
-		t.Fatal("enabled Analyst must be present in the manifest")
-	}
-	research := capabilityBySlug(manifest.Agents, "research")
-	if research.Enabled || research.Attachments || research.Artifacts || research.AttachmentPurposes == nil || len(research.AttachmentPurposes) != 0 {
-		t.Fatalf("disabled Research capability = %#v", research)
+	for _, slug := range []string{"analyst", "research"} {
+		row := capabilityBySlug(manifest.Agents, slug)
+		if !row.Enabled || !row.Attachments {
+			t.Fatalf("%s stayed dark without a local product flag: %#v", slug, row)
+		}
 	}
 }
 
@@ -886,10 +863,7 @@ func TestBotCapabilitiesLocalGatesAndRemoteDefaults(t *testing.T) {
 	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, capabilityDescriptors()), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:       true,
-		StreamEnabled:      true,
-		A2uiActionsEnabled: true,
-		ExpertEnabled:      true,
+		ProxyEnabled: true,
 	})
 
 	rows, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -907,33 +881,15 @@ func TestBotCapabilitiesLocalGatesAndRemoteDefaults(t *testing.T) {
 	if !capabilityBySlug(rows.Agents, "chat").Resolver {
 		t.Fatal("Chat resolver should follow the explicit Expert gate")
 	}
-	for _, slug := range []string{"analyst", "deep_genome", "research", "design", "network"} {
+	for _, slug := range []string{"deep_genome", "research"} {
 		row := capabilityBySlug(rows.Agents, slug)
 		if row.Enabled || row.Stream || row.A2UI || row.Resolver || row.Attachments || row.Artifacts {
-			t.Fatalf("new remote %s was enabled unexpectedly: %#v", slug, row)
+			t.Fatalf("ungated remote %s was enabled unexpectedly: %#v", slug, row)
 		}
 	}
-}
-
-func TestBotCapabilitiesKeepExpertStreamsDarkWhenExpertGateIsOff(t *testing.T) {
-	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, capabilityDescriptors()), 0)
-	t.Cleanup(srv.Close)
-	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:  true,
-		StreamEnabled: true,
-		ExpertEnabled: false,
-	})
-
-	rows, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !capabilityBySlug(rows.Agents, "chat").Stream {
-		t.Fatal("instant Chat stream should remain enabled")
-	}
-	for _, slug := range []string{"knowledge", "brief_gene"} {
-		if capabilityBySlug(rows.Agents, slug).Stream {
-			t.Fatalf("%s expert stream must stay disabled while expert gate is off", slug)
+	for _, slug := range []string{"analyst", "design", "network"} {
+		if !capabilityBySlug(rows.Agents, slug).Enabled {
+			t.Fatalf("%s should be locally enabled from Bot presence", slug)
 		}
 	}
 }
@@ -995,9 +951,7 @@ func TestBotCapabilitiesRequireMatchingUpstreamStreamingCapability(t *testing.T)
 			srv := capabilityServer(t, http.StatusOK, tt.body(t), 0)
 			t.Cleanup(srv.Close)
 			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-				ProxyEnabled:  true,
-				StreamEnabled: true,
-				ExpertEnabled: true,
+				ProxyEnabled: true,
 			})
 
 			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -1074,7 +1028,7 @@ func TestBotCapabilitiesWithoutLocalGateSkipsBotAndStaysDisabled(t *testing.T) {
 		called = true
 	}))
 	t.Cleanup(srv.Close)
-	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: false, StreamEnabled: true})
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: false})
 
 	rows, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
 	if err != nil {

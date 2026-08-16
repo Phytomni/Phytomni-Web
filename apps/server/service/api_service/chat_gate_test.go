@@ -224,21 +224,7 @@ func TestCheckChatAllowed_FailOpen_EmptyEmail(t *testing.T) {
 	}
 }
 
-func TestCheckRemoteProductAllowed_FlagOff(t *testing.T) {
-	gdb := setupChatGateDB(t)
-	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
-	seedRemoteProductPermission(t, gdb, "network-role", "GeneNetworkAgent", 1)
-	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
-
-	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent")
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("flag-off remote product error = %v, want ErrRemoteProductDisabled", err)
-	}
-}
-
-func TestResolveAgentPermissions_DisabledAnalystIsNotGenericAllowed(t *testing.T) {
+func TestResolveAgentPermissions_AnalystIsAllowedWithoutAProductFlag(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "analyst@example.com", "analyst-role", 5)
 	seedRemoteProductPermission(t, gdb, "analyst-role", "AnalystAgent", 1)
@@ -253,8 +239,8 @@ func TestResolveAgentPermissions_DisabledAnalystIsNotGenericAllowed(t *testing.T
 	if !containsAgentTool(resolution.GrantedTools, "AnalystAgent") {
 		t.Fatalf("granted tools = %#v, want AnalystAgent retained", resolution.GrantedTools)
 	}
-	if containsAgentTool(resolution.AllowedTools, "AnalystAgent") {
-		t.Fatalf("disabled Analyst remained generic-allowed: %#v", resolution.AllowedTools)
+	if !containsAgentTool(resolution.AllowedTools, "AnalystAgent") {
+		t.Fatalf("Analyst missing from allowed = %#v", resolution.AllowedTools)
 	}
 }
 
@@ -262,7 +248,7 @@ func TestCheckRemoteProductAllowed_RequiresRolePermission(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent")
@@ -276,7 +262,7 @@ func TestCheckRemoteProductAllowed_GrantedRole(t *testing.T) {
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
 	seedRemoteProductPermission(t, gdb, "network-role", "GeneNetworkAgent", 1)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	if err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "GeneNetworkAgent"); err != nil {
@@ -370,7 +356,7 @@ func TestCheckRemoteProductAllowedAuthorizedResearchRequiresResearchContract(t *
 	srv := researchCatalogServer(t, `{}`, &calls)
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	err := NewService().CheckRemoteProductAllowed(context.Background(), "research@example.com", "InSilicoResearchAgent")
@@ -389,7 +375,7 @@ func TestCheckRemoteProductAllowedResearchRejectsIncompleteFormatMatrix(t *testi
 			seedChatGateUser(t, gdb, "research@example.com", "research-role", 5)
 			seedRemoteProductPermission(t, gdb, "research-role", "InSilicoResearchAgent", 1)
 			previous := rxBot.BotConfig
-			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
 			response := validResearchCapabilityCatalog()
@@ -428,7 +414,7 @@ func TestDirectExplicitResearchWithoutAdmissionFetchesAndFailsClosed(t *testing.
 	seedRemoteProductPermission(t, gdb, "research-role", "InSilicoResearchAgent", 1)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	reader := &countingResearchCatalogReader{response: &rxBot.AgentsListResponse{}}
@@ -485,7 +471,7 @@ func TestAdmittedResearchUsesOneAlternatingCatalogFetch(t *testing.T) {
 			t.Cleanup(srv.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+				BaseURL: srv.URL, ProxyEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 			reader := &alternatingResearchCatalogReader{
@@ -572,7 +558,6 @@ func TestDirectResearchEnforcesNegotiatedLimitsWithOneCatalogFetch(t *testing.T)
 				previous := rxBot.BotConfig
 				rxBot.BotConfig = &rxBot.Config{
 					BaseURL: "http://127.0.0.1:1", ProxyEnabled: true,
-					ExpertEnabled: true, ResearchEnabled: true,
 					MaxQueryChars: limit.localQueryLimit,
 				}
 				t.Cleanup(func() { rxBot.BotConfig = previous })
@@ -641,7 +626,7 @@ func TestDirectResearchUsesLowerAttachmentAdvertisement(t *testing.T) {
 				t.Cleanup(server.Close)
 				previous := rxBot.BotConfig
 				rxBot.BotConfig = &rxBot.Config{
-					BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+					BaseURL: server.URL, ProxyEnabled: true,
 				}
 				t.Cleanup(func() { rxBot.BotConfig = previous })
 				reader := &countingResearchCatalogReader{
@@ -682,7 +667,7 @@ func TestCheckRemoteProductAllowedUnauthorizedResearchSkipsResearchContract(t *t
 	srv := researchCatalogServer(t, `{}`, &calls)
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	err := NewService().CheckRemoteProductAllowed(context.Background(), "denied@example.com", "InSilicoResearchAgent")
@@ -702,7 +687,7 @@ func TestCheckRemoteProductAllowedOtherAgentDoesNotRequireResearchContract(t *te
 	srv := researchCatalogServer(t, `{}`, &calls)
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, DesignEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	if err := NewService().CheckRemoteProductAllowed(context.Background(), "design@example.com", "DigitalDesignAgent"); err != nil {
@@ -716,7 +701,7 @@ func TestCheckRemoteProductAllowedOtherAgentDoesNotRequireResearchContract(t *te
 func TestCheckRemoteProductAllowed_UnknownToolFailsClosed(t *testing.T) {
 	setupChatGateDB(t)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{NetworkEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	err := NewService().CheckRemoteProductAllowed(context.Background(), "network@example.com", "UnknownAgent")
@@ -793,7 +778,7 @@ func TestQueryInstantRemoteProductRejectsBeforePermissionCheck(t *testing.T) {
 	gdb := setupChatGateDB(t)
 	seedChatGateUser(t, gdb, "network@example.com", "network-role", 5)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, NetworkEnabled: true, BaseURL: "http://127.0.0.1:1"}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, BaseURL: "http://127.0.0.1:1"}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	_, err := NewService().Query(context.Background(), "network@example.com", QueryInput{
@@ -841,9 +826,8 @@ func TestQueryRemoteProductRejectsNoncanonicalSurfaceBeforeBot(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled:    true,
-		ResearchEnabled: true,
-		BaseURL:         srv.URL,
+		ProxyEnabled: true,
+		BaseURL:      srv.URL,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

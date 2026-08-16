@@ -48,7 +48,6 @@ func boundedConversationCleanupLimit(limit int) int {
 func conversationContextBotAvailable() bool {
 	return rxBot.BotConfig != nil &&
 		rxBot.BotConfig.ProxyEnabled &&
-		rxBot.BotConfig.MultiturnV1Enabled &&
 		rxBot.BotConfig.BaseURL != ""
 }
 

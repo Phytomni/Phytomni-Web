@@ -34,7 +34,6 @@ func TestQueryResearchUsesTypedArgumentsAndRunIdentity(t *testing.T) {
 	defer srv.Close()
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -119,7 +118,6 @@ func TestQueryRemoteArgumentsPreserveResolverContracts(t *testing.T) {
 			defer srv.Close()
 			rxBot.BotConfig = &rxBot.Config{
 				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 

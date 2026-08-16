@@ -555,8 +555,8 @@ func TestResearchHandlerUsesMinimumNegotiatedQueryLimit(t *testing.T) {
 				t.Cleanup(server.Close)
 				previousConfig := rxBot.BotConfig
 				rxBot.BotConfig = &rxBot.Config{
-					BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-					ResearchEnabled: true, MaxQueryChars: limit.local,
+					BaseURL: server.URL, ProxyEnabled: true,
+					MaxQueryChars: limit.local,
 				}
 				t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 				previousQuota := viper.Get("chatlimit.enforce")
@@ -612,8 +612,7 @@ func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) 
 	t.Cleanup(server.Close)
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		ResearchEnabled: true, MultiturnV1Enabled: false,
+		BaseURL: server.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -685,7 +684,7 @@ func TestResearchClientTurnHeaderMustMatchParsedBody(t *testing.T) {
 	t.Cleanup(server.Close)
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ResearchEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -751,7 +750,7 @@ func TestResearchClientTurnHeaderLookupIsOwnerScoped(t *testing.T) {
 	t.Cleanup(server.Close)
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ResearchEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -823,8 +822,7 @@ func TestResearchClientTurnHeaderDoesNotReuseUnrelatedChatIdentity(t *testing.T)
 	t.Cleanup(server.Close)
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		ResearchEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -867,7 +865,7 @@ func TestResearchClientTurnHeaderRejectsMalformedValuesBeforeBody(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			seedResearchHandlerPermission(t)
 			previousConfig := rxBot.BotConfig
-			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, ResearchEnabled: true}
+			rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
 			viper.Set("chatlimit.enforce", false)
@@ -912,7 +910,7 @@ func TestResearchInputIncompatibleReturnsLocalized503BeforeBodyParsing(t *testin
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ResearchEnabled: true,
+				BaseURL: srv.URL, ProxyEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 			previousQuota := viper.Get("chatlimit.enforce")
@@ -970,7 +968,7 @@ func TestQueryResearchInputIncompatibleForExplicitResearch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -1011,7 +1009,7 @@ func TestQueryResearchIntentHeaderDoesNotBypassLocalPermission(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")
@@ -1058,7 +1056,7 @@ func TestQueryResearchIntentMismatchFailsClosedBeforeDispatch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, ResearchEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 	previousQuota := viper.Get("chatlimit.enforce")

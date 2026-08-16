@@ -27,8 +27,7 @@ func compatChatServer(t *testing.T, chatBody string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -184,7 +183,6 @@ func TestQueryDedicatedProductUsesNativeIDAcrossRouteOwnedRunMatrix(t *testing.T
 			previousConfig := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
 				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 
@@ -272,8 +270,7 @@ func TestQueryExpertUsesNativeIDAcrossResolvedAgentMatrix(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-				AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+				BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -325,8 +322,7 @@ func TestQueryRemoteMissingRunIdentityDoesNotPersistPollableRow(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 

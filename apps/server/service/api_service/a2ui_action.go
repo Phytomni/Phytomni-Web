@@ -77,9 +77,6 @@ func (ps *Service) A2uiAction(
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
-	if !rxBot.BotConfig.A2uiActionsEnabled {
-		return nil, ErrGatewayDisabled
-	}
 
 	client := rxBot.NewClient()
 	result, err := client.PostA2uiAction(ctx, env.RunID, rawBody)

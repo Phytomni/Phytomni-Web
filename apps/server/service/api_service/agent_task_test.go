@@ -1030,8 +1030,7 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -1218,7 +1217,7 @@ func TestQueryListDelete_HidesOwnerConversationBeforeBotTombstone(t *testing.T) 
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1276,7 +1275,7 @@ func TestQueryListDelete_BotFailureLeavesPendingAndReturnsSuccess(t *testing.T) 
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, MultiturnV1Enabled: true, TimeoutSeconds: 1,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

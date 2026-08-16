@@ -123,8 +123,7 @@ func botRouter(t *testing.T, hit *string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -200,8 +199,7 @@ func permissionRouteServer(t *testing.T, effects *queryPermissionEffects, captur
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 }
@@ -239,6 +237,7 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 // agent under the v1 multiturn flag uses Bot's context-aware route and carries
 // the server-owned selection through forced_tool.
 func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
 	var dispatchPath string
 	var captured rxBot.AgentRunRequest
@@ -280,8 +279,7 @@ func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		MultiturnV1Enabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -310,22 +308,6 @@ func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	}
 	if rows != 1 {
 		t.Fatalf("row count = %d, want 1", rows)
-	}
-}
-
-// TestQuery_ExpertDisabledReturns503Sentinel: flag OFF -> ErrExpertDisabled, no Bot call.
-func TestQuery_ExpertDisabledReturns503Sentinel(t *testing.T) {
-	setupExpertTestDB(t)
-	var hit string
-	botRouter(t, &hit)
-	rxBot.BotConfig.ExpertEnabled = false
-
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-	if !errors.Is(err, ErrExpertDisabled) {
-		t.Fatalf("expected ErrExpertDisabled, got %v", err)
-	}
-	if hit != "" {
-		t.Errorf("disabled Expert must not call Bot, hit %q", hit)
 	}
 }
 
@@ -387,7 +369,7 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -428,8 +410,6 @@ func TestQuery_ExpertAllowsOneRemoteProductGrant(t *testing.T) {
 	seedExpertPermissionUser(t, gdb, "research@example.com", "research-role")
 	seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
 	expertRouteServer(t, `{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`)
-	rxBot.BotConfig.DesignEnabled = false
-	rxBot.BotConfig.NetworkEnabled = false
 
 	if _, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
 		t.Fatalf("Query: %v", err)
@@ -441,17 +421,11 @@ func TestQuery_ExpertAdminUsesEveryCurrentlyAvailableTool(t *testing.T) {
 	effects := &queryPermissionEffects{}
 	var captured rxBot.RouteQueryRequest
 	permissionRouteServer(t, effects, &captured)
-	rxBot.BotConfig.NetworkEnabled = false
 
 	if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"}); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	want := make([]string, 0, len(rxBot.CanonicalAgentDisplayOrder)-1)
-	for _, tool := range rxBot.CanonicalAgentDisplayOrder {
-		if tool != "GeneNetworkAgent" {
-			want = append(want, tool)
-		}
-	}
+	want := rxBot.CanonicalAgentDisplayTools()
 	if !reflect.DeepEqual(captured.AllowedTools, want) {
 		t.Fatalf("admin allowed tools = %#v, want %#v", captured.AllowedTools, want)
 	}
@@ -497,22 +471,6 @@ func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 			},
 		},
 		{
-			name:     "forced granted but disabled",
-			username: "disabled-forced@example.com",
-			mode:     "expert",
-			tool:     "InSilicoResearchAgent",
-			setup: func(t *testing.T, gdb *gorm.DB) {
-				seedExpertPermissionUser(t, gdb, "disabled-forced@example.com", "disabled-forced")
-				seedExpertPermissionTool(t, gdb, "disabled-forced", "InSilicoResearchAgent", 1)
-			},
-			configure: func() { rxBot.BotConfig.ResearchEnabled = false },
-			assertErr: func(t *testing.T, err error) {
-				if !errors.Is(err, ErrAgentToolsUnavailable) {
-					t.Fatalf("error = %v, want ErrAgentToolsUnavailable", err)
-				}
-			},
-		},
-		{
 			name:     "no grants",
 			username: "empty@example.com",
 			mode:     "expert",
@@ -522,21 +480,6 @@ func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 			assertErr: func(t *testing.T, err error) {
 				if !errors.Is(err, ErrNoExecutableAgentTools) {
 					t.Fatalf("error = %v, want ErrNoExecutableAgentTools", err)
-				}
-			},
-		},
-		{
-			name:     "granted but all unavailable",
-			username: "disabled@example.com",
-			mode:     "expert",
-			setup: func(t *testing.T, gdb *gorm.DB) {
-				seedExpertPermissionUser(t, gdb, "disabled@example.com", "disabled")
-				seedExpertPermissionTool(t, gdb, "disabled", "InSilicoResearchAgent", 1)
-			},
-			configure: func() { rxBot.BotConfig.ResearchEnabled = false },
-			assertErr: func(t *testing.T, err error) {
-				if !errors.Is(err, ErrAgentToolsUnavailable) {
-					t.Fatalf("error = %v, want ErrAgentToolsUnavailable", err)
 				}
 			},
 		},
@@ -649,7 +592,6 @@ func TestQueryStream_PermissionFailuresHaveNoSideEffects(t *testing.T) {
 			}
 			effects := &queryPermissionEffects{}
 			permissionRouteServer(t, effects, nil)
-			rxBot.BotConfig.StreamEnabled = true
 			observeQueryPermissionEffects(t, gdb)
 
 			_, err := NewService().QueryStream(context.Background(), tc.username, QueryInput{
@@ -764,8 +706,7 @@ func expertRouteServer(t *testing.T, routeBody string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -787,8 +728,7 @@ func agentRunServer(t *testing.T, slug, runBody string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		AnalystEnabled: true, ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -1090,25 +1030,15 @@ func TestQuery_ExpertDuplicateRouteKeysFailsBeforePersistence(t *testing.T) {
 	}
 }
 
-// TestExpertModeEnabled_TracksBotConfig pins the UI flag source: it mirrors
-// BotConfig.ExpertEnabled (single source of truth) — false when BotConfig is
-// nil OR the flag is off, true only when ExpertEnabled is true.
-func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
-	// Register cleanup before mutating the global so it runs even if a future
-	// regression panics on the nil path (mirrors botRouter's t.Cleanup idiom).
+func TestExpertModeEnabledIsAlwaysOn(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-
 	rxBot.BotConfig = nil
-	if NewService().ExpertModeEnabled() {
-		t.Error("nil BotConfig must report ExpertModeEnabled=false")
-	}
-	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: false}
-	if NewService().ExpertModeEnabled() {
-		t.Error("ExpertEnabled=false must report ExpertModeEnabled=false")
-	}
-	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: true}
 	if !NewService().ExpertModeEnabled() {
-		t.Error("ExpertModeEnabled must be true when BotConfig.ExpertEnabled=true")
+		t.Error("ExpertModeEnabled must stay true without BotConfig")
+	}
+	rxBot.BotConfig = &rxBot.Config{}
+	if !NewService().ExpertModeEnabled() {
+		t.Error("ExpertModeEnabled must stay true")
 	}
 }
 
@@ -1116,6 +1046,7 @@ func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
 // forced Expert selection. Both use the canonical context route; the forced
 // turn bypasses the LLM router through requested_agent_id in the V1 envelope.
 func TestQueryExpertContextSelectionSettlement(t *testing.T) {
+	useConversationV1(t)
 	tests := []struct {
 		name, requestedTool, selectedTool, selectedSlug, routeSource, expectedPath string
 	}{
@@ -1166,9 +1097,8 @@ func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 			defer server.Close()
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-				MultiturnV1Enabled: true, TimeoutSeconds: 2,
-				ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1222,8 +1152,8 @@ func TestQueryExpertContextAsyncKeepsRunningLifecycleWithoutSettlement(t *testin
 	defer server.Close()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2, ResearchEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1265,8 +1195,8 @@ func TestQueryExpertReplacementPinsAutonomousResolvedTool(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-		TimeoutSeconds: 2, ResearchEnabled: true, AnalystEnabled: true,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1338,9 +1268,6 @@ func TestQueryExpertAutonomousReplacementRetainsUnresolvedTerminalIdentity(t *te
 				}
 				_, _ = w.Write([]byte(`{"id":"run-next-autonomous","run_id":"run-next-autonomous","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
 			})
-			rxBot.BotConfig.MultiturnV1Enabled = false
-			rxBot.BotConfig.ResearchEnabled = true
-			rxBot.BotConfig.AnalystEnabled = true
 			service := NewService()
 			key := "autonomous-unresolved-" + strings.ReplaceAll(tc.name, " ", "-")
 			input := QueryInput{

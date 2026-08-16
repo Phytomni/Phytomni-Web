@@ -51,7 +51,7 @@ func TestAnalystRunLifecycleProgressesFromSubmissionToCachedTerminal(t *testing.
 	t.Cleanup(bot.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: bot.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 1,
+		BaseURL: bot.URL, ProxyEnabled: true, TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

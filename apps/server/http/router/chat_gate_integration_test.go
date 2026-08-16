@@ -213,7 +213,7 @@ func assertNoOperationLog(t *testing.T, gdb *gorm.DB, path string) {
 func configureA2uiFlagOff(t *testing.T) {
 	t.Helper()
 	prev := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, A2uiActionsEnabled: false, TimeoutSeconds: 1}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, TimeoutSeconds: 1}
 	t.Cleanup(func() { rxBot.BotConfig = prev })
 }
 
@@ -259,10 +259,9 @@ func TestA2uiActionRouteAuditRedactsPayload(t *testing.T) {
 	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"fields":{"email":"researcher@example.com","biological_input":"BRCA1","token":"secret-token"}}}`)
 
 	response := sendA2uiActionRequest(engine, tok, body, "application/json")
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("A2UI audit request: got %d, want gateway-disabled response 503", response.Code)
+	if response.Code == http.StatusUnauthorized || response.Code == http.StatusForbidden {
+		t.Fatalf("A2UI audit request: got %d, want a post-auth response", response.Code)
 	}
-	assertA2uiGatewayError(t, response, "a2ui_gateway_disabled", false, true)
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 
 	var bodyParams string

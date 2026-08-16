@@ -98,42 +98,42 @@ type remoteProductAdmission struct {
 var remoteProductRequirements = map[string]remoteProductRequirement{
 	"AnalystAgent": {
 		tool:                    "AnalystAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"analyst": {
 		tool:                    "AnalystAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.AnalystEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"InSilicoResearchAgent": {
 		tool:                    "InSilicoResearchAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"research": {
 		tool:                    "InSilicoResearchAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.ResearchEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"DigitalDesignAgent": {
 		tool:                    "DigitalDesignAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"design": {
 		tool:                    "DigitalDesignAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.DesignEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"GeneNetworkAgent": {
 		tool:                    "GeneNetworkAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 	"network": {
 		tool:                    "GeneNetworkAgent",
-		enabled:                 func(cfg *rxBot.Config) bool { return cfg != nil && cfg.NetworkEnabled },
+		enabled:                 func(*rxBot.Config) bool { return true },
 		filterGenericPermission: true,
 	},
 }
@@ -247,10 +247,11 @@ func (ps *Service) checkRemoteProductAllowed(ctx context.Context, email, tool st
 }
 
 // CheckRemoteProductAllowed is the server-side authorization boundary for
-// remote Research, Design, and Network runs. A product must be explicitly
-// enabled in BotConfig and the authenticated user's role must grant the
-// canonical tool in user_tool_names/tool_names. Missing users or permission
-// tables fail closed: a capability must never be inferred from browser input.
+// remote Research, Design, Network, and Analyst runs. Those products are
+// locally always enabled. Research still requires the Bot research-input
+// contract. Every product still requires the authenticated user's role
+// grant in user_tool_names/tool_names. Missing users or permission tables
+// fail closed: a capability must never be inferred from browser input.
 // This check is intentionally independent of the quota gate above so turning
 // quota enforcement off cannot activate a remote product.
 func (ps *Service) CheckRemoteProductAllowed(ctx context.Context, email, tool string) error {

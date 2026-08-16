@@ -38,8 +38,7 @@ func forcedDispatchServer(t *testing.T, hitPath *string, chatBody *rxBot.ChatCom
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }

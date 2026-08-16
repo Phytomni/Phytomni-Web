@@ -34,7 +34,7 @@ func sseChatServer(t *testing.T) {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
@@ -117,6 +117,7 @@ func contextStageForStream(request rxBot.ChatCompletionRequest) rxBot.ContextSta
 }
 
 func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
 	var chatCalls, settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -192,8 +193,8 @@ func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) 
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	if err := gdb.Exec(
@@ -246,6 +247,7 @@ func TestQueryStreamContextSettlementPersistsBeforeAcknowledgment(t *testing.T) 
 }
 
 func TestQueryStreamSettlementAckFailureLeavesVisibleSuccess(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
 	var settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -267,8 +269,8 @@ func TestQueryStreamSettlementAckFailureLeavesVisibleSuccess(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	if err := gdb.Exec(
@@ -310,6 +312,7 @@ func TestQueryStreamSettlementAckFailureLeavesVisibleSuccess(t *testing.T) {
 }
 
 func TestQueryStreamContextDegradedForcesRebuildWithoutAck(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
 	var settleCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -329,8 +332,8 @@ func TestQueryStreamContextDegradedForcesRebuildWithoutAck(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	if err := gdb.Exec(
@@ -369,6 +372,7 @@ func TestQueryStreamContextDegradedForcesRebuildWithoutAck(t *testing.T) {
 }
 
 func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
+	useConversationV1(t)
 	tests := []struct {
 		name       string
 		streamBody func(rxBot.ChatCompletionRequest) string
@@ -428,8 +432,8 @@ func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
 			t.Cleanup(server.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-				MultiturnV1Enabled: true, TimeoutSeconds: 2,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -462,6 +466,7 @@ func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
 }
 
 func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
 	email := "stream-cancel-v1@example.com"
 	if err := gdb.Exec(
@@ -488,8 +493,8 @@ func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testin
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -576,8 +581,8 @@ func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 			}
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-				MultiturnV1Enabled: true, TimeoutSeconds: 2,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -669,8 +674,8 @@ func TestQueryStream_SettledKeyedV0RetryReplaysTerminalSnapshot(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	input := QueryInput{
@@ -719,8 +724,8 @@ func TestQueryStream_SettledRetryReplaysLargeStructuredAnswerByteExactly(t *test
 	gdb := setupStreamTestDB(t)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		ProxyEnabled:   true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	answer := `{"payload":"` + strings.Repeat("界", 100000) + `","kind":"structured"}`
@@ -801,8 +806,8 @@ func TestQueryStream_NonterminalKeyedV0RetryIsPendingBeforeReady(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+		BaseURL: "http://127.0.0.1:1", ProxyEnabled: true,
+		TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	private := persistedConversationContext{ClientTurnID: "keyed-stream-pending"}
@@ -847,8 +852,8 @@ func TestQueryStream_SubmittingKeyedV0RetryPublishesDurableIdentityBeforePending
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	private := persistedConversationContext{ClientTurnID: "keyed-stream-submitting"}
@@ -892,8 +897,8 @@ func TestQueryStream_FailedKeyedV0RetryReplaysRunError(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 1,
+		ProxyEnabled:   true,
+		TimeoutSeconds: 1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	private := persistedConversationContext{ClientTurnID: "keyed-stream-failed"}
@@ -975,8 +980,8 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 			t.Cleanup(server.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-				MultiturnV1Enabled: false, TimeoutSeconds: 2,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1129,9 +1134,8 @@ func TestQueryAndQueryStreamShareClientTurnReservationWithoutConversationV1(t *t
 			t.Cleanup(server.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, ExpertEnabled: true,
-				ResearchEnabled: true, StreamEnabled: true,
-				MultiturnV1Enabled: false, TimeoutSeconds: 2,
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 			service := &Service{
@@ -1273,7 +1277,7 @@ func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1303,6 +1307,7 @@ func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 }
 
 func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
+	useConversationV1(t)
 	setupStreamTestDB(t)
 	body := strings.Join([]string{
 		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_action\"}\n",
@@ -1315,8 +1320,8 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true,
-		A2uiActionsEnabled: false, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true,
+		TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -1336,12 +1341,10 @@ func TestQueryStream_A2uiAuthorizedBeforeInteractiveFrame(t *testing.T) {
 				identity.DialogueID,
 				[]byte(`{"surface_id":"s1","widget":"confirm","action_id":"submit","run_id":"run_action","payload":{"accepted":true}}`),
 			)
-			if !errors.Is(actionErr, ErrGatewayDisabled) {
-				t.Fatalf("A2UI action gateway result = %v, want ErrGatewayDisabled", actionErr)
+			if errors.Is(actionErr, ErrA2uiActionNotFound) {
+				t.Fatalf("A2UI action failed ownership before dispatch: %v", actionErr)
 			}
-			// Flag-off now fails before dispatch with the same typed disabled error
-			// as proxy-disabled mode; reaching this branch still proves the
-			// ownership tuple was present before the flag gate.
+			_ = outcome
 			if outcome != nil {
 				t.Fatalf("flag-off outcome = %+v, want nil", outcome)
 			}
@@ -1380,7 +1383,7 @@ func TestQueryStream_AutonomousExpertRefused(t *testing.T) {
 		botHits++
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := streamCapableService()
 	_, err := svc.QueryStream(context.Background(), "eve@example.com",
@@ -1426,8 +1429,8 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 			t.Cleanup(srv.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true,
-				StreamEnabled: true, TimeoutSeconds: 5,
+				BaseURL: srv.URL, ProxyEnabled: true,
+				TimeoutSeconds: 5,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1537,7 +1540,7 @@ func TestQueryStream_RequiresAdvertisedStreamingCapability(t *testing.T) {
 			t.Cleanup(server.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+				BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1576,33 +1579,13 @@ func TestQueryStream_RequiresAdvertisedStreamingCapability(t *testing.T) {
 }
 
 func TestQueryStream_ForcedExpertKeepsServerSideGates(t *testing.T) {
-	t.Run("expert gate off", func(t *testing.T) {
-		setupStreamTestDB(t)
-		previous := rxBot.BotConfig
-		rxBot.BotConfig = &rxBot.Config{
-			ProxyEnabled: true, StreamEnabled: true, ExpertEnabled: false,
-		}
-		t.Cleanup(func() { rxBot.BotConfig = previous })
-
-		_, err := (&Service{}).QueryStream(
-			context.Background(),
-			"eve@example.com",
-			QueryInput{Query: "forced report", Tool: "KnowledgeAgent", Mode: "expert"},
-			nil,
-			nil,
-		)
-		if !errors.Is(err, ErrExpertDisabled) {
-			t.Fatalf("error = %v, want ErrExpertDisabled", err)
-		}
-	})
-
 	t.Run("selected tool permission missing", func(t *testing.T) {
 		gdb := setupStreamTestDB(t)
 		seedExpertPermissionUser(t, gdb, "stream-no-knowledge@example.com", "stream-no-knowledge")
 		seedExpertPermissionTool(t, gdb, "stream-no-knowledge", "DataAgent", 1)
 		previous := rxBot.BotConfig
 		rxBot.BotConfig = &rxBot.Config{
-			ProxyEnabled: true, StreamEnabled: true, ExpertEnabled: true,
+			ProxyEnabled: true,
 		}
 		t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -1633,7 +1616,7 @@ func TestQueryStream_NonChatSlugRefused(t *testing.T) {
 		botHits++
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := streamCapableService()
 	// Instant Chat streaming has no caller-selected agent. A non-ChatAgent tool
@@ -1696,7 +1679,7 @@ func TestQueryStream_CompatibilityModelsPreserveAGUIBytes(t *testing.T) {
 				_, _ = w.Write([]byte(fixture))
 			}))
 			t.Cleanup(srv.Close)
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
 			var forwarded strings.Builder
@@ -1763,7 +1746,7 @@ func TestQueryStream_CombinedAGUICompatibilityFixture(t *testing.T) {
 				_, _ = w.Write([]byte(fixture))
 			}))
 			t.Cleanup(srv.Close)
-			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 			t.Cleanup(func() { rxBot.BotConfig = nil })
 
 			var forwarded strings.Builder
@@ -1816,7 +1799,7 @@ func TestQueryStream_CombinedRunErrorFixture(t *testing.T) {
 		_, _ = w.Write([]byte(fixture))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	var forwarded strings.Builder
@@ -1869,8 +1852,7 @@ func TestCompatibilityFixture_ExpertResearchProjectionIdentity(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -2015,26 +1997,6 @@ func TestCompatibilityFixture_HistoryProjectionFallbackOwnerScope(t *testing.T) 
 	})
 }
 
-func TestQueryStream_StreamGateOffRefusesWithoutBotCall(t *testing.T) {
-	setupStreamTestDB(t)
-	botHits := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		botHits++
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: false, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
-
-	_, err := (&Service{}).QueryStream(context.Background(), "gate@example.com",
-		QueryInput{Query: "hi", Tool: "", Mode: "instant"}, nil, nil)
-	if !errors.Is(err, ErrStreamUnsupported) {
-		t.Fatalf("err = %v, want ErrStreamUnsupported while stream gate is off", err)
-	}
-	if botHits != 0 {
-		t.Fatalf("stream gate off must not touch Bot (hits=%d)", botHits)
-	}
-}
-
 func TestQueryStream_NonChatRoutingRejectedBeforeAnyBotRequest(t *testing.T) {
 	setupStreamTestDB(t)
 	botHits := 0
@@ -2044,7 +2006,7 @@ func TestQueryStream_NonChatRoutingRejectedBeforeAnyBotRequest(t *testing.T) {
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -2123,7 +2085,7 @@ func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 	svc := streamCapableService()
 	out, err := svc.QueryStream(context.Background(), "erin@example.com",
@@ -2140,6 +2102,7 @@ func TestQueryStream_RunErrorPersistsFailed(t *testing.T) {
 }
 
 func TestConversationContextIntegrationStreamingSettlementRedactsOutput(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
 	username := "alice"
 	dialogueID := "66666666-6666-4666-8666-666666666666"
@@ -2195,8 +2158,8 @@ func TestConversationContextIntegrationStreamingSettlementRedactsOutput(t *testi
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

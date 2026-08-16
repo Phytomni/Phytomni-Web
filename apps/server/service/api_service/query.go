@@ -37,9 +37,8 @@ var ErrGatewayDisabled = errors.New("bot gateway is disabled")
 // bad tool name is a caller mistake, not a server fault.
 var ErrUnknownTool = errors.New("unknown tool")
 
-// ErrExpertDisabled is returned when mode=expert is requested while the Expert
-// routing gateway is dark (BotConfig.ExpertEnabled=false). The handler maps it
-// to 503 so a deliberately-dark Expert mode is distinguishable from a fault.
+// ErrExpertDisabled is retained for historical handler mapping. Expert routing
+// is locally always enabled; permission and Bot-route checks still apply.
 var ErrExpertDisabled = errors.New("expert mode not available")
 
 // ErrMissingBotRunID is returned when a Web row exists but cannot be synced
@@ -138,7 +137,10 @@ func multiturnV1Enabled(in QueryInput) bool {
 }
 
 func conversationV1Enabled(in QueryInput) bool {
-	if rxBot.BotConfig == nil || !rxBot.BotConfig.MultiturnV1Enabled {
+	if !rxBot.ConversationContextV1Advertised() {
+		return false
+	}
+	if !serviceClientTurnIDPattern.MatchString(strings.TrimSpace(in.ClientTurnID)) {
 		return false
 	}
 	return in.Surface == QuerySurfaceChat ||
@@ -1970,10 +1972,10 @@ var slugToToolName = map[string]string{
 	"network":     "GeneNetworkAgent",
 }
 
-// ExpertModeEnabled reports whether Expert routing is live. It is the single
-// source of truth shared by the /query gateway gate and the UI pill flag.
+// ExpertModeEnabled reports that Expert routing is locally always enabled.
+// Permission and Bot-route checks still apply to the selected tool.
 func (ps *Service) ExpertModeEnabled() bool {
-	return rxBot.BotConfig != nil && rxBot.BotConfig.ExpertEnabled
+	return true
 }
 
 func requestIDFromContext(ctx context.Context) string {
@@ -2353,10 +2355,6 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
-	}
-	// Expert mode is dark-launched: refuse early (no Bot call) when disabled.
-	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
-		return nil, ErrExpertDisabled
 	}
 	var permissions AgentPermissionResolution
 	var admission remoteProductAdmission
@@ -4046,12 +4044,6 @@ func (ps *Service) QueryStream(
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
-	}
-	if !rxBot.BotConfig.StreamEnabled {
-		return nil, fmt.Errorf("%w: stream gate is off", ErrStreamUnsupported)
-	}
-	if in.Mode == "expert" && !rxBot.BotConfig.ExpertEnabled {
-		return nil, ErrExpertDisabled
 	}
 	// Enforce the effective routed tool before any upload, dialogue lookup, or
 	// Bot stream. Instant is locked to ChatAgent; forced Expert retains its

@@ -39,12 +39,10 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 		formTool  string
 		wantErr   bool
 	}{
-		{name: "v0 chat missing", enabled: false, surface: api_service.QuerySurfaceChat},
-		{name: "v0 chat malformed remains compatible", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceChat},
 		{name: "v0 forced Research chat missing", enabled: false, surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent", wantErr: true},
 		{name: "v0 forced Research chat malformed", enabled: false, value: "bad turn", surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent", wantErr: true},
 		{name: "v0 forced Research chat valid", enabled: false, value: "turn-research-chat", surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "InSilicoResearchAgent"},
-		{name: "v0 forced non-Research chat remains compatible", enabled: false, surface: api_service.QuerySurfaceChat, mode: "expert", formTool: "AnalystAgent"},
+		{name: "chat missing", enabled: false, surface: api_service.QuerySurfaceChat},
 		{name: "v1 chat missing", enabled: true, surface: api_service.QuerySurfaceChat, wantErr: true},
 		{name: "v1 chat malformed", enabled: true, value: "bad turn", surface: api_service.QuerySurfaceChat, wantErr: true},
 		{name: "v1 chat oversized", enabled: true, value: strings.Repeat("a", 129), surface: api_service.QuerySurfaceChat, wantErr: true},
@@ -61,8 +59,12 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			previous := rxBot.BotConfig
-			rxBot.BotConfig = &rxBot.Config{MultiturnV1Enabled: tc.enabled}
-			t.Cleanup(func() { rxBot.BotConfig = previous })
+			rxBot.BotConfig = &rxBot.Config{}
+			rxBot.SetConversationContextV1Advertised(tc.enabled)
+			t.Cleanup(func() {
+				rxBot.BotConfig = previous
+				rxBot.SetConversationContextV1Advertised(false)
+			})
 
 			form := url.Values{
 				"query":          {"hello"},

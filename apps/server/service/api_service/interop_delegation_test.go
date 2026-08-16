@@ -78,7 +78,6 @@ func (h *interopDelegationServer) configure(t *testing.T) {
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
 		BaseURL: h.server.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-		InteropEnabled: true, ResearchEnabled: true, DesignEnabled: true,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 }

@@ -52,40 +52,11 @@ type Config struct {
 	// ProxyEnabled is the master switch for the /query gateway. While false the
 	// gateway stays dormant and /query keeps flowing to the Python service.
 	ProxyEnabled bool `json:"proxy_enabled" yaml:"proxy_enabled" mapstructure:"proxy_enabled"`
-	// ExpertEnabled is the dark-launch master switch for the Expert routing
-	// mode. While false the gateway returns ErrExpertDisabled for mode=expert
-	// (no Bot call). Zero value false = safe dormant default, like ProxyEnabled.
-	ExpertEnabled bool `json:"expert_enabled" yaml:"expert_enabled" mapstructure:"expert_enabled"`
-	// StreamEnabled is the dark-launch switch for AG-UI SSE streaming on /query.
-	// While false the gateway keeps using the blocking ChatCompletion path; flip
-	// to true (per deploy) to serve text/event-stream for chat-family slugs.
-	// Zero value false = safe dormant default, like ProxyEnabled.
-	StreamEnabled bool `json:"stream_enabled" yaml:"stream_enabled" mapstructure:"stream_enabled"`
-	// A2uiActionsEnabled is the dark-launch switch for POST
-	// /api/v1/conversations/:id/a2ui-actions → Bot
-	// /v1/runs/{run_id}/a2ui-actions. While false the gateway returns a local
-	// 503 after ownership checks (no Bot call). Zero value false = safe dormant
-	// default, like StreamEnabled.
-	A2uiActionsEnabled bool `json:"a2ui_actions_enabled" yaml:"a2ui_actions_enabled" mapstructure:"a2ui_actions_enabled"`
-	// InteropEnabled is the Web-owned dark-launch switch for the optional
-	// /v1/interop/capabilities discovery call. It deliberately defaults false:
-	// a missing key must never expose Bot registry metadata to the browser.
-	InteropEnabled bool `json:"interop_enabled" yaml:"interop_enabled" mapstructure:"interop_enabled"`
-	// MultiturnV1Enabled enables the server-to-server conversation-context
-	// envelope. It stays false unless Bot capability negotiation succeeds.
-	MultiturnV1Enabled bool `json:"multiturn_v1_enabled" yaml:"multiturn_v1_enabled" mapstructure:"multiturn_v1_enabled"`
 	// UploadPublicOrigin is the exact browser-reachable Bot origin used by the
 	// direct upload data plane. It must never be inferred from BaseURL, which
 	// may be an internal service address. Upload enablement is negotiated from
 	// this origin plus the Bot-advertised obs-multipart-v2 protocol.
 	UploadPublicOrigin string `json:"upload_public_origin" yaml:"upload_public_origin" mapstructure:"upload_public_origin"`
-	// AnalystEnabled, ResearchEnabled, DesignEnabled, and NetworkEnabled are
-	// independent product gates for the remote agent surfaces. They intentionally
-	// default false so a missing config key cannot activate a Bot-backed product.
-	AnalystEnabled  bool `json:"analyst_enabled" yaml:"analyst_enabled" mapstructure:"analyst_enabled"`
-	ResearchEnabled bool `json:"research_enabled" yaml:"research_enabled" mapstructure:"research_enabled"`
-	DesignEnabled   bool `json:"design_enabled" yaml:"design_enabled" mapstructure:"design_enabled"`
-	NetworkEnabled  bool `json:"network_enabled" yaml:"network_enabled" mapstructure:"network_enabled"`
 	// KeyAuditRedact, when true, requires loggers to emit only the key prefix.
 	KeyAuditRedact bool `json:"key_audit_redact" yaml:"key_audit_redact" mapstructure:"key_audit_redact"`
 }

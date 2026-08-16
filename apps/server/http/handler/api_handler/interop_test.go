@@ -58,33 +58,11 @@ func interopHandlerContext(t *testing.T, username string) (*gin.Context, *httpte
 	return c, w
 }
 
-func configureInteropHandlerBot(t *testing.T, baseURL string, enabled bool) {
+func configureInteropHandlerBot(t *testing.T, baseURL string, _ bool) {
 	t.Helper()
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{BaseURL: baseURL, UserAPIKey: "ptm-handler", TimeoutSeconds: 1, InteropEnabled: enabled}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: baseURL, UserAPIKey: "ptm-handler", ProxyEnabled: true, TimeoutSeconds: 1}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
-}
-
-func TestInteropHandlerFlagOffReturns404BeforeBot(t *testing.T) {
-	gdb := setupInteropHandlerDB(t)
-	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES ('admin@example.com', 'admin')`).Error; err != nil {
-		t.Fatal(err)
-	}
-	var hits int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&hits, 1)
-	}))
-	t.Cleanup(srv.Close)
-	configureInteropHandlerBot(t, srv.URL, false)
-
-	c, w := interopHandlerContext(t, "admin@example.com")
-	NewHandler().InteropCapabilities(c)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("flag-off status = %d, body=%s; want 404", w.Code, w.Body.String())
-	}
-	if got := atomic.LoadInt64(&hits); got != 0 {
-		t.Fatalf("flag-off Bot calls = %d, want 0", got)
-	}
 }
 
 func TestInteropHandlerUnauthorizedReturns404BeforeBot(t *testing.T) {

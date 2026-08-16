@@ -130,29 +130,9 @@ func newForcedExpertStreamTestRequest(t *testing.T, tool string) *http.Request {
 	return req
 }
 
-func TestQuery_FlagOffSkipsStream(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	setupStreamHandlerTestDB(t)
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: false}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Set("username", "alice@example.com")
-	c.Request = newStreamTestRequest(t, "")
-	c.Params = gin.Params{{Key: "id", Value: "0"}}
-
-	ph := NewHandler()
-	ph.Query(c)
-	// Flag OFF ⇒ must NOT switch to event-stream content type.
-	if ct := w.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/event-stream") {
-		t.Fatalf("flag OFF must not produce an SSE response; got Content-Type %q", ct)
-	}
-}
-
 func TestQuery_AutonomousExpertModeSkipsStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, StreamEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	w := httptest.NewRecorder()
@@ -188,8 +168,8 @@ func TestQuery_ForcedExpertChatFamilyUsesStreamBranch(t *testing.T) {
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true,
-		StreamEnabled: true, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true,
+		TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -267,7 +247,7 @@ func TestQuery_StreamAdmissionRequiresAdvertisedCapability(t *testing.T) {
 			t.Cleanup(server.Close)
 			previous := rxBot.BotConfig
 			rxBot.BotConfig = &rxBot.Config{
-				BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+				BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 			}
 			t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -319,7 +299,7 @@ func TestQuery_StreamPreFirstByteErrorIsJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// Flag ON so the SSE branch is entered, but ProxyEnabled false so
 	// QueryStream returns ErrGatewayDisabled BEFORE forwarding any frame.
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false, StreamEnabled: true}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	w := httptest.NewRecorder()
@@ -358,7 +338,7 @@ func TestQuery_StreamExposesDurableIdentityHeaders(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
@@ -408,8 +388,8 @@ func TestQuery_SettledKeyedStreamRetryReplaysTerminalSnapshot(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -471,8 +451,8 @@ func TestQuery_SettledKeyedStreamRetryReplaysLargeStructuredAnswerForBrowser(t *
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -552,7 +532,7 @@ func TestQuery_NonterminalKeyedStreamRetryIsJSONConflictBeforeHeaders(t *testing
 	}
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
@@ -595,8 +575,8 @@ func TestQuery_SubmittingKeyedBlockingRetryPreservesIdentityHeaders(t *testing.T
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: false,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	if out, err := api_service.NewService().Query(
@@ -667,8 +647,8 @@ func TestQuery_SubmittingKeyedStreamRetryPreservesIdentityHeadersBeforeJSONConfl
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: false, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 	if out, err := api_service.NewService().Query(
@@ -725,7 +705,7 @@ func TestQuery_RejectsMalformedNegativeAndOverflowConversationIDs(t *testing.T) 
 	gin.SetMode(gin.TestMode)
 	setupStreamHandlerTestDB(t)
 	previous := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false, StreamEnabled: false}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
 	for _, tc := range []struct {
@@ -766,6 +746,8 @@ func TestQuery_RejectsMalformedNegativeAndOverflowConversationIDs(t *testing.T) 
 }
 
 func TestQuery_StreamV1ForwardsTypedContextFrameAndIdentity(t *testing.T) {
+	rxBot.SetConversationContextV1Advertised(true)
+	t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
 	gin.SetMode(gin.TestMode)
 	gdb := setupStreamHandlerTestDB(t)
 	const answer = "typed stream answer"
@@ -827,8 +809,8 @@ func TestQuery_StreamV1ForwardsTypedContextFrameAndIdentity(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: server.URL, ProxyEnabled: true, StreamEnabled: true,
-		MultiturnV1Enabled: true, TimeoutSeconds: 2,
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

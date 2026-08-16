@@ -147,7 +147,7 @@ func TestQueryStreamForwardsHistoryBeforeCurrentTurn(t *testing.T) {
 			"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-history-stream\"}\n\n"))
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, StreamEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_stream_reads"}}
