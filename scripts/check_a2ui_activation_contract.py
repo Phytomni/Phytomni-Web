@@ -332,8 +332,8 @@ def _check_bot_client(text: str, violations: list[str]) -> None:
 def _check_flags(text: str, violations: list[str]) -> None:
     for key in ("stream_enabled", "a2ui_actions_enabled"):
         matches = re.findall(FLAG_RE_TEMPLATE.format(key=re.escape(key)), text)
-        if len(matches) != 1 or matches[0].lower() != "false":
-            violations.append(f"{key} default must be false")
+        if matches:
+            violations.append(f"{key} Web switch must be removed")
 
 
 def _check_config_governance(text: str, violations: list[str]) -> None:

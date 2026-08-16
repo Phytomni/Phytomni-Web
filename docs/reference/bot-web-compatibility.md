@@ -202,11 +202,12 @@ reviewed:
 | RC-WEB-007  | Expert/history dual-read and rollback        | External Pending |
 | RC-LIVE-001 | Authorized live end-to-end run               | External Pending |
 
-No row above is marked passed by this document. Feature gates remain dark by
-default (`expert_enabled`, `stream_enabled`, `a2ui_actions_enabled`,
-`interop_enabled`, `research_enabled`, `design_enabled`, `network_enabled`, and
-`history_dual_read` are false/off), and no Bot, operations, deployment, or
-live configuration change is part of this Web reference.
+No row above is marked passed by this document. The only remaining Web-owned
+dark-launch observation switch is `history_dual_read` (false/off). Expert,
+streaming, A2UI, interop, multiturn, Research, Analyst, Design, and Network
+are locally always enabled and still require the matching Bot contract. No
+Bot, operations, deployment, or live configuration change is part of this Web
+reference.
 
 ## Current Web closure record (2026-07-26)
 

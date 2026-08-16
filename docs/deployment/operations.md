@@ -191,100 +191,18 @@ lockstep. Local G15–G17 checks are readiness evidence only; every row in the
 activation matrix remains **External Pending** until an authorized packet is
 reviewed.
 
-### 11.1 Expert routing mode (`bot.expert_enabled`)
+### 11.1 Expert routing, streaming, A2UI, interop, and remote products
 
-- **Web state:** the Instant/Expert selector and the `mode` column are live but
-  dark (`bot.expert_enabled=false`). Instant is unaffected; any `mode=expert`
-  request returns **503** while dark.
-- **Bot precondition to flip ON:** the Bot must serve
-  **`POST /v1/query/route`** for autonomous Expert routing. Forced Expert
-  Knowledge and Brief Gene may use the direct SSE path described in §11.2 only
-  when their exact `/v1/agents` descriptors advertise
-  `capabilities.streaming=true`; all other Expert routes remain blocking.
-- **Activation order:** (1) Bot deploys `/v1/query/route`; (2) ops adds the
-  `question_agent_logs.mode` column (repo-reorg manual §5.6); (3) ops sets
-  `bot.expert_enabled=true` and restarts Web Go. Rollback = flip the flag back
-  (instant; the column is additive and harmless).
-
-### 11.2 AG-UI SSE streaming (`bot.stream_enabled` + `VITE_STREAM_ENABLED`)
-
-- **Web state:** the streaming spine (Go tee-forward + `useStreamMessage`) is
-  complete but dark. With `bot.stream_enabled=false`, `/query` keeps the blocking
-  ChatCompletion path byte-for-byte.
-- **⚠️ Bot precondition to flip ON (load-bearing):** the Bot must persist the
-  **real accumulated answer** in its run record — not the `"[streamed]"`
-  placeholder. The persisted `bot_run_id` is the Bot run-**registry** id from the
-  `RunStarted` frame, which is what makes a streamed chat row overlay-matchable on
-  reload. **If the flag is flipped before Bot persists the real answer, reloading
-  a streamed conversation overwrites the real answer with the placeholder.**
-- **Capability precondition:** Bot `/v1/agents` must publish
-  `capabilities.streaming=true` on each exact agent descriptor before Web may
-  advertise that stream. Missing, false, stale, absent, or mismatched descriptors
-  fail closed even when the local flags are on. Chat requires only the stream
-  gates; forced Expert Knowledge and Brief Gene additionally require
-  `bot.expert_enabled=true`. Web Go validates the matching descriptor again at
-  SSE request admission, before opening `/v1/chat/completions`, so a direct
-  authenticated caller cannot bypass browser negotiation. No other Expert or
-  async agent streams.
-- **Activation order:** (1) Bot ships real-answer persistence and advertises the
-  verified per-agent streaming booleans; (2) deploy Web Go and confirm
-  `/api/v1/bot/capabilities` exposes `stream=true` only for the intended agents;
-  (3) enable `bot.expert_enabled` if forced Expert streams are intended; (4) set
-  `bot.stream_enabled=true` and the frontend `VITE_STREAM_ENABLED` in lockstep;
-  (5) smoke Instant Chat plus forced Expert Knowledge and Brief Gene, verify the
-  Brief Gene request resolves a free-form gene id, then reload each conversation
-  and confirm the accumulated answer survives. Keep unsupported descriptors and
-  denied tools on the blocking/refused path during the smoke. With local stream
-  flags still on, temporarily return a missing or false matching descriptor and
-  verify a direct authenticated SSE request receives a non-SSE rejection without
-  a Bot chat-completion call.
-- **Rollback:** set `bot.stream_enabled=false` and
-  `VITE_STREAM_ENABLED=false`, restart Web Go and redeploy the SPA, then repeat
-  one blocking Chat and one forced Expert request. Disable `bot.expert_enabled`
-  separately only when the whole Expert surface must be rolled back. No schema
-  rollback is required.
-
-### 11.3 A2UI actions (`bot.a2ui_actions_enabled`)
-
-- **Web state:** typed A2UI surfaces and the owner/run-bound action relay are
-  deployed, but the gateway flag is `false`; the disabled path returns before a
-  Bot call. Submitted surfaces expire when their in-flight run is gone.
-- **Bot and review preconditions:** Bot must emit the accepted catalog and
-  accept the matching action contract. Web G15, the A2UI action review, owner
-  checks, expiry/retry tests, and staging/live evidence must be linked in the
-  acceptance record before a flag change.
-- **Activation order:** (1) Bot owner returns emit/action evidence; (2) Web
-  owner and security review the acceptance row; (3) ops enables
-  `bot.a2ui_actions_enabled` and smoke-tests a synthetic owner/run-matched
-  action. Rollback = set the flag back to `false` and restart; no schema
-  rollback is needed.
-
-### 11.4 Remote Research, Design, and Network surfaces
-
-- **Web state:** `bot.research_enabled`, `bot.design_enabled`, and
-  `bot.network_enabled` are all `false`. With a flag off, Web must not dispatch
-  to Bot and the user sees the documented unavailable state.
-- **Preconditions:** each surface needs its own Bot capability, resolver and
-  attachment checks, permission/owner checks, bounded result/artifact evidence,
-  and Bot/CI/staging/live smoke results. Do not treat the presence of a route or
-  a local fixture as evidence.
-- **Activation order:** enable one flag at a time after its acceptance row is
-  reviewed; record the Web/Bot SHAs and operator. Rollback = disable only the
-  affected flag and repeat its unavailable-state smoke check.
-
-### 11.5 Interop capability and provenance (`bot.interop_enabled`)
-
-- **Web state:** capability discovery is hidden/off while the flag is `false`.
-  The Web boundary remains the allowlist, owner-scope, bounded-size, and
-  redaction authority; the browser never calls Bot interop directly.
-- **Preconditions:** security review must confirm that capability/provenance
-  output excludes raw Bot envelopes, provider diagnostics, private paths,
-  credentials, and cross-user data. Bot owner, CI, staging/live, and operations
-  evidence must be linked before activation.
-- **Activation order:** ops flips `bot.interop_enabled` only after review and
-  restarts Web Go; smoke a permitted capability and a denied/owner-mismatch
-  request. Rollback = set it back to `false`; retain the sanitized projection
-  schema and legacy history.
+- **Web state:** these surfaces are locally always enabled. There is no
+  `bot.expert_enabled`, `bot.stream_enabled`, `bot.a2ui_actions_enabled`,
+  `bot.interop_enabled`, `bot.multiturn_v1_enabled`, `bot.analyst_enabled`,
+  `bot.design_enabled`, `bot.network_enabled`, or `VITE_STREAM_ENABLED` switch.
+- **Remaining gates:** Bot advertisements, role grants, ownership checks, and
+  the dedicated-page `live` registry. Streaming still requires
+  `capabilities.streaming=true` on the exact agent descriptor. Research still
+  requires a compatible `research_input_resolution_v1` contract.
+- **Rollback:** there is no Web flag to flip. Roll back by redeploying a prior
+  Web release if the Bot contract is not ready.
 
 ### 11.6 History dual-read (`bot.history_dual_read`)
 

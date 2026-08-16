@@ -109,13 +109,6 @@ following Bot switches must remain false for the initial 0.1.3 deployment:
 
 ```yaml
 bot:
-  expert_enabled: false
-  stream_enabled: false
-  a2ui_actions_enabled: false
-  interop_enabled: false
-  research_enabled: false
-  design_enabled: false
-  network_enabled: false
   history_dual_read: false
 ```
 
@@ -322,28 +315,12 @@ All rows below remain **External Pending** until an authorized acceptance packet
 is returned and reviewed. Local Web gates and endpoint presence are necessary
 but not sufficient.
 
-### 8.1 A2UI actions (`bot.a2ui_actions_enabled`)
+### 8.1 A2UI, Expert, streaming, interop, and remote products
 
-Prerequisites: Web G15 pass; Bot emit and action-accept evidence; owner review;
-staging/live action, expiry, ownership, and retry checks. Operator change:
-enable the Web flag only after those records are linked. Smoke: submit a
-synthetic valid action and verify the same `dialogue_id`, owner, and `run_id`.
-Rollback: set the flag false and restart; the blocking path remains unchanged.
-
-### 8.2 Remote product surfaces
-
-`research_enabled`, `design_enabled`, and `network_enabled` each require
-resolver, attachment, permission, bounded-result, and Bot/operations smoke
-evidence. Enable one surface at a time, record its owner and release SHAs, and
-set only that flag. Roll back by setting the individual flag false; do not
-enable all three as a proxy for acceptance.
-
-### 8.3 Interop (`bot.interop_enabled`)
-
-Prerequisites: security review of allowlists, owner scoping, capability and
-provenance redaction, Bot owner acceptance, and staging/live evidence. Keep the
-endpoint hidden/off otherwise. Never expose raw Bot envelopes, provider
-diagnostics, private paths, credentials, or unredacted provenance.
+These surfaces are locally always enabled. Admission still requires the Bot
+contract, the caller's role grant, and ownership checks. There is no Web-side
+flag to flip. Dedicated product pages remain behind the frontend `live`
+registry.
 
 ### 8.4 History dual-read (`bot.history_dual_read`)
 
@@ -352,13 +329,6 @@ projection. Before enabling, compare projection-first, legacy fallback, and Bot
 history results for owner-scoped synthetic rows; record no data loss, no older
 revision overwrite, and a tested flag rollback. Keep false until RC-WEB-007 and
 RC-LIVE-001 evidence is reviewed.
-
-### 8.5 Existing Expert and streaming gates
-
-`expert_enabled` and `stream_enabled` retain their previous acceptance process.
-`stream_enabled` requires Bot real-answer persistence and the matching frontend
-flag; with it false, the blocking path must remain byte-compatible. Do not turn
-either flag on as part of the 0.1.3 deploy.
 
 ### 8.6 Resumable biological upload negotiation (Bot `obs-multipart-v2`)
 

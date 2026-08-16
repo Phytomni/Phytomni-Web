@@ -182,12 +182,7 @@ FIXTURE_PATHS = {
     ),
 }
 
-DEFAULT_OFF_FLAGS = (
-    "expert_enabled",
-    "stream_enabled",
-    "a2ui_actions_enabled",
-    "multiturn_v1_enabled",
-)
+DEFAULT_OFF_FLAGS = ()
 
 PASS_LINE = "Bot/Web compatibility contract: PASS"
 FAIL_LINE = "Bot/Web compatibility contract: FAIL"
@@ -1211,16 +1206,12 @@ def _check_default_off_flags(text: str, violations: list[str]) -> None:
 
 def _check_web_feature_defaults(source_text: dict[str, str], violations: list[str]) -> None:
     store = source_text.get("web_store", "")
-    if not re.search(r"(?m)^\s*expertEnabled\s*:\s*false\b", store):
-        violations.append("Web expertEnabled default must be false")
+    if not re.search(r"(?m)^\s*expertEnabled\s*:\s*true\b", store):
+        violations.append("Web expertEnabled default must be true")
 
     stream = source_text.get("web_stream", "")
-    stream_refs = re.findall(r"import\.meta\.env\.VITE_STREAM_ENABLED", stream)
-    explicit_true = re.findall(
-        r'import\.meta\.env\.VITE_STREAM_ENABLED\s*===\s*["\']true["\']', stream
-    )
-    if stream_refs and len(stream_refs) != len(explicit_true):
-        violations.append("Web VITE_STREAM_ENABLED must use an explicit true opt-in")
+    if "VITE_STREAM_ENABLED" in stream:
+        violations.append("Web VITE_STREAM_ENABLED switch must be removed")
 
 
 def _iter_keys(value: Any) -> Iterable[str]:

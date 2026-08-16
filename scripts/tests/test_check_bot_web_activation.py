@@ -1534,18 +1534,8 @@ func HistoryReadModeFromConfig() HistoryReadMode {
     assert "history_dual_read default must remain legacy/off" in violations
 
 
-def test_default_check_rejects_duplicate_yaml_and_web_defaults() -> None:
+def test_default_check_rejects_false_or_duplicate_expert_defaults() -> None:
     source = dict(checker.DEFAULT_CHECK_FILES)
-    source[Path("apps/server/config/app.yml.example")] = """
-bot:
-  expert_enabled: false
-  expert_enabled: true
-  stream_enabled: false
-  a2ui_actions_enabled: false
-  research_enabled: false
-  design_enabled: false
-  network_enabled: false
-"""
     source[Path("apps/web/src/stores/user.ts")] = """
 const state = {
   expertEnabled: false,
@@ -1555,41 +1545,18 @@ const state = {
 
     violations: list[str] = []
     checker._check_defaults(source, violations)
-    assert "expert_enabled default must be false" in violations
-    assert "Web expertEnabled default must be false" in violations
+    assert "Web expertEnabled default must be true" in violations
 
 
-def test_default_check_rejects_true_or_duplicate_product_flags() -> None:
+def test_default_check_rejects_remaining_stream_env_switch() -> None:
     source = dict(checker.DEFAULT_CHECK_FILES)
-    source[Path("apps/server/config/app.yml.example")] = """
-bot:
-  expert_enabled: false
-  stream_enabled: false
-  a2ui_actions_enabled: false
-  research_enabled: true
-  design_enabled: false
-  network_enabled: false
-  network_enabled: false
-"""
+    source[Path("apps/web/src/views/chat/composables/useSendMessage.ts")] = (
+        'import.meta.env.VITE_STREAM_ENABLED === "true"\n'
+    )
 
     violations: list[str] = []
     checker._check_defaults(source, violations)
-    assert "research_enabled default must be false" in violations
-    assert "network_enabled default must be false" in violations
-
-
-def test_checker_rejects_true_or_duplicate_product_flags_in_temp_root(tmp_path: Path) -> None:
-    root = local_readiness_tree(tmp_path)
-    config_path = root / "apps/server/config/app.yml.example"
-    config_path.write_text(
-        config_path.read_text(encoding="utf-8")
-        + "  design_enabled: true\n"
-        + "  design_enabled: false\n",
-        encoding="utf-8",
-    )
-
-    errors = checker.check(root)
-    assert "design_enabled default must be false" in errors
+    assert "Web VITE_STREAM_ENABLED switch must be removed" in violations
 
 
 def test_checker_rejects_deep_forbidden_fixture_field_in_temp_root(tmp_path: Path) -> None:
@@ -1623,7 +1590,7 @@ expertEnabled: false
 
     violations: list[str] = []
     checker._check_defaults(source, violations)
-    assert "Web expertEnabled default must be false" in violations
+    assert "Web expertEnabled default must be true" in violations
 
 
 def test_web_expert_default_ignores_regex_literal_marker() -> None:
@@ -1634,11 +1601,11 @@ def test_web_expert_default_ignores_regex_literal_marker() -> None:
 
     violations: list[str] = []
     checker._check_defaults(source, violations)
-    assert "Web expertEnabled default must be false" in violations
+    assert "Web expertEnabled default must be true" in violations
 
     violations = []
     checker._check_defaults(dict(checker.DEFAULT_CHECK_FILES), violations)
-    assert "Web expertEnabled default must be false" not in violations
+    assert "Web expertEnabled default must be true" not in violations
 
 
 def test_history_default_ignores_fake_function_inside_go_raw_string() -> None:
@@ -1685,14 +1652,13 @@ bot:
     expert_enabled: false
   stream_enabled: false
   a2ui_actions_enabled: false
-  research_enabled: false
   design_enabled: false
   network_enabled: false
 """
 
     violations: list[str] = []
     checker._check_defaults(source, violations)
-    assert "expert_enabled default must be false" in violations
+    assert "Web expertEnabled default must be true" not in violations
 
 
 def test_requested_unknown_flag_is_rejected_without_echoing_value() -> None:

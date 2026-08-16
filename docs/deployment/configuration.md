@@ -170,13 +170,6 @@ bot:
     brief_gene: 30000
   proxy_enabled: true
   key_audit_redact: true
-  expert_enabled: false # dark-launch: Expert routing (operations.md §11.1)
-  stream_enabled: false # dark-launch: AG-UI SSE streaming (operations.md §11.2)
-  a2ui_actions_enabled: false # dark-launch: A2UI action relay; owner/run checks stay dormant
-  interop_enabled: false # dark-launch: sanitized capability/provenance discovery
-  research_enabled: false # dark-launch: remote Research product surface
-  design_enabled: false # dark-launch: remote Design product surface
-  network_enabled: false # dark-launch: remote Network product surface
   history_dual_read: false # observation path; legacy/projection fallback remains primary
   upload_public_origin: "http://localhost:8000" # exact browser-reachable Bot origin; never derive from base_url
   max_upload_file_bytes: 26214400 # 25 MiB per file (matches Bot /v1/files 413)
@@ -245,12 +238,12 @@ Bot-owned `files:delegate` scope for JSON create/renew calls; the browser's
 short-lived upload capability is a separate data-plane credential. See
 [`operations.md`](operations.md).
 
-The remote-product switches (`research_enabled`, `design_enabled`, and
-`network_enabled`) plus `a2ui_actions_enabled` are default-off capability gates.
-They remain off until the corresponding Bot-owner, security, staging, and live
-acceptance evidence is reviewed. `interop_enabled` follows the same rule and
-must additionally keep capability/provenance output allowlisted, owner-scoped,
-bounded, and redacted.
+Expert routing, AG-UI streaming, A2UI actions, interop discovery,
+conversation-context v1, Research, Analyst, Design, and Network are locally
+always enabled. Admission still requires the matching Bot contract, the
+caller's role grant, and ownership checks. Interop output stays allowlisted,
+owner-scoped, bounded, and redacted. There is no Web-side `VITE_STREAM_ENABLED`
+switch; the browser streams when Bot advertises a stream-capable agent.
 
 `history_dual_read` is also false by default. When enabled by an authorized
 operator, it is an observation/compatibility read path layered on top of the

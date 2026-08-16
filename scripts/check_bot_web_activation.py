@@ -129,16 +129,11 @@ ROLLBACK_MARKERS = [
 DEFAULT_CHECK_FILES: dict[Path, str] = {
     Path("apps/server/config/app.yml.example"): (
         "bot:\n"
-        "  expert_enabled: false\n"
-        "  stream_enabled: false\n"
-        "  a2ui_actions_enabled: false\n"
-        "  research_enabled: false\n"
-        "  design_enabled: false\n"
-        "  network_enabled: false\n"
+        "  proxy_enabled: true\n"
     ),
-    Path("apps/web/src/stores/user.ts"): "expertEnabled: false\n",
+    Path("apps/web/src/stores/user.ts"): "expertEnabled: true\n",
     Path("apps/web/src/views/chat/composables/useSendMessage.ts"): (
-        'import.meta.env.VITE_STREAM_ENABLED === "true"\n'
+        "shouldStream(capturedActiveAgentName, capturedMode, {\n"
     ),
     Path("apps/server/service/api_service/bot_capabilities.go"): (
         "func HistoryReadModeFromConfig() HistoryReadMode {\n"
@@ -281,8 +276,7 @@ _EXPERT_DEFAULT_RE = re.compile(
     r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _CONFIG_FLAG_RE = re.compile(
-    r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled|"
-    r"research_enabled|design_enabled|network_enabled)"
+    r"(?m)^[ \t]*(?P<key>history_dual_read)"
     r"[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _HISTORY_FUNCTION_RE = re.compile(
@@ -2376,37 +2370,17 @@ def _history_default_is_legacy(source: str) -> bool:
 def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     config = source.get(Path("apps/server/config/app.yml.example"), "")
     config = _mask_yaml_block_scalars(config)
-    matches = list(_CONFIG_FLAG_RE.finditer(config))
-    for key in (
-        "expert_enabled",
-        "stream_enabled",
-        "a2ui_actions_enabled",
-        "research_enabled",
-        "design_enabled",
-        "network_enabled",
-    ):
-        key_matches = [match for match in matches if match.group("key") == key]
-        if len(key_matches) != 1 or key_matches[0].group("value") != "false":
-            violations.append(f"{key} default must be false")
-
     user_store = source.get(Path("apps/web/src/stores/user.ts"), "")
     user_store = _mask_javascript_non_code(user_store)
     expert_matches = list(_EXPERT_DEFAULT_RE.finditer(user_store))
-    if len(expert_matches) != 1 or expert_matches[0].group("value") != "false":
-        violations.append("Web expertEnabled default must be false")
+    if len(expert_matches) != 1 or expert_matches[0].group("value") != "true":
+        violations.append("Web expertEnabled default must be true")
 
     stream_source = source.get(
         Path("apps/web/src/views/chat/composables/useSendMessage.ts"), ""
     )
-    stream_refs = stream_source.count("import.meta.env.VITE_STREAM_ENABLED")
-    explicit_true = len(
-        re.findall(
-            r'import\.meta\.env\.VITE_STREAM_ENABLED\s*===\s*["\']true["\']',
-            stream_source,
-        )
-    )
-    if stream_refs == 0 or stream_refs != explicit_true:
-        violations.append("Web VITE_STREAM_ENABLED must use an explicit true opt-in")
+    if "VITE_STREAM_ENABLED" in stream_source:
+        violations.append("Web VITE_STREAM_ENABLED switch must be removed")
 
     history_source = source.get(
         Path("apps/server/service/api_service/bot_capabilities.go"), ""
