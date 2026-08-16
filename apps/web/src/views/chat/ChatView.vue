@@ -588,7 +588,10 @@ export function removeDeletedChat(options: {
           </template>
           <template #downloads>
             <ResultArchiveDelivery
-              v-if="currentArtifactProjection?.resultArchiveV1 === true"
+              v-if="
+                currentArtifactProjection?.resultArchiveV1 === true ||
+                currentArtifactDelivery != null
+              "
               :delivery="currentArtifactDelivery"
               :artifacts="currentArtifactLinks"
               :retrying="currentArtifactRetrying"

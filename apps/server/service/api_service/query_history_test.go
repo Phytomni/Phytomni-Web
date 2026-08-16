@@ -384,3 +384,67 @@ func TestHistoryReturnsAuthorizedArtifactLinksWithoutPrivateContext(t *testing.T
 		t.Fatalf("cross-owner history=%#v err=%v", other, err)
 	}
 }
+
+func TestHistoryAndQueryPublishResultArchiveV1(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "44444444-4444-4444-8444-444444444444"
+	const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	raw, err := marshalPersistedProjection(BotRunProjection{
+		RunID:           "run-archive-ready",
+		Agent:           "design",
+		Status:          "SUCCEEDED",
+		ReportRevision:  2,
+		ResultArchiveV1: true,
+		Artifacts: ProjectionArtifacts{
+			OutputDirs: []string{"obs://bucket/alice/run-archive"},
+		},
+		Delivery: &ProjectionDelivery{
+			SchemaVersion:   1,
+			Required:        true,
+			Status:          "ready",
+			Revision:        1,
+			InventoryDigest: digest,
+			ArchiveName:     "design-results.zip",
+			ArchiveSize:     4097,
+			ArchiveRef:      "obs://bucket/alice/run-archive/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/design-results.zip",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := model.QuestionAgentLog{
+		DialogueId: dialogueID, UserName: "alice", Query: "design question",
+		Answer: "design answer", Status: statusSucceeded, Mode: "expert",
+		ToolName: "DigitalDesignAgent", BotProjectionJSON: raw, BotReportRevision: 2,
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil || len(history) != 1 {
+		t.Fatalf("history=%#v err=%v", history, err)
+	}
+	if !history[0].ResultArchiveV1 || history[0].Delivery == nil ||
+		history[0].Delivery.Status != "ready" ||
+		history[0].Delivery.Name == nil || *history[0].Delivery.Name != "design-results.zip" ||
+		len(history[0].Artifacts) != 1 || history[0].Artifacts[0].Name != "design-results.zip" {
+		t.Fatalf("history archive=%#v", history[0])
+	}
+
+	out := &QueryData{Id: row.Id, DialogueId: dialogueID, ToolName: "DigitalDesignAgent"}
+	if err := NewService().decorateConversationQueryData(context.Background(), "alice", out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.ResultArchiveV1 || out.Delivery == nil || out.Delivery.Status != "ready" ||
+		len(out.Artifacts) != 1 || out.Artifacts[0].Name != "design-results.zip" {
+		t.Fatalf("query archive=%#v", out)
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "obs://") || strings.Contains(string(encoded), "delivery/") {
+		t.Fatalf("query data leaked archive reference: %s", encoded)
+	}
+}

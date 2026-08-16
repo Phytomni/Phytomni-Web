@@ -267,6 +267,37 @@ describe("parseBotProjection", () => {
     expect(JSON.stringify(projection)).not.toContain("/obs/private");
   });
 
+  it("reads the query/history archive contract without treating conversation links as OBS paths", () => {
+    const projection = parseBotProjection({
+      tool_name: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      answer: "design answer",
+      result_archive_v1: true,
+      delivery: {
+        schema_version: 1,
+        required: true,
+        status: "ready",
+        revision: 1,
+        name: "design-results.zip",
+        size_bytes: 4097,
+        error_code: null,
+        retryable: false,
+      },
+      artifacts: [
+        {
+          id: "opaque-archive",
+          name: "design-results.zip",
+          kind: "archive",
+          media_type: "application/zip",
+        },
+      ],
+    });
+
+    expect(projection.resultArchiveV1).toBe(true);
+    expect(projection.delivery?.name).toBe("design-results.zip");
+    expect(projection.artifacts).toEqual([]);
+  });
+
   it("rejects non-objects and oversized bounded values", () => {
     expect(() => parseBotProjection(null)).toThrow(/object/);
     expect(() => parseBotProjection([])).toThrow(/object/);

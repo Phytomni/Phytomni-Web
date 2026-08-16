@@ -581,7 +581,7 @@ func TestResultArchiveV1Effective(t *testing.T) {
 		{name: "design full intersection", resp: responseFor("design", true, []int{1}), slug: "design", cfg: configFor("design"), want: true},
 		{name: "missing protocol", resp: responseFor("analyst", true, nil), slug: "analyst", cfg: configFor("analyst")},
 		{name: "wrong protocol version", resp: responseFor("analyst", true, []int{2}), slug: "analyst", cfg: configFor("analyst")},
-		{name: "product flag disabled", resp: responseFor("analyst", true, []int{1}), slug: "analyst", cfg: &rxBot.Config{}},
+		{name: "product flag unused", resp: responseFor("analyst", true, []int{1}), slug: "analyst", cfg: &rxBot.Config{}, want: true},
 		{name: "descriptor without artifacts", resp: responseFor("analyst", false, []int{1}), slug: "analyst", cfg: configFor("analyst")},
 		{name: "descriptor absent", resp: &rxBot.AgentsListResponse{Protocols: map[string][]int{rxBot.ResultArchiveProtocol: {1}}}, slug: "analyst", cfg: configFor("analyst")},
 		{name: "unscoped data agent", resp: responseFor("data", true, []int{1}), slug: "data", cfg: &rxBot.Config{}},
@@ -589,7 +589,7 @@ func TestResultArchiveV1Effective(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := resultArchiveV1Effective(tt.resp, tt.slug, tt.cfg); got != tt.want {
+			if got := resultArchiveV1Effective(tt.resp, tt.slug); got != tt.want {
 				t.Fatalf("resultArchiveV1Effective(%q)=%v, want %v", tt.slug, got, tt.want)
 			}
 		})

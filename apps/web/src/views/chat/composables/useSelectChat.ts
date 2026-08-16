@@ -61,7 +61,7 @@ export function historyAssistantMetadata(
 }
 
 function isActiveResultArchiveV1(item: Partial<ChatResponse>): boolean {
-  if (item.result_archive_v1 === true) return true;
+  if (item.result_archive_v1 === true || item.delivery != null) return true;
   if (typeof item.answer !== "string" || item.answer.trim() === "") {
     return false;
   }

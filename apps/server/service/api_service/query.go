@@ -1905,6 +1905,8 @@ type QueryData struct {
 	DegradedInterop   bool                       `json:"degraded_interop,omitempty"`
 	InterOp           *InteropProvenance         `json:"interop,omitempty"`
 	Artifacts         []ConversationArtifactLink `json:"artifacts,omitempty"`
+	ResultArchiveV1   bool                       `json:"result_archive_v1,omitempty"`
+	Delivery          *AgentTaskDeliveryDTO      `json:"delivery,omitempty"`
 	Attachments       []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ContextRebuilt    bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded   bool                       `json:"context_degraded,omitempty"`
@@ -1923,6 +1925,13 @@ func (ps *Service) decorateConversationQueryData(
 		return err
 	}
 	out.Artifacts = links
+	projection, projectionErr := LoadBotRunProjection(ctx, username, out.Id)
+	if projectionErr == nil {
+		out.ResultArchiveV1 = projection.ResultArchiveV1
+		out.Delivery = agentTaskDeliveryDTO(projection)
+	} else if !errors.Is(projectionErr, ErrBotProjectionNotFound) {
+		return projectionErr
+	}
 	private, err := LoadBotConversationContext(ctx, username, out.Id)
 	if err != nil {
 		return err

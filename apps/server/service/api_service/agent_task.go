@@ -144,6 +144,7 @@ type ConversationHistoryRow struct {
 	*model.QuestionAgentLog
 	Artifacts       []ConversationArtifactLink `json:"artifacts,omitempty"`
 	Attachments     []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
+	ResultArchiveV1 bool                       `json:"result_archive_v1,omitempty"`
 	Delivery        *AgentTaskDeliveryDTO      `json:"delivery,omitempty"`
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
@@ -169,6 +170,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 		if projectionErr != nil {
 			return nil, projectionErr
 		}
+		historyRow.ResultArchiveV1 = projection.ResultArchiveV1
 		historyRow.Delivery = agentTaskDeliveryDTO(projection)
 		if projection.ResultArchiveV1 || len(projection.Artifacts.Paths) > 0 {
 			links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
