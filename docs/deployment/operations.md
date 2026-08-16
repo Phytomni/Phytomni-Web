@@ -300,10 +300,13 @@ reviewed.
   history into MySQL. Rollback = set it back to `false`; do not drop
   `bot_projection_json`, `bot_report_revision`, or their index.
 
-### 11.7 Resumable biological uploads (`bot.resumable_upload_enabled`)
+### 11.7 Resumable biological uploads (Bot `obs-multipart-v2`)
 
-- **Web state:** the control/data-plane client and five-state UI are deployed,
-  but the switch is `false`. The current checkout still contains legacy
+- **Web state:** there is no Web-side upload feature flag. The control/data-plane
+  client and five-state UI follow the Bot catalog: per-agent attachment
+  channels come from the Bot descriptor, and `upload.enabled` is true only
+  when Bot advertises `obs-multipart-v2` v2 and `upload_public_origin` is a
+  valid browser-reachable origin. The current checkout still contains legacy
   multipart relay code; the source-boundary checker therefore remains a
   deliberate pre-cutover diagnostic and must not be treated as a pass.
 - **Bot preconditions:** the Bot owner must return a clean SHA and receipt for
@@ -313,23 +316,24 @@ reviewed.
   separately identify development, staging, and production evidence; an
   unexecuted 10 GiB case is `Needs Verification`.
 - **Web preconditions:** the Web full gate passes; capability negotiation
-  returns `upload.enabled=false` until every Bot/origin condition is true; the
-  browser matrix covers queued, uploading, paused, failed, and completed at
-  `320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560` CSS pixels in
-  both themes. Synthetic screenshots are not live storage acceptance.
+  returns `upload.enabled=false` until the Bot protocol and public origin
+  agree; the browser matrix covers queued, uploading, paused, failed, and
+  completed at `320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560`
+  CSS pixels in both themes. Synthetic screenshots are not live storage
+  acceptance.
 - **Activation order:** (1) deploy the accepted Bot data plane; (2) deploy Web
-  with the switch off and the exact browser-reachable `upload_public_origin`;
-  (3) verify `/api/v1/bot/capabilities` exposes only the bounded manifest and
-  no credentials; (4) enable `bot.resumable_upload_enabled` and restart Web;
-  (5) smoke one small file and generated biological fixtures, then exercise
-  interruption/resume, capability renewal, cancel, cross-user denial, and
-  Agent resolution. Do not enable this flag while the Bot receipt or boundary
-  checker is pending.
-- **Rollback:** set the switch to `false`, restart Web, and preserve the
-  failed evidence. Do not silently fall back to a body relay after the breaking
+  with the exact browser-reachable `upload_public_origin`; (3) verify
+  `/api/v1/bot/capabilities` exposes only the bounded manifest and no
+  credentials, with `upload.enabled=true` and attachment purposes matching
+  Bot; (4) smoke one small file and generated biological fixtures, then
+  exercise interruption/resume, capability renewal, cancel, cross-user
+  denial, and Agent resolution.
+- **Rollback:** unset or invalidate `upload_public_origin`, or stop advertising
+  `obs-multipart-v2` on Bot, then restart Web and preserve the failed
+  evidence. Do not silently fall back to a body relay after the breaking
   cutover; a full release rollback is a separately reviewed operation and must
   retain additive Bot persistence. Never delete completed assets as part of a
-  flag rollback.
+  rollback.
 
 ### 11.8 Shared evidence and deployment boundary
 

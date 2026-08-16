@@ -85,12 +85,11 @@ func TestBotCapabilitiesResponseHasBoundedManifest(t *testing.T) {
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL:                server.URL,
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "http://upload.example/",
-		ResearchEnabled:        true,
-		MaxQueryChars:          131_072,
+		BaseURL:            server.URL,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "http://upload.example/",
+		ResearchEnabled:    true,
+		MaxQueryChars:      131_072,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 

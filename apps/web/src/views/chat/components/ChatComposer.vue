@@ -28,12 +28,12 @@
           />
         </div>
         <p
-          v-if="attachmentTargetBlocked && !isSending"
+          v-if="attachmentStatus"
           class="composer-attachment-status"
           data-testid="attachment-target-status"
           role="status"
         >
-          {{ t("chat.attachmentTargetUnavailable") }}
+          {{ attachmentStatus }}
         </p>
 
         <div class="chat-composer-body">
@@ -87,8 +87,10 @@
 
           <div class="composer-utility-actions">
             <el-upload
+              v-if="showUploadControl"
               ref="uploadRef"
               class="upload-demo"
+              data-testid="composer-attach"
               :limit="maxAttachments"
               :show-file-list="false"
               :auto-upload="false"
@@ -209,27 +211,31 @@ import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
 import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 
-const props = defineProps<{
-  modelValue: string;
-  isSending: boolean;
-  chatMode: "instant" | "expert";
-  instantModeEnabled: boolean;
-  expertModeEnabled: boolean;
-  modeUsable: boolean;
-  showModeSelector: boolean;
-  maxAttachments?: number;
-  fileList: ResumableUploadItem[];
-  attachmentAnnouncement?: string;
-  attachmentAnnouncementNonce?: number;
-  hasBlockingUploads: boolean;
-  attachmentTargetAvailable: boolean;
-  attachmentTargetBlocked: boolean;
-  rolesLoading: boolean;
-  hasMessages: boolean;
-  selectedAgent: string;
-  pickerOptions: ChatAgentPickerOption[];
-  setTourInputTarget?: (el: HTMLElement | null) => void;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    isSending: boolean;
+    chatMode: "instant" | "expert";
+    instantModeEnabled: boolean;
+    expertModeEnabled: boolean;
+    modeUsable: boolean;
+    showModeSelector: boolean;
+    maxAttachments?: number;
+    fileList: ResumableUploadItem[];
+    attachmentAnnouncement?: string;
+    attachmentAnnouncementNonce?: number;
+    hasBlockingUploads: boolean;
+    uploadCapabilityEnabled?: boolean;
+    attachmentTargetAvailable: boolean;
+    attachmentTargetBlocked: boolean;
+    rolesLoading: boolean;
+    hasMessages: boolean;
+    selectedAgent: string;
+    pickerOptions: ChatAgentPickerOption[];
+    setTourInputTarget?: (el: HTMLElement | null) => void;
+  }>(),
+  { uploadCapabilityEnabled: true }
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -274,12 +280,31 @@ const mentionTriggers = computed(() =>
 const canEdit = computed(
   () => !props.isSending && !props.rolesLoading && props.modeUsable
 );
+const uploadCapabilityEnabled = computed(() => props.uploadCapabilityEnabled);
+const showUploadControl = computed(
+  () => uploadCapabilityEnabled.value || props.fileList.length > 0
+);
 const canQueueFiles = computed(
   () => canEdit.value && props.attachmentTargetAvailable
 );
-const uploadActionLabel = computed(() =>
-  t("chat.uploadFile", { maxFiles: props.maxAttachments ?? 10 })
-);
+const uploadActionLabel = computed(() => {
+  if (!props.attachmentTargetAvailable) {
+    return uploadCapabilityEnabled.value
+      ? t("chat.attachmentTargetUnsupported")
+      : t("chat.attachmentErrors.upload_disabled");
+  }
+  return t("chat.uploadFile", { maxFiles: props.maxAttachments ?? 10 });
+});
+const attachmentStatus = computed(() => {
+  if (props.isSending) return "";
+  if (props.attachmentTargetBlocked) {
+    return t("chat.attachmentTargetUnavailable");
+  }
+  if (!props.attachmentTargetAvailable && uploadCapabilityEnabled.value) {
+    return t("chat.attachmentTargetUnsupported");
+  }
+  return "";
+});
 const permissionUnavailable = computed(
   () => !props.rolesLoading && !props.modeUsable
 );

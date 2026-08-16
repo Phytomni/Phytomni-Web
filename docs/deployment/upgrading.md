@@ -360,11 +360,13 @@ RC-LIVE-001 evidence is reviewed.
 flag; with it false, the blocking path must remain byte-compatible. Do not turn
 either flag on as part of the 0.1.3 deploy.
 
-### 8.6 Resumable biological upload gate (`bot.resumable_upload_enabled`)
+### 8.6 Resumable biological upload negotiation (Bot `obs-multipart-v2`)
 
 This is a breaking Web ↔ Bot data-plane cutover, not an additive fallback for
-the legacy multipart body relay. Keep it `false` during the normal 0.1.3/0.1.4
-deployment unless a separate acceptance packet covers both repositories.
+the legacy multipart body relay. There is no Web-side upload feature flag:
+attachment channels are copied from the Bot descriptor, and the browser
+upload contract is enabled only when Bot advertises `obs-multipart-v2` v2
+and `upload_public_origin` is a valid browser-reachable origin.
 
 The release contract has one Attach action and server-side classification:
 Web Go derives `dataset` or `document` from bounded filename metadata (archives
@@ -398,7 +400,7 @@ strip, bounded layout at `320px`/`390px`, full accessible names for ellipsized
 filenames, `+N more`, keyboard-visible focus, default-sized touch targets,
 polite live announcements, reduced-motion, and forced-colors support.
 
-Before an operator changes the flag, record all of the following:
+Before an operator points browsers at the Bot upload origin, record all of the following:
 
 1. the exact clean Web and Bot SHAs, with the Bot receipt's protocol,
    persistence, cleanup, owner-isolation, AssetResolver, Agent wiring, and
@@ -415,12 +417,13 @@ Before an operator changes the flag, record all of the following:
 5. an explicit confirmation that the browser and Web Go hold no Huawei AK/SK,
    account password, OBS upload ID, object key, or full file body.
 
-Activation is ordered: Bot data plane → Web with the flag off → capability
-manifest/origin smoke → flag on → small and biological fixture smokes →
-interruption/resume and owner-denial checks. If any result fails, set the flag
-back to `false` and restart Web. Do not restore the old body relay as an
-implicit fallback after the breaking cutover; handle a full release rollback
-with the owner and retain additive Bot persistence.
+Activation is ordered: Bot data plane → Web with a valid
+`upload_public_origin` → capability manifest/origin smoke → small and
+biological fixture smokes → interruption/resume and owner-denial checks. If
+any result fails, unset the origin or stop advertising the protocol and
+restart Web. Do not restore the old body relay as an implicit fallback after
+the breaking cutover; handle a full release rollback with the owner and retain
+additive Bot persistence.
 
 Label acceptance explicitly: local Web classifier, request-shape, recovery,
 chip, accessibility, and visual checks are `ACCEPTED_WITH_GAPS (WEB-ONLY)`;
@@ -428,8 +431,9 @@ they do not establish Bot storage or native Agent mapping. A paired-runtime
 result is `External Pending`/`Needs Verification` until the Bot receipt and a
 development Web → Go → Bot run prove storage, owner isolation, credential
 redaction, and dual/single/zero-channel behavior. This runbook keeps
-`bot.resumable_upload_enabled=false`; it neither activates nor authorizes a
-production configuration change.
+`upload.enabled` false unless Bot advertises the protocol and the public
+origin is valid; it neither activates nor authorizes a production
+configuration change.
 
 ## 9. Evidence and ownership
 

@@ -126,11 +126,10 @@ func setupUploadHandler(t *testing.T, serverURL string) {
 	t.Helper()
 	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL:                serverURL,
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     serverURL,
-		TimeoutSeconds:         1,
+		BaseURL:            serverURL,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: serverURL,
+		TimeoutSeconds:     1,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 }

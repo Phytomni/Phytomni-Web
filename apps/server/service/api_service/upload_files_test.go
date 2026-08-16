@@ -259,9 +259,8 @@ func TestCreateUploadDerivesOwnerPurposeAndNormalizesFilename(t *testing.T) {
 	var captured []uploadCreateCapture
 	server := uploadControlServer(t, true, "", &captured, http.StatusOK)
 	useUploadBotConfig(t, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     server.URL,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: server.URL,
 	}, server.URL)
 
 	result, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{
@@ -300,7 +299,7 @@ func TestCreateUploadDerivesPurposeFromFilename(t *testing.T) {
 		t.Run(filename, func(t *testing.T) {
 			var captured []uploadCreateCapture
 			server := uploadControlServer(t, true, "", &captured, http.StatusOK)
-			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 			_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: filename, SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 			if err != nil {
 				t.Fatalf("CreateUpload error: %v", err)
@@ -318,7 +317,7 @@ func TestCreateUploadRejectsUnsupportedOrAmbiguousFilenameBeforeBot(t *testing.T
 			var calls int
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
 			t.Cleanup(server.Close)
-			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 			_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: filename, SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 			if !errors.Is(err, ErrUploadMetadataInvalid) {
 				t.Fatalf("filename %q error=%v, want invalid metadata", filename, err)
@@ -354,7 +353,7 @@ func TestCreateUploadSizeBoundaries(t *testing.T) {
 				http.NotFound(w, r)
 			}))
 			t.Cleanup(server.Close)
-			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 			_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: size}, "550e8400-e29b-41d4-a716-446655440000")
 			if err != nil {
 				t.Fatalf("CreateUpload(%d) error: %v", size, err)
@@ -368,7 +367,7 @@ func TestCreateUploadSizeBoundaries(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
 	t.Cleanup(server.Close)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: resumableUploadMaxFileBytes + 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadMetadataInvalid) {
 		t.Fatalf("oversized file error = %v, want metadata error", err)
@@ -397,16 +396,16 @@ func TestCreateUploadRequiresNegotiatedProtocolAndEnabledGate(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	t.Cleanup(server.Close)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadControlDisabled) {
 		t.Fatalf("missing protocol error = %v, want disabled", err)
 	}
 
-	rxBot.BotConfig.ResumableUploadEnabled = false
+	rxBot.BotConfig.UploadPublicOrigin = ""
 	_, err = NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadControlDisabled) {
-		t.Fatalf("disabled switch error = %v, want disabled", err)
+		t.Fatalf("missing origin error = %v, want disabled", err)
 	}
 }
 
@@ -415,7 +414,7 @@ func TestCreateUploadBotErrorDoesNotExposeUpstreamDetail(t *testing.T) {
 	server := uploadControlServer(t, true, "", &captured, http.StatusBadRequest)
 	// Replace the fixture with one whose response URL is not needed because the
 	// Bot returns an error before the response is validated.
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadControlUnavailable) {
 		t.Fatalf("Bot error = %v, want unavailable", err)
@@ -448,7 +447,7 @@ func TestRenewUploadCapabilityDerivesOwnerAndRejectsPathTampering(t *testing.T) 
 		}
 	}))
 	t.Cleanup(server.Close)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 	result, err := NewService().RenewUploadCapability(context.Background(), "bob@example.com", "file_test")
 	if err != nil || result.AssetID != "file_test" {
 		t.Fatalf("renew result=%#v err=%v", result, err)
@@ -473,10 +472,9 @@ func TestCreateUploadCompensatesUnexpectedOrigin(t *testing.T) {
 	var trace uploadRequestRecorder
 	server := uploadControlServerWithTrace(t, true, hostileServer.URL, nil, http.StatusOK, &trace, http.StatusOK, nil)
 	useUploadBotConfig(t, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     server.URL,
-		UserAPIKey:             "private-service-key-marker",
+		ProxyEnabled:       true,
+		UploadPublicOrigin: server.URL,
+		UserAPIKey:         "private-service-key-marker",
 	}, server.URL)
 
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
@@ -512,10 +510,9 @@ func TestCreateUploadCompensationOutlivesCanceledContextAndIsBounded(t *testing.
 	var trace uploadRequestRecorder
 	server := uploadControlServerWithTrace(t, true, "http://unexpected.example", nil, http.StatusOK, &trace, http.StatusOK, abortStarted)
 	useUploadBotConfig(t, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     server.URL,
-		TimeoutSeconds:         30,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: server.URL,
+		TimeoutSeconds:     30,
 	}, server.URL)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -544,7 +541,7 @@ func TestCreateUploadCompensationOutlivesCanceledContextAndIsBounded(t *testing.
 
 func TestCreateUploadCompensationFailureKeepsGenericError(t *testing.T) {
 	server := uploadControlServerWithTrace(t, true, "http://unexpected.example", nil, http.StatusOK, nil, http.StatusInternalServerError, nil)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadControlUnavailable) {
 		t.Fatalf("failed-compensation error = %v, want unavailable", err)
@@ -574,7 +571,7 @@ func TestCreateUploadDoesNotCompensateUnsafeResponse(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(server.Close)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 
 	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(err, ErrUploadControlUnavailable) {
@@ -693,7 +690,7 @@ func TestUploadControlErrorClassifierIsUsedByCreateAndRenew(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 
 	_, createErr := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "paper.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 	if !errors.Is(createErr, ErrUploadStateConflict) || strings.Contains(createErr.Error(), "private create detail") {
@@ -752,9 +749,8 @@ func TestUploadControlErrorMalformedHTTPBodiesStayGeneric(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			useUploadBotConfig(t, rxBot.Config{
-				ProxyEnabled:           true,
-				ResumableUploadEnabled: true,
-				UploadPublicOrigin:     server.URL,
+				ProxyEnabled:       true,
+				UploadPublicOrigin: server.URL,
 			}, server.URL)
 
 			var err error
@@ -809,7 +805,7 @@ func TestCreateUploadLogsCategoriesWithoutSensitiveMarkers(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := uploadControlServerWithTrace(t, true, "http://private-url-marker.invalid", nil, http.StatusOK, nil, test.abortStatus, nil)
-			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
 			_, _ = NewService().CreateUpload(context.Background(), "private-owner-marker", UploadCreateInput{Filename: "private-body-marker.pdf", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
 		})
 	}

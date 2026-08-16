@@ -185,11 +185,10 @@ func TestBotCapabilitiesResearchFormatMatrixFailsClosedOnlyForResearch(t *testin
 			srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 			t.Cleanup(srv.Close)
 			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-				ProxyEnabled:           true,
-				ResumableUploadEnabled: true,
-				UploadPublicOrigin:     "https://upload.example",
-				ResearchEnabled:        true,
-				MaxQueryChars:          131_072,
+				ProxyEnabled:       true,
+				UploadPublicOrigin: "https://upload.example",
+				ResearchEnabled:    true,
+				MaxQueryChars:      131_072,
 			})
 
 			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -247,11 +246,10 @@ func TestBotCapabilitiesProjectsResearchInputContract(t *testing.T) {
 	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, validResearchCapabilityCatalog()), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
-		ResearchEnabled:        true,
-		MaxQueryChars:          131_072,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
+		ResearchEnabled:    true,
+		MaxQueryChars:      131_072,
 	})
 
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -297,7 +295,7 @@ func TestBotCapabilitiesProjectsLowerAttachmentAdvertisement(t *testing.T) {
 			server := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 			t.Cleanup(server.Close)
 			useCapabilityBotConfig(t, server.URL, rxBot.Config{
-				ProxyEnabled: true, ResumableUploadEnabled: true,
+				ProxyEnabled:       true,
 				UploadPublicOrigin: "https://upload.example", ResearchEnabled: true,
 			})
 
@@ -351,11 +349,10 @@ func TestBotCapabilitiesMalformedResearchInputDisablesOnlyResearch(t *testing.T)
 			srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 			t.Cleanup(srv.Close)
 			useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-				ProxyEnabled:           true,
-				ResumableUploadEnabled: true,
-				UploadPublicOrigin:     "https://upload.example",
-				ResearchEnabled:        true,
-				MaxQueryChars:          131_072,
+				ProxyEnabled:       true,
+				UploadPublicOrigin: "https://upload.example",
+				ResearchEnabled:    true,
+				MaxQueryChars:      131_072,
 			})
 
 			manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -392,8 +389,12 @@ func TestBotCapabilitiesResearchInputDoesNotEnableDisabledUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Upload.Enabled || capabilityBySlug(manifest.Agents, "research").Enabled {
-		t.Fatalf("Research contract bypassed the upload gate: %#v", manifest)
+	if manifest.Upload.Enabled {
+		t.Fatalf("upload enabled without a public origin: %#v", manifest.Upload)
+	}
+	research := capabilityBySlug(manifest.Agents, "research")
+	if !research.Enabled || !research.Attachments {
+		t.Fatalf("Research stayed dark despite Bot attachment ads: %#v", research)
 	}
 	if !manifest.ResearchInput.Enabled {
 		t.Fatalf("validated input descriptor should remain finite and enabled: %#v", manifest.ResearchInput)
@@ -468,11 +469,10 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	srv := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
-		AnalystEnabled:         true,
-		ResearchEnabled:        true,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
+		AnalystEnabled:     true,
+		ResearchEnabled:    true,
 	})
 
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -498,11 +498,10 @@ func TestBotCapabilitiesAnalystResearchAttachmentIntersection(t *testing.T) {
 	srvNoDataset := capabilityServer(t, http.StatusOK, researchCapabilityResponse(t, response), 0)
 	t.Cleanup(srvNoDataset.Close)
 	useCapabilityBotConfig(t, srvNoDataset.URL, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
-		AnalystEnabled:         true,
-		ResearchEnabled:        true,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
+		AnalystEnabled:     true,
+		ResearchEnabled:    true,
 	})
 	manifest, err = NewService().BotCapabilities(context.Background(), "alice@example.com")
 	if err != nil {
@@ -523,9 +522,8 @@ func TestBotCapabilitiesProjectsAdvertisedAttachmentChannelsForEveryEnabledAgent
 	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
 	t.Cleanup(srv.Close)
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
 	})
 
 	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -615,13 +613,12 @@ func TestBotCapabilitiesResultArchiveArtifactsRequireFullIntersection(t *testing
 	researchCatalog := validResearchCapabilityCatalog()
 	descriptors := researchCatalog.Data
 	config := rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
-		AnalystEnabled:         true,
-		ResearchEnabled:        true,
-		NetworkEnabled:         true,
-		DesignEnabled:          true,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
+		AnalystEnabled:     true,
+		ResearchEnabled:    true,
+		NetworkEnabled:     true,
+		DesignEnabled:      true,
 	}
 	protocols := func(resultArchive bool) map[string][]int {
 		values := map[string][]int{
@@ -728,16 +725,21 @@ func TestBotCapabilitiesAnalystResearchRequireIndependentLocalFlags(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	if manifest.Upload.Enabled {
+		t.Fatalf("upload enabled without a public origin: %#v", manifest.Upload)
+	}
 	analyst := capabilityBySlug(manifest.Agents, "analyst")
-	if analyst.Enabled || analyst.Attachments || analyst.Artifacts || analyst.AttachmentPurposes == nil || len(analyst.AttachmentPurposes) != 0 {
-		t.Fatalf("unnegotiated Analyst capability = %#v", analyst)
+	if !analyst.Enabled || !analyst.Attachments {
+		t.Fatalf("Analyst stayed dark despite Bot attachment ads: %#v", analyst)
+	}
+	if got := strings.Join(analyst.AttachmentPurposes, ","); got != "document,dataset" {
+		t.Fatalf("analyst attachment purposes = %q, want document,dataset", got)
 	}
 
 	useCapabilityBotConfig(t, srv.URL, rxBot.Config{
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     "https://upload.example",
-		AnalystEnabled:         true,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: "https://upload.example",
+		AnalystEnabled:     true,
 	})
 
 	manifest, err = NewService().BotCapabilities(context.Background(), "alice@example.com")
@@ -805,13 +807,13 @@ func TestBotCapabilitiesUploadNegotiation(t *testing.T) {
 		wantAgents      bool
 		wantAttachments bool
 	}{
-		{name: "switch off", config: rxBot.Config{ProxyEnabled: true}, status: http.StatusOK, body: withProtocol, wantAgents: true},
-		{name: "proxy off", config: rxBot.Config{ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: withProtocol},
-		{name: "absent protocol", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(withoutProtocol), wantAgents: true},
-		{name: "wrong protocol version", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(wrongVersion), wantAgents: true},
-		{name: "invalid public origin", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example/path"}, status: http.StatusOK, body: withProtocol, wantAgents: true},
-		{name: "discovery error", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusBadGateway, body: `{}`, wantAgents: false},
-		{name: "fully enabled", config: rxBot.Config{ProxyEnabled: true, ResumableUploadEnabled: true, UploadPublicOrigin: "http://upload.example/"}, status: http.StatusOK, body: withProtocol, wantUpload: true, wantAgents: true, wantAttachments: true},
+		{name: "origin missing", config: rxBot.Config{ProxyEnabled: true}, status: http.StatusOK, body: withProtocol, wantAgents: true, wantAttachments: true},
+		{name: "proxy off", config: rxBot.Config{UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: withProtocol},
+		{name: "absent protocol", config: rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(withoutProtocol), wantAgents: true, wantAttachments: true},
+		{name: "wrong protocol version", config: rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusOK, body: string(wrongVersion), wantAgents: true, wantAttachments: true},
+		{name: "invalid public origin", config: rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: "http://upload.example/path"}, status: http.StatusOK, body: withProtocol, wantAgents: true, wantAttachments: true},
+		{name: "discovery error", config: rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: "http://upload.example"}, status: http.StatusBadGateway, body: `{}`, wantAgents: false},
+		{name: "fully enabled", config: rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: "http://upload.example/"}, status: http.StatusOK, body: withProtocol, wantUpload: true, wantAgents: true, wantAttachments: true},
 	}
 
 	for _, tt := range tests {

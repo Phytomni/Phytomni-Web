@@ -208,7 +208,7 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		}
 	}
 	uploadOrigin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)
-	uploadEnabled := cfg.ResumableUploadEnabled && validOrigin && rxBot.SupportsProtocol(
+	uploadEnabled := validOrigin && rxBot.SupportsProtocol(
 		response,
 		rxBot.ResumableUploadProtocol,
 		rxBot.ResumableUploadProtocolVersion,
@@ -241,11 +241,11 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		if definition.Slug == "research" && !researchCompatible {
 			continue
 		}
-		attachmentPurposes := attachmentPurposesFor(agentPresence, uploadEnabled)
+		attachmentPurposes := attachmentPurposesFor(agentPresence)
 		if productAttachmentCapability(definition.Slug) && len(attachmentPurposes) == 0 {
 			// Analyst and Research are attachment-enabled product surfaces. Their
-			// browser records remain dark until local product, upload negotiation,
-			// and Bot channel evidence all agree.
+			// browser records remain dark until local product flags and Bot
+			// channel evidence agree.
 			continue
 		}
 
@@ -399,10 +399,7 @@ func streamEnabledForAgent(resp *rxBot.AgentsListResponse, slug string, cfg *rxB
 	}
 }
 
-func attachmentPurposesFor(presence rxBot.WebAgentPresence, uploadEnabled bool) []string {
-	if !uploadEnabled {
-		return []string{}
-	}
+func attachmentPurposesFor(presence rxBot.WebAgentPresence) []string {
 	purposes := make([]string, 0, 2)
 	if presence.Documents {
 		purposes = append(purposes, "document")

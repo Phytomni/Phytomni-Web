@@ -36,12 +36,11 @@ func TestBotUploadReclamationContract(t *testing.T) {
 
 	previousConfig := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL:                baseURL,
-		UserAPIKey:             userAPIKey,
-		TimeoutSeconds:         15,
-		ProxyEnabled:           true,
-		ResumableUploadEnabled: true,
-		UploadPublicOrigin:     publicOrigin,
+		BaseURL:            baseURL,
+		UserAPIKey:         userAPIKey,
+		TimeoutSeconds:     15,
+		ProxyEnabled:       true,
+		UploadPublicOrigin: publicOrigin,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previousConfig })
 

@@ -221,7 +221,7 @@ func compensateRejectedUpload(ctx context.Context, client *rxBot.Client, assetID
 
 func (ps *Service) uploadControlOrigin(ctx context.Context) (string, error) {
 	cfg := rxBot.BotConfig
-	if cfg == nil || !cfg.ProxyEnabled || !cfg.ResumableUploadEnabled {
+	if cfg == nil || !cfg.ProxyEnabled {
 		return "", ErrUploadControlDisabled
 	}
 	origin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)

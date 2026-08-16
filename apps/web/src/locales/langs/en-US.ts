@@ -431,6 +431,7 @@ export default {
       "Attach biological data or text files (up to 10 GiB each, {maxFiles} files). You can also paste copied files.",
     attachmentTargetUnavailable:
       "This agent can't accept attachments. Remove them or choose a compatible agent.",
+    attachmentTargetUnsupported: "This agent does not accept file uploads.",
     attachmentErrors: {
       unsupported_type:
         '"{file}" is not supported by this Agent. Check the Agent capability before retrying.',

@@ -178,8 +178,6 @@ bot:
   design_enabled: false # dark-launch: remote Design product surface
   network_enabled: false # dark-launch: remote Network product surface
   history_dual_read: false # observation path; legacy/projection fallback remains primary
-  # Breaking resumable biological upload protocol; keep OFF until Bot acceptance.
-  resumable_upload_enabled: false
   upload_public_origin: "http://localhost:8000" # exact browser-reachable Bot origin; never derive from base_url
   max_upload_file_bytes: 26214400 # 25 MiB per file (matches Bot /v1/files 413)
   max_upload_file_count: 10
@@ -210,10 +208,12 @@ A2UI, interop, OBS relay, and background-Agent submission use
 `timeout_seconds`. These settings do not change Bot-internal dependency
 timeouts.
 
-`resumable_upload_enabled` is a Web-side dark-launch switch. It is effective
-only when the Bot advertises protocol `obs-multipart-v2` version 2 and
-`upload_public_origin` is a valid scheme-plus-host origin with no credentials,
-query, fragment, or path. The origin is deliberately separate from the
+Upload enablement is negotiated from the Bot catalog. The browser upload
+contract is `enabled` only when Bot advertises protocol `obs-multipart-v2`
+version 2 and `upload_public_origin` is a valid scheme-plus-host origin with
+no credentials, query, fragment, or path. Per-agent attachment channels are
+copied from the Bot descriptor (`document_context` / `datasets`) and are not
+gated by a Web-side feature flag. The origin is deliberately separate from the
 internal `base_url`: it is the browser-reachable Bot upload origin, not an OBS
 endpoint.
 

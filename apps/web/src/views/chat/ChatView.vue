@@ -411,6 +411,9 @@ export function removeDeletedChat(options: {
                   :attachment-announcement="attachmentAnnouncement"
                   :attachment-announcement-nonce="attachmentAnnouncementNonce"
                   :has-blocking-uploads="hasBlockingUploads"
+                  :upload-capability-enabled="
+                    botCapabilities.upload.value.enabled
+                  "
                   :attachment-target-available="attachmentTargetAvailable"
                   :attachment-target-blocked="attachmentTargetBlocked"
                   :roles-loading="rolesLoading"
@@ -677,10 +680,7 @@ import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
-import {
-  useBotCapabilities,
-  type BotCapability,
-} from "./composables/useBotCapabilities";
+import { useBotCapabilities } from "./composables/useBotCapabilities";
 import { useResumableUploads } from "./composables/useResumableUploads";
 import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
@@ -691,6 +691,10 @@ import {
   type ChatAttachmentValidationError,
 } from "./composables/useFileUpload";
 import type { UploadValidationLimits } from "./upload/validation";
+import {
+  hasAttachmentChannel,
+  resolveAttachmentTarget,
+} from "./utils/attachment-target";
 import { useComposer } from "./composables/useComposer";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
@@ -759,14 +763,6 @@ function messageAttachments(
     size: file.size,
     asset_id: "asset_id" in file ? file.asset_id : undefined,
   }));
-}
-
-function hasAttachmentChannel(capability: BotCapability | undefined): boolean {
-  return (
-    capability?.enabled === true &&
-    capability.attachments === true &&
-    (capability.attachmentChannels?.length ?? 0) > 0
-  );
 }
 
 const composerRef = ref<ComposerHandle | null>(null);
@@ -1082,29 +1078,20 @@ const uploadValidationLimits = computed<Readonly<UploadValidationLimits>>(() =>
     maxAttachments: botCapabilities.upload.value.max_attachments,
   })
 );
-const attachmentTargetAvailable = computed(() => {
-  if (!botCapabilities.upload.value.enabled) return false;
-
+const attachmentTarget = computed(() => {
   const byTool = botCapabilities.byTool.value;
-  if (chatMode.value === "instant") {
-    return (
-      authorizedAgentTools.value.includes("ChatAgent") &&
-      hasAttachmentChannel(byTool.ChatAgent)
-    );
-  }
-
-  if (selectedAgent.value) {
-    const tool = selectedAgent.value as CanonicalAgentTool;
-    return (
-      authorizedAgentTools.value.includes(tool) &&
-      hasAttachmentChannel(byTool[tool])
-    );
-  }
-
-  return authorizedAgentTools.value.some((tool) =>
-    hasAttachmentChannel(byTool[tool])
-  );
+  return resolveAttachmentTarget({
+    uploadEnabled: botCapabilities.upload.value.enabled,
+    chatMode: chatMode.value,
+    selectedAgent: selectedAgent.value,
+    authorizedTools: authorizedAgentTools.value,
+    hasChannel: (tool) =>
+      hasAttachmentChannel(byTool[tool as CanonicalAgentTool]),
+  });
 });
+const attachmentTargetAvailable = computed(
+  () => attachmentTarget.value.available
+);
 const uploadUsername = computed(() => userStore().name ?? "");
 const uploadQueue = useResumableUploads({
   currentChatId,

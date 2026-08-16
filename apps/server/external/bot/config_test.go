@@ -78,7 +78,7 @@ func TestInitFromViper_MultiturnV1Enabled(t *testing.T) {
 	}
 }
 
-func TestInitFromViper_ResumableUploadDefaultsAndExplicitConfig(t *testing.T) {
+func TestInitFromViper_UploadPublicOriginDefaultsAndExplicitConfig(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(func() {
 		viper.Reset()
@@ -88,17 +88,16 @@ func TestInitFromViper_ResumableUploadDefaultsAndExplicitConfig(t *testing.T) {
 	if err := InitFromViper(); err != nil {
 		t.Fatalf("InitFromViper defaults: %v", err)
 	}
-	if BotConfig.ResumableUploadEnabled || BotConfig.UploadPublicOrigin != "" {
-		t.Fatalf("upload capability must default off and unset: %#v", BotConfig)
+	if BotConfig.UploadPublicOrigin != "" {
+		t.Fatalf("upload origin must default unset: %#v", BotConfig)
 	}
 
-	viper.Set("bot.resumable_upload_enabled", true)
 	viper.Set("bot.upload_public_origin", "https://upload.example/")
 	if err := InitFromViper(); err != nil {
 		t.Fatalf("InitFromViper explicit config: %v", err)
 	}
-	if !BotConfig.ResumableUploadEnabled || BotConfig.UploadPublicOrigin != "https://upload.example/" {
-		t.Fatalf("upload capability config was not decoded: %#v", BotConfig)
+	if BotConfig.UploadPublicOrigin != "https://upload.example/" {
+		t.Fatalf("upload origin config was not decoded: %#v", BotConfig)
 	}
 }
 

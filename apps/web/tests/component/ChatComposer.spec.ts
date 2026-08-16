@@ -701,6 +701,35 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
   });
 
+  it("explains a gray attach control when the selected Agent cannot accept files", () => {
+    const wrapper = mountComposer({
+      selectedAgent: "DataAgent",
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: false,
+    });
+
+    expect(wrapper.get('[data-testid="attachment-target-status"]').text()).toBe(
+      "This agent does not accept file uploads."
+    );
+    expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(wrapper.get('[data-testid="composer-attach"]').exists()).toBe(true);
+  });
+
+  it("hides the attach control while the upload contract is dark", () => {
+    const wrapper = mountComposer({
+      uploadCapabilityEnabled: false,
+      attachmentTargetAvailable: false,
+    });
+
+    expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(false);
+    expect(
+      wrapper.find('[data-testid="attachment-target-status"]').exists()
+    ).toBe(false);
+  });
+
   it("emits file-change from the upload control", async () => {
     const wrapper = mountComposer();
     const upload = wrapper.findComponent({ name: "ElUpload" });

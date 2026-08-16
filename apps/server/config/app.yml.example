@@ -234,8 +234,7 @@ bot:
   a2ui_actions_enabled: false   # OFF: local pre-dispatch 503/no Bot call; operator flips only after A-G1 through A-G8 review
   interop_enabled: false        # OFF: capability discovery stays hidden until security and external review
   multiturn_v1_enabled: false   # OFF: enable only after Bot advertises conversation_context v1
-  resumable_upload_enabled: false # OFF: enable only after Bot advertises obs-multipart-v2 v2 and origin validation
-  upload_public_origin: "http://localhost:8000" # browser-reachable Bot origin; never derive from base_url
+  upload_public_origin: "http://localhost:8000" # browser-reachable Bot origin; never derive from base_url. Upload enablement is negotiated from this origin plus Bot obs-multipart-v2.
   research_enabled: false   # dark-launch: Research product surface remains unavailable until external acceptance
   design_enabled: false     # dark-launch: Design product surface remains unavailable until external acceptance
   network_enabled: false    # dark-launch: Network product surface remains unavailable until external acceptance
