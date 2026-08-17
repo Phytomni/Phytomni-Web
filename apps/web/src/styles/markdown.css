@@ -19,6 +19,10 @@
   font-size: 15px;
   line-height: 1.6;
   overflow-wrap: anywhere;
+  /* Inherited pre-wrap survives all:revert (white-space longhands). */
+  white-space: normal;
+  white-space-collapse: collapse;
+  text-wrap: wrap;
 }
 
 .phy-markdown--chat h1,
@@ -198,7 +202,9 @@
 
 /* Nested content wrappers emitted by the shared Markdown engine. */
 .phy-markdown--chat .markdown-content,
-.phy-markdown--chat.md-block {
+.phy-markdown--chat.md-block,
+.phy-markdown--chat .elx-xmarkdown-container,
+.phy-markdown--chat .elx-xmarkdown-provider {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
@@ -208,6 +214,9 @@
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  white-space: normal;
+  white-space-collapse: collapse;
+  text-wrap: wrap;
 }
 
 /* Artifact and document skins stay opt-in. Their root is always UI sans so

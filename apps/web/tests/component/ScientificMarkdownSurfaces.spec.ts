@@ -91,6 +91,17 @@ describe("ScientificMarkdown completed surfaces", () => {
     ).toMatch(/font-family:\s*var\(--phy-font-shell\)/);
   });
 
+  it("forces chat markdown to collapse whitespace so bubble pre-wrap cannot hide list bodies", () => {
+    const chatRoot = cssRuleBody(
+      ".md-block.phy-markdown--chat,\n.phy-markdown.phy-markdown--chat"
+    );
+    expect(chatRoot).toMatch(/white-space:\s*normal/);
+    expect(chatRoot).toMatch(/white-space-collapse:\s*collapse/);
+    expect(MARKDOWN_CSS).toMatch(
+      /\.phy-markdown--chat \.elx-xmarkdown-container[\s\S]*white-space:\s*normal/
+    );
+  });
+
   it("routes every completed caller to the scientific renderer without a legacy wrapper", () => {
     for (const path of SURFACE_CALLERS) {
       const source = readFileSync(resolve(__dirname, path), "utf8");

@@ -307,4 +307,49 @@ describe("ScientificMarkdown", () => {
     await nextTick();
     expect(document.body.textContent).not.toContain("after-unmount");
   });
+
+  it("keeps CJK bold-label lists and the closing paragraph visible", async () => {
+    // Tester copy from 20260817/chat: raw markdown is complete in Word,
+    // but the chat bubble dropped list bodies and left leftover **.
+    const source = [
+      "#### **三、关键注意事项**",
+      "1. **无菌操作**：所有步骤需严格无菌，避免杂菌污染。",
+      "2. **重复与统计**：检测设 3 次生物学重复，数据采用 ANOVA 分析 (p<0.05)。",
+      "3. **菌株保藏**：高效菌株用 **20%甘油** 于-80°C 保存，并做 16S rRNA 鉴定。",
+      "4. **培养基标准化**：统一培养基成分与 pH (如 pH=7.0)，减少批次误差。",
+      "",
+      "---",
+      "",
+      "#### **四、试剂与仪器建议**",
+      "- **试剂**：Salkowski 试剂、ACC (Sigma)、钼蓝比色试剂盒。",
+      "- **仪器**：分光光度计、离心机、HPLC、恒温摇床、pH 计。",
+      "",
+      "---",
+      "",
+      "通过以上流程，可系统评估菌株功能并构建具有协同效应的合成菌群，为微生物肥料开发或植物-微生物互作研究提供可靠基础。如需具体培养基配方或数据分析方法，可进一步提供详细信息。",
+    ].join("\n");
+
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: { source, surface: "chat" },
+    });
+    await vi.dynamicImportSettled();
+
+    const text = wrapper.text();
+    expect(text).toContain("所有步骤需严格无菌");
+    expect(text).toContain("ANOVA");
+    expect(text).toContain("Salkowski");
+    expect(text).toContain("分光光度计");
+    expect(text).toContain("可系统评估菌株功能");
+    expect(text).toContain("进一步提供详细信息");
+    expect(text).not.toMatch(/无菌操作\*\*无菌操作/);
+    expect(text).not.toMatch(/仪器\*\*仪器/);
+    expect(wrapper.findAll("li").map((item) => item.text())).toEqual([
+      "无菌操作：所有步骤需严格无菌，避免杂菌污染。",
+      "重复与统计：检测设 3 次生物学重复，数据采用 ANOVA 分析 (p<0.05)。",
+      "菌株保藏：高效菌株用 20%甘油 于-80°C 保存，并做 16S rRNA 鉴定。",
+      "培养基标准化：统一培养基成分与 pH (如 pH=7.0)，减少批次误差。",
+      "试剂：Salkowski 试剂、ACC (Sigma)、钼蓝比色试剂盒。",
+      "仪器：分光光度计、离心机、HPLC、恒温摇床、pH 计。",
+    ]);
+  });
 });

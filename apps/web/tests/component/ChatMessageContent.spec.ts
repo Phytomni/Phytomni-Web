@@ -1179,6 +1179,12 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     expect(contentStyles).toMatch(/overflow-x:\s*auto/);
     // Table branch and bubble body both need an overflow owner.
     expect(contentStyles).toMatch(/\.table-response|\.message-text/);
+    expect(contentStyles).toMatch(
+      /\.phy-bubble-user\s*\{[\s\S]*white-space:\s*pre-wrap/
+    );
+    expect(contentStyles).toMatch(
+      /\.phy-bubble-assistant\s*\{[\s\S]*white-space:\s*normal/
+    );
   });
 
   it("uses locale-reactive result image alt with one-based index", () => {

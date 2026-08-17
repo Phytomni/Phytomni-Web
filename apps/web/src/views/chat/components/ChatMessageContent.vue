@@ -552,8 +552,15 @@ const shouldShowSpecializedNoData = computed(() => {
   max-width: 100%;
   overflow-x: auto;
   word-break: break-word;
-  white-space: pre-wrap;
   box-sizing: border-box;
+
+  &.phy-bubble-user {
+    white-space: pre-wrap;
+  }
+
+  &.phy-bubble-assistant {
+    white-space: normal;
+  }
 
   :deep(pre),
   :deep(table),
