@@ -63,6 +63,11 @@ import type {
 } from "./useBotCapabilities";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+const ACCEPTED_EMPTY_BACKGROUND_TOOLS = new Set([
+  "GeneNetworkAgent",
+  "DigitalDesignAgent",
+  "InSilicoResearchAgent",
+]);
 const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 type ChatUserStore = {
@@ -968,8 +973,7 @@ export function useSendMessage(opts: {
               // handle other unknown tool types with the default format
               const acceptedSpecializedBackground =
                 acceptedExpertResponse &&
-                (response.data.tool_name === "GeneNetworkAgent" ||
-                  response.data.tool_name === "DigitalDesignAgent");
+                ACCEPTED_EMPTY_BACKGROUND_TOOLS.has(response.data.tool_name);
               assistantMessage = {
                 role: "assistant",
                 content:

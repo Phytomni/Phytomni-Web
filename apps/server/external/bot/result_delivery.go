@@ -170,8 +170,10 @@ func DecodeRunDelivery(raw json.RawMessage, agent string, outputDirs []string) (
 		if _, ok := resultArchiveNames[agent]; !ok {
 			return RunDelivery{}, fmt.Errorf("delivery: unsupported archive agent")
 		}
-		if _, err := validateResultArchiveOutputDirs(outputDirs); err != nil {
-			return RunDelivery{}, err
+		if !isInitialPendingDeliveryMarker(*wire.Status, *wire.Revision, *wire.InventoryDigest) {
+			if _, err := validateResultArchiveOutputDirs(outputDirs); err != nil {
+				return RunDelivery{}, err
+			}
 		}
 	}
 
@@ -451,6 +453,10 @@ func decodeExecutionTracking(raw json.RawMessage) (bool, error) {
 		return false, fmt.Errorf("execution.tracking: degraded is required")
 	}
 	return *tracking.Degraded, nil
+}
+
+func isInitialPendingDeliveryMarker(status string, revision int64, digest string) bool {
+	return status == "pending" && revision == 1 && digest == ""
 }
 
 func validateResultArchiveOutputDirs(outputDirs []string) ([]string, error) {

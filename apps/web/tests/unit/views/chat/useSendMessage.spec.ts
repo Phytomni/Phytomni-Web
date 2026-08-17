@@ -2751,7 +2751,11 @@ describe("useSendMessage", () => {
     expect(stateFor("B").renderedChat).toBe(peerBefore);
   });
 
-  it.each(["GeneNetworkAgent", "DigitalDesignAgent"] as const)(
+  it.each([
+    "GeneNetworkAgent",
+    "DigitalDesignAgent",
+    "InSilicoResearchAgent",
+  ] as const)(
     "%s keeps an accepted empty background response free of refusal copy",
     async (toolName) => {
       stateFor("A").messageInput = "start background work";

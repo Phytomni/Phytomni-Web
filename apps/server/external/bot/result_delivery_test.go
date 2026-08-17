@@ -90,6 +90,33 @@ func TestCanonicalResultArchiveRefCollapsesChildDeliveryPath(t *testing.T) {
 	}
 }
 
+func TestDecodeRunExecutionAcceptsInitialPendingWithoutOutputRoots(t *testing.T) {
+	execution := json.RawMessage(`{
+		"tracking":{"degraded":false},
+		"output_dirs":[],
+		"delivery":{
+			"schema_version":1,
+			"required":true,
+			"status":"pending",
+			"revision":1,
+			"inventory_digest":"",
+			"archive":null,
+			"error_code":null,
+			"retryable":false
+		}
+	}`)
+	got, err := DecodeRunExecutionDelivery(execution, "research")
+	if err != nil {
+		t.Fatalf("initial pending research delivery without roots: %v", err)
+	}
+	if !got.ResultArchiveV1 || got.Delivery == nil || got.Delivery.Status != "pending" || got.Delivery.Revision != 1 {
+		t.Fatalf("pending delivery = %#v", got)
+	}
+	if len(got.OutputDirs) != 0 || got.OutputDirectoryCount != 0 {
+		t.Fatalf("output roots = %#v", got)
+	}
+}
+
 func TestDecodeRunDeliveryAcceptsOnlyInitialPendingWithoutDigest(t *testing.T) {
 	pending := map[string]interface{}{
 		"schema_version":   1,
@@ -100,6 +127,12 @@ func TestDecodeRunDeliveryAcceptsOnlyInitialPendingWithoutDigest(t *testing.T) {
 		"archive":          nil,
 		"error_code":       nil,
 		"retryable":        false,
+	}
+	if _, err := DecodeRunDelivery(encodeDeliveryPayload(t, pending), "research", nil); err != nil {
+		t.Fatalf("initial pending marker without roots rejected: %v", err)
+	}
+	if _, err := DecodeRunDelivery(encodeDeliveryPayload(t, readyDeliveryPayload("research")), "research", nil); err == nil {
+		t.Fatal("ready archive accepted without output roots")
 	}
 	if _, err := DecodeRunDelivery(encodeDeliveryPayload(t, pending), "analyst", []string{"/obs/bucket/owner/run"}); err != nil {
 		t.Fatalf("initial pending marker rejected: %v", err)
