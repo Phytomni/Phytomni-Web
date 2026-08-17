@@ -102,6 +102,17 @@ describe("ScientificMarkdown completed surfaces", () => {
     );
   });
 
+  it("forces artifact and document skins to collapse the same inherited pre-wrap", () => {
+    const sharedRoot = cssRuleBody(
+      ".phy-markdown--artifact,\n.phy-markdown--document"
+    );
+    expect(sharedRoot).toMatch(/white-space:\s*normal/);
+    expect(sharedRoot).toMatch(/white-space-collapse:\s*collapse/);
+    expect(MARKDOWN_CSS).toMatch(
+      /:is\(\.phy-markdown--artifact, \.phy-markdown--document\)\s*:is\(\.elx-xmarkdown-container, \.elx-xmarkdown-provider\)[\s\S]*white-space:\s*normal/
+    );
+  });
+
   it("routes every completed caller to the scientific renderer without a legacy wrapper", () => {
     for (const path of SURFACE_CALLERS) {
       const source = readFileSync(resolve(__dirname, path), "utf8");
