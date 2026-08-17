@@ -342,7 +342,42 @@ func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (strin
 		return "", fmt.Errorf("execution.output_dirs: ready delivery requires exactly one root")
 	}
 	digestHex := strings.TrimPrefix(delivery.InventoryDigest, "sha256:")
-	return roots[0] + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
+	return resultArchivePublishRoot(roots[0]) + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
+}
+
+var resultChildPart = regexp.MustCompile(`^part-(?:00[1-9]|0[1-9][0-9]|1[0-9]{2})$`)
+
+func ResultArchiveRunRoot(outputDir string) string {
+	return resultArchiveRunRoot(outputDir)
+}
+
+func resultArchiveRunRoot(outputDir string) string {
+	return resultArchivePublishRoot(outputDir)
+}
+
+func resultArchivePublishRoot(outputDir string) string {
+	root, part, ok := strings.Cut(strings.TrimRight(outputDir, "/"), "/children/")
+	if !ok || root == "" || !resultChildPart.MatchString(part) {
+		return outputDir
+	}
+	return root + "/children"
+}
+
+// CanonicalResultArchiveRef rewrites a part-scoped archive path to the
+// directory Bot actually publishes into: the parent of part-NNN.
+func CanonicalResultArchiveRef(ref string) string {
+	trimmed := strings.TrimRight(ref, "/")
+	childAt := strings.Index(trimmed, "/children/")
+	deliveryAt := strings.Index(trimmed, "/delivery/")
+	partStart := childAt + len("/children/")
+	if childAt < 0 || deliveryAt < 0 || deliveryAt <= partStart {
+		return ref
+	}
+	part := trimmed[partStart:deliveryAt]
+	if !resultChildPart.MatchString(part) {
+		return ref
+	}
+	return trimmed[:childAt] + "/children" + trimmed[deliveryAt:]
 }
 
 func decodeProjectionOutputDirs(raw json.RawMessage) ([]string, int, error) {

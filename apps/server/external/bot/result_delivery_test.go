@@ -63,6 +63,33 @@ func TestDecodeRunDeliveryAcceptsReadyArchive(t *testing.T) {
 	}
 }
 
+func TestDecodeRunDeliveryResolvesArchiveUnderResultChildRoot(t *testing.T) {
+	got, err := DecodeRunDelivery(
+		encodeDeliveryPayload(t, readyDeliveryPayload("analyst")),
+		"analyst",
+		[]string{"/obs/bucket/owner/run/children/part-001"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedObjectRef := "/obs/bucket/owner/run/children/delivery/" + strings.TrimPrefix(testArchiveDigest, "sha256:") + "/analyst-results.zip"
+	if got.Archive == nil || got.Archive.ObjectRef != expectedObjectRef {
+		t.Fatalf("object ref = %#v, want %q", got.Archive, expectedObjectRef)
+	}
+}
+
+func TestCanonicalResultArchiveRefCollapsesChildDeliveryPath(t *testing.T) {
+	digest := strings.TrimPrefix(testArchiveDigest, "sha256:")
+	child := "/obs/bucket/owner/run/children/part-001/delivery/" + digest + "/analyst-results.zip"
+	want := "/obs/bucket/owner/run/children/delivery/" + digest + "/analyst-results.zip"
+	if got := CanonicalResultArchiveRef(child); got != want {
+		t.Fatalf("CanonicalResultArchiveRef() = %q, want %q", got, want)
+	}
+	if got := CanonicalResultArchiveRef(want); got != want {
+		t.Fatalf("already-canonical ref changed: %q", got)
+	}
+}
+
 func TestDecodeRunDeliveryAcceptsOnlyInitialPendingWithoutDigest(t *testing.T) {
 	pending := map[string]interface{}{
 		"schema_version":   1,

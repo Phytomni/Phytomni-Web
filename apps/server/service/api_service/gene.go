@@ -460,6 +460,10 @@ func conversationArtifactPathContained(projection BotRunProjection, artifactPath
 		if artifactPathWithinPrefix(directory, artifactPath) {
 			return true
 		}
+		if root := rxBot.ResultArchiveRunRoot(directory); root != directory &&
+			artifactPathWithinPrefix(root, artifactPath) {
+			return true
+		}
 	}
 	return false
 }
@@ -534,22 +538,23 @@ func resultArchiveConversationArtifact(rowID int64, projection BotRunProjection)
 	if delivery == nil || delivery.Status != "ready" {
 		return []conversationArtifact{}, nil
 	}
+	archiveRef := rxBot.CanonicalResultArchiveRef(delivery.ArchiveRef)
 	if delivery.SchemaVersion != rxBot.ResultArchiveProtocolVersion || !delivery.Required ||
-		delivery.ArchiveSize <= 0 || delivery.ArchiveName == "" || delivery.ArchiveRef == "" ||
-		path.Base(delivery.ArchiveRef) != delivery.ArchiveName ||
+		delivery.ArchiveSize <= 0 || delivery.ArchiveName == "" || archiveRef == "" ||
+		path.Base(archiveRef) != delivery.ArchiveName ||
 		len([]byte(delivery.ArchiveName)) > maxConversationArtifactNameBytes ||
 		conversationArtifactKind(delivery.ArchiveName) != "archive" ||
-		!conversationArtifactPathContained(projection, delivery.ArchiveRef) {
+		!conversationArtifactPathContained(projection, archiveRef) {
 		return []conversationArtifact{}, nil
 	}
 	return []conversationArtifact{{
 		link: ConversationArtifactLink{
-			ID:        conversationArtifactID(rowID, delivery.ArchiveRef),
+			ID:        conversationArtifactID(rowID, archiveRef),
 			Name:      delivery.ArchiveName,
 			Kind:      "archive",
 			MediaType: conversationArtifactMediaType(delivery.ArchiveName),
 		},
-		path: delivery.ArchiveRef,
+		path: archiveRef,
 	}}, nil
 }
 
@@ -610,18 +615,43 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 	if err != nil {
 		return "", friendlyRelayErr(err)
 	}
-	zipKey := ""
+	downloadKey := pickAnalystDownloadKey(obsPath, keys)
+	if downloadKey == "" {
+		return "", errors.New("no downloadable file found in the specified directory")
+	}
+	return relayDownloadURL(downloadKey)
+}
+
+func pickAnalystDownloadKey(obsPath string, keys []string) string {
+	var zipKey, reportKey, fallback string
 	for _, candidate := range keys {
-		if !strings.HasSuffix(strings.ToLower(candidate), ".zip") || !artifactPathWithinPrefix(obsPath, candidate) {
+		if !artifactPathWithinPrefix(obsPath, candidate) {
 			continue
 		}
-		zipKey = candidate
-		break
+		name := strings.ToLower(path.Base(candidate))
+		if name == "" || name == "." || name == "/" || strings.HasSuffix(candidate, "/") {
+			continue
+		}
+		if name == ".phytomni-artifacts.json" {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(name, ".zip") && zipKey == "":
+			zipKey = candidate
+		case reportKey == "" && (name == "final_report.txt" || strings.HasSuffix(name, ".md")):
+			reportKey = candidate
+		}
+		if fallback == "" {
+			fallback = candidate
+		}
 	}
-	if zipKey == "" {
-		return "", errors.New("no zip file found in the specified directory")
+	if zipKey != "" {
+		return zipKey
 	}
-	return relayDownloadURL(zipKey)
+	if reportKey != "" {
+		return reportKey
+	}
+	return fallback
 }
 
 func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {

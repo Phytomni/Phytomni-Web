@@ -336,6 +336,39 @@ func TestDownloadAnalystAgentObsFilePreservesRelativeRelayZipKey(t *testing.T) {
 	}
 }
 
+func TestDownloadAnalystAgentObsFileSignsScientificReportWhenZipMissing(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, download_path, status, created_at) VALUES
+		(92, 'alice', '/obs/bucket/user/runs/run-2', 'SUCCEEDED', '2026-01-01 00:00:00')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	const relayKey = "user/runs/run-2/final_report.txt"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/relay/obs/list" {
+			t.Fatalf("unexpected relay path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":["user/runs/run-2/.phytomni-artifacts.json","user/runs/run-2/final_report.txt","user/runs/run-2/result_files.json"]}`))
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	got, err := NewService().DownloadAnalystAgentObsFile(context.Background(), "alice", "/obs/bucket/user/runs/run-2")
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("signed URL parse: %v", err)
+	}
+	key, err := middleware.ParseDownloadToken(parsed.Query().Get("token"))
+	if err != nil || key != relayKey {
+		t.Fatalf("signed key = %q, err=%v; want scientific report %q", key, err, relayKey)
+	}
+}
+
 func TestDownloadAnalystAgentObsImagesPreservesRelativeRelayImageKey(t *testing.T) {
 	gdb := setupTestDB(t)
 	const relayKey = "user/runs/run-1/plot.png"
