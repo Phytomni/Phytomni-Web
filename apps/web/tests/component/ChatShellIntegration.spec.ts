@@ -368,6 +368,9 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData");
     expect(CHAT_SOURCE).toContain("skipRestoreTempIds");
     expect(CHAT_SOURCE).toContain("skipTempIds?: ReadonlySet<string>");
+    expect(CHAT_SOURCE).toContain(
+      "isLocalStorageChat(urlChatId) || chatExists"
+    );
     expect(CHAT_SOURCE).toMatch(
       /getHistoryQuestionData\([\s\S]*sendingDialogueId/
     );
@@ -468,7 +471,14 @@ describe("Chat adaptive shell integration", () => {
     expect(chatStatesSource).toContain(
       "getChatState(currentChatId.value).renderedChat"
     );
-    expect(CHAT_SOURCE).toContain("getChatState(dialogueId).renderedChat");
+    const selectChatSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useSelectChat.ts"),
+      "utf8"
+    );
+    expect(selectChatSource).toContain("chatState.renderedChat =");
+    expect(selectChatSource).toContain(
+      "isLocalStorageChat(capturedDialogueId)"
+    );
 
     const selectStart = CHAT_SOURCE.indexOf("useSelectChat({");
     const selectEnd = CHAT_SOURCE.indexOf("});", selectStart);

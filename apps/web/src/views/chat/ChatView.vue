@@ -939,23 +939,20 @@ onMounted(async () => {
 
     // If chatId is absent, default to a new chat
     if (urlChatId) {
-      // First check whether it is an incomplete session
-      if (loadPendingChat(urlChatId)) {
-        return;
-      }
-
-      // Look up whether a corresponding chat exists
+      // Look up whether a corresponding chat exists. Local `new_*` rows are
+      // reopened from pending storage inside selectChat — they are never
+      // server parents, so a list miss must not fall through to another chat.
       const chatExists = chatList.value.find(
         (chat) => chat.dialogue_id === urlChatId
       );
-      if (chatExists) {
+      if (isLocalStorageChat(urlChatId) || chatExists) {
         // If it exists, select that chat
-        selectChat(urlChatId);
+        void selectChat(urlChatId);
       } else if (chatList.value.length > 0) {
         // If it does not exist but there are chat records, update the URL to the first record's ID
         const firstChatId = chatList.value[0].dialogue_id;
         updateUrlWithChatId(firstChatId);
-        selectChat(firstChatId);
+        void selectChat(firstChatId);
       } else {
         // If there are no chat records, create a new chat state
         startNewChat();
@@ -974,27 +971,6 @@ onUnmounted(() => {
   window.removeEventListener("resize", updateMobileViewport);
   chatAgentRunLifecycle.dispose();
 });
-
-// Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
-const loadPendingChat = (dialogueId: string) => {
-  const key = `pending_chat_${dialogueId}`;
-  const pendingChatData = safeParse(localStorage.getItem(key));
-
-  if (!isValidPendingRecord(pendingChatData)) {
-    if (pendingChatData !== null) {
-      localStorage.removeItem(key); // corrupt / contract violation → clean
-    }
-    return false;
-  }
-
-  currentChatId.value = dialogueId;
-  getChatState(dialogueId).renderedChat = {
-    messages: pendingChatData.messages,
-  };
-  getChatState(dialogueId).mode =
-    pendingChatData.mode === "expert" ? "expert" : "instant";
-  return true;
-};
 
 // Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {

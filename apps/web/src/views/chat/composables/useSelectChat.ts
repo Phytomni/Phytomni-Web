@@ -21,6 +21,11 @@ import {
 import { readServerFile } from "../utils/agent-log";
 import { getAnswerCheck } from "@/api/chat";
 import { normalizePositiveTaskRowId } from "@/api/task";
+import {
+  isLocalStorageChat,
+  isValidPendingRecord,
+  safeParse,
+} from "@/utils/pending-chat";
 import i18n from "@/locales";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
@@ -274,6 +279,61 @@ export function useSelectChat(opts: {
         ownsLiveRenderedState() &&
         currentChatId.value === capturedDialogueId
       ) {
+        updateUrlWithChatId(capturedDialogueId);
+      }
+      return "applied";
+    }
+
+    // `new_*` rows are local-only. The messages API looks up a server parent by
+    // dialogue_id and returns [] for that prefix, which would paint
+    // history-empty over a conversation the sidebar still lists after refresh.
+    if (isLocalStorageChat(capturedDialogueId)) {
+      const pending = safeParse(
+        localStorage.getItem(`pending_chat_${capturedDialogueId}`)
+      );
+      if (isValidPendingRecord(pending)) {
+        const messages = pending.messages.map((message) => ({
+          ...message,
+        })) as ChatMessage[];
+        if (pending.mode === "expert" || pending.mode === "instant") {
+          chatState.mode = pending.mode;
+        }
+        const pendingTitle =
+          typeof pending.title === "string" ? pending.title.trim() : "";
+        chatState.historyErrorKind = null;
+        chatState.historyQuestion = messages.map((message) => ({
+          role: message.role,
+          content: typeof message.content === "string" ? message.content : "",
+        }));
+        chatState.renderedChat = {
+          ...chat,
+          dialogue_id: capturedDialogueId,
+          ...(chat?.title || pendingTitle
+            ? { title: chat?.title || pendingTitle }
+            : {}),
+          messages,
+        };
+        chatState.historyHydration =
+          messages.length > 0 ? "ready" : "history-empty";
+        if (mode.foreground && currentChatId.value === capturedDialogueId) {
+          if (messages.length > 0) await scrollToBottom();
+          updateUrlWithChatId(capturedDialogueId);
+        }
+        return "applied";
+      }
+
+      if (mode.force) {
+        return "applied";
+      }
+      chatState.historyErrorKind = null;
+      chatState.historyQuestion = [];
+      chatState.renderedChat = {
+        ...chat,
+        dialogue_id: capturedDialogueId,
+        messages: [],
+      };
+      chatState.historyHydration = "history-empty";
+      if (mode.foreground && currentChatId.value === capturedDialogueId) {
         updateUrlWithChatId(capturedDialogueId);
       }
       return "applied";

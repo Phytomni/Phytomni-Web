@@ -1252,6 +1252,27 @@ export function useSendMessage(opts: {
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
         const wasStopped = chatState.generationStopped;
+        // Snapshot the accepted turn so a later refresh can reopen this
+        // still-local `new_*` row. Reconciliation may still replace the
+        // record with the server dialogue id below.
+        if (
+          acceptedTurn &&
+          isNewChat &&
+          isLocalStorageChat(sendingDialogueId)
+        ) {
+          writePendingChat(
+            sendingDialogueId,
+            sendingMessages as unknown as Array<{
+              role: string;
+              content: string;
+              [key: string]: unknown;
+            }>,
+            {
+              title: sendingTitle,
+              mode: capturedMode,
+            }
+          );
+        }
         const historyOpts =
           blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
         const reconciliation = await getHistoryQuestionData(

@@ -95,13 +95,14 @@ vi.mock("@/utils/network-error", () => ({
 
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
 import { getAnswerCheck, getQueryAbortable } from "@/api/chat";
-import { clearPendingChat } from "@/utils/pending-chat";
+import { clearPendingChat, writePendingChat } from "@/utils/pending-chat";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { ElMessage } from "element-plus";
 
 const mockGetQueryAbortable = vi.mocked(getQueryAbortable);
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
 const mockClearPendingChat = vi.mocked(clearPendingChat);
+const mockWritePendingChat = vi.mocked(writePendingChat);
 
 type ChatStateRecord = ChatUIState;
 type HistoryQuestionLookup = (
@@ -2000,6 +2001,15 @@ describe("useSendMessage", () => {
 
     expect(mockClearPendingChat).not.toHaveBeenCalled();
     expect(currentChatId.value).toBe("new_888");
+    expect(mockWritePendingChat).toHaveBeenCalled();
+    const lastWrite = mockWritePendingChat.mock.calls.at(-1);
+    expect(lastWrite?.[0]).toBe("new_888");
+    expect(lastWrite?.[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "user", content: "hello" }),
+        expect.objectContaining({ role: "assistant", content: "ok" }),
+      ])
+    );
   });
 
   it.each([409, 500])(

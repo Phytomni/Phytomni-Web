@@ -1023,6 +1023,84 @@ describe("useSelectChat", () => {
     expect(stateFor("d1").historyQuestion).toEqual([]);
   });
 
+  it("reopens a pending new_ history row from localStorage instead of an empty messages API", async () => {
+    const tempId = "new_1735819200000";
+    chatList.value = [
+      buildChat({
+        id: 0,
+        dialogue_id: tempId,
+        title: "Provide a scientifically rigorous a...",
+        isPending: true,
+      }),
+      buildChat({
+        id: 88,
+        dialogue_id: "srv-review-uuid",
+        title: "Provide a scientifically rigorou...",
+      }),
+    ];
+    localStorage.setItem(
+      `pending_chat_${tempId}`,
+      JSON.stringify({
+        id: tempId,
+        title: "Provide a scientifically rigorous a...",
+        isPending: true,
+        mode: "expert",
+        messages: [
+          {
+            role: "user",
+            content:
+              "Provide a scientifically rigorous and integrated analysis",
+          },
+          {
+            role: "assistant",
+            content: "Persisted review answer",
+            tool_name: "ReviewAgent",
+          },
+        ],
+      })
+    );
+
+    const { selectChat } = makeComposable();
+    await selectChat(tempId);
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(stateFor(tempId).historyHydration).toBe("ready");
+    expect(stateFor(tempId).historyErrorKind).toBeNull();
+    expect(stateFor(tempId).mode).toBe("expert");
+    expect(renderedFor(tempId, "pending history").messages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "Provide a scientifically rigorous and integrated analysis",
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "Persisted review answer",
+        tool_name: "ReviewAgent",
+      }),
+    ]);
+    expect(updateUrlWithChatId).toHaveBeenCalledWith(tempId);
+    localStorage.removeItem(`pending_chat_${tempId}`);
+  });
+
+  it("does not ask the server for a new_ dialogue that has no pending record", async () => {
+    const tempId = "new_no_pending";
+    chatList.value = [
+      buildChat({
+        id: 0,
+        dialogue_id: tempId,
+        title: "Orphan pending title",
+        isPending: true,
+      }),
+    ];
+
+    const { selectChat } = makeComposable();
+    await selectChat(tempId);
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(stateFor(tempId).historyHydration).toBe("history-empty");
+    expect(renderedFor(tempId, "orphan new_").messages).toEqual([]);
+  });
+
   it("records a decode error for a malformed successful payload", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<ChatHistoryRecord[]>>({ code: 200, data: null })
