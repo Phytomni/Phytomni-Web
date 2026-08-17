@@ -23,6 +23,7 @@ const DeepGenomeResultViewerStub = defineComponent({
     ns: { type: String, default: "" },
     showActions: { type: Boolean, default: true },
     showReferences: { type: Boolean, default: true },
+    renderingFileId: { type: String, default: "" },
   },
   emits: ["citation-activate"],
   setup(props, { expose }) {
@@ -142,6 +143,39 @@ describe("DeepGenomeArtifact", () => {
 
     expect(download).toHaveBeenNthCalledWith(1, "pdf");
     expect(download).toHaveBeenNthCalledWith(2, "markdown");
+  });
+
+  it("forwards a persisted rendering-file id into the embedded viewer", () => {
+    const wrapper = mountWithApp(DeepGenomeArtifact, {
+      props: {
+        markdown: "# Full report",
+        references: referenceList,
+        ns: "artifact_under",
+        renderingFileId: "42",
+        title: "Deep genome report",
+        metadata: "Deep Genome Agent",
+        status: "Finished",
+        tabLabels: {
+          content: "Report",
+          evidence: "Evidence",
+          activity: "Activity",
+          downloads: "Downloads",
+        },
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+      global: {
+        stubs: {
+          DeepGenomeResultViewer: DeepGenomeResultViewerStub,
+        },
+        mocks: { $t: (key: string) => key },
+      },
+    });
+
+    expect(
+      wrapper.findComponent(DeepGenomeResultViewerStub).props("renderingFileId")
+    ).toBe("42");
   });
 
   it("contains a rejected embedded viewer download", async () => {

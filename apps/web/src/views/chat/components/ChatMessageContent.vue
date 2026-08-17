@@ -201,6 +201,7 @@
         "
         :references="message.doc_list || []"
         :ns="'m' + index"
+        :rendering-file-id="message.id"
         :show-actions="showDeepGenomeFinalActions"
         :show-references="hasDeepGenomeReferences"
         embedded

@@ -1174,6 +1174,10 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     .map((m) => m[1])
     .join("\n");
 
+  it("hands a persisted DeepGenome row id to the inline viewer for PDF export", () => {
+    expect(CONTENT_SOURCE).toContain(':rendering-file-id="message.id"');
+  });
+
   it("owns internal overflow so wide table/code/image children stay in transcript", () => {
     expect(contentStyles).toMatch(/min-width:\s*0/);
     expect(contentStyles).toMatch(/overflow-x:\s*auto/);

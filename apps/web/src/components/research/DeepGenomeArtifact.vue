@@ -59,6 +59,7 @@
           :references="references"
           :resources="resources"
           :ns="ns"
+          :rendering-file-id="renderingFileId"
           :show-actions="false"
           :show-references="false"
           @citation-activate="activateEvidence"
@@ -105,6 +106,7 @@ const props = withDefaults(
     references?: readonly unknown[];
     resources?: readonly AuthorizedScientificResource[];
     ns: string;
+    renderingFileId?: string;
     title: string;
     metadata?: string | string[];
     status?: string;

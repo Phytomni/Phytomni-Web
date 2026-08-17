@@ -1508,6 +1508,12 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
     expect(CHAT_SOURCE).toContain("<template #artifact>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
+    expect(CHAT_SOURCE).toContain(
+      ':rendering-file-id="currentArtifactMessage.id"'
+    );
+    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(
+      ':rendering-file-id="renderingFileId"'
+    );
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");

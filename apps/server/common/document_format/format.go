@@ -50,9 +50,12 @@ func NewAgentWithOptions(toolName string, opts AgentOptions) (FileDownloader, er
 	case "DataAgent":
 		return &DataAgent{}, nil
 	case "BriefGeneAgent", "ReviewAgent":
-		// BriefGeneAgent and ReviewAgent share the same formatter; both are
-		// canonical Bot-side tool names, otherwise /v1/download/* reports "unknown tool".
+		// Cited-family reports share the {content, doc_list} formatter.
+		// Register every canonical Bot-side tool name or /v1/download/*
+		// reports "unknown tool".
 		return &ReviewAgent{opts: opts}, nil
+	case "DeepGenomeAgent":
+		return &ReviewAgent{opts: opts, filePrefix: "deepgenome"}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
@@ -141,14 +144,19 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 }
 
 type ReviewAgent struct {
-	opts AgentOptions
+	opts       AgentOptions
+	filePrefix string
 }
 
 func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
 	doc := parseReviewAnswer(answer)
 
 	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("review_%d", timestamp)
+	prefix := a.filePrefix
+	if prefix == "" {
+		prefix = "review"
+	}
+	filename := fmt.Sprintf("%s_%d", prefix, timestamp)
 
 	switch format {
 	case "Word":

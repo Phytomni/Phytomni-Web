@@ -11,6 +11,8 @@ const GENERATED_DOWNLOAD_TOOLS = new Set([
   "KnowledgeAgent",
   "DataAgent",
   "ReviewAgent",
+  "BriefGeneAgent",
+  "DeepGenomeAgent",
 ]);
 
 export function messageActionCapabilities(

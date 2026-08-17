@@ -495,6 +495,7 @@ export function removeDeletedChat(options: {
           "
           :references="currentArtifactMessage.doc_list"
           :resources="currentArtifactResources"
+          :rendering-file-id="currentArtifactMessage.id"
           :ns="artifactNamespace"
           :tab="artifactTab"
           :tab-labels="artifactTabLabels"

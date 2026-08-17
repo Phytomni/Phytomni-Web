@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref, computed, nextTick } from "vue";
+import { buildBinaryResponse } from "../../helpers/apiBuilders";
+import { mustGet } from "../../helpers/mockFactories";
 
 // file-saver mock — hoisted so the vi.mock factory can reference it
 const mockSaveAs = vi.hoisted(() => vi.fn());
+const mockGetFileDownUrlApi = vi.hoisted(() => vi.fn());
 
 vi.mock("file-saver", () => ({
   saveAs: mockSaveAs,
 }));
 
 vi.mock("element-plus", () => ({
-  ElMessage: { error: vi.fn() },
+  ElMessage: { error: vi.fn(), info: vi.fn() },
+}));
+
+vi.mock("@/api/chat", () => ({
+  getFileDownUrlApi: mockGetFileDownUrlApi,
 }));
 
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
@@ -243,6 +250,96 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     await expect(downloadPDF()).resolves.toBeUndefined();
     expect(printSpy).not.toHaveBeenCalled();
 
+    printSpy.mockRestore();
+  });
+});
+
+describe("useDeepGenomeDownloads — downloadPDF rendering-file", () => {
+  beforeEach(() => {
+    mockGetFileDownUrlApi.mockReset();
+    mockSaveAs.mockReset();
+  });
+
+  function spyOnPrint() {
+    if (typeof window.print !== "function") {
+      Object.defineProperty(window, "print", {
+        configurable: true,
+        writable: true,
+        value: () => undefined,
+      });
+    }
+    return vi.spyOn(window, "print");
+  }
+
+  function stubBlobDownload() {
+    const createObjectURL = vi
+      .spyOn(window.URL, "createObjectURL")
+      .mockReturnValue("blob:deep-genome-pdf");
+    const revokeObjectURL = vi
+      .spyOn(window.URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    return { createObjectURL, revokeObjectURL, clickSpy };
+  }
+
+  it("downloads a PDF attachment and never opens the print dialog", async () => {
+    const { clickSpy } = stubBlobDownload();
+    mockGetFileDownUrlApi.mockResolvedValueOnce(
+      buildBinaryResponse("deepgenome_1.pdf", "%PDF-1.4")
+    );
+    const printSpy = spyOnPrint();
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: {
+        markdown: "# Deep genome report",
+        filename: "report.md",
+        renderingFileId: "42",
+      },
+      mainContentRef: ref(null),
+      displayReferences: computed(() => []),
+    });
+
+    await downloadPDF();
+
+    expect(printSpy).not.toHaveBeenCalled();
+    expect(mockGetFileDownUrlApi).toHaveBeenCalledOnce();
+    const [data] = mustGet(
+      mockGetFileDownUrlApi.mock.calls[0],
+      "DeepGenome rendering-file request"
+    );
+    expect(data).toBeInstanceOf(FormData);
+    expect((data as FormData).get("id")).toBe("42");
+    expect((data as FormData).get("document_format")).toBe("PDF");
+    expect(clickSpy).toHaveBeenCalledOnce();
+
+    printSpy.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it("does not treat a non-numeric artifact id as a rendering-file row", async () => {
+    const printSpy = spyOnPrint().mockImplementation(() => undefined);
+    mockGetFileDownUrlApi.mockResolvedValueOnce(
+      buildBinaryResponse("should-not-download.pdf")
+    );
+
+    const fakeEl = document.createElement("div");
+    fakeEl.appendChild(document.createElement("p"));
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: {
+        markdown: "# Demo report",
+        renderingFileId: "deep-genome-demo",
+      },
+      mainContentRef: ref(fakeEl),
+      displayReferences: computed(() => []),
+    });
+
+    await downloadPDF();
+
+    expect(mockGetFileDownUrlApi).not.toHaveBeenCalled();
+    expect(printSpy).toHaveBeenCalledOnce();
     printSpy.mockRestore();
   });
 });

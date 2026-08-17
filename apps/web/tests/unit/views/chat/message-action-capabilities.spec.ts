@@ -43,5 +43,21 @@ describe("messageActionCapabilities", () => {
         tool_name: "ReviewAgent",
       }).generatedFormats
     ).toEqual(["PDF", "Markdown", "Word"]);
+
+    expect(
+      messageActionCapabilities({
+        role: "assistant",
+        id: "13",
+        tool_name: "DeepGenomeAgent",
+      }).generatedFormats
+    ).toEqual(["PDF", "Markdown", "Word"]);
+
+    expect(
+      messageActionCapabilities({
+        role: "assistant",
+        id: "14",
+        tool_name: "BriefGeneAgent",
+      }).generatedFormats
+    ).toEqual(["PDF", "Markdown", "Word"]);
   });
 });

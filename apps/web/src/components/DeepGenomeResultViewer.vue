@@ -112,6 +112,7 @@ const props = withDefaults(
     embedded?: boolean;
     showActions?: boolean;
     showReferences?: boolean;
+    renderingFileId?: string;
   }>(),
   {
     markdown: "",

@@ -2,7 +2,9 @@ import { nextTick } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import { saveAs } from "file-saver";
 import { ElMessage } from "element-plus";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import i18n from "@/locales";
+import { downloadRenderingFile } from "@/utils/download-rendering-file";
 import type { DisplayReference } from "@/utils/reference-renderer";
 
 export type DeepGenomeMainContentValue =
@@ -12,9 +14,19 @@ export interface DeepGenomeDownloadsOpts {
   props: {
     markdown: string;
     filename?: string;
+    renderingFileId?: string;
   };
   mainContentRef: Ref<DeepGenomeMainContentValue>;
   displayReferences: ComputedRef<DisplayReference[]>;
+}
+
+function resolveRenderingFileId(value: unknown): string {
+  if (value == null || value === "") return "";
+  try {
+    return normalizePositiveTaskRowId(value as string | number);
+  } catch {
+    return "";
+  }
 }
 
 const resolveMainElement = (
@@ -29,6 +41,14 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
 
   // Download methods
   const downloadPDF = async () => {
+    const renderingFileId = resolveRenderingFileId(props.renderingFileId);
+    if (renderingFileId) {
+      await downloadRenderingFile(renderingFileId, "PDF", (key) =>
+        i18n.global.t(key)
+      );
+      return;
+    }
+
     // create the print container
     const printContainer = document.createElement("div");
     printContainer.id = "print-container";

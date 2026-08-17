@@ -3,6 +3,7 @@ package document_format
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,26 @@ func TestReviewAgentDownloadsWordAndPDFFromMarkdownAnswer(t *testing.T) {
 		if len(content) == 0 {
 			t.Fatalf("%s download returned empty body, filename=%s", format, filename)
 		}
+	}
+}
+
+func TestDeepGenomeAgentDownloadsPDFFromCitedAnswer(t *testing.T) {
+	agent, err := NewAgent("DeepGenomeAgent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer := `{"content":"# Deep genome report\n\nA cited fixture.","doc_list":[{"title":"Source A"}]}`
+	content, filename, err := agent.Download("PDF", answer)
+	if err != nil {
+		t.Fatalf("DeepGenome PDF download failed: %v", err)
+	}
+	if !bytes.HasPrefix(content, []byte("%PDF")) {
+		t.Fatalf("DeepGenome PDF missing %%PDF header, filename=%s", filename)
+	}
+	if bytes.Contains(content, []byte("# Deep genome report")) {
+		t.Fatal("DeepGenome PDF still contains raw markdown heading")
+	}
+	if !strings.HasPrefix(filename, "deepgenome_") || !strings.HasSuffix(filename, ".pdf") {
+		t.Fatalf("DeepGenome PDF filename = %q, want deepgenome_*.pdf", filename)
 	}
 }
