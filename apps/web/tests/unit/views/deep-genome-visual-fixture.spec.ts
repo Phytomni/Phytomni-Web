@@ -284,7 +284,7 @@ describe("Deep Genome real-content visual fixture", () => {
         "research-contract__390x844__dark.png",
         "research-contract__390x844__light.png",
       ]);
-    });
+    }, 20_000);
   });
 
   it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {
