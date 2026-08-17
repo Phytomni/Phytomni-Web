@@ -547,7 +547,7 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 	if strings.TrimSpace(projection.Status) != "" {
 		row.Status = projection.Status
 		if projectionHasPendingRequiredDelivery(projection) && !isProjectionFailureStatus(projection.Status) {
-			row.Status = "RUNNING"
+			row.Status = businessStatusForPendingDelivery(projection.Status)
 		}
 	}
 	if toolName := slugToToolName[projection.Agent]; toolName != "" {

@@ -414,6 +414,7 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   if (
     status === "PREPARING" ||
     status === "RUNNING" ||
+    status === "FINALIZING" ||
     status === "SUCCEEDED" ||
     status === "FAILED" ||
     status === "TIMED_OUT" ||
@@ -492,7 +493,8 @@ const hasSpecializedReport = computed(
 const activeSpecializedLifecycle = computed(
   () =>
     effectiveLifecyclePhase.value === "PREPARING" ||
-    effectiveLifecyclePhase.value === "RUNNING"
+    effectiveLifecyclePhase.value === "RUNNING" ||
+    effectiveLifecyclePhase.value === "FINALIZING"
 );
 const awaitingSpecializedImages = computed(
   () =>

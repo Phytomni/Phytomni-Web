@@ -90,6 +90,20 @@ describe("ChatMessageContent lifecycle status", () => {
     );
   });
 
+  it("shows Finalizing for Digital Design after compute succeeds and the archive is still packing", () => {
+    const wrapper = mountContent(
+      {
+        tool_name: "DigitalDesignAgent",
+        content: "",
+        status: "FINALIZING",
+      },
+      lifecycle("FINALIZING")
+    );
+
+    expect(wrapper.find(".agent-lifecycle").text()).toBe("Finalizing");
+    expect(wrapper.text()).not.toContain("Running");
+  });
+
   it("does not duplicate lifecycle status for specialized image agents", () => {
     const wrapper = mountContent(
       { tool_name: "GeneNetworkAgent", content: "" },

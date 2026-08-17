@@ -3551,7 +3551,7 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 	if statusPresent && stored.Status != "" {
 		businessStatus := stored.Status
 		if projectionHasPendingRequiredDelivery(stored) && !isProjectionFailureStatus(stored.Status) {
-			businessStatus = "RUNNING"
+			businessStatus = businessStatusForPendingDelivery(stored.Status)
 		}
 		updates["status"] = businessStatus
 	}

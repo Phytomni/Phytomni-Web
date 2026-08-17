@@ -230,15 +230,15 @@ func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryPollable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AgentTaskLifecycle: %v", err)
 	}
-	if got.Phase != "RUNNING" || got.Terminal || got.Reconciliation != "FRESH" || fake.calls != 1 {
+	if got.Phase != "FINALIZING" || got.Terminal || got.Reconciliation != "FRESH" || fake.calls != 1 {
 		t.Fatalf("lifecycle=%+v calls=%d, want fresh nonterminal pending delivery", got, fake.calls)
 	}
 	if got.Delivery == nil || got.Delivery.Status != "pending" || got.Delivery.Revision != 1 {
 		t.Fatalf("delivery=%+v, want pending revision 1", got.Delivery)
 	}
 	status, _ := readStatusAnswer(t, gdb, 20)
-	if status != "RUNNING" {
-		t.Fatalf("business row status=%q, want RUNNING", status)
+	if status != "FINALIZING" {
+		t.Fatalf("business row status=%q, want FINALIZING", status)
 	}
 	assertDeliveryDTOIsBounded(t, got.Delivery)
 }
@@ -329,7 +329,7 @@ func TestAnswerCheckIncludesBoundedDeliveryForOwnerHistory(t *testing.T) {
 		}
 		rowStatus := "SUCCEEDED"
 		if delivery.Status == "pending" {
-			rowStatus = "RUNNING"
+			rowStatus = "FINALIZING"
 		}
 		if err := gdb.Exec(`INSERT INTO question_agent_logs
 			(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, bot_projection_json, bot_report_revision, created_at)
@@ -351,8 +351,8 @@ func TestAnswerCheckIncludesBoundedDeliveryForOwnerHistory(t *testing.T) {
 		if history[index].Delivery == nil || history[index].Delivery.Status != wantStatus {
 			t.Fatalf("history[%d].delivery=%+v, want %q", index, history[index].Delivery, wantStatus)
 		}
-		if wantStatus == "pending" && history[index].Status != "RUNNING" {
-			t.Fatalf("pending history status=%q, want RUNNING", history[index].Status)
+		if wantStatus == "pending" && history[index].Status != "FINALIZING" {
+			t.Fatalf("pending history status=%q, want FINALIZING", history[index].Status)
 		}
 		assertDeliveryDTOIsBounded(t, history[index].Delivery)
 	}

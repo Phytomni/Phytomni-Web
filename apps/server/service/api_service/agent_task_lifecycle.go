@@ -165,6 +165,9 @@ func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjec
 	}
 	switch projection.Delivery.Status {
 	case "pending":
+		if phase == "SUCCEEDED" || phase == "FINALIZING" {
+			return "FINALIZING", false
+		}
 		return "RUNNING", false
 	case "failed":
 		return "FAILED", true

@@ -511,6 +511,14 @@ func projectionHasPendingRequiredDelivery(projection BotRunProjection) bool {
 	return projection.ResultArchiveV1 && projection.Delivery != nil && projection.Delivery.Required && projection.Delivery.Status == "pending"
 }
 
+// Scientific SUCCEEDED plus a still-packing archive is not compute RUNNING.
+func businessStatusForPendingDelivery(scientificStatus string) string {
+	if strings.EqualFold(strings.TrimSpace(scientificStatus), "SUCCEEDED") {
+		return "FINALIZING"
+	}
+	return "RUNNING"
+}
+
 func mergeProjectionStatus(current, incoming string) string {
 	if isProjectionTerminalStatus(current) || strings.TrimSpace(incoming) == "" {
 		return current

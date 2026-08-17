@@ -81,8 +81,8 @@ func TestRetryConversationResultArchiveRetriesOnlyOwnerScopedRetryableFailure(t 
 	if err := model.DB(context.Background()).Raw("SELECT status FROM question_agent_logs WHERE id = ?", 701).Scan(&status).Error; err != nil {
 		t.Fatal(err)
 	}
-	if status != "RUNNING" {
-		t.Fatalf("status=%q, want RUNNING", status)
+	if status != "FINALIZING" {
+		t.Fatalf("status=%q, want FINALIZING", status)
 	}
 }
 

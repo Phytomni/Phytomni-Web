@@ -65,19 +65,20 @@ func (ps *Service) RetryConversationResultArchive(
 	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where(
-			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_run_id = ? AND UPPER(status) IN (?, ?) AND "+botProjectionCASPredicate,
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_run_id = ? AND UPPER(status) IN (?, ?, ?) AND "+botProjectionCASPredicate,
 			rowID,
 			username,
 			dialogueID,
 			row.BotRunId,
 			"SUCCEEDED",
 			"RUNNING",
+			"FINALIZING",
 			rowID,
 			username,
 			storedRevision,
 			storedRaw,
 		).
-		Update("status", "RUNNING")
+		Update("status", "FINALIZING")
 	if result.Error != nil {
 		return AgentTaskDeliveryDTO{}, result.Error
 	}

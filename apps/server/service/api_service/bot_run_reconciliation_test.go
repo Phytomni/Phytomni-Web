@@ -243,8 +243,8 @@ func TestSyncBotRunsKeepsRequiredDeliveryPendingThenSettlesReady(t *testing.T) {
 
 	SyncBotRuns([]model.QuestionAgentLog{row})
 	status, answer := readStatusAnswer(t, gdb, 160)
-	if status != "RUNNING" || !strings.Contains(answer, "Scientific result") {
-		t.Fatalf("pending status=%q answer=%q, want RUNNING with report", status, answer)
+	if status != "FINALIZING" || !strings.Contains(answer, "Scientific result") {
+		t.Fatalf("pending status=%q answer=%q, want FINALIZING with report", status, answer)
 	}
 	projection := loadBotRunProjectionForTest(t, "alice", 160)
 	if !projection.ResultArchiveV1 || projection.Delivery == nil || projection.Delivery.Status != "pending" {
