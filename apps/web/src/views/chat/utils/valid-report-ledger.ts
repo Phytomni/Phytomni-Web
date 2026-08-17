@@ -1,8 +1,52 @@
-/** Conservative valid-report ledger: only approved exact/prefix placeholders. */
+/** Exact/prefix placeholders harvested from product i18n and transport text. */
+
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 
 export type ReportPlaceholderRule =
   | { readonly match: "exact"; readonly value: string }
   | { readonly match: "prefix"; readonly value: string };
+
+type AgentLocaleCopy = {
+  emptyReport?: unknown;
+  noReferences?: unknown;
+  taskCreated?: unknown;
+};
+
+function harvestProductEmptyReportPlaceholders(
+  packs: readonly unknown[]
+): readonly ReportPlaceholderRule[] {
+  const exact = new Set<string>();
+  const prefixes = new Set<string>();
+  for (const pack of packs) {
+    const agents = (pack as { agents?: Record<string, AgentLocaleCopy> })
+      .agents;
+    if (!agents) continue;
+    for (const agent of Object.values(agents)) {
+      if (typeof agent.emptyReport === "string" && agent.emptyReport.trim()) {
+        exact.add(agent.emptyReport);
+      }
+      if (typeof agent.noReferences === "string" && agent.noReferences.trim()) {
+        exact.add(agent.noReferences);
+      }
+      if (typeof agent.taskCreated === "string" && agent.taskCreated.trim()) {
+        prefixes.add(agent.taskCreated);
+      }
+    }
+  }
+  return [
+    ...[...exact].sort().map((value) => ({ match: "exact" as const, value })),
+    ...[...prefixes]
+      .sort()
+      .map((value) => ({ match: "prefix" as const, value })),
+  ];
+}
+
+/**
+ * EN/ZH empty-report, no-references, and task-created copy from locale packs.
+ */
+export const PRODUCT_EMPTY_REPORT_PLACEHOLDERS =
+  harvestProductEmptyReportPlaceholders([enUS, zhCN]);
 
 /** Lifecycle tokens plus Web/BFF/Bot transport acknowledgements. */
 export const GENERIC_REPORT_PLACEHOLDERS = [
@@ -16,7 +60,6 @@ export const GENERIC_REPORT_PLACEHOLDERS = [
   { match: "exact", value: "CANCELED" },
   { match: "exact", value: "TIMED_OUT" },
   { match: "exact", value: "TIMEOUT" },
-  { match: "exact", value: "NO REFERENCES AVAILABLE." },
   { match: "exact", value: "Sorry, I cannot answer this question." },
   { match: "exact", value: "Task created" },
   { match: "prefix", value: "Task created:" },
@@ -24,6 +67,7 @@ export const GENERIC_REPORT_PLACEHOLDERS = [
   { match: "prefix", value: "Tasks created successfully:" },
   { match: "prefix", value: "Task submission failed:" },
   { match: "prefix", value: "Server task created:" },
+  ...PRODUCT_EMPTY_REPORT_PLACEHOLDERS,
 ] as const satisfies readonly ReportPlaceholderRule[];
 
 /**

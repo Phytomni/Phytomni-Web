@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GENERIC_REPORT_PLACEHOLDERS,
+  PRODUCT_EMPTY_REPORT_PLACEHOLDERS,
   TOOL_REPORT_PLACEHOLDERS,
   isApprovedReportText,
   isDeepGenomeLedgerPlaceholder,
@@ -8,6 +9,8 @@ import {
 } from "@/views/chat/utils/valid-report-ledger";
 import { artifactPresentationForMessage } from "@/views/chat/utils/artifact-policy";
 import type { ChatMessage } from "@/views/chat/types";
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
 
 const REPORT_TOOLS = [
   "KnowledgeAgent",
@@ -57,7 +60,6 @@ describe("valid report ledger", () => {
       "exact:CANCELED",
       "exact:TIMED_OUT",
       "exact:TIMEOUT",
-      "exact:NO REFERENCES AVAILABLE.",
       "exact:Sorry, I cannot answer this question.",
       "exact:Task created",
       "prefix:Task created:",
@@ -65,6 +67,9 @@ describe("valid report ledger", () => {
       "prefix:Tasks created successfully:",
       "prefix:Task submission failed:",
       "prefix:Server task created:",
+      ...PRODUCT_EMPTY_REPORT_PLACEHOLDERS.map(
+        (rule) => `${rule.match}:${rule.value}`
+      ),
     ]);
     expect(
       deepGenomeRules.map((rule) => `${rule.match}:${rule.value}`)
@@ -161,6 +166,8 @@ describe("valid report ledger", () => {
     "Task submission failed: missing task_id",
     "Task submission failed: no task ids",
     "Server task created: dg-child-1",
+    "任务创建成功",
+    "任务创建成功: dg-child-1",
   ])(
     "rejects transport acknowledgement %j for every report tool",
     (content) => {
@@ -174,6 +181,36 @@ describe("valid report ledger", () => {
       }
     }
   );
+
+  it("harvests every agent emptyReport and DeepGenome noReferences string", () => {
+    const harvested: string[] = [];
+    for (const pack of [enUS, zhCN]) {
+      const agents = (
+        pack as { agents?: Record<string, Record<string, unknown>> }
+      ).agents;
+      if (!agents) continue;
+      for (const agent of Object.values(agents)) {
+        if (typeof agent.emptyReport === "string") {
+          harvested.push(agent.emptyReport);
+        }
+        if (typeof agent.noReferences === "string") {
+          harvested.push(agent.noReferences);
+        }
+        if (typeof agent.taskCreated === "string") {
+          harvested.push(agent.taskCreated);
+        }
+      }
+    }
+    const encoded = new Set(
+      PRODUCT_EMPTY_REPORT_PLACEHOLDERS.map((rule) => rule.value)
+    );
+    expect(harvested.sort()).toEqual([...encoded].sort());
+    for (const content of harvested) {
+      for (const tool_name of REPORT_TOOLS) {
+        expect(isApprovedReportText(tool_name, content)).toBe(false);
+      }
+    }
+  });
 
   it("never rejects useful text merely because it contains failed", () => {
     const content =
