@@ -362,6 +362,7 @@ export const getObsImages = (data: {
       url: "/api/v1/downloads/analyst-agent/obs-images",
       method: "get",
       params: data,
+      suppressErrorToast: true,
     },
     decodeImageData
   );

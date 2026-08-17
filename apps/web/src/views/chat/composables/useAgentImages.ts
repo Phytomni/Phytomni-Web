@@ -2,6 +2,7 @@ import { reactive, watch } from "vue";
 import type { Ref } from "vue";
 import { getObsImages } from "@/api/chat";
 import type { ChatMessage, ChatView } from "../types";
+import { artifactPresentationForMessage } from "../utils/artifact-policy";
 
 const isChatMessage = (value: unknown): value is ChatMessage =>
   typeof value === "object" && value !== null;
@@ -93,7 +94,8 @@ export function useAgentImages(currentChat: Ref<ChatView | null>) {
           typeof rawDownloadPath === "string" &&
           rawDownloadPath.trim() !== "" &&
           messageId &&
-          !geneNetworkImages[messageId]
+          !geneNetworkImages[messageId] &&
+          artifactPresentationForMessage(msg) === null
         ) {
           fetchGeneNetworkImages(messageId, rawDownloadPath).catch(
             () => undefined
@@ -104,7 +106,8 @@ export function useAgentImages(currentChat: Ref<ChatView | null>) {
           msg.tool_name === "DigitalDesignAgent" &&
           rawDownloadPath !== undefined &&
           messageId &&
-          !digitalDesignImages[messageId]
+          !digitalDesignImages[messageId] &&
+          artifactPresentationForMessage(msg) === null
         ) {
           let paths: string[] = [];
           if (Array.isArray(rawDownloadPath)) {

@@ -678,11 +678,16 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 		}
 	}
 	if len(keys) == 0 {
-		// Legacy row or empty image_paths: fall back to prefix enumeration (preserves current behaviour).
+		// Legacy row or empty image_paths: fall back to prefix enumeration.
+		// Chat auto-fetches this gallery; a relay 400/403 (unservable or
+		// unallocated test dump) is "no images", not a user-facing 500.
 		var err error
 		client := rxBot.NewClient()
 		keys, err = listObsKeysCached(ctx, client, obsPath, row.Status == statusSucceeded)
 		if err != nil {
+			if rxBot.IsLegacyPathErr(err) {
+				return []string{}, nil
+			}
 			return nil, friendlyRelayErr(err)
 		}
 	}
@@ -714,7 +719,7 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	}
 
 	if len(imageUrls) == 0 {
-		return nil, errors.New("no png image file found in the specified directory")
+		return []string{}, nil
 	}
 
 	return imageUrls, nil

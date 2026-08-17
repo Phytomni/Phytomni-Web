@@ -35,7 +35,7 @@ describe("useAgentImages", () => {
     return buildChatMessage({ role: "assistant", ...overrides });
   }
 
-  it("GeneNetworkAgent: with download_path + id, calls getObsImages and writes geneNetworkImages", async () => {
+  it("GeneNetworkAgent: gallery-only row (no artifact card) calls getObsImages", async () => {
     mockGetObsImages.mockResolvedValue(
       buildApiEnvelope(["http://obs/img1.png", "http://obs/img2.png"])
     );
@@ -50,6 +50,8 @@ describe("useAgentImages", () => {
           tool_name: "GeneNetworkAgent",
           download_path: "obs://bucket/path",
           id: "msg-001",
+          content: "",
+          status: "SUCCEEDED",
         }),
       ],
     };
@@ -67,6 +69,29 @@ describe("useAgentImages", () => {
     expect(geneNetworkImagesLoading["msg-001"]).toBe(false);
   });
 
+  it("GeneNetworkAgent: artifact-card report does not prefetch obs-images", async () => {
+    const currentChat = chatRef();
+    useAgentImages(currentChat);
+
+    currentChat.value = {
+      messages: [
+        message({
+          tool_name: "GeneNetworkAgent",
+          download_path:
+            "/obs/phytomni/agent_data/test/output/children/part-001",
+          id: "3676",
+          status: "SUCCEEDED",
+          content:
+            "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.",
+        }),
+      ],
+    };
+
+    await flushPromises();
+
+    expect(mockGetObsImages).not.toHaveBeenCalled();
+  });
+
   it("DigitalDesignAgent: when download_path is a single string value, parses it then calls getObsImages", async () => {
     mockGetObsImages.mockResolvedValue(
       buildApiEnvelope("http://obs/design.png")
@@ -82,6 +107,8 @@ describe("useAgentImages", () => {
           tool_name: "DigitalDesignAgent",
           download_path: "obs://bucket/design",
           id: "msg-002",
+          content: "",
+          status: "SUCCEEDED",
         }),
       ],
     };
@@ -110,6 +137,8 @@ describe("useAgentImages", () => {
           tool_name: "DigitalDesignAgent",
           download_path: JSON.stringify(["obs://p1", "obs://p2"]),
           id: "msg-003",
+          content: "",
+          status: "SUCCEEDED",
         }),
       ],
     };
@@ -205,6 +234,8 @@ describe("useAgentImages", () => {
       tool_name: "GeneNetworkAgent",
       download_path: "obs://bucket/x",
       id: "msg-006",
+      content: "",
+      status: "SUCCEEDED",
     });
 
     currentChat.value = { messages: [msg] };

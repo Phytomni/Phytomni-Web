@@ -132,6 +132,65 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 	}
 }
 
+// TestApiDownloadAnalystAgentObsImages_LegacyListIsEmptyGallery: chat auto-
+// fetches this endpoint for every GeneNetworkAgent row that still has a
+// download_path. A Bot 403 (relay prefix miss, including the unallocated
+// AnalystConfig.OUTPUT_DIR dump /obs/phytomni/agent_data/test/output/...)
+// must not become a 500 "pre-cutover historical data" toast. Gallery is
+// best-effort: unservable prefixes return no images.
+func TestApiDownloadAnalystAgentObsImages_LegacyListIsEmptyGallery(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dump = "/obs/phytomni/agent_data/test/output/children/part-001"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, download_path, image_paths, status, created_at) VALUES
+		(75, 'alice', ?, '', 'SUCCEEDED', '2026-08-17 18:45:29')`, dump).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"list prefix outside the output root"}}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	urls, err := NewService().DownloadAnalystAgentObsImages(context.Background(), "alice", dump)
+	if err != nil {
+		t.Fatalf("legacy/unservable gallery prefix must not error, got %v", err)
+	}
+	if len(urls) != 0 {
+		t.Fatalf("legacy/unservable gallery prefix must yield no image URLs, got %v", urls)
+	}
+}
+
+// TestApiDownloadAnalystAgentObsImages_NoPngIsEmptyGallery: a listed prefix
+// with no .png objects is an empty gallery, not a 500. Chat prefetch would
+// otherwise toast "no png image file found" on every finished network row
+// that only has reports/archives.
+func TestApiDownloadAnalystAgentObsImages_NoPngIsEmptyGallery(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, download_path, image_paths, status, created_at) VALUES
+		(76, 'alice', '/obs/bucket/user/runs/run-1', '', 'SUCCEEDED', '2026-08-17 18:45:29')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":["/obs/bucket/user/runs/run-1/report.md","/obs/bucket/user/runs/run-1/t.csv"]}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	urls, err := NewService().DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/bucket/user/runs/run-1")
+	if err != nil {
+		t.Fatalf("no-png listing must not error, got %v", err)
+	}
+	if len(urls) != 0 {
+		t.Fatalf("no-png listing must yield no image URLs, got %v", urls)
+	}
+}
+
 // TestApiDownloadAnalystAgentObsImages_MalformedJSON: a non-empty but invalid
 // image_paths must NOT be silently signed as keys. The handler discards the
 // parse (warns) and falls back to OBS prefix listing — which, with no Bot

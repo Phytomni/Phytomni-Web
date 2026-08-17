@@ -17,6 +17,7 @@ import request, { createAbortableRequest } from "@/utils/request";
 import {
   decodeQueryData,
   getChatdownloadURL,
+  getObsImages,
   getConversationArtifactDownloadURL,
   getConversationArtifactFile,
   getAnalystAgentLog,
@@ -528,6 +529,29 @@ describe("getAnalystAgentLog — wire contract", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     }
   );
+});
+
+describe("getObsImages", () => {
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
+  it("does not toast when the gallery endpoint is empty or unservable", async () => {
+    mockRequest.mockResolvedValueOnce({ code: 200, data: [] });
+
+    await getObsImages({
+      obs_path: "/obs/phytomni/agent_data/test/output/children/part-001",
+    });
+
+    expect(mockRequest).toHaveBeenCalledWith({
+      url: "/api/v1/downloads/analyst-agent/obs-images",
+      method: "get",
+      params: {
+        obs_path: "/obs/phytomni/agent_data/test/output/children/part-001",
+      },
+      suppressErrorToast: true,
+    });
+  });
 });
 
 describe("feedback — wire contract", () => {
