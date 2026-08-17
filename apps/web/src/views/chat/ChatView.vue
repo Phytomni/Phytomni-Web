@@ -1363,18 +1363,16 @@ function retryCurrentResultArchive(): void {
     if (matches.length !== 1) return;
     const [message] = matches;
     message.delivery = { ...delivery };
-    message.status = "RUNNING";
+    message.status = "FINALIZING";
     if (message.botProjection) {
       message.botProjection = {
         ...message.botProjection,
-        status: "RUNNING",
         delivery: { ...delivery },
       };
     }
     if (message.botLifecycle) {
       message.botLifecycle = {
         ...message.botLifecycle,
-        status: "RUNNING",
         delivery: { ...delivery },
       };
     }

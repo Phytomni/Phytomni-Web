@@ -741,7 +741,7 @@ function applyPendingArchiveDelivery(delivery: AgentResultDelivery): void {
   const current = run.state.value;
   if (!current.projection || !current.messageId) return;
   run.hydrate(
-    { ...current.projection, status: "RUNNING", delivery: { ...delivery } },
+    { ...current.projection, delivery: { ...delivery } },
     {
       dialogueId: current.dialogueId ?? dialogueId,
       messageId: current.messageId,

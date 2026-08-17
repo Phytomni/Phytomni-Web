@@ -1508,6 +1508,8 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
     expect(CHAT_SOURCE).toContain("<template #artifact>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
+    expect(CHAT_SOURCE).toContain('message.status = "FINALIZING"');
+    expect(CHAT_SOURCE).not.toContain('message.status = "RUNNING"');
     expect(CHAT_SOURCE).toContain(
       ':rendering-file-id="currentArtifactMessage.id"'
     );
@@ -1530,5 +1532,27 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).not.toContain('title: t("common.finished")');
     expect(CONTENT_SOURCE).toContain("<ResearchArtifactPreview");
     expect(CONTENT_SOURCE).toContain("@open=\"emit('open-artifact')\"");
+  });
+
+  it("does not relabel archive packing as compute RUNNING on any remote-agent surface", () => {
+    const productSources = [
+      resolve(
+        __dirname,
+        "../../src/views/digital-design-agent/DigitalDesignAgentView.vue"
+      ),
+      resolve(
+        __dirname,
+        "../../src/views/gene-network-agent/GeneNetworkAgentView.vue"
+      ),
+      resolve(
+        __dirname,
+        "../../src/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue"
+      ),
+    ].map((path) => readFileSync(path, "utf8"));
+
+    for (const source of productSources) {
+      expect(source).toContain("function applyPendingArchiveDelivery");
+      expect(source).not.toContain('status: "RUNNING", delivery');
+    }
   });
 });
