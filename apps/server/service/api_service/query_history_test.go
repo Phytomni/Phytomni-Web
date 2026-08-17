@@ -451,3 +451,115 @@ func TestHistoryAndQueryPublishResultArchiveV1(t *testing.T) {
 		t.Fatalf("query data leaked archive reference: %s", encoded)
 	}
 }
+
+func TestQueryV1KnowledgeFollowUpKeepsParentRunAndForwardsUserHistory(t *testing.T) {
+	useConversationV1(t)
+	gdb := setupExpertTestDB(t)
+	var followup rxBot.RouteQueryRequest
+	var followupSeen bool
+	turn := 0
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/query/route":
+			var req rxBot.RouteQueryRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode route: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			turn++
+			if turn > 1 {
+				followup = req
+				followupSeen = true
+			}
+			if req.Conversation == nil {
+				t.Error("v1 Knowledge route omitted conversation envelope")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			stage := rxBot.ContextStageMetadata{
+				SchemaVersion:                  1,
+				TurnID:                         req.Conversation.TurnID,
+				SelectedAgentID:                "KnowledgeAgent",
+				RouteSource:                    "explicit_selection",
+				RouteReasonCode:                "EXPLICIT_SELECTION",
+				BaseBusinessContextVersion:     req.Conversation.BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: req.Conversation.BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor:        req.Conversation.LedgerCursor,
+			}
+			runID := fmt.Sprintf("run-knowledge-%d", turn)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": runID, "run_id": runID, "object": "agent.run",
+				"agent": "knowledge", "status": "succeeded", "task_ids": []string{},
+				"result": map[string]interface{}{
+					"formatted": map[string]interface{}{
+						"answer":     "bounded knowledge answer",
+						"references": []map[string]string{{"file_id": "f1", "title": "Doc A"}},
+					},
+				},
+				"conversation_context": stage,
+			})
+		case "/v1/conversation-context/settle":
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: int64(turn + 1),
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	first, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query:        "What is the function of RuBisCO in plants?",
+		Mode:         "expert",
+		Tool:         "KnowledgeAgent",
+		ClientTurnID: "knowledge-first-turn",
+		Surface:      QuerySurfaceChat,
+	})
+	if err != nil {
+		t.Fatalf("first Knowledge turn: %v", err)
+	}
+	if first == nil || first.Id == 0 || first.BotRunID == "" || first.ToolName != "KnowledgeAgent" {
+		t.Fatalf("first turn = %#v, want durable Knowledge run", first)
+	}
+	var stored model.QuestionAgentLog
+	if err := gdb.First(&stored, first.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.BotRunId == "" {
+		t.Fatal("Web dropped bot_run_id on the first Knowledge row")
+	}
+
+	second, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query:        "Name one enzyme that acts immediately after it in the Calvin cycle.",
+		Mode:         "expert",
+		Tool:         "KnowledgeAgent",
+		Id:           first.Id,
+		History:      `[{"role":"user","content":"What is the function of RuBisCO in plants?"},{"role":"assistant","content":"RuBisCO fixes CO2."}]`,
+		ClientTurnID: "knowledge-follow-up",
+		Surface:      QuerySurfaceChat,
+	})
+	if err != nil {
+		t.Fatalf("Knowledge follow-up: %v", err)
+	}
+	if second == nil || second.Id == first.Id || second.BotRunID == "" || second.BotRunID == first.BotRunID {
+		t.Fatalf("follow-up = %#v, want a new Knowledge run", second)
+	}
+	if !followupSeen || followup.Conversation == nil {
+		t.Fatal("follow-up did not send a v1 conversation envelope")
+	}
+	if len(followup.History) != 0 {
+		t.Fatalf("v1 follow-up still forwarded form history=%#v", followup.History)
+	}
+	foundUser := false
+	for _, entry := range followup.Conversation.HistoryDelta {
+		if entry.Role == "user" && strings.Contains(entry.Content, "RuBisCO") {
+			foundUser = true
+		}
+		if entry.Role == "assistant" && entry.Content != "" {
+			t.Fatalf("follow-up envelope leaked raw assistant content: %#v", entry)
+		}
+	}
+	if !foundUser {
+		t.Fatalf("follow-up HistoryDelta omitted first user turn: %#v", followup.Conversation.HistoryDelta)
+	}
+}
