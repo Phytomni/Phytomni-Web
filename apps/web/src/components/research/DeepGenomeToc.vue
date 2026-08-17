@@ -21,73 +21,11 @@
         class="deep-genome-toc-menu"
         @select="handleSelect"
       >
-        <template v-for="item in nestedHeadings" :key="item.id">
-          <el-menu-item
-            v-if="
-              item.level === 2 && (!item.children || item.children.length === 0)
-            "
-            :index="item.id"
-            class="menu-level-2"
-          >
-            <span>{{ item.text }}</span>
-          </el-menu-item>
-
-          <el-sub-menu
-            v-else-if="
-              item.level === 2 && item.children && item.children.length > 0
-            "
-            :index="item.id"
-            class="menu-level-2"
-          >
-            <template #title>
-              <span>{{ item.text }}</span>
-            </template>
-
-            <template v-for="child in item.children" :key="child.id">
-              <el-menu-item
-                v-if="
-                  child.level === 3 &&
-                  (!child.children || child.children.length === 0)
-                "
-                :index="child.id"
-                class="menu-level-3"
-              >
-                <span>{{ child.text }}</span>
-              </el-menu-item>
-
-              <el-sub-menu
-                v-else-if="
-                  child.level === 3 &&
-                  child.children &&
-                  child.children.length > 0
-                "
-                :index="child.id"
-                class="menu-level-3"
-              >
-                <template #title>
-                  <span>{{ child.text }}</span>
-                </template>
-
-                <el-menu-item
-                  v-for="grandChild in child.children"
-                  :key="grandChild.id"
-                  :index="grandChild.id"
-                  class="menu-level-4"
-                >
-                  <span>{{ grandChild.text }}</span>
-                </el-menu-item>
-              </el-sub-menu>
-            </template>
-          </el-sub-menu>
-
-          <el-menu-item
-            v-else-if="item.level >= 3"
-            :index="item.id"
-            :class="`menu-level-${item.level}`"
-          >
-            <span>{{ item.text }}</span>
-          </el-menu-item>
-        </template>
+        <DeepGenomeTocNode
+          v-for="item in nestedHeadings"
+          :key="item.id"
+          :item="item"
+        />
       </el-menu>
     </details>
   </aside>
@@ -95,15 +33,12 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { ElMenu, ElMenuItem, ElSubMenu } from "element-plus";
-import type { ScientificHeading } from "@/utils/scientific-markdown/types";
-
-interface NestedHeading extends ScientificHeading {
-  children: NestedHeading[];
-}
+import { ElMenu } from "element-plus";
+import DeepGenomeTocNode from "./DeepGenomeTocNode.vue";
+import type { NestedScientificHeading } from "@/utils/scientific-markdown/toc";
 
 defineProps<{
-  nestedHeadings: NestedHeading[];
+  nestedHeadings: NestedScientificHeading[];
   activeHeadingId: string;
   title: string;
 }>();

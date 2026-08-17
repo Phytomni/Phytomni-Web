@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  collapseConsecutiveDuplicateHeadings,
   collectAndAssignHeadings,
   rehypeScientificHeadings,
 } from "@/utils/scientific-markdown/headings";
@@ -88,5 +89,51 @@ describe("scientific Markdown headings", () => {
       { id: "istanbul", level: 2, text: "Istanbul" },
     ]);
     expect(localeLower).not.toHaveBeenCalled();
+  });
+
+  it("drops a heading that repeats the previous heading text", () => {
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "h2",
+          properties: {},
+          children: [{ type: "text", value: "Digital Design" }],
+        },
+        {
+          type: "element",
+          tagName: "h3",
+          properties: {},
+          children: [{ type: "text", value: "Promoter Design" }],
+        },
+        { type: "text", value: "\n" },
+        {
+          type: "element",
+          tagName: "h1",
+          properties: {},
+          children: [{ type: "text", value: "Promoter Design" }],
+        },
+        {
+          type: "element",
+          tagName: "p",
+          properties: {},
+          children: [{ type: "text", value: "Result artifacts" }],
+        },
+        {
+          type: "element",
+          tagName: "h2",
+          properties: {},
+          children: [{ type: "text", value: "Protein Design" }],
+        },
+      ],
+    };
+
+    collapseConsecutiveDuplicateHeadings(tree);
+    expect(collectAndAssignHeadings(tree)).toEqual([
+      { id: "digital-design", level: 2, text: "Digital Design" },
+      { id: "promoter-design", level: 3, text: "Promoter Design" },
+      { id: "protein-design", level: 2, text: "Protein Design" },
+    ]);
   });
 });

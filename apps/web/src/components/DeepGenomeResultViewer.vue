@@ -92,16 +92,16 @@ import type {
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import {
+  buildNestedHeadings,
+  type NestedScientificHeading,
+} from "@/utils/scientific-markdown/toc";
 import type {
   AuthorizedScientificResource,
   ScientificCitationActivation,
   ScientificHeading,
   ScientificResourceActivation,
 } from "@/utils/scientific-markdown/types";
-
-interface DeepGenomeTocHeading extends ScientificHeading {
-  children: DeepGenomeTocHeading[];
-}
 
 const props = withDefaults(
   defineProps<{
@@ -129,7 +129,7 @@ const emit = defineEmits<{
 }>();
 
 const headings = ref<ScientificHeading[]>([]);
-const nestedHeadings = ref<DeepGenomeTocHeading[]>([]);
+const nestedHeadings = ref<NestedScientificHeading[]>([]);
 const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
 let observerSetupTimer: number | null = null;
@@ -146,29 +146,6 @@ const displayReferences = computed(() =>
 const citationNamespace = computed(() =>
   referenceRows.value.length > 0 ? props.ns : ""
 );
-
-function buildNestedHeadings(
-  flatHeadings: readonly ScientificHeading[]
-): DeepGenomeTocHeading[] {
-  const nested: DeepGenomeTocHeading[] = [];
-  const stack: DeepGenomeTocHeading[] = [];
-
-  for (const heading of flatHeadings) {
-    if (heading.level < 2 || heading.level > 4) continue;
-    while (true) {
-      const parent = stack.at(-1);
-      if (!parent || parent.level < heading.level) break;
-      stack.pop();
-    }
-    const item: DeepGenomeTocHeading = { ...heading, children: [] };
-    const parent = stack.at(-1);
-    if (parent) parent.children.push(item);
-    else nested.push(item);
-    stack.push(item);
-  }
-
-  return nested;
-}
 
 function handleHeadings(nextHeadings: ScientificHeading[]): void {
   headings.value = nextHeadings;

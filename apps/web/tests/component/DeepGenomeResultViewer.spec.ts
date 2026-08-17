@@ -123,6 +123,77 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(VIEWER_SOURCE).not.toContain("parseDeepGenomeMarkdown");
   });
 
+  it("nests numbered protocol headings and drops a repeated title", async () => {
+    const wrapper = render(
+      [
+        "## Digital Design",
+        "",
+        "### Promoter Design",
+        "",
+        "# Promoter Design",
+        "",
+        "Result artifacts",
+        "",
+        "## Recommended experiments",
+        "",
+        "## 1. Step-by-Step Quantitative RT-PCR Protocol",
+        "",
+        "## 2. Step-by-Step GUS/GUS Protocol",
+      ].join("\n")
+    );
+    await settleMarkdown();
+
+    expect(
+      wrapper
+        .get('[data-testid="deep-genome-document"]')
+        .find(".phy-markdown")
+        .findAll("h1, h2, h3")
+        .map((node) => node.text())
+    ).toEqual([
+      "Digital Design",
+      "Promoter Design",
+      "Recommended experiments",
+      "1. Step-by-Step Quantitative RT-PCR Protocol",
+      "2. Step-by-Step GUS/GUS Protocol",
+    ]);
+    expect(
+      wrapper.findComponent(DeepGenomeToc).props("nestedHeadings")
+    ).toEqual([
+      {
+        id: "digital-design",
+        level: 2,
+        text: "Digital Design",
+        children: [
+          {
+            id: "promoter-design",
+            level: 3,
+            text: "Promoter Design",
+            children: [],
+          },
+        ],
+      },
+      {
+        id: "recommended-experiments",
+        level: 2,
+        text: "Recommended experiments",
+        children: [
+          {
+            id: "1-step-by-step-quantitative-rt-pcr-protocol",
+            level: 3,
+            text: "1. Step-by-Step Quantitative RT-PCR Protocol",
+            children: [],
+          },
+          {
+            id: "2-step-by-step-gus-gus-protocol",
+            level: 3,
+            text: "2. Step-by-Step GUS/GUS Protocol",
+            children: [],
+          },
+        ],
+      },
+    ]);
+  });
+
   it("uses the shared GFM, math, citation, and superscript DOM contract", async () => {
     const wrapper = render(
       [

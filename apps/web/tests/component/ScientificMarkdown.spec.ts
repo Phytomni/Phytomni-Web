@@ -352,4 +352,25 @@ describe("ScientificMarkdown", () => {
       "仪器：分光光度计、离心机、HPLC、恒温摇床、pH 计。",
     ]);
   });
+
+  it("keeps DeepGenome figure prose after an unauthorized cultivar image", async () => {
+    const source = [
+      "#### 2.2. Expression Profile across Different Cultivars",
+      "",
+      "![Cultivar Image](./.out/Os01g0177400/LOC_Os01g08220_cultivars.png)",
+      "",
+      "The expression levels of the analyzed genes, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM), showed notable variation across the five rice varieties.",
+    ].join("\n");
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: { source, surface: "document" },
+    });
+    await vi.dynamicImportSettled();
+    expect(wrapper.text()).toContain(
+      "showed notable variation across the five rice varieties"
+    );
+    expect(wrapper.text()).not.toMatch(/theMath>/);
+    expect(wrapper.find(".scientific-resource--unavailable").exists()).toBe(
+      true
+    );
+  });
 });
