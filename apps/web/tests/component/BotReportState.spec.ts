@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { nextTick } from "vue";
 import type { BotArtifact } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -51,6 +52,38 @@ function mountReport(
 }
 
 describe("BotReportState", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("flushes remaining CoT before showing the finished report", async () => {
+    vi.useFakeTimers();
+    const wrapper = mountReport(lifecycle({ status: "RUNNING" }));
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+
+    await wrapper.setProps({
+      state: lifecycle({
+        status: "SUCCEEDED",
+        visibleReport: "# Final report",
+        finalReport: "# Final report",
+      }),
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+
+    vi.advanceTimersByTime(180);
+    await nextTick();
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+      "# Final report"
+    );
+  });
+
   it.each([
     ["waiting", "waiting_for_brief_gene", "loading"],
     ["partial", "intermediate", "degraded"],

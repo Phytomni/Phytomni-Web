@@ -60,6 +60,7 @@ import {
   getSharedPhase3COverlay,
   SYNTHETIC_IDENTITY,
 } from "../visual/chat/fixture-data";
+import { expectLifecyclePhase } from "../helpers/lifecycle-phase";
 import { mustGet } from "../helpers/mockFactories";
 import {
   createTestAppContext,
@@ -886,61 +887,58 @@ describe("ChatInteractionV2 — behavior matrix", () => {
   });
 
   it.each([
-    ["PREPARING", "Preparing"],
-    ["RESOLVING_INPUTS", "Resolving inputs"],
-    ["PLANNING", "Planning tasks"],
-    ["RUNNING", "Running"],
-    ["FINALIZING", "Finalizing"],
-  ] as const)(
-    "renders %s Research as lifecycle-only progress",
-    (phase, label) => {
-      const rendererCases: Array<
-        Partial<ChatMessage> & {
-          artifactPreview?: ArtifactPreview;
-        }
-      > = [
-        {
-          content: "No references available.",
-          artifactPreview: {
-            title: "Research result",
-            kind: "research",
-            summary: "No references available.",
-            openLabel: "Open artifact",
-          },
-        },
-        {
-          content: "No references available.",
-          doc_list: [{ title: "Synthetic reference" }],
-        },
-        { content: "No references available.", doc_list: [] },
-      ];
-
-      for (const { artifactPreview, ...message } of rendererCases) {
-        const wrapper = mountChatMessageContent({
-          message: {
-            tool_name: "InSilicoResearchAgent",
-            ...message,
-          },
-          lifecycle: researchLifecycle(phase),
-          artifactPreview,
-        });
-
-        expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
-        expect(
-          wrapper.find('[data-testid="research-artifact-preview"]').exists()
-        ).toBe(false);
-        expect(
-          wrapper.find('[data-testid="research-reference-viewer"]').exists()
-        ).toBe(false);
-        expect(
-          wrapper.find('[data-testid="research-result-viewer"]').exists()
-        ).toBe(false);
-        expect(wrapper.text()).not.toContain(enUS.common.noData);
-        expect(wrapper.text()).not.toContain("No references available.");
-        wrapper.unmount();
+    "PREPARING",
+    "RESOLVING_INPUTS",
+    "PLANNING",
+    "RUNNING",
+    "FINALIZING",
+  ] as const)("renders %s Research as lifecycle-only progress", (phase) => {
+    const rendererCases: Array<
+      Partial<ChatMessage> & {
+        artifactPreview?: ArtifactPreview;
       }
+    > = [
+      {
+        content: "No references available.",
+        artifactPreview: {
+          title: "Research result",
+          kind: "research",
+          summary: "No references available.",
+          openLabel: "Open artifact",
+        },
+      },
+      {
+        content: "No references available.",
+        doc_list: [{ title: "Synthetic reference" }],
+      },
+      { content: "No references available.", doc_list: [] },
+    ];
+
+    for (const { artifactPreview, ...message } of rendererCases) {
+      const wrapper = mountChatMessageContent({
+        message: {
+          tool_name: "InSilicoResearchAgent",
+          ...message,
+        },
+        lifecycle: researchLifecycle(phase),
+        artifactPreview,
+      });
+
+      expectLifecyclePhase(wrapper, "Validating the research request");
+      expect(
+        wrapper.find('[data-testid="research-artifact-preview"]').exists()
+      ).toBe(false);
+      expect(
+        wrapper.find('[data-testid="research-reference-viewer"]').exists()
+      ).toBe(false);
+      expect(
+        wrapper.find('[data-testid="research-result-viewer"]').exists()
+      ).toBe(false);
+      expect(wrapper.text()).not.toContain(enUS.common.noData);
+      expect(wrapper.text()).not.toContain("No references available.");
+      wrapper.unmount();
     }
-  );
+  });
 
   it.each([
     ["streaming", { streaming: true }],
@@ -953,7 +951,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         lifecycle: researchLifecycle("RUNNING"),
       });
 
-      expect(wrapper.get(".agent-lifecycle").text()).toBe("Running");
+      expectLifecyclePhase(wrapper, "Validating the research request");
       expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
         false
       );
@@ -990,7 +988,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         lifecycle: researchLifecycle(phase),
       });
 
-      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+      expectLifecyclePhase(wrapper, "Validating the research request");
       expect(wrapper.find('[data-testid="table-result"]').exists()).toBe(false);
       expect(wrapper.find(".ai-response").exists()).toBe(false);
       expect(
@@ -1000,18 +998,14 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     }
   );
 
-  it.each([
-    ["RESOLVING_INPUTS", "Resolving inputs"],
-    ["PLANNING", "Planning tasks"],
-    ["FINALIZING", "Finalizing"],
-  ] as const)(
+  it.each(["RESOLVING_INPUTS", "PLANNING", "FINALIZING"] as const)(
     "uses Research message status %s as lifecycle fallback",
-    (status, label) => {
+    (status) => {
       const wrapper = mountChatMessageContent({
         message: { tool_name: "InSilicoResearchAgent", status },
       });
 
-      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+      expectLifecyclePhase(wrapper, "Validating the research request");
       expect(
         wrapper.find('[data-testid="research-result-viewer"]').exists()
       ).toBe(false);
@@ -1051,7 +1045,14 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         message: { ...message, status },
       });
 
-      expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
+      if (_name === "DeepGenome") {
+        expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+          "Writing the gene background"
+        );
+        expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+      } else {
+        expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
+      }
       expect(wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()).toBe(
         true
       );

@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { nextTick } from "vue";
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "@/views/chat/types";
+import { expectLifecyclePhase } from "../helpers/lifecycle-phase";
 import { mountWithApp } from "../helpers/test-app-context";
+import { resetProgressStartedAtForTests } from "@/views/chat/utils/agentProgress";
 
 vi.mock("@/components/ScientificMarkdown.vue", () => ({
   default: {
@@ -46,7 +49,11 @@ const lifecycle = (phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle => ({
   error_code: null,
 });
 
-function mountContent(message: Partial<ChatMessage>, run: AgentTaskLifecycle) {
+function mountContent(
+  message: Partial<ChatMessage>,
+  run: AgentTaskLifecycle,
+  extra: Record<string, unknown> = {}
+) {
   return mountWithApp(ChatMessageContent, {
     props: {
       message: {
@@ -62,6 +69,7 @@ function mountContent(message: Partial<ChatMessage>, run: AgentTaskLifecycle) {
       digitalDesignImages: {},
       digitalDesignImagesLoading: {},
       lifecycle: run,
+      ...extra,
     },
     global: {
       stubs: {
@@ -78,13 +86,18 @@ function mountContent(message: Partial<ChatMessage>, run: AgentTaskLifecycle) {
 }
 
 describe("ChatMessageContent lifecycle status", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    resetProgressStartedAtForTests();
+  });
+
   it("shows a lifecycle status for analysis agents without image branches", () => {
     const wrapper = mountContent(
       { tool_name: "AnalystAgent" },
       lifecycle("SUCCEEDED")
     );
 
-    expect(wrapper.find(".agent-lifecycle").text()).toBe("Succeeded");
+    expectLifecyclePhase(wrapper, "Succeeded");
     expect(wrapper.get('[data-test="scientific-markdown"]').text()).toContain(
       "Synthetic result."
     );
@@ -108,8 +121,12 @@ describe("ChatMessageContent lifecycle status", () => {
         lifecycle("FINALIZING")
       );
 
-      expect(wrapper.find(".agent-lifecycle").text()).toBe("Finalizing");
-      expect(wrapper.text()).not.toContain("Running");
+      expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="progress-label"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="progress-label"]').text()).not.toBe(
+        "Running"
+      );
     }
   );
 
@@ -120,18 +137,39 @@ describe("ChatMessageContent lifecycle status", () => {
     );
 
     expect(wrapper.findAll(".agent-lifecycle")).toHaveLength(1);
-    expect(wrapper.find(".agent-lifecycle").text()).toBe("Preparing");
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Preparing network analysis"
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
   });
 
   it("keeps the leading DeepGenome lifecycle as the only live region", () => {
     const wrapper = mountContent(
-      { tool_name: "DeepGenomeAgent" },
+      { tool_name: "DeepGenomeAgent", content: "" },
       lifecycle("RUNNING")
     );
 
     expect(wrapper.findAll(".agent-lifecycle")).toHaveLength(1);
     expect(wrapper.findAll('[role="status"]')).toHaveLength(1);
-    expect(wrapper.find(".agent-lifecycle").text()).toBe("Running");
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="progress-eta"]').text()).toMatch(/24–72/);
+  });
+
+  it("shows a wait card for Design without a finished result", () => {
+    const wrapper = mountContent(
+      { tool_name: "DigitalDesignAgent", content: "" },
+      lifecycle("RUNNING")
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Preparing protein and promoter design tasks"
+    );
+    expect(wrapper.find('[data-test="progress-eta"]').text()).toMatch(/12–48/);
+    expect(wrapper.find(".phy-bubble-assistant").exists()).toBe(true);
   });
 
   it("renders a passed Research timeout lifecycle as its exact status", () => {
@@ -140,8 +178,45 @@ describe("ChatMessageContent lifecycle status", () => {
       lifecycle("TIMED_OUT")
     );
 
-    expect(wrapper.get(".agent-lifecycle").text()).toBe("Timed out");
+    expectLifecyclePhase(wrapper, "Timed out");
     expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("Failed");
+  });
+
+  it("flushes remaining CoT before showing the official result", async () => {
+    vi.useFakeTimers();
+    resetProgressStartedAtForTests();
+    const startedAt = Date.now();
+    const wrapper = mountContent(
+      { tool_name: "AnalystAgent", content: "" },
+      lifecycle("RUNNING"),
+      { progressStartedAt: startedAt }
+    );
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="scientific-markdown"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(1);
+
+    await wrapper.setProps({
+      message: {
+        ...wrapper.props("message"),
+        content: "### Analysis report\n\nSynthetic result.",
+      },
+      lifecycle: lifecycle("SUCCEEDED"),
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="scientific-markdown"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(1);
+
+    vi.advanceTimersByTime(90 * 16);
+    await nextTick();
+    expect(wrapper.get('[data-test="scientific-markdown"]').text()).toContain(
+      "Synthetic result."
+    );
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(16);
   });
 });

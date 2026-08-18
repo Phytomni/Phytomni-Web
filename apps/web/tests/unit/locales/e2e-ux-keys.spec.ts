@@ -17,6 +17,11 @@ describe("e2e UX i18n keys", () => {
     "chat.timeoutFailed",
     "chat.progress.processing",
     "chat.progress.valueText",
+    "chat.progress.etaSeconds",
+    "chat.progress.etaMinutes",
+    "chat.progress.etaHours",
+    "chat.progress.cotLabel",
+    "chat.progress.cotCount",
     "chat.agentsArchitectureTitle",
     "chat.agentsArchitectureAlt",
   ];
@@ -43,6 +48,24 @@ describe("e2e UX i18n keys", () => {
     );
     expect(getMessage(zhCN, "chat.progress.valueText")).toBe(
       "处理中，{percent}%"
+    );
+    expect(getMessage(enUS, "chat.progress.etaSeconds")).toBe(
+      "Usually {min}–{max} seconds"
+    );
+    expect(getMessage(zhCN, "chat.progress.etaSeconds")).toBe(
+      "通常需要 {min}–{max} 秒"
+    );
+    expect(getMessage(enUS, "chat.progress.etaMinutes")).toBe(
+      "Usually {min}–{max} min"
+    );
+    expect(getMessage(zhCN, "chat.progress.etaMinutes")).toBe(
+      "通常需要 {min}–{max} 分钟"
+    );
+    expect(getMessage(enUS, "chat.progress.etaHours")).toBe(
+      "Usually {min}–{max} hours"
+    );
+    expect(getMessage(zhCN, "chat.progress.etaHours")).toBe(
+      "通常需要 {min}–{max} 小时"
     );
     expect(getMessage(enUS, "chat.eta")).toBeUndefined();
     expect(getMessage(zhCN, "chat.eta")).toBeUndefined();

@@ -353,7 +353,9 @@
                         class="message-text loading-message phy-bubble-assistant"
                         data-testid="chat-fixture-progress-host"
                       >
-                        {{ $t("chat.ladingInner") }}
+                        <span class="sr-only">{{
+                          $t("chat.ladingInner")
+                        }}</span>
                         <TransferProgress
                           v-if="transferSnapshot"
                           :snapshot="transferSnapshot"
@@ -844,6 +846,33 @@ onUnmounted(() => {
   font-family: var(--phy-font-shell, Inter, system-ui, sans-serif);
   color: #b42318;
   background: #fef3f2;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.loading-message {
+  display: block;
+  width: min(28rem, 100%);
+  background-color: var(--phy-bubble-assistant-bg);
+  padding: 0;
+  border-radius: var(--phy-radius-lg);
+}
+
+.loading-message :deep(.send-progress) {
+  width: 100%;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .chat-main-layout,

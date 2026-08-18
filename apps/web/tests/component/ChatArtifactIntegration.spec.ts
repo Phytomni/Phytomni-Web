@@ -887,7 +887,7 @@ describe("Chat artifact shell integration", () => {
   );
 
   it.each([
-    ["RUNNING", enUS.chat.lifecycle.running],
+    ["RUNNING", ""],
     ["FAILED", enUS.chat.lifecycle.failed],
     ["CANCELLED", enUS.chat.lifecycle.cancelled],
     ["SUCCEEDED", enUS.chat.lifecycle.resultUnavailable],
@@ -917,7 +917,11 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       const row = wrapper.get(`[data-message-id="${id}"]`);
-      expect(row.text()).toContain(expectedCopy);
+      if (status === "RUNNING") {
+        expect(row.find('[data-test="agent-wait"]').exists()).toBe(true);
+      } else {
+        expect(row.text()).toContain(expectedCopy);
+      }
       expect(row.find(".research-artifact-preview").exists()).toBe(false);
       expect(row.find('[data-test="artifact-open"]').exists()).toBe(false);
       expect(state.getChatState("A").artifactOpen).toBe(false);
@@ -937,7 +941,7 @@ describe("Chat artifact shell integration", () => {
         status: "RUNNING",
         content: "Server task created: synthetic-child",
       } satisfies ChatMessage,
-      lifecycleCopy: enUS.chat.lifecycle.running,
+      lifecycleCopy: "",
       inlineReport: null,
       previewCount: 0,
       neutralPreviewCount: 0,
@@ -1008,7 +1012,11 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       const row = wrapper.get(`[data-message-id="${message.id}"]`);
-      expect(row.text()).toContain(lifecycleCopy);
+      if (lifecycleCopy) {
+        expect(row.text()).toContain(lifecycleCopy);
+      } else {
+        expect(row.find('[data-test="agent-wait"]').exists()).toBe(true);
+      }
       expect(row.findAll(".research-artifact-preview")).toHaveLength(
         previewCount
       );

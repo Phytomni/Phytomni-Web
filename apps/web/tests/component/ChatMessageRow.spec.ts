@@ -160,7 +160,7 @@ describe("ChatMessageRow", () => {
       /<ChatMessageRow[\s\S]*v-for="\(message, index\) in currentChat\.messages"/
     );
     expect(CHAT_SOURCE).toMatch(
-      /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
+      /<ChatMessageRow[\s\S]*v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(CHAT_SOURCE).not.toContain('data-testid="chat-message-row"');
   });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { expectLifecyclePhase } from "../../../helpers/lifecycle-phase";
 
 const testState = vi.hoisted(() => ({
   chatStates: null as ReturnType<
@@ -119,7 +120,6 @@ describe("ChatView lifecycle cleanup", () => {
           ChatAnalystLog: true,
           StreamMessage: true,
           TransferProgress: true,
-          SendProgress: true,
           ElTour: true,
           ElTourStep: true,
           ElBacktop: true,
@@ -162,7 +162,7 @@ describe("ChatView lifecycle cleanup", () => {
 
     const row = wrapper.get('[data-message-id="research-running-1"]');
     expect(row.find(".research-artifact-preview").exists()).toBe(true);
-    expect(row.get(".agent-lifecycle").text()).toBe("Running");
+    expectLifecyclePhase(row, "Validating the research request");
     expect(row.get(".research-artifact-preview__title").text()).toBe("Running");
     expect(row.text()).not.toContain("Finished");
 
@@ -183,7 +183,7 @@ describe("ChatView lifecycle cleanup", () => {
     await nextTick();
 
     const historyTimeout = wrapper.get('[data-message-id="82"]');
-    expect(historyTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
+    expectLifecyclePhase(historyTimeout, "Timed out");
     expect(historyTimeout.find(".research-artifact-preview").exists()).toBe(
       false
     );
@@ -224,7 +224,7 @@ describe("ChatView lifecycle cleanup", () => {
     await nextTick();
 
     const polledTimeout = wrapper.get('[data-message-id="83"]');
-    expect(polledTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
+    expectLifecyclePhase(polledTimeout, "Timed out");
     expect(polledTimeout.find(".research-artifact-preview").exists()).toBe(
       false
     );

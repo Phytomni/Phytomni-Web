@@ -66,12 +66,15 @@ describe("Chat progress placement integration", () => {
   });
 
   it("uses a routing-derived stage label without inferring one from elapsed time", () => {
-    expect(LOADING_BUBBLE).toContain(':stage-label="t(progressLabelKey)"');
+    expect(LOADING_BUBBLE).toContain(
+      "progressLabelKey === 'chat.progress.selectingAgent'"
+    );
     expect(CHAT_SOURCE).toMatch(
       /const progressLabelKey = computed\(\(\) =>[\s\S]*?chatMode\.value === "expert"[\s\S]*?activeAgentName === ""[\s\S]*?"chat\.progress\.selectingAgent"[\s\S]*?: "chat\.progress\.processing"/
     );
     expect(SEND_PROGRESS_SOURCE).toContain("stageLabel?: string");
-    expect(SEND_PROGRESS_SOURCE).toContain('t("chat.progress.processing")');
+    expect(SEND_PROGRESS_SOURCE).toContain("revealedStageCount(");
+    expect(SEND_PROGRESS_SOURCE).toContain("stepDurationMs(");
     expect(SEND_PROGRESS_SOURCE).not.toMatch(
       /stageLabel\s*=\s*(?:progressAt|elapsedMs|config)/
     );
@@ -92,6 +95,12 @@ describe("Chat progress placement integration", () => {
     );
     expect(getMessage(zhCN, "chat.progress.valueText")).toBe(
       "处理中，{percent}%"
+    );
+    expect(getMessage(enUS, "chat.progress.etaMinutes")).toEqual(
+      expect.any(String)
+    );
+    expect(getMessage(enUS, "chat.progress.etaHours")).toEqual(
+      expect.any(String)
     );
     expect(getMessage(enUS, "chat.eta")).toBeUndefined();
     expect(getMessage(zhCN, "chat.eta")).toBeUndefined();

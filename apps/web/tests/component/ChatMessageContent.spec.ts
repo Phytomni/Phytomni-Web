@@ -250,7 +250,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         tool_name,
         status: "RUNNING",
       });
-      expect(running.text()).toContain("Running");
+      expect(running.find('[data-test="send-progress"]').exists()).toBe(true);
       expect(running.text()).not.toContain("common.noData");
 
       const failed = mountContent({
@@ -287,7 +287,9 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         }
       );
 
-      expect(wrapper.get(".agent-lifecycle").text()).toBe("Timed out");
+      expect(wrapper.get('[data-test="lifecycle-phase"]').text()).toBe(
+        "Timed out"
+      );
       expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
       expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
       expect(wrapper.text()).not.toContain("No references available.");
@@ -346,7 +348,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         },
         { lifecycle: lifecycle("RUNNING") }
       );
-      expect(report.text()).toContain("Running");
+      expect(report.find('[data-test="send-progress"]').exists()).toBe(true);
       expect(
         report.findComponent({ name: "ScientificMarkdown" }).props("source")
       ).toBe("partial report");
@@ -364,7 +366,9 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
           },
         }
       );
-      expect(pendingImage.text()).toContain("Running");
+      expect(pendingImage.find('[data-test="send-progress"]').exists()).toBe(
+        true
+      );
       expect(pendingImage.text()).not.toContain("common.noData");
 
       const imageId = `${tool_name}-success`;
@@ -792,7 +796,9 @@ line2\nline3`;
       deepGenomeMessage({ content: "Server task created: child-task-123" })
     );
 
-    expect(wrapper.text()).toContain("Preparing");
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
     expect(wrapper.text()).not.toContain("Server task created");
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
@@ -803,7 +809,9 @@ line2\nline3`;
   it("renders a running empty result without viewer or reference fallback", () => {
     const wrapper = mountContent(deepGenomeMessage({ status: "RUNNING" }));
 
-    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("No references available.");
   });
@@ -816,7 +824,7 @@ line2\nline3`;
       })
     );
 
-    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
     expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
   });
@@ -885,7 +893,7 @@ line2\nline3`;
     {
       name: "active row with steps",
       status: "RUNNING",
-      label: "Running",
+      label: "Writing the gene background",
       content: "Server task created: child-task-steps",
       structure: { steps: ["internal active step"] },
       hasViewer: false,
@@ -893,7 +901,7 @@ line2\nline3`;
     {
       name: "active row with table headers",
       status: "RUNNING",
-      label: "Running",
+      label: "Writing the gene background",
       content: "# Partial active report",
       structure: {
         tableHeaders: [{ prop: "gene", label: "Gene" }],
