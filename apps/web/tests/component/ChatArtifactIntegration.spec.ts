@@ -860,6 +860,17 @@ describe("Chat artifact shell integration", () => {
       },
       expectOpen: false,
     },
+    {
+      name: "running cached complete file",
+      message: {
+        ...deepGenomeMessage,
+        id: "running-cached-deep",
+        status: "RUNNING",
+        content:
+          "# Smoc Analysis\n\nThe analysis of chromatin accessibility for the Os01g0822900 promoter.",
+      },
+      expectOpen: false,
+    },
   ])(
     "handles a $name report according to usable content",
     async ({ name, message, expectOpen = false }) => {
@@ -882,6 +893,14 @@ describe("Chat artifact shell integration", () => {
           false
         );
         expect(wrapper.text()).not.toContain("No references available.");
+      }
+      if (name === "running cached complete file") {
+        expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+        expect(wrapper.find('[data-test="artifact-open"]').exists()).toBe(
+          false
+        );
+        expect(wrapper.text()).not.toContain("Smoc Analysis");
+        expect(wrapper.text()).not.toContain("Os01g0822900");
       }
     }
   );
@@ -948,7 +967,7 @@ describe("Chat artifact shell integration", () => {
       showActions: null,
     },
     {
-      name: "running revision Markdown",
+      name: "running cached file Markdown",
       message: {
         role: "assistant",
         id: "402",
@@ -956,10 +975,10 @@ describe("Chat artifact shell integration", () => {
         status: "RUNNING",
         content: "# Synthetic revision report",
       } satisfies ChatMessage,
-      lifecycleCopy: enUS.chat.lifecycle.running,
+      lifecycleCopy: "",
       inlineReport: null,
-      previewCount: 1,
-      neutralPreviewCount: 1,
+      previewCount: 0,
+      neutralPreviewCount: 0,
       showActions: null,
     },
     {
@@ -1520,6 +1539,9 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).not.toContain('message.status = "RUNNING"');
     expect(CHAT_SOURCE).toContain(
       ':rendering-file-id="currentArtifactMessage.id"'
+    );
+    expect(CHAT_SOURCE).toContain(
+      "currentArtifactPresentation?.kind === 'deep-genome'"
     );
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(
       ':rendering-file-id="renderingFileId"'

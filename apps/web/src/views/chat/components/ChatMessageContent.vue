@@ -547,6 +547,7 @@ const resolvedProgressStartedAt = computed(() =>
 );
 const isWaitOnlyBody = computed(() => {
   if (!showWaitProgress.value) return false;
+  if (isDeepGenomeMessage.value && !hasArtifactPresentation.value) return true;
   if (hasArtifactPresentation.value) return false;
   if (hasMeaningfulDeepGenomeReport.value) return false;
   if (hasSpecializedReport.value && !isDeepGenomeMessage.value) return false;

@@ -123,40 +123,43 @@ describe("artifact policy", () => {
         identity: `message:${tool_name}-42`,
       });
 
-      expect(
-        artifactPresentationForMessage(
-          reportMessage(tool_name, {
-            content: message,
-            botProjection: {
-              runId: "run-42",
-              agent: tool_name,
-              status: "INPUT_REQUIRED",
-              workStage: null,
-              reportPresentation: true,
-              reportStage: "intermediate",
-              reportCompleteness: "partial",
-              reportRevision: 2,
-              reportUpdatedAt: null,
-              intermediateReport: intermediate,
-              finalReport: "",
-              progress: {
-                completed: 0,
-                total: 1,
-                failed: 0,
-                pending: 1,
-                briefGeneStatus: "",
-              },
-              degraded: false,
-              degradedReason: null,
-              failures: [],
-              artifacts: [],
-              resultArchiveV1: false,
-              requestId: null,
-              trackingDegraded: false,
+      const inputRequired = artifactPresentationForMessage(
+        reportMessage(tool_name, {
+          content: message,
+          botProjection: {
+            runId: "run-42",
+            agent: tool_name,
+            status: "INPUT_REQUIRED",
+            workStage: null,
+            reportPresentation: true,
+            reportStage: "intermediate",
+            reportCompleteness: "partial",
+            reportRevision: 2,
+            reportUpdatedAt: null,
+            intermediateReport: intermediate,
+            finalReport: "",
+            progress: {
+              completed: 0,
+              total: 1,
+              failed: 0,
+              pending: 1,
+              briefGeneStatus: "",
             },
-          })
-        )?.report
-      ).toBe(intermediate);
+            degraded: false,
+            degradedReason: null,
+            failures: [],
+            artifacts: [],
+            resultArchiveV1: false,
+            requestId: null,
+            trackingDegraded: false,
+          },
+        })
+      );
+      if (tool_name === "DeepGenomeAgent") {
+        expect(inputRequired).toBeNull();
+      } else {
+        expect(inputRequired?.report).toBe(intermediate);
+      }
 
       expect(
         artifactPresentationForMessage(
@@ -186,6 +189,13 @@ describe("artifact policy", () => {
                 : "# Retained report\n\nThe run retained evidence.",
           })
         );
+        if (
+          tool_name === "DeepGenomeAgent" &&
+          (status === "RUNNING" || status === "INPUT_REQUIRED")
+        ) {
+          expect(presentation).toBeNull();
+          continue;
+        }
         expect(presentation?.report).toContain("retained");
       }
     }
@@ -487,7 +497,48 @@ describe("artifact policy", () => {
     ).toBe(true);
   });
 
-  it.each(["RUNNING", "FAILED", "CANCELLED", "TIMED_OUT"])(
+  it.each([
+    "PENDING",
+    "QUEUED",
+    "ACCEPTED",
+    "SUBMITTING",
+    "PREPARING",
+    "RUNNING",
+    "FINALIZING",
+  ])(
+    "does not promote a cached DeepGenome file report while the run is still %s",
+    (status) => {
+      const cachedFile = `# Smoc Analysis
+
+The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
+      const message = reportMessage("DeepGenomeAgent", {
+        status,
+        content: cachedFile,
+        botLifecycle: {
+          status,
+          finalReport: cachedFile,
+          intermediateReport: cachedFile,
+        } as ChatMessage["botLifecycle"],
+      });
+
+      expect(artifactPresentationForMessage(message)).toBeNull();
+      expect(isCompletedDeepGenomeMessage(message)).toBe(false);
+      expect(artifactKindForMessage(message)).toBeNull();
+    }
+  );
+
+  it("keeps Research intermediate reports View-eligible while RUNNING", () => {
+    expect(
+      artifactPresentationForMessage(
+        reportMessage("InSilicoResearchAgent", {
+          status: "RUNNING",
+          content: "# Partial network report\n\nOne bounded analysis step.",
+        })
+      )?.kind
+    ).toBe("research");
+  });
+
+  it.each(["FAILED", "CANCELLED", "TIMED_OUT"])(
     "marks a substantive %s DeepGenome report as View-eligible",
     (status) => {
       expect(
@@ -701,7 +752,6 @@ describe("artifact policy", () => {
     "InSilicoResearchAgent",
     "DigitalDesignAgent",
     "GeneNetworkAgent",
-    "DeepGenomeAgent",
   ] as const)(
     "does not title a still-running %s preview Finished",
     (tool_name) => {
@@ -714,6 +764,17 @@ describe("artifact policy", () => {
       expect(artifactPreviewTitleKey(message)).toBe("chat.lifecycle.running");
     }
   );
+
+  it("does not create a still-running DeepGenome preview from a cached file", () => {
+    const message = {
+      ...ELIGIBLE_MESSAGE,
+      tool_name: "DeepGenomeAgent",
+      status: "RUNNING",
+      content: "# Intermediate notes\n\nOne section is available.",
+    };
+    expect(artifactPresentationForMessage(message)).toBeNull();
+    expect(artifactPreviewTitleKey(message)).toBeNull();
+  });
 
   it.each([
     ["RUNNING", "RUNNING"],

@@ -158,6 +158,40 @@ describe("ChatMessageContent lifecycle status", () => {
     expect(wrapper.find('[data-test="progress-eta"]').text()).toMatch(/24–72/);
   });
 
+  it("does not surface a cached complete DeepGenome file while wait progress is still running", () => {
+    const cachedFile = `# Smoc Analysis
+
+The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
+    const wrapper = mountContent(
+      {
+        tool_name: "DeepGenomeAgent",
+        status: "RUNNING",
+        content: cachedFile,
+        doc_list: [{ title: "Cached DeepGenome source" }],
+      },
+      lifecycle("RUNNING"),
+      {
+        artifactPreview: {
+          title: "Running",
+          kind: "Deep Genome Agent",
+          summary: "Decodes plant genomes for smarter breeding strategies.",
+          openLabel: "View",
+        },
+      }
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
+    expect(
+      wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-test="artifact-open"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Smoc Analysis");
+    expect(wrapper.text()).not.toContain("Os01g0822900");
+  });
+
   it("shows a wait card for Design without a finished result", () => {
     const wrapper = mountContent(
       { tool_name: "DigitalDesignAgent", content: "" },
@@ -181,6 +215,54 @@ describe("ChatMessageContent lifecycle status", () => {
     expectLifecyclePhase(wrapper, "Timed out");
     expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("Failed");
+  });
+
+  it("flushes remaining DeepGenome CoT before showing a cached file that just succeeded", async () => {
+    vi.useFakeTimers();
+    resetProgressStartedAtForTests();
+    const startedAt = Date.now();
+    const cachedFile = `# Smoc Analysis
+
+The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
+    const wrapper = mountContent(
+      {
+        tool_name: "DeepGenomeAgent",
+        status: "RUNNING",
+        content: cachedFile,
+      },
+      lifecycle("RUNNING"),
+      { progressStartedAt: startedAt }
+    );
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
+    ).toBe(false);
+
+    await wrapper.setProps({
+      message: {
+        ...wrapper.props("message"),
+        status: "SUCCEEDED",
+      },
+      lifecycle: lifecycle("SUCCEEDED"),
+      artifactPreview: {
+        title: "Finished",
+        kind: "Deep Genome Agent",
+        summary: "Decodes plant genomes for smarter breeding strategies.",
+        openLabel: "View",
+      },
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
+    ).toBe(false);
+
+    vi.advanceTimersByTime(90 * 19);
+    await nextTick();
+    expect(
+      wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
+    ).toBe(true);
+    expect(wrapper.text()).not.toContain("Smoc Analysis");
   });
 
   it("flushes remaining CoT before showing the official result", async () => {

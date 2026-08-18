@@ -1050,12 +1050,15 @@ describe("ChatInteractionV2 — behavior matrix", () => {
           "Writing the gene background"
         );
         expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+        expect(
+          wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()
+        ).toBe(false);
       } else {
         expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
+        expect(
+          wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()
+        ).toBe(true);
       }
-      expect(wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()).toBe(
-        true
-      );
       wrapper.unmount();
     }
   );

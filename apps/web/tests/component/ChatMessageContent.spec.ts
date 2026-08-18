@@ -816,7 +816,7 @@ line2\nline3`;
     expect(wrapper.text()).not.toContain("No references available.");
   });
 
-  it("renders a running partial report as a View candidate", () => {
+  it("keeps a running cached file report wait-only instead of opening View", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -825,11 +825,13 @@ line2\nline3`;
     );
 
     expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Partial report");
   });
 
-  it("keeps a running partial report in the View path when references exist", () => {
+  it("does not promote a running cached file report even when references exist", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -838,8 +840,10 @@ line2\nline3`;
       })
     );
 
-    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Partial report");
   });
 
   it.each([

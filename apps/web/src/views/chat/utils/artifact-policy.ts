@@ -202,6 +202,14 @@ export function artifactPresentationForMessage(
 
   for (const [source, candidate] of reportCandidates(message)) {
     if (isReportTextValid(toolName, candidate)) {
+      // Cached DeepGenome files can already be complete while the run is
+      // still non-terminal. Do not open View until the run finishes.
+      if (
+        kind === "deep-genome" &&
+        NON_TERMINAL_RUN_STATUSES.has(normalizedRunStatus(message))
+      ) {
+        return null;
+      }
       return { kind, report: candidate, source, identity };
     }
   }

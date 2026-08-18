@@ -494,8 +494,9 @@ export function removeDeletedChat(options: {
           :metadata="artifactAgentLabel(currentArtifactMessage)"
           :status="currentArtifactStatusLabel"
           :markdown="
-            currentArtifactPresentation?.report ??
-            String(currentArtifactMessage.content)
+            currentArtifactPresentation?.kind === 'deep-genome'
+              ? currentArtifactPresentation.report
+              : ''
           "
           :references="currentArtifactMessage.doc_list"
           :resources="currentArtifactResources"
