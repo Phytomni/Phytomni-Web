@@ -835,17 +835,29 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   const cancel = (): boolean => {
     const token = activeToken;
     const messageId = owned.messageId ?? state.value.messageId;
-    if (token && !token.cancelled && owned.activeRequestId === token.id) {
-      token.cancelled = true;
-      abortRequest(token.id);
-    } else if (!messageId) {
+    if (
+      !messageId &&
+      !(token && !token.cancelled && owned.activeRequestId === token.id)
+    ) {
       return false;
     }
     owned.generationStopped = true;
     owned.activeAgentName = "";
     syncCancelledOwner();
     if (messageId) {
-      void cancelTask(messageId).catch(() => undefined);
+      void Promise.resolve(cancelTask(messageId))
+        .catch(() => undefined)
+        .finally(() => {
+          if (token && !token.cancelled) {
+            token.cancelled = true;
+            abortRequest(token.id);
+          }
+        });
+      return true;
+    }
+    if (token && !token.cancelled) {
+      token.cancelled = true;
+      abortRequest(token.id);
     }
     return true;
   };

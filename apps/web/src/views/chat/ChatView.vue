@@ -2021,9 +2021,8 @@ const abortDialogueRequest = async (
   chatState.generationStopped = true;
 
   try {
-    if (requestId) {
-      abortRequest(requestId);
-    }
+    // Owner cancel must reach Bot before the local stream is disconnected.
+    // Aborting first settles the remote run as failed, then cancel is 409.
     const resolvedRowId =
       rowId ?? (await resolveRowIdAfterStop(dialogueId, chatState));
     if (resolvedRowId) {
@@ -2046,6 +2045,10 @@ const abortDialogueRequest = async (
           instantMessage: true,
         };
         messages.push(abortMessage);
+      }
+      // No owner row yet: disconnect so a later submit cannot keep running.
+      if (requestId) {
+        abortRequest(requestId);
       }
     }
 

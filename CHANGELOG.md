@@ -36,6 +36,9 @@ Newest first.
   do not let a later Query persist overlay a cancelled owner row.
 - Expert Knowledge and BriefGene streams omit Instant conversation envelopes
   so Bot can mint a run that owner cancel can stop.
+- After an owner row exists, Stop does not abort the in-flight Query. That
+  lets DeepGenome finish minting its Bot run so cancel can settle
+  `cancelled` instead of request-abort `failed`.
 
 ### 🧬 Research input resolution
 
