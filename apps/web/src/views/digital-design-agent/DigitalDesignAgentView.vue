@@ -261,6 +261,7 @@
               :state="displayedState"
               :progress="reportProgress"
               :updated-at="reportUpdatedAt"
+              agent-name="DigitalDesignAgent"
               ns="digital-design-agent"
               :labels="reportLabels"
               :failure-label="reportFailureLabel"

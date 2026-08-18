@@ -41,6 +41,11 @@ import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+import {
+  progressConfigFor,
+  remainingCotFlushMs,
+  rememberProgressStartedAt,
+} from "../utils/agentProgress";
 import { isRecord, isSuccessfulDataEnvelope } from "@/api/contracts";
 import {
   chatContentToText,
@@ -479,6 +484,7 @@ export function useSendMessage(opts: {
     chatState.generationStopped = false;
     chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
+    rememberProgressStartedAt(sendingDialogueId, chatState.sendStartedAt);
     chatState.activeAgentName = capturedActiveAgentName;
     chatState.completing = false;
     chatState.messageInput = "";
@@ -720,7 +726,17 @@ export function useSendMessage(opts: {
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
       if (!chatState.generationStopped) {
         chatState.completing = true;
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const elapsed =
+          chatState.sendStartedAt == null
+            ? 0
+            : Math.max(0, Date.now() - chatState.sendStartedAt);
+        const flushMs = remainingCotFlushMs(
+          elapsed,
+          progressConfigFor(chatState.activeAgentName)
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(300, flushMs))
+        );
       }
 
       // The runtime interceptor returns code 200 for decoded success envelopes;

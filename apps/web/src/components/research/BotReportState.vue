@@ -27,7 +27,7 @@
     </div>
 
     <ScientificMarkdown
-      v-if="reportText"
+      v-if="reportText && !showWaitProgress"
       :source="reportText"
       :citation-namespace="ns"
       :reference-count="referenceCount"
@@ -36,6 +36,14 @@
       data-test="bot-report-content"
       @citation-activate="emit('citation-activate', $event)"
       @resource-activate="emit('resource-activate', $event)"
+    />
+    <SendProgress
+      v-else-if="showWaitProgress"
+      :started-at="resolvedProgressStartedAt"
+      :agent-name="agentName"
+      :completing="isFlushingOfficialResult"
+      :stage-label="statusLabel"
+      @flushed="onCotFlushed"
     />
     <p
       v-else-if="
@@ -60,10 +68,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import SendProgress from "@/views/chat/components/SendProgress.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
+import { progressStartedAtFor } from "@/views/chat/utils/agentProgress";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import type {
@@ -118,6 +128,8 @@ const props = withDefaults(
     emptyReportLabel?: string;
     failureLabel?: string;
     hideActiveReport?: boolean;
+    agentName?: string;
+    progressStartedAt?: number | null;
   }>(),
   {
     progress: null,
@@ -127,6 +139,8 @@ const props = withDefaults(
     resources: () => [],
     labels: () => ({}),
     hideActiveReport: false,
+    agentName: "",
+    progressStartedAt: null,
   }
 );
 
@@ -213,6 +227,40 @@ const updatedAtLabel = computed(() =>
     : ""
 );
 
+const resolvedProgressStartedAt = computed(() =>
+  progressStartedAtFor(
+    props.state.runId || "bot-report",
+    props.progressStartedAt
+  )
+);
+const sawActiveWait = ref(false);
+const cotFlushed = ref(false);
+const isLoadingStatus = computed(() => reportStatus.value === "loading");
+watch(
+  isLoadingStatus,
+  (loading) => {
+    if (loading) {
+      sawActiveWait.value = true;
+      cotFlushed.value = false;
+    }
+  },
+  { immediate: true }
+);
+const isFlushingOfficialResult = computed(
+  () =>
+    sawActiveWait.value &&
+    reportStatus.value === "complete" &&
+    !cotFlushed.value &&
+    Boolean(reportText.value)
+);
+const showWaitProgress = computed(
+  () =>
+    (isLoadingStatus.value && !reportText.value) ||
+    isFlushingOfficialResult.value
+);
+function onCotFlushed() {
+  cotFlushed.value = true;
+}
 const progressVisible = computed(() => {
   const progress = props.progress ?? lifecycleMetadata.value.progress ?? null;
   if (!progress) return false;

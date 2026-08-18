@@ -234,6 +234,7 @@
               :state="displayedState"
               :progress="reportProgress"
               :updated-at="reportUpdatedAt"
+              agent-name="GeneNetworkAgent"
               ns="gene-network-agent"
               :labels="reportLabels"
               :empty-report-label="t('agents.geneNetwork.emptyReport')"

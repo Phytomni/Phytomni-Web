@@ -212,6 +212,7 @@ export function removeDeletedChat(options: {
                           digitalDesignImagesLoading
                         "
                         :lifecycle="agentRunLifecycleForMessage(message)"
+                        :progress-started-at="progressHintForMessage(message)"
                         @finish="() => handleMarkdownFinish(index)"
                         @open-artifact="openArtifactForMessage(message)"
                         @update:activity-expanded="
@@ -354,7 +355,11 @@ export function removeDeletedChat(options: {
            suppressed while an AG-UI stream is in flight — the placeholder already
            shows streaming content, so both would double the "is responding" cue. -->
                   <ChatMessageRow
-                    v-if="isSending && !getChatState(currentChatId).isStreaming"
+                    v-if="
+                      isSending &&
+                      !getChatState(currentChatId).isStreaming &&
+                      !hasActivePollableAssistantWait
+                    "
                     role="assistant"
                     loading
                   >
@@ -364,12 +369,7 @@ export function removeDeletedChat(options: {
                     <div
                       class="message-text loading-message phy-bubble-assistant"
                     >
-                      {{ $t("chat.ladingInner") }}
-                      <div class="loading-dots">
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                      </div>
+                      <span class="sr-only">{{ $t("chat.ladingInner") }}</span>
                       <TransferProgress
                         v-if="uploadTransfer"
                         :snapshot="uploadTransfer"
@@ -382,7 +382,11 @@ export function removeDeletedChat(options: {
                           getChatState(currentChatId).activeAgentName
                         "
                         :completing="getChatState(currentChatId).completing"
-                        :stage-label="t(progressLabelKey)"
+                        :stage-label="
+                          progressLabelKey === 'chat.progress.selectingAgent'
+                            ? t(progressLabelKey)
+                            : undefined
+                        "
                       />
                     </div>
                   </ChatMessageRow>
@@ -533,6 +537,7 @@ export function removeDeletedChat(options: {
             <BotReportState
               v-if="currentArtifactLifecycle"
               :state="currentArtifactLifecycle"
+              :agent-name="currentArtifactMessage?.tool_name || ''"
               :report="
                 currentArtifactPresentation?.kind === 'research'
                   ? currentArtifactPresentation.report
@@ -709,6 +714,7 @@ import {
 import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
+import { isPollableChatAgentTool } from "./utils/async-agent-policy";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useA2uiInteraction } from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
@@ -887,6 +893,32 @@ const progressLabelKey = computed(() =>
     ? "chat.progress.selectingAgent"
     : "chat.progress.processing"
 );
+
+const POLLABLE_WAIT_TERMINAL = new Set([
+  "SUCCEEDED",
+  "FAILED",
+  "TIMED_OUT",
+  "TIMEOUT",
+  "CANCELLED",
+  "CANCELED",
+]);
+
+const hasActivePollableAssistantWait = computed(() => {
+  const messages = currentChat.value?.messages ?? [];
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") return false;
+  if (!isPollableChatAgentTool(last.tool_name)) return false;
+  const status = (last.status ?? "").trim().toUpperCase();
+  return status === "" || !POLLABLE_WAIT_TERMINAL.has(status);
+});
+
+function progressHintForMessage(message: ChatMessage): number | null {
+  const state = getChatState(currentChatId.value);
+  const messages = currentChat.value?.messages ?? [];
+  const isLast = messages[messages.length - 1] === message;
+  if (isLast && state.sendStartedAt != null) return state.sendStartedAt;
+  return null;
+}
 
 const chatHeaderTitle = computed(() => {
   const currentTitle =
@@ -2517,15 +2549,32 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
 }
 
 // Loading animation
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .loading-message {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  width: min(28rem, 100%);
   min-height: 40px;
   background-color: var(--phy-bubble-assistant-bg);
-  padding: 12px;
-  border-radius: 8px;
-  width: 75px;
+  padding: 0;
+  border-radius: var(--phy-radius-lg);
+
+  :deep(.send-progress) {
+    width: 100%;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
 
   .loading-dots {
     display: flex;
