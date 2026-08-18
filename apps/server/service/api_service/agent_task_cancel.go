@@ -42,14 +42,11 @@ func (ps *Service) AgentTaskCancel(ctx context.Context, rowID int64, username st
 	if !validCancelRunRecord(record, row.BotRunId) {
 		return AgentTaskLifecycleDTO{}, ErrAgentTaskCancelConflict
 	}
-	if _, err := DecodeRunProjection(record); err != nil {
-		return AgentTaskLifecycleDTO{}, err
-	}
-	if err := ps.applyBotRunProjection(ctx, row, record, meta); err != nil {
-		if errors.Is(err, ErrBotProjectionConflict) {
-			return AgentTaskLifecycleDTO{}, ErrAgentTaskCancelConflict
-		}
-		return AgentTaskLifecycleDTO{}, err
+	// Bot already accepted the cancel. Merge the draft when the snapshot is
+	// well-formed, but never leave the owner row RUNNING because projection
+	// apply failed (Design archive payloads are the known case).
+	if _, decodeErr := DecodeRunProjection(record); decodeErr == nil {
+		_ = ps.applyBotRunProjection(ctx, row, record, meta)
 	}
 	if err := persistOwnerTaskCancelled(ctx, row); err != nil {
 		return AgentTaskLifecycleDTO{}, err

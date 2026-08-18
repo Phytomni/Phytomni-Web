@@ -147,6 +147,16 @@ func conversationV1Enabled(in QueryInput) bool {
 		dedicatedResearchProductSubmission(in)
 }
 
+// instantChatConversationStream is the only /v1/chat/completions path Bot
+// accepts a V1 conversation envelope on. Expert Knowledge/BriefGene streams
+// must omit the envelope or Bot returns 422 ("chat context requires instant
+// mode" / "instant context requires a ChatAgent model").
+func instantChatConversationStream(in QueryInput, slug string) bool {
+	return conversationV1Enabled(in) &&
+		strings.EqualFold(strings.TrimSpace(in.Mode), "instant") &&
+		slug == "chat"
+}
+
 func ownerAllocatedSubmissionEnabled(in QueryInput) bool {
 	return conversationV1Enabled(in) || researchOwnerAllocatedSubmission(in) ||
 		in.Surface == QuerySurfaceChat &&
@@ -1726,6 +1736,13 @@ func failV1Submission(
 	username string,
 	rowID int64,
 ) error {
+	var current model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, bot_run_id, status, bot_projection_json").
+		Where("id = ? AND user_name = ?", rowID, username).
+		Take(&current).Error; err == nil && ownerTaskAlreadyCancelled(&current) {
+		return nil
+	}
 	replacementConflict := false
 	for attempt := 0; attempt < botProjectionCASAttempts; attempt++ {
 		projection, private, currentRaw, revision, err := loadPersistedBotProjectionRow(
@@ -2718,7 +2735,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 			OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 		}
-		if conversationV1 {
+		if conversationV1 && instantChatConversationStream(in, slug) {
 			req.Conversation = submission.envelope
 		}
 		if slug == "brief_gene" {
@@ -3088,6 +3105,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		return nil, err
 	}
 	out.Id = id
+	ps.adoptOwnerCancelIfPresent(ctx, username, id, out, botRunID)
 	if conversationV1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
 		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		err := lockConversationRootMode(lockCtx, username, dialogueID)
@@ -3757,6 +3775,41 @@ func (ps *Service) persistOwnerAllocatedQuestionLog(
 		if private == nil {
 			return ErrDuplicateClientTurn
 		}
+		if ownerTaskAlreadyCancelled(&stored) {
+			updates := map[string]interface{}{}
+			if strings.TrimSpace(row.BotRunId) != "" && strings.TrimSpace(stored.BotRunId) == "" {
+				updates["bot_run_id"] = row.BotRunId
+			}
+			if strings.TrimSpace(row.Answer) != "" && strings.TrimSpace(stored.Answer) == "" {
+				updates["answer"] = row.Answer
+			}
+			if strings.TrimSpace(row.FollowUpQuestions) != "" &&
+				strings.TrimSpace(stored.FollowUpQuestions) == "" {
+				updates["follow_up_questions"] = row.FollowUpQuestions
+			}
+			if strings.TrimSpace(row.ToolName) != "" {
+				updates["tool_name"] = row.ToolName
+			}
+			if len(updates) == 0 {
+				return nil
+			}
+			result := tx.Model(&model.QuestionAgentLog{}).
+				Where(
+					"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND bot_projection_json = ?",
+					id,
+					username,
+					submission.row.DialogueId,
+					stored.BotProjectionJSON,
+				).
+				Updates(updates)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return ErrDuplicateClientTurn
+			}
+			return nil
+		}
 		replacement := private.Replacement
 		next := private.clone()
 		if replacement != nil {
@@ -4156,7 +4209,8 @@ func (ps *Service) QueryStream(
 		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 		OwnerSubject: attachmentOwnerSubject(username, in.Attachments),
 	}
-	if conversationV1 {
+	instantConversation := conversationV1 && instantChatConversationStream(in, slug)
+	if instantConversation {
 		req.Messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
 		req.Conversation = submission.envelope
 	}
@@ -4173,7 +4227,7 @@ func (ps *Service) QueryStream(
 		if err == nil {
 			break
 		}
-		if conversationV1 {
+		if instantConversation {
 			retry, retryErr := prepareV1ConversationRebuildRetry(
 				ctx,
 				username,
@@ -4247,7 +4301,7 @@ func (ps *Service) QueryStream(
 	// split token includes its original separator so the bytes reaching Web are
 	// exactly the bytes Bot sent; only the accumulator parses a copy.
 	expectedTurnID := ""
-	if conversationV1 {
+	if instantConversation {
 		expectedTurnID = submission.envelope.TurnID
 	}
 	acc := rxBot.NewAGUIAccumulator(expectedTurnID)
@@ -4333,7 +4387,7 @@ func (ps *Service) QueryStream(
 			ErrInvalidConversationStage,
 		)
 	}
-	if conversationV1 && status == statusSucceeded {
+	if instantConversation && status == statusSucceeded {
 		switch {
 		case !acc.Finished():
 			status = "FAILED"
@@ -4370,7 +4424,7 @@ func (ps *Service) QueryStream(
 	if acc.Err() != nil {
 		streamErr = nil
 	}
-	retainSubmitting := conversationV1 && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
+	retainSubmitting := instantConversation && streamErr != nil && acc.Err() == nil && !isV1DefiniteFailure(streamErr)
 
 	// Finalize the row opened above. WithoutCancel preserves request-scoped DB
 	// values while ensuring request cancellation cannot interrupt a terminal
@@ -4409,7 +4463,7 @@ func (ps *Service) QueryStream(
 		out.Status = "RUNNING"
 		return out, streamErr
 	}
-	if conversationV1 {
+	if instantConversation {
 		if status != statusSucceeded {
 			if err := failV1Submission(finalizeCtx, username, id); err != nil {
 				return nil, err
@@ -4494,6 +4548,7 @@ func (ps *Service) QueryStream(
 	if err := ps.finalizeQuestionStream(finalizeCtx, username, identity, acc.RunID(), out); err != nil {
 		return nil, err
 	}
+	ps.adoptOwnerCancelIfPresent(finalizeCtx, username, id, out, acc.RunID())
 	if streamErr != nil {
 		return out, streamErr
 	}
@@ -4583,6 +4638,13 @@ func (ps *Service) setQuestionStreamRunID(ctx context.Context, username string, 
 	if result.RowsAffected != 1 {
 		return fmt.Errorf("stream row %d not found", identity.MessageID)
 	}
+	var stored model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, bot_run_id, status, bot_projection_json").
+		Where("id = ? AND user_name = ?", identity.MessageID, username).
+		Take(&stored).Error; err == nil && ownerTaskAlreadyCancelled(&stored) {
+		ps.cancelKnownOwnerRun(ctx, runID)
+	}
 	return nil
 }
 
@@ -4593,14 +4655,27 @@ func (ps *Service) finalizeQuestionStream(
 	runID string,
 	out *QueryData,
 ) error {
+	var stored model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, bot_run_id, status, answer, bot_projection_json").
+		Where("id = ? AND user_name = ? AND dialogue_id = ?", identity.MessageID, username, identity.DialogueID).
+		Take(&stored).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("stream row %d not found", identity.MessageID)
+		}
+		return err
+	}
+	updates := map[string]interface{}{
+		"answer":              out.Answer,
+		"bot_run_id":          runID,
+		"follow_up_questions": out.FollowUpQuestions,
+	}
+	if !ownerTaskAlreadyCancelled(&stored) {
+		updates["status"] = out.Status
+	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
 		Where("id = ? AND user_name = ? AND dialogue_id = ?", identity.MessageID, username, identity.DialogueID).
-		Updates(map[string]interface{}{
-			"answer":              out.Answer,
-			"bot_run_id":          runID,
-			"follow_up_questions": out.FollowUpQuestions,
-			"status":              out.Status,
-		})
+		Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -4608,6 +4683,36 @@ func (ps *Service) finalizeQuestionStream(
 		return fmt.Errorf("stream row %d not found", identity.MessageID)
 	}
 	return nil
+}
+
+func (ps *Service) adoptOwnerCancelIfPresent(
+	ctx context.Context,
+	username string,
+	rowID int64,
+	out *QueryData,
+	runID string,
+) {
+	if out == nil || rowID <= 0 || strings.TrimSpace(username) == "" {
+		return
+	}
+	row, err := loadAgentTaskLifecycleRow(ctx, rowID, username)
+	if err != nil || !ownerTaskAlreadyCancelled(row) {
+		return
+	}
+	out.Status = "CANCELLED"
+	cancelID := strings.TrimSpace(row.BotRunId)
+	if cancelID == "" {
+		cancelID = strings.TrimSpace(runID)
+	}
+	ps.cancelKnownOwnerRun(ctx, cancelID)
+}
+
+func (ps *Service) cancelKnownOwnerRun(ctx context.Context, runID string) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" || ps.agentRunCanceller() == nil {
+		return
+	}
+	_, _, _ = ps.agentRunCanceller().CancelRunWithMeta(context.WithoutCancel(ctx), runID)
 }
 
 // splitSSEFrames is a bufio.SplitFunc that yields one SSE frame per call,

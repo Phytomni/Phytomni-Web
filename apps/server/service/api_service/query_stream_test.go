@@ -1474,6 +1474,163 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 	}
 }
 
+func TestQueryStream_ExpertChatFamilyOmitsInstantConversationEnvelope(t *testing.T) {
+	useConversationV1(t)
+	tests := []struct {
+		name          string
+		tool          string
+		model         string
+		resolveGeneID bool
+	}{
+		{name: "expert knowledge", tool: "KnowledgeAgent", model: "phyto-knowledge"},
+		{name: "expert brief gene", tool: "BriefGeneAgent", model: "phyto-brief-gene", resolveGeneID: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			var captured rxBot.ChatCompletionRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/chat/completions" {
+					t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(strings.Join([]string{
+					`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-expert-v1"}` + "\n",
+					`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"# report"}` + "\n",
+					`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-expert-v1"}` + "\n",
+				}, "\n")))
+			}))
+			t.Cleanup(srv.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: srv.URL, ProxyEnabled: true,
+				TimeoutSeconds: 5,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := streamCapableService().QueryStream(
+				context.Background(),
+				"eve@example.com",
+				QueryInput{
+					Query:        "forced report",
+					Tool:         tt.tool,
+					Mode:         "expert",
+					Surface:      QuerySurfaceChat,
+					ClientTurnID: "stream-v1-" + strings.ReplaceAll(tt.name, " ", "-"),
+				},
+				nil,
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("QueryStream error: %v", err)
+			}
+			if captured.Conversation != nil {
+				t.Fatalf("expert stream sent Instant conversation envelope: %+v", captured.Conversation)
+			}
+			if captured.Model != tt.model {
+				t.Fatalf("model = %q, want %q", captured.Model, tt.model)
+			}
+			if captured.ResolveGeneID != tt.resolveGeneID {
+				t.Fatalf("resolve_gene_id = %v, want %v", captured.ResolveGeneID, tt.resolveGeneID)
+			}
+			if out.ToolName != tt.tool || out.Status != "SUCCEEDED" {
+				t.Fatalf("stream result = %#v", out)
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row, out.Id).Error; err != nil {
+				t.Fatalf("load persisted row: %v", err)
+			}
+			if row.Status != "SUCCEEDED" || row.BotRunId != "run-expert-v1" {
+				t.Fatalf("persisted row = %#v", row)
+			}
+		})
+	}
+}
+
+func TestPersistOwnerAllocatedQuestionLogKeepsCancelled(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	projection := `{"status":"CANCELLED","report_revision":-1,"progress":{},"artifacts":{},"conversation_context":{"client_turn_id":"turn-keep","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","mode_lock_state":"provisional","settlement_state":"submission_append"}}`
+	if err := gdb.Exec(
+		`INSERT INTO question_agent_logs
+			(id, dialogue_id, user_name, query, tool_name, status, mode, bot_projection_json, bot_report_revision, reaction_type, collect_type)
+			VALUES (21, 'dlg-keep', 'eve@example.com', 'wait', 'DigitalDesignAgent', 'CANCELLED', 'expert', ?, -1, '0', '0')`,
+		projection,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	submission := &v1Submission{
+		row: model.QuestionAgentLog{
+			Id:         21,
+			DialogueId: "dlg-keep",
+			UserName:   "eve@example.com",
+		},
+	}
+	if _, err := (&Service{}).persistOwnerAllocatedQuestionLog(
+		context.Background(),
+		"eve@example.com",
+		submission,
+		&model.QuestionAgentLog{
+			DialogueId: "dlg-keep",
+			UserName:   "eve@example.com",
+			BotRunId:   "run-late",
+			Answer:     "late draft",
+			ToolName:   "DigitalDesignAgent",
+			Status:     "RUNNING",
+			Mode:       "expert",
+		},
+		true,
+	); err != nil {
+		t.Fatalf("persist: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, 21).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "CANCELLED" {
+		t.Fatalf("status overwritten to %q", row.Status)
+	}
+	if row.BotRunId != "run-late" {
+		t.Fatalf("bot_run_id=%q, want late join key", row.BotRunId)
+	}
+	if row.Answer != "late draft" {
+		t.Fatalf("answer=%q", row.Answer)
+	}
+}
+
+func TestFinalizeQuestionStreamKeepsCancelled(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	if err := gdb.Exec(
+		`INSERT INTO question_agent_logs
+			(id, dialogue_id, user_name, query, tool_name, status, mode, reaction_type, collect_type)
+			VALUES (22, 'dlg-stream', 'eve@example.com', 'wait', 'KnowledgeAgent', 'CANCELLED', 'expert', '0', '0')`,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	out := &QueryData{Answer: "streamed draft", Status: "SUCCEEDED"}
+	if err := (&Service{}).finalizeQuestionStream(
+		context.Background(),
+		"eve@example.com",
+		StreamIdentity{DialogueID: "dlg-stream", MessageID: 22},
+		"run-stream",
+		out,
+	); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, 22).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "CANCELLED" {
+		t.Fatalf("status overwritten to %q", row.Status)
+	}
+	if row.BotRunId != "run-stream" || row.Answer != "streamed draft" {
+		t.Fatalf("row=%#v", row)
+	}
+}
+
 func TestQueryStream_RequiresAdvertisedStreamingCapability(t *testing.T) {
 	tests := []struct {
 		name          string

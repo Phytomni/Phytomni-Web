@@ -255,6 +255,44 @@ func TestAgentTaskCancelBotSuccessWinsOverConcurrentSucceededSnapshot(t *testing
 	}
 }
 
+func TestAgentTaskCancelPersistsWhenProjectionApplyFails(t *testing.T) {
+	gdb := setupAgentTaskLifecycleDB(t)
+	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+		id:             19,
+		username:       "alice",
+		runID:          "run-19",
+		status:         "RUNNING",
+		answer:         "partial design draft",
+		reportRevision: 0,
+		projection:     `{"run_id":"run-19","agent":"design","status":"RUNNING","report_revision":0,"result_archive_v1":true,"delivery":{"schema_version":1,"required":true,"status":"pending","revision":1,"retryable":false}}`,
+	})
+	fake := &cancelFakeRunCanceller{
+		record: &rxBot.RunRecord{
+			RunID:  "run-19",
+			Agent:  "design",
+			Status: "cancelled",
+			Result: json.RawMessage(`{"result_archive_v1":true}`),
+		},
+	}
+	got, err := (&Service{runCanceller: fake}).AgentTaskCancel(context.Background(), 19, "alice")
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if got.Phase != "CANCELLED" || !got.Terminal {
+		t.Fatalf("lifecycle=%+v", got)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("id = ?", 19).Take(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "CANCELLED" {
+		t.Fatalf("status=%q, want CANCELLED after apply failure", row.Status)
+	}
+	if row.Answer != "partial design draft" {
+		t.Fatalf("draft wiped: %q", row.Answer)
+	}
+}
+
 func TestAgentTaskCancelMapsBotNotFoundAndConflict(t *testing.T) {
 	tests := []struct {
 		name string

@@ -32,6 +32,10 @@ Newest first.
   call the same cancel API. Already-emitted tokens stay on the same assistant
   row as a cancelled draft. Leaving a dedicated page only disconnects
   transport and does not cancel the remote job.
+- Persist CANCELLED even when the Bot cancel snapshot cannot be merged, and
+  do not let a later Query persist overlay a cancelled owner row.
+- Expert Knowledge and BriefGene streams omit Instant conversation envelopes
+  so Bot can mint a run that owner cancel can stop.
 
 ### 🧬 Research input resolution
 
