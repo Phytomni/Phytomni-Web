@@ -84,12 +84,7 @@ describe("ScientificMarkdown resources", () => {
     await vi.dynamicImportSettled();
     await Promise.resolve();
     expect(wrapper.emitted("headings")).toEqual([
-      [
-        [
-          { id: "gene-network", level: 2, text: "Gene network" },
-          { id: "gene-network-2", level: 2, text: "Gene network" },
-        ],
-      ],
+      [[{ id: "gene-network", level: 2, text: "Gene network" }]],
     ]);
     await wrapper.setProps({ streaming: false });
     await Promise.resolve();

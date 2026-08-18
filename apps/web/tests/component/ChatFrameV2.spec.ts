@@ -80,14 +80,14 @@ describe("ChatFrameV2 — production capture hooks", () => {
     expect(TRANSCRIPT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
-    expect(TRANSCRIPT_SOURCE).toContain(
-      'v-if="isSending && !getChatState(currentChatId).isStreaming"'
+    expect(TRANSCRIPT_SOURCE).toMatch(
+      /v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
       /<ChatMessageRow[\s\S]*v-for="\(message, index\) in currentChat\.messages"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
-      /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
+      /<ChatMessageRow[\s\S]*v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(/<ChatMessageRow[\s\S]*\bloading\b/);
   });
