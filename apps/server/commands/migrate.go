@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 
@@ -77,6 +78,64 @@ func addIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) er
 // addUniqueIndexIfMissing is an idempotent helper for creating a unique index.
 // addColumnIfMissing handles columns; addIndexIfMissing handles the shared
 // HasIndex guard for both unique and non-unique indexes.
+// syncDefaultRoleToolGrants writes the product default role → tool map into
+// user_tool_names. It only touches guest, user, and vip_user; other codes
+// (admin fixtures, e2e roles) stay untouched. Idempotent.
+func syncDefaultRoleToolGrants(db *gorm.DB) (int64, error) {
+	var tools []model.ToolName
+	if err := db.Find(&tools).Error; err != nil {
+		return 0, err
+	}
+	idByName := make(map[string]int64, len(tools))
+	for _, tool := range tools {
+		idByName[tool.ToolName] = tool.Id
+	}
+
+	var changed int64
+	for _, role := range []string{"guest", "user", "vip_user"} {
+		desired := rxBot.DefaultRoleToolGrants[role]
+		wanted := make(map[string]struct{}, len(desired))
+		var wantedIDs []int64
+		for _, name := range desired {
+			id, ok := idByName[name]
+			if !ok || id == 0 {
+				return changed, fmt.Errorf("default role %s missing tool_names row %q", role, name)
+			}
+			wanted[fmt.Sprintf("%d", id)] = struct{}{}
+			wantedIDs = append(wantedIDs, id)
+		}
+
+		var existing []model.UserToolName
+		if err := db.Where("code = ?", role).Find(&existing).Error; err != nil {
+			return changed, err
+		}
+		have := make(map[string]struct{}, len(existing))
+		for _, row := range existing {
+			have[row.ToolId] = struct{}{}
+			if _, ok := wanted[row.ToolId]; ok {
+				continue
+			}
+			res := db.Where("id = ? AND code = ?", row.Id, role).Delete(&model.UserToolName{})
+			if res.Error != nil {
+				return changed, res.Error
+			}
+			changed += res.RowsAffected
+		}
+		for _, id := range wantedIDs {
+			key := fmt.Sprintf("%d", id)
+			if _, ok := have[key]; ok {
+				continue
+			}
+			res := db.Create(&model.UserToolName{Code: role, ToolId: key})
+			if res.Error != nil {
+				return changed, res.Error
+			}
+			changed += res.RowsAffected
+		}
+	}
+	return changed, nil
+}
+
 func addUniqueIndexIfMissing(db *gorm.DB, model interface{}, indexName, ddl string) error {
 	return addIndexIfMissing(db, model, indexName, ddl)
 }
@@ -319,6 +378,20 @@ func Migrate() *cli.Command {
 						return err
 					}
 					rxLog.Sugar().Infow("backfill-agent-tool-names complete", "rows_affected", n)
+					return nil
+				},
+			},
+			{
+				Name:        "seed-default-role-tools",
+				Usage:       "sync guest/user/vip_user rows in user_tool_names",
+				Description: "Write the product default role grants: guest=Chat/Knowledge/Data, user=those plus Review/BriefGene, vip_user=all ten agents. Other role codes are left untouched. Idempotent.",
+				Action: func(ctx *cli.Context) error {
+					n, err := syncDefaultRoleToolGrants(model.Default())
+					if err != nil {
+						rxLog.Sugar().Errorw("seed-default-role-tools failed", "err", err)
+						return err
+					}
+					rxLog.Sugar().Infow("seed-default-role-tools complete", "rows_affected", n)
 					return nil
 				},
 			},

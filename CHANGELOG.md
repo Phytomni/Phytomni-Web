@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🔐 Default role tool grants
+
+- `user_tool_names` defaults are now guest = Chat/Knowledge/Data, user =
+  those plus Review/BriefGene, and vip_user = all ten agents. Other role
+  codes are not rewritten.
+
 ### 🐛 Expert forced-agent follow-up
 
 - An accepted Expert turn keeps the captured `selectedAgent`. A Knowledge

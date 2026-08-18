@@ -53,6 +53,36 @@ func CanonicalAgentDisplayTools() []string {
 	return append([]string(nil), CanonicalAgentDisplayOrder...)
 }
 
+// DefaultRoleToolGrants is the product default for user_tool_names.
+// Admin and super_admin are not listed: they receive every canonical tool
+// in ResolveAgentPermissions without grant rows.
+var DefaultRoleToolGrants = map[string][]string{
+	"guest": {
+		"ChatAgent",
+		"KnowledgeAgent",
+		"DataAgent",
+	},
+	"user": {
+		"ChatAgent",
+		"KnowledgeAgent",
+		"DataAgent",
+		"ReviewAgent",
+		"BriefGeneAgent",
+	},
+	"vip_user": {
+		"ChatAgent",
+		"KnowledgeAgent",
+		"DataAgent",
+		"AnalystAgent",
+		"ReviewAgent",
+		"InSilicoResearchAgent",
+		"GeneNetworkAgent",
+		"BriefGeneAgent",
+		"DeepGenomeAgent",
+		"DigitalDesignAgent",
+	},
+}
+
 const maxBotAgentDescriptors = 32
 
 // WebAgentPresence is the finite descriptor projection consumed by the Web

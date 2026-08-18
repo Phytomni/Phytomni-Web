@@ -292,7 +292,9 @@ go run main.go migrate backfill-agent-tool-names
 Before a development smoke test, inspect rather than blindly re-seed the local
 database. It must contain one row for each canonical name and no legacy alias;
 the `user_tool_names` grants remain an explicit product permission decision and
-must not be bulk-granted merely to satisfy this check. Production operators
+must not be bulk-granted merely to satisfy this check. The product defaults
+are guest = Chat/Knowledge/Data, user = those plus Review/BriefGene, and
+vip_user = all ten agents (`go run main.go migrate seed-default-role-tools`). Production operators
 must run the migrations against a verified backup and follow the rollback
 procedure for the deployed release. Never apply these statements to production
 from a developer workstation.
