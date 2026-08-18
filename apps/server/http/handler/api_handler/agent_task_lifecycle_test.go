@@ -35,7 +35,8 @@ func setupAgentTaskLifecycleHandlerDB(t *testing.T) *gorm.DB {
 		download_path TEXT,
 		image_paths TEXT,
 		bot_projection_json TEXT,
-		bot_report_revision INTEGER NOT NULL DEFAULT -1
+		bot_report_revision INTEGER NOT NULL DEFAULT -1,
+		updated_at DATETIME
 	)`).Error; err != nil {
 		t.Fatalf("create question_agent_logs: %v", err)
 	}
@@ -53,6 +54,19 @@ func lifecycleHandlerRequest(t *testing.T, handler *Handler, id, username string
 	ctx.Set("username", username)
 	i18n.Localize()(ctx)
 	handler.AgentTaskLifecycle(ctx)
+	return recorder
+}
+
+func cancelHandlerRequest(t *testing.T, handler *Handler, id, username string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/async-tasks/"+id+"/cancel?run_id=browser-run", nil)
+	ctx.Params = gin.Params{{Key: "id", Value: id}}
+	ctx.Set("username", username)
+	i18n.Localize()(ctx)
+	handler.AgentTaskCancel(ctx)
 	return recorder
 }
 
@@ -112,6 +126,77 @@ func TestAgentTaskLifecycleMissingAndCrossOwnerShareNotFoundResponse(t *testing.
 	}
 	if missing.Body.String() != foreign.Body.String() {
 		t.Fatalf("missing and cross-owner responses differ: missing=%s foreign=%s", missing.Body.String(), foreign.Body.String())
+	}
+}
+
+func TestAgentTaskCancelRejectsInvalidID(t *testing.T) {
+	setupAgentTaskLifecycleHandlerDB(t)
+	handler := NewHandler()
+
+	for _, id := range []string{"0", "-1", "abc", "9223372036854775808"} {
+		t.Run(id, func(t *testing.T) {
+			recorder := cancelHandlerRequest(t, handler, id, "alice")
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status for id %q = %d, want %d", id, recorder.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func TestAgentTaskCancelMissingAndCrossOwnerShareNotFoundResponse(t *testing.T) {
+	gdb := setupAgentTaskLifecycleHandlerDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs (id, user_name, status, answer, bot_report_revision) VALUES (61, 'bob', 'RUNNING', 'private draft', 0)`).Error; err != nil {
+		t.Fatalf("seed foreign task: %v", err)
+	}
+	handler := NewHandler()
+
+	missing := cancelHandlerRequest(t, handler, "404", "alice")
+	foreign := cancelHandlerRequest(t, handler, "61", "alice")
+	if missing.Code != http.StatusNotFound || foreign.Code != http.StatusNotFound {
+		t.Fatalf("missing=%d foreign=%d, both must be 404", missing.Code, foreign.Code)
+	}
+	if missing.Body.String() != foreign.Body.String() {
+		t.Fatalf("missing and cross-owner responses differ: missing=%s foreign=%s", missing.Body.String(), foreign.Body.String())
+	}
+}
+
+func TestAgentTaskCancelLocalDraftAndTooLateConflict(t *testing.T) {
+	gdb := setupAgentTaskLifecycleHandlerDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, status, answer, bot_report_revision) VALUES
+		(62, 'alice', 'RUNNING', 'streamed draft', 0),
+		(63, 'alice', 'SUCCEEDED', 'official report', 3)`).Error; err != nil {
+		t.Fatalf("seed cancel tasks: %v", err)
+	}
+	handler := NewHandler()
+
+	cancelled := cancelHandlerRequest(t, handler, "62", "alice")
+	if cancelled.Code != http.StatusOK {
+		t.Fatalf("local cancel status=%d body=%s", cancelled.Code, cancelled.Body.String())
+	}
+	var envelope struct {
+		Data struct {
+			Phase    string `json:"phase"`
+			Terminal bool   `json:"terminal"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(cancelled.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if envelope.Data.Phase != "CANCELLED" || !envelope.Data.Terminal {
+		t.Fatalf("envelope=%+v", envelope)
+	}
+	var answer string
+	if err := gdb.Raw("SELECT answer FROM question_agent_logs WHERE id = ?", 62).Scan(&answer).Error; err != nil {
+		t.Fatal(err)
+	}
+	if answer != "streamed draft" {
+		t.Fatalf("draft wiped: %q", answer)
+	}
+
+	tooLate := cancelHandlerRequest(t, handler, "63", "alice")
+	if tooLate.Code != http.StatusConflict {
+		t.Fatalf("succeeded cancel status=%d body=%s", tooLate.Code, tooLate.Body.String())
 	}
 }
 

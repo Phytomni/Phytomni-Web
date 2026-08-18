@@ -12,7 +12,10 @@ import (
 	"phytomni-server/model"
 )
 
-var ErrAgentTaskLifecycleNotFound = errors.New("agent task lifecycle not found")
+var (
+	ErrAgentTaskLifecycleNotFound = errors.New("agent task lifecycle not found")
+	ErrAgentTaskCancelConflict    = errors.New("agent task cancellation is no longer available")
+)
 
 const (
 	lifecycleReconciliationCached   = "CACHED"

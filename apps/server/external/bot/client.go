@@ -424,6 +424,30 @@ func (c *Client) GetRunWithMeta(ctx context.Context, runID string) (*RunRecord, 
 	return &out, meta, err
 }
 
+// CancelRun asks Bot to cancel one owner-scoped run and last-claim jobs.
+func (c *Client) CancelRun(ctx context.Context, runID string) (*RunRecord, error) {
+	response, _, err := c.CancelRunWithMeta(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// CancelRunWithMeta cancels one owner-scoped run and returns Bot metadata.
+// The response identity is persisted, so the decoder rejects duplicate keys.
+func (c *Client) CancelRunWithMeta(ctx context.Context, runID string) (*RunRecord, ResponseMeta, error) {
+	var out RunRecord
+	meta, err := c.doJSONWithMetaOptions(
+		ctx,
+		http.MethodPost,
+		"/v1/runs/"+url.PathEscape(runID)+"/cancel",
+		nil,
+		&out,
+		true,
+	)
+	return &out, meta, err
+}
+
 // RetryRunDelivery starts or observes one idempotent archive-delivery retry.
 // Bot returns only the new pending delivery revision; scientific work is not
 // resubmitted by this command.

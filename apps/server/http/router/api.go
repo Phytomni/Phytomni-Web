@@ -63,6 +63,7 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       // task list (owner-scoped)
 		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   // task status (owner-scoped)
 		apiV1Router.GET("/async-tasks/:id/lifecycle", apiHandler.AgentTaskLifecycle)    // bounded lifecycle (owner-scoped)
+		apiV1Router.POST("/async-tasks/:id/cancel", apiHandler.AgentTaskCancel)         // owner-authorized cancel
 		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog)  // analyst log
 		apiV1Router.PATCH("/async-tasks/analyst-log", apiHandler.QueryAnalystUpdateLog) // async result write-back (Bot via legacy alias /query/analyst/update_log)
 

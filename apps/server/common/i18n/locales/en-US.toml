@@ -104,6 +104,8 @@ not_admin_create = "you are not an administrator and cannot create users"
 [agent_task]
 invalid_reaction_type = "invalid reaction_type value"
 invalid_collect_type = "invalid collect_type value"
+not_found = "task not found"
+cancel_unavailable = "task cancellation is no longer available"
 
 [a2ui]
 invalid_body = "invalid body"

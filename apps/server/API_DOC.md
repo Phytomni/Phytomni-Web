@@ -212,6 +212,19 @@ No Token required to access.
   - HTTP 400: invalid path ID.
   - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
 
+#### Cancel Task
+
+- **URL**: `/api/v1/async-tasks/{id}/cancel`
+- **Method**: `POST`
+- **Authentication**: Required. The authenticated user is the task owner; a browser must not provide a Bot run ID or owner identity. The request has no body.
+- **Parameters**:
+  - `id` (positive int64, path, required): Web-owned task row ID. Non-positive, non-decimal, and overflowing values return HTTP 400.
+- **Success response**: The same bounded lifecycle envelope as `GET /async-tasks/{id}/lifecycle`. Already-emitted tokens remain on the row as a cancelled draft and are not an official report.
+- **Errors**:
+  - HTTP 400: invalid path ID.
+  - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
+  - HTTP 409: the task is already succeeded, failed, timed out, or finalizing.
+
 #### Get Analyst Log
 
 - **URL**: `/api/v1/async-tasks/{id}/analyst-log`

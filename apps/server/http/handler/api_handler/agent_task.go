@@ -69,6 +69,43 @@ func (ph *Handler) AgentTaskLifecycle(ctx *gin.Context) {
 	ctx.JSON(errs.SucResp(lifecycle))
 }
 
+// AgentTaskCancel asks Bot to stop the authenticated owner's task. The browser
+// names only the Web row id; emitted tokens stay as a cancelled draft.
+func (ph *Handler) AgentTaskCancel(ctx *gin.Context) {
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": i18n.T(ctx, "query.task_id_required"),
+		})
+		return
+	}
+	name, _ := ctx.Get("username")
+	lifecycle, err := ph.service.AgentTaskCancel(ctx, id, name.(string))
+	if err != nil {
+		if errors.Is(err, api_service.ErrAgentTaskLifecycleNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": i18n.T(ctx, "agent_task.not_found"),
+			})
+			return
+		}
+		if errors.Is(err, api_service.ErrAgentTaskCancelConflict) {
+			ctx.JSON(http.StatusConflict, gin.H{
+				"code":    http.StatusConflict,
+				"message": i18n.T(ctx, "agent_task.cancel_unavailable"),
+			})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": i18n.T(ctx, "agent_task.cancel_unavailable"),
+		})
+		return
+	}
+	ctx.JSON(errs.SucResp(lifecycle))
+}
+
 func (ph *Handler) AnalystAgentGetLog(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id")) // RESTful: task id from path /async-tasks/:id
 	name, _ := ctx.Get("username")

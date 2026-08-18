@@ -15,6 +15,10 @@ type agentRunReader interface {
 	GetRunLogs(context.Context, string) (*rxBot.RunLogsResponse, error)
 }
 
+type agentRunCanceller interface {
+	CancelRunWithMeta(context.Context, string) (*rxBot.RunRecord, rxBot.ResponseMeta, error)
+}
+
 type resultDeliveryClient interface {
 	RetryRunDelivery(context.Context, string) (*rxBot.RunDelivery, error)
 }
@@ -25,6 +29,7 @@ type agentCatalogReader interface {
 
 type Service struct {
 	runReader      agentRunReader
+	runCanceller   agentRunCanceller
 	deliveryClient resultDeliveryClient
 	catalogReader  agentCatalogReader
 }
@@ -39,6 +44,13 @@ func (ps *Service) agentCatalogReader() agentCatalogReader {
 func (ps *Service) agentRunReader() agentRunReader {
 	if ps != nil && ps.runReader != nil {
 		return ps.runReader
+	}
+	return rxBot.NewClient()
+}
+
+func (ps *Service) agentRunCanceller() agentRunCanceller {
+	if ps != nil && ps.runCanceller != nil {
+		return ps.runCanceller
 	}
 	return rxBot.NewClient()
 }

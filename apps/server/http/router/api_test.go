@@ -246,10 +246,12 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 			"GET /api/v1/async-tasks",
 			"GET /api/v1/async-tasks/:id",
 			"GET /api/v1/async-tasks/:id/lifecycle",
+			"POST /api/v1/async-tasks/:id/cancel",
 			"GET /api/v1/async-tasks/:id/analyst-log",
 		},
 		[]string{
 			"GET /api/v1/auth/async-tasks/:id/lifecycle",
+			"POST /api/v1/auth/async-tasks/:id/cancel",
 			"GET /v1/async_task/list",
 			"GET /v1/async_task/info",
 			"GET /v1/analyst/get_log",
@@ -267,6 +269,19 @@ func TestAgentTaskLifecycleRouteRequiresAuthentication(t *testing.T) {
 	engine.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated lifecycle request status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAgentTaskCancelRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/async-tasks/1/cancel", nil)
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated cancel request status = %d, want %d", response.Code, http.StatusUnauthorized)
 	}
 }
 

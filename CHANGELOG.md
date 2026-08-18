@@ -13,6 +13,16 @@ Newest first.
 
 ## [Unreleased]
 
+### 🛑 Owner-initiated task cancel
+
+- JWT owners can `POST /api/v1/async-tasks/:id/cancel`. The gateway authorizes
+  the Web row, then cancels the Bot run and last-claim jobs. The browser never
+  supplies a Bot run id.
+- Tasks without a Bot run id cancel locally. Already-emitted tokens stay on the
+  row as a cancelled draft and are not promoted to an official report.
+- Succeeded, failed, timed-out, and finalizing rows return 409. A cancelled
+  row is sticky against a later shared-fingerprint success snapshot.
+
 ### 🧬 Research input resolution
 
 - Research submissions retain one query and one Attach action while accepting

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -518,4 +519,59 @@ func TestNewClientUsesGlobalTimeout(t *testing.T) {
 	if got := client.http.Timeout; got != 17*time.Second {
 		t.Fatalf("global timeout=%s, want 17s", got)
 	}
+}
+
+func TestCancelRunUsesStrictAuthenticatedPost(t *testing.T) {
+	var gotMethod, gotEscapedPath, gotAuth, gotContentType string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotEscapedPath = r.URL.EscapedPath()
+		gotAuth = r.Header.Get("Authorization")
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"run/with space","agent":"analyst","status":"cancelled","result":{}}`))
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv.URL).CancelRun(context.Background(), "run/with space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID != "run/with space" || got.Status != "cancelled" {
+		t.Fatalf("record = %#v", got)
+	}
+	if gotMethod != http.MethodPost || gotEscapedPath != "/v1/runs/run%2Fwith%20space/cancel" {
+		t.Fatalf("request = %s %s", gotMethod, gotEscapedPath)
+	}
+	if gotAuth != "Bearer ptm_test" || gotContentType != "" || len(gotBody) != 0 {
+		t.Fatalf("headers/body auth=%q content-type=%q body=%q", gotAuth, gotContentType, gotBody)
+	}
+}
+
+func TestCancelRunRejectsDuplicateKeysAndSurfacesConflict(t *testing.T) {
+	t.Run("duplicate keys", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"run_id":"run-1","run_id":"run-2","agent":"analyst","status":"cancelled","result":{}}`))
+		}))
+		defer srv.Close()
+		if _, err := newTestClient(srv.URL).CancelRun(context.Background(), "run-1"); err == nil {
+			t.Fatal("duplicate cancel keys accepted")
+		}
+	})
+	t.Run("conflict", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":{"code":"run_state_conflict","message":"Run cancellation is no longer available.","stage":"execution","retryable":false}}`))
+		}))
+		defer srv.Close()
+		_, err := newTestClient(srv.URL).CancelRun(context.Background(), "run-1")
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict || apiErr.Code != "run_state_conflict" {
+			t.Fatalf("err=%v", err)
+		}
+	})
 }
