@@ -63,6 +63,48 @@ func seedAgentTaskLogRow(t *testing.T, id int64, username, runID, taskID, taskLo
 	}
 }
 
+func TestAgentTaskLogModernRunExtractsNestedPlatformContent(t *testing.T) {
+	seedAgentTaskLogRow(t, 80, "alice", "run-80", "", "", "RUNNING", 1)
+	fake := &agentTaskLogFakeReader{logs: &rxBot.RunLogsResponse{TaskLogs: []map[string]interface{}{
+		{"logs": []interface{}{
+			map[string]interface{}{"content": "Get conda environment finish!\n"},
+			map[string]interface{}{"content": "[MCP] Loaded 35 tool(s).\n"},
+		}},
+	}}}
+
+	value, err := (&Service{runReader: fake}).AnalystAgentGetLog(context.Background(), 80, "alice")
+	if err != nil {
+		t.Fatalf("AnalystAgentGetLog: %v", err)
+	}
+	got := decodeAgentTaskLogResponse(t, value)
+	if got.State != "AVAILABLE" || got.Source != "BOT_RUN" || got.Text != "Get conda environment finish!\n[MCP] Loaded 35 tool(s).\n" {
+		t.Fatalf("log DTO = %+v", got)
+	}
+}
+
+func TestAgentTaskLogPrefersPlatformContentOverProjectedText(t *testing.T) {
+	seedAgentTaskLogRow(t, 88, "alice", "run-88", "", "", "SUCCEEDED", 1)
+	joined := "Get conda environment finish!\n[MCP] Loaded 35 tool(s).\n"
+	fake := &agentTaskLogFakeReader{logs: &rxBot.RunLogsResponse{TaskLogs: []map[string]interface{}{
+		{
+			"text": joined,
+			"logs": []interface{}{
+				map[string]interface{}{"content": "Get conda environment finish!\n"},
+				map[string]interface{}{"content": "[MCP] Loaded 35 tool(s).\n"},
+			},
+		},
+	}}}
+
+	value, err := (&Service{runReader: fake}).AnalystAgentGetLog(context.Background(), 88, "alice")
+	if err != nil {
+		t.Fatalf("AnalystAgentGetLog: %v", err)
+	}
+	got := decodeAgentTaskLogResponse(t, value)
+	if got.Text != joined {
+		t.Fatalf("log DTO text = %q, want one join of logs[].content", got.Text)
+	}
+}
+
 func TestAgentTaskLogModernRunReturnsAllowlistedText(t *testing.T) {
 	seedAgentTaskLogRow(t, 81, "alice", "run-81", "", "", "RUNNING", 7)
 	fake := &agentTaskLogFakeReader{logs: &rxBot.RunLogsResponse{TaskLogs: []map[string]interface{}{

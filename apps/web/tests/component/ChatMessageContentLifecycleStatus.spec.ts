@@ -91,6 +91,25 @@ describe("ChatMessageContent lifecycle status", () => {
     resetProgressStartedAtForTests();
   });
 
+  it("keeps Analyst wait-only while the answer is still the task-created ack", () => {
+    const wrapper = mountContent(
+      {
+        tool_name: "AnalystAgent",
+        content:
+          "Task created successfully:a20b8246-9acc-11f1-bbb4-fa163e7f72d1",
+        status: "RUNNING",
+      },
+      lifecycle("RUNNING")
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("Task created successfully");
+    expect(wrapper.find('[data-test="scientific-markdown"]').exists()).toBe(
+      false
+    );
+  });
+
   it("shows a lifecycle status for analysis agents without image branches", () => {
     const wrapper = mountContent(
       { tool_name: "AnalystAgent" },

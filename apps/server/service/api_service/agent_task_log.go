@@ -128,6 +128,12 @@ func publicLogEntriesText(entries []map[string]interface{}) (string, bool) {
 	parts := make([]string, 0, len(entries)*5)
 	truncated := false
 	for _, entry := range entries {
+		fromLogs, clipped := publicPlatformLogContents(entry)
+		truncated = truncated || clipped
+		if fromLogs != "" {
+			parts = append(parts, fromLogs)
+			continue
+		}
 		for _, key := range []string{"status", "message", "log", "text"} {
 			part, clipped := publicLogString(entry[key])
 			if part != "" {
@@ -145,6 +151,30 @@ func publicLogEntriesText(entries []map[string]interface{}) (string, bool) {
 	}
 	text, clipped := boundedPublicLogText(strings.Join(parts, "\n"))
 	return text, truncated || clipped
+}
+
+func publicPlatformLogContents(entry map[string]interface{}) (string, bool) {
+	rawLogs, ok := entry["logs"].([]interface{})
+	if !ok {
+		return "", false
+	}
+	contents := make([]string, 0, len(rawLogs))
+	truncated := false
+	for _, item := range rawLogs {
+		mapped, isMap := item.(map[string]interface{})
+		if !isMap {
+			continue
+		}
+		part, clipped := publicLogString(mapped["content"])
+		if part != "" {
+			contents = append(contents, part)
+		}
+		truncated = truncated || clipped
+	}
+	if len(contents) == 0 {
+		return "", truncated
+	}
+	return strings.Join(contents, ""), truncated
 }
 
 func publicLogString(value interface{}) (string, bool) {

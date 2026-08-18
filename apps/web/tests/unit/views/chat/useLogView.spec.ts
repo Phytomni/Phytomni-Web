@@ -191,6 +191,38 @@ describe("useLogView", () => {
     expect(mockGetAnalystAgentLog).toHaveBeenCalledTimes(1);
   });
 
+  it("refetches a cached PENDING modern log when the disclosure opens again", async () => {
+    const message = msg({ id: "73" });
+    const state = getChatState("A");
+    state.logData["73"] = {
+      state: "PENDING",
+      source: "BOT_RUN",
+      text: "",
+      revision: 0,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
+    mockGetAnalystAgentLog.mockResolvedValue(
+      buildApiEnvelope({
+        state: "AVAILABLE",
+        source: "BOT_RUN",
+        text: "Get conda environment finish!",
+        revision: 1,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      })
+    );
+
+    const { setLogExpanded } = makeComposable();
+    await setLogExpanded(message, true);
+
+    expect(mockGetAnalystAgentLog).toHaveBeenCalledWith({ id: "73" });
+    expect(state.logData["73"]?.text).toBe("Get conda environment finish!");
+    expect(state.logData["73"]?.state).toBe("AVAILABLE");
+  });
+
   it("refreshes a material modern log only while its activity is expanded", async () => {
     const message = msg({ id: "71" });
     const state = getChatState("A");

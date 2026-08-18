@@ -121,7 +121,10 @@ export function useLogView(opts: {
       expanded;
 
     if (expanded) {
-      await fetchLogIfNeeded(rowId, chatState);
+      const cached = chatState.logData[rowId];
+      const forcePending =
+        cached?.source === "BOT_RUN" && cached.state === "PENDING";
+      await fetchLogIfNeeded(rowId, chatState, forcePending);
     }
   };
 

@@ -358,6 +358,7 @@ import {
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
 } from "../utils/artifact-policy";
+import { isApprovedReportText } from "../utils/valid-report-ledger";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -582,10 +583,8 @@ const isTerminalLifecycle = computed(
     effectiveLifecyclePhase.value === "TIMED_OUT" ||
     effectiveLifecyclePhase.value === "CANCELLED"
 );
-const hasSpecializedReport = computed(
-  () =>
-    typeof props.message.content === "string" &&
-    props.message.content.trim() !== ""
+const hasSpecializedReport = computed(() =>
+  isApprovedReportText(props.message.tool_name ?? "", props.message.content)
 );
 const activeSpecializedLifecycle = computed(
   () =>
