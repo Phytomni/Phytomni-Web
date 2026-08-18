@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Agent preview no longer blocks neighboring clicks
+
+- Expert agent hover cards flip above the chip when there is more room
+  above, instead of sliding over the chip row and case links.
+- A click that lands on the card but belongs to another chip or case
+  passes through to that control.
+
 ### 🧹 Chat console and form-field Issues
 
 - Drop the leftover `Theme initialized` boot log so a clean chat session no

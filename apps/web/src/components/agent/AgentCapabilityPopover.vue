@@ -33,6 +33,7 @@
       :style="panelStyle"
       @pointerenter="cancelScheduledClose"
       @pointerleave="scheduleClose"
+      @pointerdown.capture="onPanelPointerDownCapture"
     >
       <div class="agent-capability-popover__header">
         <h3 :id="headingId" class="agent-capability-popover__heading">
@@ -57,6 +58,7 @@
         <img
           :src="presentation.workflow.src"
           :alt="t(presentation.workflow.altKey)"
+          @load="positionPanel"
         />
       </div>
     </section>
@@ -139,6 +141,11 @@ function cancelScheduledClose() {
   closeTimer = undefined;
 }
 
+const VIEWPORT_PADDING = 16;
+const PANEL_GAP = 8;
+const UNDERLYING_CONTROL_SELECTOR =
+  "a[href], button, [role='button'], input, textarea, select";
+
 function positionPanel() {
   const root = rootRef.value;
   const panel = panelRef.value;
@@ -150,22 +157,62 @@ function positionPanel() {
   const rootRect = root.getBoundingClientRect();
   const panelRect = panel.getBoundingClientRect();
   const panelWidth = panelRect.width || panel.offsetWidth;
-  const panelHeight = panelRect.height || panel.offsetHeight;
-  if (!panelWidth || !panelHeight) return;
+  const naturalHeight = panelRect.height || panel.offsetHeight;
+  if (!panelWidth || !naturalHeight) return;
 
-  const viewportPadding = 16;
-  const panelGap = 8;
+  const spaceBelow = window.innerHeight - VIEWPORT_PADDING - rootRect.bottom;
+  const spaceAbove = rootRect.top - VIEWPORT_PADDING;
+  // Prefer the roomier side so a still-loading flowchart cannot open
+  // downward over the case links and then grow in place.
+  const placeAbove = spaceAbove > spaceBelow;
+  const available = Math.max(0, placeAbove ? spaceAbove : spaceBelow);
+  const maxHeight = Math.max(0, available - PANEL_GAP);
+  const usedHeight = Math.min(naturalHeight, maxHeight);
+  const leftSafeLeft = VIEWPORT_PADDING - rootRect.left;
   const rightSafeLeft =
-    window.innerWidth - viewportPadding - panelWidth - rootRect.left;
-  const leftSafeLeft = viewportPadding - rootRect.left;
-  const desiredTop = rootRect.height + panelGap;
-  const topSafeTop = viewportPadding - rootRect.top;
-  const bottomSafeTop =
-    window.innerHeight - viewportPadding - panelHeight - rootRect.top;
+    window.innerWidth - VIEWPORT_PADDING - panelWidth - rootRect.left;
+
   panelStyle.value = {
     left: `${Math.max(leftSafeLeft, Math.min(0, rightSafeLeft))}px`,
-    top: `${Math.max(topSafeTop, Math.min(desiredTop, bottomSafeTop))}px`,
+    top: `${placeAbove ? -usedHeight - PANEL_GAP : rootRect.height + PANEL_GAP}px`,
+    maxHeight: `${maxHeight}px`,
   };
+}
+
+function onPanelPointerDownCapture(event: PointerEvent) {
+  if (window.innerWidth < 600) return;
+  const target = event.target;
+  if (
+    !(target instanceof Element) ||
+    target.closest(".agent-capability-popover__close")
+  ) {
+    return;
+  }
+
+  const panel = panelRef.value;
+  if (!panel) return;
+
+  const previous = panel.style.pointerEvents;
+  panel.style.pointerEvents = "none";
+  const under = document.elementFromPoint(event.clientX, event.clientY);
+  panel.style.pointerEvents = previous;
+
+  if (!(under instanceof Element)) return;
+  const interactive = under.closest(UNDERLYING_CONTROL_SELECTOR);
+  if (
+    !(interactive instanceof HTMLElement) ||
+    panel.contains(interactive) ||
+    rootRef.value?.contains(interactive)
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  close();
+  queueMicrotask(() => {
+    interactive.click();
+  });
 }
 
 function handleViewportResize() {

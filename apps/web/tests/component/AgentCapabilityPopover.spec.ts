@@ -257,7 +257,12 @@ describe("AgentCapabilityPopover", () => {
       window.dispatchEvent(new Event("resize"));
       await nextTick();
 
-      expect(panel.style.top).toBe("-376px");
+      // Flip fully above the trigger (440px + 8px gap) instead of sliding
+      // the card over the chip row. The roomier side wins even when a
+      // still-loading short card would have fit below.
+      expect(panel.style.top).toBe("-448px");
+      expect(Number.parseFloat(panel.style.top) + 440).toBeLessThanOrEqual(0);
+      expect(panel.style.maxHeight).toBe("796px");
     } finally {
       Object.defineProperty(window, "innerWidth", {
         configurable: true,
@@ -266,6 +271,42 @@ describe("AgentCapabilityPopover", () => {
       Object.defineProperty(window, "innerHeight", {
         configurable: true,
         value: previousHeight,
+      });
+    }
+  });
+
+  it("forwards a click through the preview onto a covered control", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    const covered = document.createElement("button");
+    covered.type = "button";
+    covered.textContent = "Covered chip";
+    const onCoveredClick = vi.fn();
+    covered.addEventListener("click", onCoveredClick);
+    document.body.append(covered);
+
+    try {
+      const wrapper = mountPopover("DeepGenomeAgent");
+      await wrapper.get("button").trigger("focus");
+      const panel = wrapper.get('[role="dialog"]');
+      const hitTest = vi
+        .spyOn(document, "elementFromPoint")
+        .mockReturnValue(covered);
+
+      await panel.trigger("pointerdown");
+      await nextTick();
+
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(onCoveredClick).toHaveBeenCalledTimes(1);
+      hitTest.mockRestore();
+    } finally {
+      covered.remove();
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: previousWidth,
       });
     }
   });
