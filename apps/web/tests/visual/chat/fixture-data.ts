@@ -30,6 +30,7 @@ import {
   type Phase3BMessageKey,
   type Phase3CFixtureKey,
 } from "../../fixtures/chat";
+import { isWaitCotPollableKey, WAIT_COT_POLLABLE } from "./wait-cot-fixtures";
 
 /** Exact visible identity for harness and redaction scripts. */
 export const SYNTHETIC_IDENTITY = "Synthetic user";
@@ -464,6 +465,10 @@ export function buildSyntheticMessages(
 export function buildHarnessMessages(
   fixture: ChatVisualFixtureDefinition
 ): ChatMessage[] | SyntheticMessage[] {
+  if (isWaitCotPollableKey(fixture.key)) {
+    const data = WAIT_COT_POLLABLE[fixture.key];
+    return [data.user, data.message];
+  }
   if (fixture.key in AGENT_LIFECYCLE_VISUAL_DATA) {
     return [
       AGENT_LIFECYCLE_VISUAL_DATA[fixture.key as AgentLifecycleVisualFixtureKey]
@@ -825,4 +830,8 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   "send-stop": "Synthetic stop draft",
   "parallel-a": "Synthetic dialogue A draft",
   "parallel-b": "Synthetic dialogue B draft",
+  "wait-cot-chat-start": "Synthetic wait draft",
+  "wait-cot-chat-mid": "Synthetic wait draft",
+  "wait-cot-chat-flush": "Synthetic wait draft",
+  "wait-cot-knowledge-mid": "Synthetic wait draft",
 };

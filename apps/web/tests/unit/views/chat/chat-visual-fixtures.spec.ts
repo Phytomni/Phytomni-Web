@@ -558,6 +558,14 @@ describe("Chat visual fixture registry", () => {
       "send-stop",
       "parallel-a",
       "parallel-b",
+      "wait-cot-chat-start",
+      "wait-cot-chat-mid",
+      "wait-cot-chat-flush",
+      "wait-cot-knowledge-mid",
+      "wait-cot-design",
+      "wait-cot-genome",
+      "wait-cot-research",
+      "wait-cot-network-partial",
     ]);
   });
 

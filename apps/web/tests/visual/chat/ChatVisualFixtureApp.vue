@@ -285,7 +285,11 @@
                           :gene-network-images-loading="EMPTY_LOADING"
                           :digital-design-images="EMPTY_IMAGES"
                           :digital-design-images-loading="EMPTY_LOADING"
-                          :lifecycle="agentLifecycleOverlay?.lifecycle"
+                          :lifecycle="
+                            agentLifecycleOverlay?.lifecycle ??
+                            waitCotPollable?.lifecycle
+                          "
+                          :progress-started-at="waitCotProgressStartedAt"
                           :artifact-preview="
                             agentLifecycleOverlay?.artifactPreview
                           "
@@ -478,6 +482,13 @@ import {
   type ChatVisualFixtureDefinition,
 } from "./fixture-registry";
 import {
+  isWaitCotPollableKey,
+  isWaitCotSendingKey,
+  waitCotProgressProps,
+  waitCotStartedAt,
+  WAIT_COT_POLLABLE,
+} from "./wait-cot-fixtures";
+import {
   isPhase3BMessageKey,
   isPhase3CFixtureKey,
   FIXTURE_ACTIVITY_STATE_KEY,
@@ -634,11 +645,28 @@ const isA2uiLifecycleContentFixture = computed(
   () => !!props.fixture && isA2uiLifecycleFixtureKey(props.fixture.key)
 );
 
+const waitCotPollable = computed(() => {
+  const key = props.fixture?.key;
+  if (!isWaitCotPollableKey(key)) return null;
+  return WAIT_COT_POLLABLE[key];
+});
+const waitCotProgressStartedAt = computed(() => {
+  const key = props.fixture?.key;
+  if (!isWaitCotPollableKey(key)) return null;
+  return waitCotStartedAt(key, Date.now());
+});
+const waitCotSendingProgress = computed((): Phase3CProgressProps | null => {
+  const key = props.fixture?.key;
+  if (!isWaitCotSendingKey(key)) return null;
+  return waitCotProgressProps(key, Date.now());
+});
+
 const isStructuredContentFixture = computed(
   () =>
     isPhase3CContentFixture.value ||
     isA2uiLifecycleContentFixture.value ||
-    agentLifecycleOverlay.value !== null
+    agentLifecycleOverlay.value !== null ||
+    waitCotPollable.value !== null
 );
 
 const contentMessages = computed((): ChatMessage[] => {
@@ -669,7 +697,9 @@ const activityExpandedMap = computed((): Record<string, boolean> => {
 });
 
 const showProgressOverlay = computed(
-  () => phase3cOverlay.value?.kind === "progress"
+  () =>
+    phase3cOverlay.value?.kind === "progress" ||
+    waitCotSendingProgress.value !== null
 );
 const showTransferOverlay = computed(
   () => phase3cOverlay.value?.kind === "transfer"
@@ -684,6 +714,7 @@ const transferSnapshot = computed((): TransferSnapshot | null => {
 });
 
 const progressProps = computed((): Phase3CProgressProps | null => {
+  if (waitCotSendingProgress.value) return waitCotSendingProgress.value;
   const overlay = phase3cOverlay.value;
   if (!overlay || overlay.kind !== "progress" || !overlay.progress) {
     return null;
