@@ -86,6 +86,13 @@
                     {{ $t("taskManager.downloadURL") }}
                   </el-button>
                   <el-button
+                    v-if="isCancellable(row)"
+                    class="task-cancel-action"
+                    @click="handleCancel(row)"
+                  >
+                    {{ $t("taskManager.cancel") }}
+                  </el-button>
+                  <el-button
                     class="task-dialogue-action"
                     type="primary"
                     @click="handleTaskClick(row)"
@@ -128,7 +135,7 @@ import {
   PhyWorkspaceShell,
 } from "@/components/shell";
 import { PhyAsyncState, PhyErrorState, PhySkeleton } from "@/components/state";
-import { getTaskList } from "@/api/task";
+import { cancelTask, getTaskList } from "@/api/task";
 import { getChatdownloadURL } from "@/api/chat";
 import type { AsyncTaskRecord } from "@/api/types";
 import { formatDisplayDate } from "@/locales/format-display-date";
@@ -343,6 +350,22 @@ const handleDownClick = async (data: AsyncTaskRecord) => {
 const handleTaskClick = (data: AsyncTaskRecord) => {
   const url = `/chat?dialogue_id=${data.f_dialogue_id || data.dialogue_id}`;
   window.open(url, "_blank");
+};
+
+const isCancellable = (row: AsyncTaskRecord): boolean =>
+  typeof row.id === "number" &&
+  Number.isInteger(row.id) &&
+  row.id > 0 &&
+  !terminalStatuses.has(effectiveStatus(row));
+
+const handleCancel = async (row: AsyncTaskRecord) => {
+  if (!isCancellable(row) || row.id === undefined) return;
+  try {
+    await cancelTask(row.id);
+    await fetchData();
+  } catch {
+    ElMessage.error(t("taskManager.cancelFailed"));
+  }
 };
 
 const handleSizeChange = async (size: number) => {

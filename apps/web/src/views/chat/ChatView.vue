@@ -404,7 +404,7 @@ export function removeDeletedChat(options: {
                 <ChatComposer
                   ref="composerRef"
                   v-model="displayMessageInput"
-                  :is-sending="isSending"
+                  :is-sending="isSending || hasActivePollableAssistantWait"
                   v-model:chat-mode="chatMode"
                   :instant-mode-enabled="instantModeEnabled"
                   :expert-mode-enabled="expertModeEnabled"
@@ -683,7 +683,7 @@ import BotReportState from "@/components/research/BotReportState.vue";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Download, Menu } from "@element-plus/icons-vue";
-import { getHistoryQuestionList } from "@/api/chat";
+import { getAnswerCheck, getHistoryQuestionList } from "@/api/chat";
 import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
@@ -728,6 +728,11 @@ import {
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { abortRequest } from "@/utils/request";
+import { cancelTask, normalizePositiveTaskRowId } from "@/api/task";
+import {
+  applyCancelledTaskDraft,
+  resolveCancellableTaskRowId,
+} from "./composables/applyCancelledTaskDraft";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
@@ -1946,22 +1951,93 @@ const abortCurrentRequest = async () => {
   await abortDialogueRequest(dialogueId, chatState);
 };
 
+const UUID_DIALOGUE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function canonicalDialogueIdForCancel(
+  dialogueId: string,
+  chatState: ChatUIState
+): string | null {
+  const candidates = [chatState.renderedChat?.dialogue_id, dialogueId];
+  for (const value of candidates) {
+    if (typeof value === "string" && UUID_DIALOGUE_PATTERN.test(value.trim())) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+async function resolveRowIdAfterStop(
+  dialogueId: string,
+  chatState: ChatUIState
+): Promise<string | null> {
+  const immediate = resolveCancellableTaskRowId(chatState);
+  if (immediate) return immediate;
+  let serverDialogue = canonicalDialogueIdForCancel(dialogueId, chatState);
+  if (!serverDialogue) {
+    try {
+      const list = await getHistoryQuestionList();
+      const newest = list.data?.[0]?.dialogue_id;
+      if (typeof newest === "string" && UUID_DIALOGUE_PATTERN.test(newest)) {
+        serverDialogue = newest;
+      }
+    } catch {
+      return null;
+    }
+  }
+  if (!serverDialogue) return null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    const local = resolveCancellableTaskRowId(chatState);
+    if (local) return local;
+    try {
+      const history = await getAnswerCheck({ dialogue_id: serverDialogue });
+      const records = history.data ?? [];
+      for (let index = records.length - 1; index >= 0; index -= 1) {
+        try {
+          return normalizePositiveTaskRowId(records[index]?.id ?? "");
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // The row may still be committing; keep polling.
+    }
+  }
+  return resolveCancellableTaskRowId(chatState);
+}
+
 const abortDialogueRequest = async (
   dialogueId: string,
   chatState: ChatUIState
 ) => {
   const requestId = chatState.activeRequestId;
-  if (!requestId || chatState.generationStopped) return;
+  const rowId = resolveCancellableTaskRowId(chatState);
+  if (chatState.generationStopped) return;
+  if (!requestId && !rowId) return;
 
   // Claim the stop before aborting so a double click cannot race two abort
   // attempts or append duplicate local stopped rows.
   chatState.generationStopped = true;
 
   try {
-    const success = abortRequest(requestId);
-    if (success) {
-      // Local stopped row: no server message id — copy may remain; the shared
-      // capability helper keeps every server-backed action unavailable.
+    if (requestId) {
+      abortRequest(requestId);
+    }
+    const resolvedRowId =
+      rowId ?? (await resolveRowIdAfterStop(dialogueId, chatState));
+    if (resolvedRowId) {
+      try {
+        await cancelTask(resolvedRowId);
+      } catch {
+        // Keep the local cancelled draft even if the gateway is already gone.
+      }
+      applyCancelledTaskDraft(
+        chatState,
+        resolvedRowId,
+        t("chat.generationStopped")
+      );
+    } else {
       const messages = chatState.renderedChat?.messages;
       if (messages) {
         const abortMessage: ChatMessage = {
@@ -1971,16 +2047,14 @@ const abortDialogueRequest = async (
         };
         messages.push(abortMessage);
       }
+    }
 
-      chatState.uploadTransfer = null;
-      // Leave isSending + activeRequestId for the owning send finally. This
-      // serializes a same-dialogue resend until authoritative reconciliation.
+    chatState.uploadTransfer = null;
+    // Leave isSending + activeRequestId for the owning send finally. This
+    // serializes a same-dialogue resend until authoritative reconciliation.
 
-      if (currentChatId.value === dialogueId) {
-        await scrollToBottom();
-      }
-    } else {
-      chatState.generationStopped = false;
+    if (currentChatId.value === dialogueId) {
+      await scrollToBottom();
     }
   } catch (error) {
     chatState.generationStopped = false;

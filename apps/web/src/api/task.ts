@@ -53,3 +53,17 @@ export const getTaskLifecycle = (
     decodeAgentTaskLifecycle
   );
 };
+
+export const cancelTask = (
+  id: string | number
+): Promise<ApiEnvelope<AgentTaskLifecycle>> => {
+  const rowId = normalizePositiveTaskRowId(id);
+  return requestApi(
+    {
+      url: `/api/v1/async-tasks/${rowId}/cancel`,
+      method: "post",
+      suppressErrorToast: true,
+    },
+    decodeAgentTaskLifecycle
+  );
+};

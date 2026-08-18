@@ -111,6 +111,7 @@ const mocks = vi.hoisted(() => {
     uploadCapability,
     submit: vi.fn().mockResolvedValue(null),
     cancel: vi.fn(),
+    abortTransport: vi.fn(),
     reset: vi.fn(),
     load: vi.fn().mockResolvedValue([]),
     routerBack: vi.fn(),
@@ -162,6 +163,7 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
     state: mocks.state,
     submit: mocks.submit,
     cancel: mocks.cancel,
+    abortTransport: mocks.abortTransport,
     reset: mocks.reset,
   }),
 }));
@@ -1040,7 +1042,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     wrapper.unmount();
   });
 
-  it("does not offer request cancellation after Research HTTP acceptance", () => {
+  it("offers request cancellation while a Research run is active", () => {
     setActiveRun({
       phase: "running",
       projectionStatus: "RUNNING",
@@ -1048,7 +1050,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
     });
     const wrapper = mountWorkspace("InSilicoResearchAgent");
 
-    expect(wrapper.find('[data-test="research-cancel"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="research-cancel"]').exists()).toBe(true);
     expect(mocks.cancel).not.toHaveBeenCalled();
     wrapper.unmount();
   });

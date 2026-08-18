@@ -533,7 +533,6 @@ async function submitNetwork(): Promise<void> {
 }
 
 function cancelNetwork(): void {
-  remoteLifecycle.reset();
   run.cancel();
 }
 
@@ -624,7 +623,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   remoteLifecycle.dispose();
-  run.cancel();
+  run.abortTransport();
 });
 </script>
 

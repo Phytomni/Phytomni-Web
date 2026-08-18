@@ -1,6 +1,7 @@
 import { ref, type Ref } from "vue";
 import { runAgentProductAbortable } from "@/api/chat";
 import { isSuccessfulDataEnvelope } from "@/api/contracts";
+import { cancelTask } from "@/api/task";
 import { abortRequest } from "@/utils/request";
 import {
   decodeAgentResultDelivery,
@@ -499,6 +500,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     identity?: Partial<RemoteAgentRunIdentity>
   ) => void;
   cancel: () => boolean;
+  abortTransport: () => boolean;
   reset: () => void;
 } {
   const { tool, dialogueId } = options;
@@ -821,16 +823,31 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     }
   };
 
-  const cancel = (): boolean => {
+  const abortTransport = (): boolean => {
     const token = activeToken;
-    if (!token || token.cancelled || owned.activeRequestId !== token.id) {
+    if (!token || token.cancelled) {
       return false;
     }
     token.cancelled = true;
+    return abortRequest(token.id);
+  };
+
+  const cancel = (): boolean => {
+    const token = activeToken;
+    const messageId = owned.messageId ?? state.value.messageId;
+    if (token && !token.cancelled && owned.activeRequestId === token.id) {
+      token.cancelled = true;
+      abortRequest(token.id);
+    } else if (!messageId) {
+      return false;
+    }
     owned.generationStopped = true;
     owned.activeAgentName = "";
     syncCancelledOwner();
-    return abortRequest(token.id);
+    if (messageId) {
+      void cancelTask(messageId).catch(() => undefined);
+    }
+    return true;
   };
 
   const reset = (): void => {
@@ -864,5 +881,5 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     };
   };
 
-  return { state, submit, hydrate, cancel, reset };
+  return { state, submit, hydrate, cancel, abortTransport, reset };
 }

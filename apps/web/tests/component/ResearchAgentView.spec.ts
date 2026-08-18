@@ -128,6 +128,7 @@ mocks.useBotRemoteAgentRun.mockImplementation(() => ({
   submit: mocks.submit,
   hydrate: mocks.hydrate,
   cancel: mocks.cancel,
+  abortTransport: vi.fn(),
   reset: mocks.reset,
 }));
 
@@ -266,6 +267,7 @@ describe("ResearchAgentView", () => {
       submit: mocks.submit,
       hydrate: mocks.hydrate,
       cancel: mocks.cancel,
+      abortTransport: vi.fn(),
       reset: mocks.reset,
     }));
     REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;

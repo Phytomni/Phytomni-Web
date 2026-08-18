@@ -561,11 +561,7 @@ const isRunActive = computed(() =>
     displayedState.value.phase
   )
 );
-const canCancelRun = computed(() =>
-  props.tool === "InSilicoResearchAgent"
-    ? isSubmitting.value
-    : isRunActive.value
-);
+const canCancelRun = computed(() => isSubmitting.value || isRunActive.value);
 const hasRun = computed(
   () =>
     props.state !== undefined ||
@@ -844,7 +840,6 @@ async function submit(): Promise<void> {
 }
 
 function cancelRun(): void {
-  remoteLifecycle.reset();
   run.cancel();
 }
 
@@ -934,7 +929,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   remoteLifecycle.dispose();
-  run.cancel();
+  run.abortTransport();
 });
 </script>
 

@@ -848,6 +848,8 @@ export default {
       fetchDataFailed: "获取数据列表失败",
     },
     operate: "操作",
+    cancel: "取消",
+    cancelFailed: "任务已无法取消",
   },
 
   // 用户反馈

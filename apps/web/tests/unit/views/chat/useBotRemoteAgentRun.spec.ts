@@ -6,6 +6,7 @@ const mockChatQuery = vi.hoisted(() => vi.fn());
 const mockGetAnswerCheck = vi.hoisted(() => vi.fn());
 const mockGetChatdownloadURL = vi.hoisted(() => vi.fn());
 const mockAbortRequest = vi.hoisted(() => vi.fn(() => true));
+const mockCancelTask = vi.hoisted(() => vi.fn());
 const mockUseBotCapabilities = vi.hoisted(() => vi.fn());
 const mockLoadCapabilities = vi.hoisted(() => vi.fn());
 
@@ -19,6 +20,12 @@ vi.mock("@/api/chat", () => ({
 vi.mock("@/utils/request", () => ({
   default: vi.fn(),
   abortRequest: mockAbortRequest,
+}));
+
+vi.mock("@/api/task", () => ({
+  cancelTask: mockCancelTask,
+  getTaskLifecycle: vi.fn(),
+  normalizePositiveTaskRowId: (value: string | number) => String(value),
 }));
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
@@ -159,6 +166,7 @@ describe("useBotRemoteAgentRun", () => {
     mockGetAnswerCheck.mockReset();
     mockGetChatdownloadURL.mockReset();
     mockAbortRequest.mockClear();
+    mockCancelTask.mockReset();
     mockUseBotCapabilities.mockReset();
     mockLoadCapabilities.mockReset();
   });

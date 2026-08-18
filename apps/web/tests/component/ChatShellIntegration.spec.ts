@@ -442,11 +442,11 @@ describe("Chat adaptive shell integration", () => {
     const abortBlock = CHAT_SOURCE.slice(abortStart, abortEnd);
     expect(abortBlock).toContain("chatState.activeRequestId");
     expect(abortBlock).toContain("abortRequest(requestId)");
+    expect(abortBlock).toContain("cancelTask(resolvedRowId)");
+    expect(abortBlock).toContain("applyCancelledTaskDraft");
     expect(abortBlock).not.toContain("abortAllRequests");
     expect(abortBlock).toContain("generationStopped = true");
-    expect(abortBlock).toContain(
-      "if (!requestId || chatState.generationStopped) return"
-    );
+    expect(abortBlock).toContain("if (chatState.generationStopped) return");
     expect(abortBlock).not.toContain("chatState.isSending = false");
     expect(abortBlock).not.toMatch(/\bid:\s/);
 

@@ -88,6 +88,7 @@ mocks.useBotRemoteAgentRun.mockImplementation(() => ({
   submit: mocks.submit,
   hydrate: mocks.hydrate,
   cancel: mocks.cancel,
+  abortTransport: vi.fn(),
   reset: mocks.reset,
 }));
 
@@ -225,6 +226,7 @@ describe("GeneNetworkAgentView", () => {
       submit: mocks.submit,
       hydrate: mocks.hydrate,
       cancel: mocks.cancel,
+      abortTransport: vi.fn(),
       reset: mocks.reset,
     }));
     resetState();

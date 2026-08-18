@@ -715,7 +715,6 @@ async function submitDesign(): Promise<void> {
 }
 
 function cancelDesign(): void {
-  remoteLifecycle.reset();
   run.cancel();
 }
 
@@ -808,7 +807,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   remoteLifecycle.dispose();
-  run.cancel();
+  run.abortTransport();
 });
 </script>
 

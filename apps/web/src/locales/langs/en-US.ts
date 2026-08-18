@@ -864,6 +864,8 @@ export default {
       fetchDataFailed: "Failed to obtain data list",
     },
     operate: "Operate",
+    cancel: "Cancel",
+    cancelFailed: "Task cancellation is no longer available",
   },
 
   // User Feedback

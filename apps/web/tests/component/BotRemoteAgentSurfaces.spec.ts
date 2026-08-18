@@ -169,6 +169,7 @@ vi.mock("@/views/chat/composables/useBotRemoteAgentRun", () => ({
     state: mocks.state,
     submit: mocks.submit,
     cancel: mocks.cancel,
+    abortTransport: vi.fn(),
     reset: mocks.reset,
   }),
 }));
