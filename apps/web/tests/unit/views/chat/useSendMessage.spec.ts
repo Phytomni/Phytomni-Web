@@ -2946,7 +2946,7 @@ describe("useSendMessage", () => {
     }
   );
 
-  it("clears an unchanged captured forced Expert selection after synchronous acceptance", async () => {
+  it("keeps an unchanged captured forced Expert selection after synchronous acceptance", async () => {
     const state = stateFor("A");
     state.mode = "expert";
     state.selectedAgent = "DataAgent";
@@ -2967,12 +2967,12 @@ describe("useSendMessage", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    expect(state.selectedAgent).toBe("");
+    expect(state.selectedAgent).toBe("DataAgent");
     expect(state.pendingTurnId).toBeNull();
     expect(state.pendingTurnFingerprint).toBeNull();
   });
 
-  it("clears an unchanged captured forced Expert selection after accepted RUNNING response", async () => {
+  it("keeps an unchanged captured forced Expert selection after accepted RUNNING response", async () => {
     const state = stateFor("A");
     state.mode = "expert";
     state.selectedAgent = "DataAgent";
@@ -2992,9 +2992,48 @@ describe("useSendMessage", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    expect(state.selectedAgent).toBe("");
+    expect(state.selectedAgent).toBe("DataAgent");
     expect(state.pendingTurnId).toBeNull();
     expect(state.pendingTurnFingerprint).toBeNull();
+  });
+
+  it("sends the same forced Knowledge tool on an Expert follow-up turn", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "KnowledgeAgent";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "KnowledgeAgent",
+          answer: "first knowledge answer",
+          status: "SUCCEEDED",
+          id: "knowledge-first",
+        },
+      })
+    );
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    expect(state.selectedAgent).toBe("KnowledgeAgent");
+    state.messageInput = "follow-up citation question";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "KnowledgeAgent",
+          answer: "second knowledge answer",
+          status: "SUCCEEDED",
+          id: "knowledge-follow-up",
+        },
+      })
+    );
+    await sendMessage();
+
+    const followUp = queryCallAt(1, "knowledge follow-up")[0] as FormData;
+    expect(followUp.get("tool")).toBe("KnowledgeAgent");
+    expect(followUp.get("mode")).toBe("expert");
+    expect(followUp.get("query")).toBe("follow-up citation question");
+    expect(state.selectedAgent).toBe("KnowledgeAgent");
   });
 
   it.each(["PENDING", "QUEUED", "INPUT_REQUIRED"] as const)(

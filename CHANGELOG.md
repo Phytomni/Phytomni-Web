@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Expert forced-agent follow-up
+
+- An accepted Expert turn keeps the captured `selectedAgent`. A Knowledge
+  (or other forced-tool) follow-up still sends `tool=<that agent>` instead
+  of clearing back to Auto and hitting autonomous Expert routing.
+
 ### 🛑 Owner-initiated task cancel
 
 - JWT owners can `POST /api/v1/async-tasks/:id/cancel`. The gateway authorizes
@@ -22,6 +28,10 @@ Newest first.
   row as a cancelled draft and are not promoted to an official report.
 - Succeeded, failed, timed-out, and finalizing rows return 409. A cancelled
   row is sticky against a later shared-fingerprint success snapshot.
+- Composer Stop, pollable wait, dedicated agent pages, and Task Manager all
+  call the same cancel API. Already-emitted tokens stay on the same assistant
+  row as a cancelled draft. Leaving a dedicated page only disconnects
+  transport and does not cancel the remote job.
 
 ### 🧬 Research input resolution
 

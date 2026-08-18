@@ -78,7 +78,6 @@ const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
 };
-type ChatMode = ChatUIState["mode"];
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
@@ -88,20 +87,6 @@ function safeWebRequestID(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return SAFE_WEB_REQUEST_ID_PATTERN.test(normalized) ? normalized : undefined;
-}
-
-function clearCapturedSelectionAfterAcceptance(
-  chatState: ChatUIState,
-  capturedMode: ChatMode,
-  capturedSelectedAgent: string
-): void {
-  if (
-    capturedMode === "expert" &&
-    capturedSelectedAgent !== "" &&
-    chatState.selectedAgent === capturedSelectedAgent
-  ) {
-    chatState.selectedAgent = "";
-  }
 }
 
 function hasDurableRowId(value: unknown): boolean {
@@ -590,13 +575,6 @@ export function useSendMessage(opts: {
         draftFingerprint,
         durableRowId
       );
-      if (capturedMode !== "expert" || acceptedExpertResponse) {
-        clearCapturedSelectionAfterAcceptance(
-          chatState,
-          capturedMode,
-          capturedSelectedAgent
-        );
-      }
     };
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
