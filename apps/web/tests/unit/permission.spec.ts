@@ -110,10 +110,13 @@ describe("beforeEachGuard", () => {
     ).resolves.toBe("/chat");
   });
 
-  it("5: token + root path → allow navigation", async () => {
+  it("5: token + root path → replace to /chat", async () => {
     mockGetToken.mockReturnValue("tok");
     localStorage.setItem("loginStatus", "1");
-    await expect(beforeEachGuard(route("/"))).resolves.toBe(undefined);
+    await expect(beforeEachGuard(route("/"))).resolves.toEqual({
+      path: "/chat",
+      replace: true,
+    });
   });
 
   it("6: token + real route + getUserTools success → allow navigation (covers skipped S3)", async () => {

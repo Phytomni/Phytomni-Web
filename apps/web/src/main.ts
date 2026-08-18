@@ -45,13 +45,6 @@ app.use(i18n);
 // init theme
 themeStore.initTheme();
 
-// Debug logging
-console.log("Theme initialized:", {
-  theme: themeStore.theme,
-  currentTheme: themeStore.currentTheme,
-  systemTheme: themeStore.systemTheme,
-});
-
 // mount global methods
 app.config.globalProperties.download = download;
 

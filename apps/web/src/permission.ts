@@ -152,7 +152,10 @@ export async function beforeEachGuard(to: RouteLocationNormalized) {
     }
     if (to.path === "/") {
       NProgress.done();
-      return;
+      // Replace `/` instead of allowing the route redirect `/` → `/login` →
+      // `/chat`. That extra hop is what Chrome marks as a skippable history
+      // item on `/chat` when a session is already present.
+      return { path: "/chat", replace: true };
     }
     if (
       to.path === "/login" ||

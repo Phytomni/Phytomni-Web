@@ -34,8 +34,10 @@
         <span class="picker-agent-mark" aria-hidden="true">@</span>
         <div class="picker-value">
           <input
+            id="chat-agent-picker"
             ref="inputRef"
             type="text"
+            name="chat-agent"
             role="combobox"
             class="picker-combobox"
             :class="{ 'has-display-label': !open }"

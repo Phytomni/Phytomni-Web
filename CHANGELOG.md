@@ -13,6 +13,16 @@ Newest first.
 
 ## [Unreleased]
 
+### 🧹 Chat console and form-field Issues
+
+- Drop the leftover `Theme initialized` boot log so a clean chat session no
+  longer prints a debug object in the console.
+- Give the Expert agent picker an `id` and `name` so Chrome no longer reports
+  a nameless form field on `/chat`.
+- An authenticated visit to `/` now replaces directly to `/chat` instead of
+  bouncing through `/login`, which Chrome was marking as a skippable history
+  item.
+
 ### 🔐 Default role tool grants
 
 - `user_tool_names` defaults are now guest = Chat/Knowledge/Data, user =

@@ -30,6 +30,8 @@ describe("ChatAgentPicker", () => {
     const wrapper = mountPicker();
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
+    expect(combobox.attributes("id")).toBe("chat-agent-picker");
+    expect(combobox.attributes("name")).toBe("chat-agent");
     expect(combobox.attributes("aria-expanded")).toBe("false");
     expect((combobox.element as HTMLInputElement).value).toContain("Auto");
 
