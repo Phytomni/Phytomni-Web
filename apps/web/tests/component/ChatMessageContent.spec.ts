@@ -452,9 +452,26 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       route_reason_code: "ROUTER_SELECTED",
     });
 
-    expect(wrapper.get('[data-testid="routing-notice"]').text()).toMatch(
-      /Knowledge Agent|routingSelectedAgent/
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
+      "Knowledge Agent"
     );
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).not.toContain(
+      "This turn was answered by"
+    );
+  });
+
+  it("labels the wait card with the known agent before the official answer", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      tool_name: "ReviewAgent",
+      status: "RUNNING",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
+      "Review Agent"
+    );
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
   });
 
   it("hides routing notices for instant chat", () => {

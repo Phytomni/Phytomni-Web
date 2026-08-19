@@ -64,14 +64,25 @@
           v-for="(step, index) in visibleSteps"
           :key="step.key"
           class="send-progress__cot-item"
-          :data-current="index === visibleSteps.length - 1 && !allRevealed"
+          :data-current="index === currentStepIndex"
+          :aria-current="index === currentStepIndex ? 'step' : undefined"
           :data-test="
             index === visibleSteps.length - 1
               ? 'progress-cot-current'
               : undefined
           "
         >
-          {{ step.label }}{{ index === visibleSteps.length - 1 ? "..." : "" }}
+          <span class="send-progress__cot-marker" aria-hidden="true">
+            <span
+              v-if="index === currentStepIndex"
+              class="send-progress__cot-spin"
+              data-test="progress-cot-spin"
+            />
+          </span>
+          <span class="send-progress__cot-index">{{ index + 1 }}.</span>
+          <span class="send-progress__cot-copy">
+            {{ step.label }}{{ index === visibleSteps.length - 1 ? "..." : "" }}
+          </span>
         </li>
       </ol>
     </details>
@@ -213,6 +224,11 @@ const visibleSteps = computed(() =>
     label: t(key),
   }))
 );
+
+const currentStepIndex = computed(() => {
+  if (props.forceLastStage || visibleSteps.value.length === 0) return -1;
+  return visibleSteps.value.length - 1;
+});
 
 const widthPct = computed(() => {
   if (props.completing) return 100;
@@ -360,21 +376,59 @@ watch(
 }
 .send-progress__cot-list {
   margin: var(--phy-space-8) 0 0;
-  padding: 0 0 0 1.15rem;
+  padding: 0;
+  list-style: none;
 }
 .send-progress__cot-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--phy-space-8);
   color: var(--phy-color-text-secondary);
   font-size: 0.75rem;
   line-height: 1.45;
+}
+.send-progress__cot-marker {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  min-height: 1.45em;
+}
+.send-progress__cot-spin {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid
+    color-mix(in srgb, var(--phy-color-brand-blue) 28%, transparent);
+  border-top-color: var(--phy-color-brand-blue);
+  border-radius: 50%;
+  animation: send-progress-spin 0.7s linear infinite;
+}
+.send-progress__cot-index {
+  flex: none;
+  min-width: 1.35em;
+  font-variant-numeric: tabular-nums;
+}
+.send-progress__cot-copy {
+  min-width: 0;
 }
 .send-progress__cot-item[data-current="true"] {
   color: var(--phy-color-text);
   font-weight: 600;
 }
 
+@keyframes send-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .send-progress__fill {
     transition: none;
+  }
+  .send-progress__cot-spin {
+    animation: none;
   }
 }
 </style>

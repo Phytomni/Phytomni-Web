@@ -13,6 +13,15 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Wait card current step, spinner, and agent name
+
+- The live working-step row keeps a leading spinner in front of its number
+  (`[spinner] 18. …`) and stays bold through the last step until the official
+  answer replaces the wait card.
+- The assistant wait card shows the known agent name above the blue bubble.
+  Finished turns keep that name and drop the “This turn was answered by”
+  prefix.
+
 ### 🐛 Agent preview no longer blocks neighboring clicks
 
 - Expert agent hover cards flip above the chip when there is more room

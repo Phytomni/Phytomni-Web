@@ -367,6 +367,13 @@ export function removeDeletedChat(options: {
                       <el-avatar :size="36" :src="botAvatar" />
                     </template>
                     <div
+                      v-if="waitAgentLabel"
+                      class="wait-agent-label"
+                      data-testid="wait-agent-label"
+                    >
+                      {{ waitAgentLabel }}
+                    </div>
+                    <div
                       class="message-text loading-message phy-bubble-assistant"
                     >
                       <span class="sr-only">{{ $t("chat.ladingInner") }}</span>
@@ -899,6 +906,19 @@ const progressLabelKey = computed(() =>
     ? "chat.progress.selectingAgent"
     : "chat.progress.processing"
 );
+
+const waitAgentLabel = computed(() => {
+  if (progressLabelKey.value === "chat.progress.selectingAgent") return "";
+  const tool = canonicalAgentTool(
+    getChatState(currentChatId.value).activeAgentName
+  );
+  if (!tool) return "";
+  const agent =
+    locale.value === "zh-CN"
+      ? CANONICAL_AGENT_ZH_NAMES[tool]
+      : CANONICAL_AGENT_DISPLAY_NAMES[tool];
+  return t("chat.routingSelectedAgent", { agent });
+});
 
 const POLLABLE_WAIT_TERMINAL = new Set([
   "SUCCEEDED",
@@ -2637,6 +2657,13 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.wait-agent-label {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .loading-message {

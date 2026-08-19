@@ -82,23 +82,65 @@ describe("SendProgress.vue", () => {
     });
     expect(wrapper.find('[data-test="progress-cot"]').exists()).toBe(true);
     expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(1);
-    expect(wrapper.find('[data-test="progress-cot-current"]').text()).toBe(
-      "Preparing conversation context..."
-    );
+    expect(
+      wrapper
+        .find('[data-test="progress-cot-current"] .send-progress__cot-copy')
+        .text()
+    ).toBe("Preparing conversation context...");
+    expect(wrapper.find('[data-test="progress-cot-spin"]').exists()).toBe(true);
     vi.advanceTimersByTime(10_000);
     await nextTick();
     expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(2);
-    expect(wrapper.find('[data-test="progress-cot-current"]').text()).toBe(
-      "Writing the answer..."
-    );
+    expect(
+      wrapper
+        .find('[data-test="progress-cot-current"] .send-progress__cot-copy')
+        .text()
+    ).toBe("Writing the answer...");
     await wrapper.setProps({ completing: true });
     vi.advanceTimersByTime(90);
     await nextTick();
     expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(3);
-    expect(wrapper.find('[data-test="progress-cot-current"]').text()).toBe(
+    expect(
+      wrapper
+        .find('[data-test="progress-cot-current"] .send-progress__cot-copy')
+        .text()
+    ).toBe("Preparing follow-up questions...");
+    expect(wrapper.emitted("flushed")?.length).toBe(1);
+  });
+
+  it("keeps the last revealed step current with a leading spinner while still waiting", async () => {
+    const now = Date.now();
+    const { wrapper } = mountProgress({
+      startedAt: now,
+      agentName: "ChatAgent",
+      completing: false,
+    });
+    vi.advanceTimersByTime(30_000);
+    await nextTick();
+    const current = wrapper.find('[data-test="progress-cot-current"]');
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(3);
+    expect(current.attributes("data-current")).toBe("true");
+    expect(current.find('[data-test="progress-cot-spin"]').exists()).toBe(true);
+    expect(current.find(".send-progress__cot-index").text()).toBe("3.");
+    expect(current.find(".send-progress__cot-copy").text()).toBe(
       "Preparing follow-up questions..."
     );
-    expect(wrapper.emitted("flushed")?.length).toBe(1);
+    expect(wrapper.findAll('[data-test="progress-cot-spin"]')).toHaveLength(1);
+  });
+
+  it("drops the spinner after forceLastStage settles the list", async () => {
+    const { wrapper } = mountProgress({
+      startedAt: Date.now(),
+      agentName: "ChatAgent",
+      completing: false,
+      forceLastStage: true,
+    });
+    await nextTick();
+    const current = wrapper.find('[data-test="progress-cot-current"]');
+    expect(current.attributes("data-current")).toBe("false");
+    expect(wrapper.find('[data-test="progress-cot-spin"]').exists()).toBe(
+      false
+    );
   });
 
   it("shows every remaining graph step immediately when forceLastStage is set", async () => {

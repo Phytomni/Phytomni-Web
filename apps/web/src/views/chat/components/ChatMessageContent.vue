@@ -2,7 +2,7 @@
   <div
     v-if="routingNotice"
     class="routing-notice"
-    role="status"
+    :role="isRoutingFallbackNotice ? 'status' : undefined"
     data-testid="routing-notice"
   >
     {{ routingNotice }}
@@ -394,15 +394,7 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
 
-const routingNotice = computed(() => {
-  if (props.message.role !== "assistant") return "";
-  const reason = props.message.route_reason_code;
-  if (reason === "CHAT_FALLBACK") {
-    return t("chat.routingFallbackChat");
-  }
-  if (reason !== "ROUTER_SELECTED" && reason !== "EXPLICIT_SELECTION") {
-    return "";
-  }
+function routedAgentLabel(): string {
   const tool = props.message.tool_name;
   if (!tool || !(tool in CANONICAL_AGENT_ZH_NAMES)) return "";
   const agent =
@@ -410,6 +402,25 @@ const routingNotice = computed(() => {
       ? CANONICAL_AGENT_ZH_NAMES[tool as CanonicalAgentTool]
       : CANONICAL_AGENT_DISPLAY_NAMES[tool as CanonicalAgentTool];
   return t("chat.routingSelectedAgent", { agent });
+}
+
+const isRoutingFallbackNotice = computed(
+  () => props.message.route_reason_code === "CHAT_FALLBACK"
+);
+
+const routingNotice = computed(() => {
+  if (props.message.role !== "assistant") return "";
+  const reason = props.message.route_reason_code;
+  if (reason === "CHAT_FALLBACK") {
+    return t("chat.routingFallbackChat");
+  }
+  if (reason === "ROUTER_SELECTED" || reason === "EXPLICIT_SELECTION") {
+    return routedAgentLabel();
+  }
+  if (showWaitProgress.value || isFlushingOfficialResult.value) {
+    return routedAgentLabel();
+  }
+  return "";
 });
 
 // Canonical tool_name spelling: 'DeepGenomeAgent'.
