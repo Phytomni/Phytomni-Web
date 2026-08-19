@@ -9,6 +9,8 @@ import {
   progressAt,
   etaRangeFor,
   isAgentWaitPhase,
+  parseProgressStartedAt,
+  progressHintForWait,
   progressStartedAtFor,
   rememberProgressStartedAt,
   resetProgressStartedAtForTests,
@@ -149,6 +151,38 @@ describe("agentProgress", () => {
     expect(progressStartedAtFor("row-1", 1_800_000_000_000)).toBe(
       1_800_000_000_000
     );
+  });
+
+  it("parses history created_at into an epoch start time", () => {
+    expect(parseProgressStartedAt("2026-08-19T13:52:46Z")).toBe(
+      Date.parse("2026-08-19T13:52:46Z")
+    );
+    expect(parseProgressStartedAt("2026-08-19 21:52:46")).toBe(
+      Date.parse("2026-08-19T21:52:46")
+    );
+    expect(parseProgressStartedAt("")).toBeNull();
+    expect(parseProgressStartedAt("not-a-date")).toBeNull();
+  });
+
+  it("keeps live sendStartedAt and reconstructs a reload from created_at", () => {
+    const createdAt = "2026-08-19T13:52:46Z";
+    const createdMs = Date.parse(createdAt);
+    expect(
+      progressHintForWait({
+        sendStartedAt: 1_700_000_000_000,
+        createdAt,
+      })
+    ).toBe(1_700_000_000_000);
+    expect(
+      progressHintForWait({
+        sendStartedAt: null,
+        createdAt,
+      })
+    ).toBe(createdMs);
+    const elapsed = 9.34 * 3_600_000;
+    expect(
+      Math.round(progressAt(elapsed, AGENT_PROGRESS.AnalystAgent.halfLifeMs))
+    ).toBe(66);
   });
 
   it("falls back to ChatAgent config for unknown/empty agent", () => {

@@ -300,6 +300,36 @@ export function rememberProgressStartedAt(
   startedAtByKey.set(key, startedAt);
 }
 
+const MYSQL_DATETIME = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
+
+export function parseProgressStartedAt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const mysql = MYSQL_DATETIME.exec(trimmed);
+  const normalized = mysql ? `${mysql[1]}T${mysql[2]}` : trimmed;
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function progressHintForWait(input: {
+  sendStartedAt?: number | null;
+  createdAt?: unknown;
+}): number | null {
+  if (
+    typeof input.sendStartedAt === "number" &&
+    Number.isFinite(input.sendStartedAt)
+  ) {
+    return input.sendStartedAt;
+  }
+  return parseProgressStartedAt(input.createdAt);
+}
+
 export function progressStartedAtFor(
   key: string,
   hint?: number | null

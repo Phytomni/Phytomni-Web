@@ -343,7 +343,11 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
-import { isAgentWaitPhase, progressStartedAtFor } from "../utils/agentProgress";
+import {
+  isAgentWaitPhase,
+  parseProgressStartedAt,
+  progressStartedAtFor,
+} from "../utils/agentProgress";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
   CANONICAL_AGENT_ZH_NAMES,
@@ -554,7 +558,7 @@ const progressAgentName = computed(() =>
 const resolvedProgressStartedAt = computed(() =>
   progressStartedAtFor(
     props.message.id || `row-${props.index}`,
-    props.progressStartedAt
+    props.progressStartedAt ?? parseProgressStartedAt(props.message.created_at)
   )
 );
 const isWaitOnlyBody = computed(() => {

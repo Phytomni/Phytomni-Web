@@ -50,11 +50,14 @@ export function historyAssistantMetadata(
   item: Pick<
     ChatResponse,
     "artifacts" | "delivery" | "context_rebuilt" | "context_degraded"
-  >
-): Pick<ChatMessage, "artifacts" | "delivery" | "contextNotice"> {
+  > & { created_at?: string }
+): Pick<
+  ChatMessage,
+  "artifacts" | "delivery" | "contextNotice" | "created_at"
+> {
   const metadata: Pick<
     ChatMessage,
-    "artifacts" | "delivery" | "contextNotice"
+    "artifacts" | "delivery" | "contextNotice" | "created_at"
   > = {};
   if (Array.isArray(item.artifacts)) {
     metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
@@ -62,6 +65,9 @@ export function historyAssistantMetadata(
   if (item.delivery) metadata.delivery = { ...item.delivery };
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
+  if (typeof item.created_at === "string" && item.created_at.trim()) {
+    metadata.created_at = item.created_at;
+  }
   return metadata;
 }
 

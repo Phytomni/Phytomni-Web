@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Wait card keeps elapsed progress after reload
+
+- Reopening a running wait card after login or refresh reconstructs elapsed
+  time from the persisted assistant `created_at`, so the percent no longer
+  restarts at 0% while the task is still running.
+
 ### 🐛 Wait card current step, spinner, and agent name
 
 - The live working-step row keeps a leading spinner in front of its number

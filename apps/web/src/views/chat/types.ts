@@ -85,6 +85,8 @@ export interface ChatMessage {
     label: string;
   }>;
   instantMessage?: boolean;
+  /** Persisted row created_at; wait-card elapsed uses this after reload. */
+  created_at?: string;
   status?: string;
   upload_path?: string;
   download_path?: string; // download path

@@ -723,6 +723,7 @@ import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
 import { isPollableChatAgentTool } from "./utils/async-agent-policy";
+import { progressHintForWait } from "./utils/agentProgress";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useA2uiInteraction } from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
@@ -942,8 +943,10 @@ function progressHintForMessage(message: ChatMessage): number | null {
   const state = getChatState(currentChatId.value);
   const messages = currentChat.value?.messages ?? [];
   const isLast = messages[messages.length - 1] === message;
-  if (isLast && state.sendStartedAt != null) return state.sendStartedAt;
-  return null;
+  return progressHintForWait({
+    sendStartedAt: isLast ? state.sendStartedAt : null,
+    createdAt: message.created_at,
+  });
 }
 
 const chatHeaderTitle = computed(() => {

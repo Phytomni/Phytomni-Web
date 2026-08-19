@@ -211,6 +211,30 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     expect(wrapper.text()).not.toContain("Os01g0822900");
   });
 
+  it("reconstructs Analyst wait-card percent from history created_at after reload", () => {
+    vi.useFakeTimers();
+    resetProgressStartedAtForTests();
+    const now = 1_700_033_640_000;
+    vi.setSystemTime(now);
+    const createdMs = now - 9.34 * 3_600_000;
+    const wrapper = mountContent(
+      {
+        id: "171",
+        tool_name: "AnalystAgent",
+        content: "",
+        status: "RUNNING",
+        created_at: new Date(createdMs).toISOString(),
+      },
+      lifecycle("RUNNING")
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="progress-percent"]').text()).toBe("66%");
+    expect(wrapper.find(".send-progress__cot-count").text()).toMatch(
+      /7\s*\/\s*16/
+    );
+  });
+
   it("shows a wait card for Design without a finished result", () => {
     const wrapper = mountContent(
       { tool_name: "DigitalDesignAgent", content: "" },

@@ -1613,6 +1613,7 @@ describe("useSelectChat", () => {
           tool_name: "AnalystAgent",
           task_id: "ei-task-abc",
           compute_resource: "analyst-agents-small",
+          created_at: "2026-08-19T13:52:46Z",
         }),
       ])
     );
@@ -1624,6 +1625,7 @@ describe("useSelectChat", () => {
     expect(assistant.tool_name).toBe("AnalystAgent");
     expect(assistant.id).toBe("1001");
     expect(assistant.task_id).toBe("ei-task-abc");
+    expect(assistant.created_at).toBe("2026-08-19T13:52:46Z");
   });
 
   it("hydrates blank nonterminal background agents as discoverable assistant placeholders", async () => {
