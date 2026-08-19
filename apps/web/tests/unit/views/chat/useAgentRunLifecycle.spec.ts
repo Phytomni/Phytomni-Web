@@ -383,7 +383,7 @@ describe("useAgentRunLifecycle", () => {
     poller.dispose();
   });
 
-  it("pauses hidden timers and polls once immediately when visible", async () => {
+  it("keeps polling while hidden and still polls immediately when visible", async () => {
     vi.useFakeTimers();
     const document = visibilityDocument();
     const fetchLifecycle = vi.fn().mockResolvedValue(response(lifecycle()));
@@ -397,14 +397,16 @@ describe("useAgentRunLifecycle", () => {
 
     poller.watchRow("42");
     await flush();
+    expect(fetchLifecycle).toHaveBeenCalledOnce();
+
     document.setHidden(true);
     await vi.advanceTimersByTimeAsync(60000);
-    expect(fetchLifecycle).toHaveBeenCalledOnce();
-    expect(poller.snapshots.value["42"].terminal).toBe(false);
+    expect(fetchLifecycle.mock.calls.length).toBeGreaterThan(1);
 
+    const hiddenCalls = fetchLifecycle.mock.calls.length;
     document.setHidden(false);
     await flush();
-    expect(fetchLifecycle).toHaveBeenCalledTimes(2);
+    expect(fetchLifecycle.mock.calls.length).toBeGreaterThan(hiddenCalls);
     poller.dispose();
     expect(document.listenerCount()).toBe(0);
   });

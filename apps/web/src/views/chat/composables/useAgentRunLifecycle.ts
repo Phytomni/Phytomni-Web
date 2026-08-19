@@ -142,8 +142,7 @@ export function useAgentRunLifecycle(options: {
       isDisposed ||
       controller.disposed ||
       controller.terminal ||
-      controller.inFlight ||
-      isHidden()
+      controller.inFlight
     ) {
       return;
     }
@@ -153,12 +152,7 @@ export function useAgentRunLifecycle(options: {
 
   const schedule = (controller: LifecycleController, delay: number): void => {
     clearTimer(controller);
-    if (
-      isDisposed ||
-      controller.disposed ||
-      controller.terminal ||
-      isHidden()
-    ) {
+    if (isDisposed || controller.disposed || controller.terminal) {
       return;
     }
     controller.timer = scheduler.setTimeout(() => {
@@ -184,7 +178,6 @@ export function useAgentRunLifecycle(options: {
       controller.disposed ||
       controller.terminal ||
       controller.inFlight ||
-      isHidden() ||
       activeRequests >= maxConcurrent ||
       activeRows.has(controller.rowId)
     ) {
@@ -242,7 +235,7 @@ export function useAgentRunLifecycle(options: {
   };
 
   function drain(): void {
-    if (isDisposed || isHidden()) return;
+    if (isDisposed) return;
     for (const controller of queuedControllers) {
       if (activeRequests >= maxConcurrent) return;
       if (activeRows.has(controller.rowId)) continue;
@@ -296,7 +289,6 @@ export function useAgentRunLifecycle(options: {
 
   const onVisibilityChange = (): void => {
     if (isHidden()) {
-      for (const controller of controllers.values()) clearTimer(controller);
       return;
     }
     for (const controller of controllers.values()) {
