@@ -1874,6 +1874,7 @@ watch(
           lifecycle.artifact_summary.image_count,
           lifecycle.artifact_summary.output_directory_count,
           lifecycle.artifact_summary.has_report,
+          lifecycle.terminal ? "1" : "0",
         ].join(":")
       )
       .join("|");

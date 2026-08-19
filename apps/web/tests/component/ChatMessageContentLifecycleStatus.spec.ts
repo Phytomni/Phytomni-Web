@@ -110,6 +110,27 @@ describe("ChatMessageContent lifecycle status", () => {
     );
   });
 
+  it("hides the Analyst wait card when lifecycle is SUCCEEDED and history is still RUNNING", async () => {
+    const wrapper = mountContent(
+      {
+        tool_name: "AnalystAgent",
+        content:
+          "Task created successfully:a20b8246-9acc-11f1-bbb4-fa163e7f72d1",
+        status: "RUNNING",
+      },
+      lifecycle("RUNNING")
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+
+    await wrapper.setProps({ lifecycle: lifecycle("SUCCEEDED") });
+    await nextTick();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Task created successfully");
+  });
+
   it("shows a lifecycle status for analysis agents without image branches", () => {
     const wrapper = mountContent(
       { tool_name: "AnalystAgent" },
@@ -295,7 +316,8 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
       },
     });
     await nextTick();
-    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(true);
     expect(
       wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
     ).toBe(false);
@@ -334,7 +356,8 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     expect(wrapper.find('[data-test="scientific-markdown"]').exists()).toBe(
       false
     );
-    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(true);
     expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(1);
 
     vi.advanceTimersByTime(90 * 16);

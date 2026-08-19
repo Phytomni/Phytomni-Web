@@ -17,7 +17,7 @@
   <div
     v-if="showStandaloneCot"
     class="message-text phy-bubble-assistant agent-wait"
-    data-test="agent-wait"
+    :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
   >
     <div class="agent-lifecycle" role="status" aria-live="polite">
       <SendProgress
