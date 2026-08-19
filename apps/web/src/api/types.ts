@@ -292,6 +292,13 @@ export interface AgentArtifactSummary {
   has_report: boolean;
 }
 
+export interface AgentTaskChild {
+  ordinal: number;
+  phase: "PREPARING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  kind: string;
+  error_code: string | null;
+}
+
 export interface AgentTaskLifecycle {
   id: number;
   phase: AgentRunPhase;
@@ -303,6 +310,7 @@ export interface AgentTaskLifecycle {
   reconciliation: AgentReconciliation;
   tracking_degraded: boolean;
   delivery?: AgentResultDelivery;
+  children?: AgentTaskChild[];
   error_code: "bot_transport_failed" | "run_contract_invalid" | null;
 }
 
@@ -492,6 +500,14 @@ const AGENT_RECONCILIATIONS = new Set<AgentReconciliation>([
   "CACHED",
   "DEGRADED",
 ]);
+const AGENT_CHILD_PHASES = new Set<AgentTaskChild["phase"]>([
+  "PREPARING",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+]);
+const AGENT_CHILD_TOKEN_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 const AGENT_LIFECYCLE_ERROR_CODES = new Set<
   NonNullable<AgentTaskLifecycle["error_code"]>
 >(["bot_transport_failed", "run_contract_invalid"]);
@@ -664,7 +680,8 @@ export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
   if (
     lifecycleKeys.some((key) => !hasOwn(value, key)) ||
     Object.keys(value).some(
-      (key) => !lifecycleKeys.includes(key) && key !== "delivery"
+      (key) =>
+        !lifecycleKeys.includes(key) && key !== "delivery" && key !== "children"
     )
   ) {
     invalid(label);
@@ -742,7 +759,56 @@ export function decodeAgentTaskLifecycle(value: unknown): AgentTaskLifecycle {
   if (hasOwn(value, "delivery")) {
     result.delivery = decodeAgentResultDelivery(value.delivery);
   }
+  if (hasOwn(value, "children")) {
+    result.children = decodeAgentTaskChildren(value.children);
+  }
   return result;
+}
+
+function decodeAgentTaskChildren(value: unknown): AgentTaskChild[] {
+  const label = "agent task lifecycle";
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > MAX_AGENT_TASK_COUNT
+  ) {
+    invalid(label);
+  }
+  const seenOrdinals = new Set<number>();
+  return value.map((item) => {
+    if (!isRecord(item)) invalid(label);
+    requireExactKeys(item, ["ordinal", "phase", "kind", "error_code"], label);
+    const ordinal = requiredSafeInteger(item, "ordinal", label);
+    if (
+      ordinal < 1 ||
+      ordinal > MAX_AGENT_TASK_COUNT ||
+      seenOrdinals.has(ordinal)
+    ) {
+      invalid(label);
+    }
+    seenOrdinals.add(ordinal);
+    if (typeof item.kind !== "string") invalid(label);
+    if (item.kind !== "" && !AGENT_CHILD_TOKEN_PATTERN.test(item.kind)) {
+      invalid(label);
+    }
+    let errorCode: string | null = null;
+    if (item.error_code === null) {
+      errorCode = null;
+    } else if (
+      typeof item.error_code === "string" &&
+      AGENT_CHILD_TOKEN_PATTERN.test(item.error_code)
+    ) {
+      errorCode = item.error_code;
+    } else {
+      invalid(label);
+    }
+    return {
+      ordinal,
+      phase: requiredAllowedString(item, "phase", AGENT_CHILD_PHASES, label),
+      kind: item.kind,
+      error_code: errorCode,
+    };
+  });
 }
 
 export function decodeAnalystAgentLog(value: unknown): AnalystAgentLog {

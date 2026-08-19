@@ -124,6 +124,43 @@ describe("agent lifecycle decoding", () => {
     expect(decodeAgentTaskLifecycle(lifecycle)).toEqual(lifecycle);
   });
 
+  it("accepts bounded children and rejects child identities", () => {
+    const withChildren = {
+      ...lifecycle,
+      child_task_count: 2,
+      child_work_accepted: true,
+      children: [
+        {
+          ordinal: 1,
+          phase: "SUCCEEDED",
+          kind: "protein_structure_analysis",
+          error_code: null,
+        },
+        {
+          ordinal: 2,
+          phase: "FAILED",
+          kind: "promoter_analysis",
+          error_code: "input_rejected",
+        },
+      ],
+    };
+    expect(decodeAgentTaskLifecycle(withChildren)).toEqual(withChildren);
+    expect(() =>
+      decodeAgentTaskLifecycle({
+        ...withChildren,
+        children: [
+          {
+            ordinal: 1,
+            phase: "RUNNING",
+            kind: "analyst",
+            error_code: null,
+            id: "child-secret",
+          },
+        ],
+      })
+    ).toThrow("Invalid agent task lifecycle");
+  });
+
   it.each(["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"])(
     "accepts canonical terminal phase %s",
     (phase) => {
@@ -256,6 +293,53 @@ describe("agent lifecycle decoding", () => {
     ["string ID", { id: "42" }],
     ["Bot run field", { run_id: "bot-secret" }],
     ["child identity field", { child_ids: ["child-secret"] }],
+    ["empty children", { children: [] }],
+    [
+      "duplicate child ordinal",
+      {
+        children: [
+          {
+            ordinal: 1,
+            phase: "RUNNING",
+            kind: "analyst",
+            error_code: null,
+          },
+          {
+            ordinal: 1,
+            phase: "FAILED",
+            kind: "design",
+            error_code: null,
+          },
+        ],
+      },
+    ],
+    [
+      "child identity on row",
+      {
+        children: [
+          {
+            ordinal: 1,
+            phase: "RUNNING",
+            kind: "analyst",
+            error_code: null,
+            id: "child-secret",
+          },
+        ],
+      },
+    ],
+    [
+      "unsupported child phase",
+      {
+        children: [
+          {
+            ordinal: 1,
+            phase: "FINALIZING",
+            kind: "analyst",
+            error_code: null,
+          },
+        ],
+      },
+    ],
     ["path field", { path: "/internal/path" }],
     ["report text field", { report: "private report" }],
   ])("rejects %s", (_label, overrides) => {

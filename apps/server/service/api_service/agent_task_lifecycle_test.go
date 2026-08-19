@@ -587,6 +587,72 @@ func TestAgentTaskLifecycleHidesAbsentAndForeignRows(t *testing.T) {
 	}
 }
 
+func TestAgentTaskLifecycleProjectsChildrenWithoutIdentities(t *testing.T) {
+	t.Run("projects children without identities", func(t *testing.T) {
+		gdb := setupAgentTaskLifecycleDB(t)
+		seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+			id: 11, username: "alice", runID: "run-children", status: "RUNNING", reportRevision: -1,
+		})
+		rec := &rxBot.RunRecord{
+			RunID:   "run-children",
+			Agent:   "design",
+			Status:  "running",
+			TaskIDs: []string{"child-secret-1", "child-secret-2"},
+			Result:  json.RawMessage(`{"execution":{"tasks":[{"id":"child-secret-1","accepted":true,"status":"succeeded","kind":"protein_structure_analysis","error_code":null},{"id":"child-secret-2","accepted":false,"status":"failed","kind":"promoter_analysis","error_code":"input_rejected"}]}}`),
+		}
+		fake := &lifecycleFakeRunReader{record: rec}
+
+		got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 11, "alice")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Children) != 2 {
+			t.Fatalf("children=%v", got.Children)
+		}
+		if got.Children[0].Ordinal != 1 || got.Children[0].Phase != "SUCCEEDED" {
+			t.Fatalf("child0=%v", got.Children[0])
+		}
+		if got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
+			t.Fatalf("child1=%v", got.Children[1])
+		}
+		assertLifecycleJSONIsMinimized(t, got, []string{"child-secret-1", "child-secret-2", "run-children"})
+	})
+
+	t.Run("cached projection keeps children when Bot is unreachable", func(t *testing.T) {
+		gdb := setupAgentTaskLifecycleDB(t)
+		errorCode := "input_rejected"
+		stored, err := marshalPersistedProjection(BotRunProjection{
+			RunID: "run-cached-children", Agent: "design", Status: "SUCCEEDED", ChildTaskCount: 2, ReportRevision: 4,
+			Children: []BotRunChild{
+				{Ordinal: 1, Phase: "SUCCEEDED", Kind: "protein_structure_analysis"},
+				{Ordinal: 2, Phase: "FAILED", Kind: "promoter_analysis", ErrorCode: &errorCode},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal stored projection: %v", err)
+		}
+		seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+			id: 12, username: "alice", runID: "run-cached-children", status: "SUCCEEDED", projection: stored, reportRevision: 4,
+		})
+		fake := &lifecycleFakeRunReader{err: errors.New("cached children must not poll")}
+
+		got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 12, "alice")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Reconciliation != "CACHED" || fake.calls != 0 {
+			t.Fatalf("lifecycle=%+v calls=%d, want cached without polling", got, fake.calls)
+		}
+		if len(got.Children) != 2 || got.Children[0].Phase != "SUCCEEDED" {
+			t.Fatalf("cached children=%v", got.Children)
+		}
+		if got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
+			t.Fatalf("cached child1=%v", got.Children[1])
+		}
+		assertLifecycleJSONIsMinimized(t, got, []string{"child-secret-1", "run-cached-children"})
+	})
+}
+
 func TestAgentTaskLifecycleMarshalsOnlyBoundedArtifactSummary(t *testing.T) {
 	t.Run("projection artifacts", func(t *testing.T) {
 		gdb := setupAgentTaskLifecycleDB(t)

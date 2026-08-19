@@ -39,7 +39,16 @@ type AgentTaskLifecycleDTO struct {
 	Reconciliation    string                      `json:"reconciliation"`
 	TrackingDegraded  bool                        `json:"tracking_degraded"`
 	Delivery          *AgentTaskDeliveryDTO       `json:"delivery,omitempty"`
+	Children          []AgentTaskChildDTO         `json:"children,omitempty"`
 	ErrorCode         *string                     `json:"error_code"`
+}
+
+// AgentTaskChildDTO exposes one bounded child without Bot identities.
+type AgentTaskChildDTO struct {
+	Ordinal   int     `json:"ordinal"`
+	Phase     string  `json:"phase"`
+	Kind      string  `json:"kind"`
+	ErrorCode *string `json:"error_code"`
 }
 
 // AgentTaskDeliveryDTO exposes only browser-renderable delivery state. Storage
@@ -128,7 +137,8 @@ func rowIsTerminal(status string) bool {
 
 func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, errorCode *string) AgentTaskLifecycleDTO {
 	projection := lifecycleStoredProjection(row)
-	childCount := boundedLifecycleCount(projection.ChildTaskCount)
+	children := lifecycleChildren(projection.Children)
+	childCount := lifecycleChildTaskCount(projection.ChildTaskCount, len(children))
 	phase, terminal := lifecyclePhase(lifecycleScientificStatus(row, projection), projection.WorkStage)
 	phase, terminal = lifecycleDeliveryPhase(phase, terminal, projection)
 
@@ -147,6 +157,7 @@ func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, err
 		Reconciliation:    reconciliation,
 		TrackingDegraded:  projection.TrackingDegraded,
 		Delivery:          agentTaskDeliveryDTO(projection),
+		Children:          children,
 		ErrorCode:         errorCode,
 	}
 }
@@ -292,6 +303,37 @@ func boundedLifecycleCount(value int) int {
 		return lifecycleArtifactLimit
 	}
 	return value
+}
+
+func lifecycleChildTaskCount(storedCount, childCount int) int {
+	return boundedLifecycleCount(projectionChildTaskCount(storedCount, childCount))
+}
+
+func lifecycleChildren(children []BotRunChild) []AgentTaskChildDTO {
+	if len(children) == 0 {
+		return nil
+	}
+	if len(children) > lifecycleArtifactLimit {
+		children = children[:lifecycleArtifactLimit]
+	}
+	out := make([]AgentTaskChildDTO, len(children))
+	for i, child := range children {
+		out[i] = AgentTaskChildDTO{
+			Ordinal:   child.Ordinal,
+			Phase:     child.Phase,
+			Kind:      child.Kind,
+			ErrorCode: cloneLifecycleErrorCode(child.ErrorCode),
+		}
+	}
+	return out
+}
+
+func cloneLifecycleErrorCode(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	code := *value
+	return &code
 }
 
 func lifecycleErrorCode(code string) *string {

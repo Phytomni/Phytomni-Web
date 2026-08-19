@@ -27,6 +27,15 @@ const INITIAL_DELAY = 1000;
 const MAX_NORMAL_DELAY = 15000;
 const MAX_FAILURE_DELAY = 30000;
 
+function childrenSignature(lifecycle: AgentTaskLifecycle): string {
+  return (lifecycle.children ?? [])
+    .map(
+      (child) =>
+        `${child.ordinal}:${child.phase}:${child.kind}:${child.error_code ?? ""}`
+    )
+    .join("|");
+}
+
 function materialChanged(
   previous: AgentTaskLifecycle | undefined,
   next: AgentTaskLifecycle
@@ -48,7 +57,8 @@ function materialChanged(
       next.artifact_summary.image_count ||
     previous.artifact_summary.output_directory_count !==
       next.artifact_summary.output_directory_count ||
-    previous.artifact_summary.has_report !== next.artifact_summary.has_report
+    previous.artifact_summary.has_report !== next.artifact_summary.has_report ||
+    childrenSignature(previous) !== childrenSignature(next)
   );
 }
 
@@ -315,7 +325,9 @@ export function useAgentRunLifecycle(options: {
   };
 
   return {
-    snapshots: readonly(snapshots),
+    snapshots: readonly(snapshots) as Readonly<
+      Ref<Record<string, AgentTaskLifecycle>>
+    >,
     watchRow,
     unwatchRow,
     pollNow,

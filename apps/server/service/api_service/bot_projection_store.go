@@ -33,6 +33,7 @@ type persistedProjection struct {
 	Status               string                        `json:"status,omitempty"`
 	WorkStage            string                        `json:"work_stage,omitempty"`
 	ChildTaskCount       int                           `json:"child_task_count,omitempty"`
+	Children             []BotRunChild                 `json:"children,omitempty"`
 	ReportStage          string                        `json:"report_stage,omitempty"`
 	ReportCompleteness   string                        `json:"report_completeness,omitempty"`
 	ReportRevision       int64                         `json:"report_revision"`
@@ -444,6 +445,9 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if incoming.ChildTaskCount > dst.ChildTaskCount {
 		dst.ChildTaskCount = incoming.ChildTaskCount
 	}
+	if len(incoming.Children) > 0 {
+		dst.Children = cloneBotRunChildren(incoming.Children)
+	}
 	if strings.TrimSpace(incoming.ReportStage) != "" {
 		dst.ReportStage = incoming.ReportStage
 	}
@@ -551,6 +555,7 @@ func cloneBotRunProjection(in BotRunProjection) BotRunProjection {
 		out.ReportUpdatedAt = &t
 	}
 	out.Failures = append([]string(nil), in.Failures...)
+	out.Children = cloneBotRunChildren(in.Children)
 	out.Artifacts.Directories = append([]string(nil), in.Artifacts.Directories...)
 	out.Artifacts.OutputDirs = append([]string(nil), in.Artifacts.OutputDirs...)
 	out.Artifacts.Paths = append([]string(nil), in.Artifacts.Paths...)
@@ -590,6 +595,7 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 		Status:             projection.Status,
 		WorkStage:          workStage,
 		ChildTaskCount:     projection.ChildTaskCount,
+		Children:           cloneBotRunChildren(projection.Children),
 		ReportStage:        projection.ReportStage,
 		ReportCompleteness: projection.ReportCompleteness,
 		ReportRevision:     projection.ReportRevision,
@@ -647,6 +653,7 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 		Status:             stored.Status,
 		WorkStage:          workStage,
 		ChildTaskCount:     stored.ChildTaskCount,
+		Children:           cloneBotRunChildren(stored.Children),
 		ReportStage:        stored.ReportStage,
 		ReportCompleteness: stored.ReportCompleteness,
 		ReportRevision:     stored.ReportRevision,

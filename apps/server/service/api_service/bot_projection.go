@@ -31,7 +31,19 @@ const (
 	maxInteropMetadataEntries   = 16
 )
 
-var interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+var (
+	interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+	childTokenPattern              = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+)
+
+// BotRunChild is the bounded, identity-free child snapshot retained on a run
+// projection. Child task ids never cross this type.
+type BotRunChild struct {
+	Ordinal   int     `json:"ordinal"`
+	Phase     string  `json:"phase"`
+	Kind      string  `json:"kind"`
+	ErrorCode *string `json:"error_code"`
+}
 
 // InteropProvenance is the Web-owned explanation of how a research/design
 // request was executed. It intentionally contains only bounded, allowlisted
@@ -82,16 +94,17 @@ type ProjectionDelivery struct {
 }
 
 // BotRunProjection is the Web-owned, sanitized lifecycle snapshot. It never
-// carries Bot's raw result, SQL, credentials, child task payloads, or provider
-// diagnostics. RawPayload exists only as a nil compatibility sentinel for
-// older callers that asserted raw state was absent; DecodeRunProjection never
-// assigns it.
+// carries Bot's raw result, SQL, credentials, child task identities, or
+// provider diagnostics. RawPayload exists only as a nil compatibility sentinel
+// for older callers that asserted raw state was absent; DecodeRunProjection
+// never assigns it.
 type BotRunProjection struct {
 	RunID                string
 	Agent                string
 	Status               string
 	WorkStage            string
 	ChildTaskCount       int
+	Children             []BotRunChild
 	ReportStage          string
 	ReportCompleteness   string
 	ReportRevision       int64
@@ -207,7 +220,8 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	projection.ChildTaskCount = len(record.TaskIDs)
+	projection.Children = decodeBotRunChildren(envelope.Execution)
+	projection.ChildTaskCount = projectionChildTaskCount(len(record.TaskIDs), len(projection.Children))
 	projection.WorkStage = sanitizeRunWorkStage(record.Stage)
 	projection.TrackingDegraded = projection.TrackingDegraded || record.DegradedTracking
 	return normalizeCompletedReviewProjection(projection), nil
@@ -269,11 +283,13 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
 	}
 
+	children := decodeBotRunChildren(response.Result.Execution)
 	projection := BotRunProjection{
 		RunID:            runID,
 		Agent:            agent,
 		Status:           status,
-		ChildTaskCount:   len(response.TaskIDs),
+		ChildTaskCount:   projectionChildTaskCount(len(response.TaskIDs), len(children)),
+		Children:         children,
 		ReportRevision:   -1,
 		TrackingDegraded: trackingDegraded,
 		Artifacts: ProjectionArtifacts{
@@ -964,4 +980,113 @@ func validProjectionCompleteness(value string) bool {
 	default:
 		return false
 	}
+}
+
+type botRunChildWire struct {
+	Status    string          `json:"status"`
+	Kind      string          `json:"kind"`
+	ErrorCode json.RawMessage `json:"error_code"`
+}
+
+func decodeBotRunChildren(execution json.RawMessage) []BotRunChild {
+	trimmed := bytes.TrimSpace(execution)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var envelope struct {
+		Tasks json.RawMessage `json:"tasks"`
+	}
+	if err := json.Unmarshal(trimmed, &envelope); err != nil {
+		return nil
+	}
+	tasksRaw := bytes.TrimSpace(envelope.Tasks)
+	if len(tasksRaw) == 0 || bytes.Equal(tasksRaw, []byte("null")) {
+		return nil
+	}
+	var wires []botRunChildWire
+	if err := json.Unmarshal(tasksRaw, &wires); err != nil {
+		return nil
+	}
+	children := make([]BotRunChild, 0, len(wires))
+	for _, wire := range wires {
+		phase := childPhaseFromStatus(wire.Status)
+		if phase == "" {
+			continue
+		}
+		kind := strings.TrimSpace(wire.Kind)
+		if !childTokenPattern.MatchString(kind) {
+			kind = ""
+		}
+		children = append(children, BotRunChild{
+			Ordinal:   len(children) + 1,
+			Phase:     phase,
+			Kind:      kind,
+			ErrorCode: decodeChildErrorCode(wire.ErrorCode),
+		})
+		if len(children) == maxProjectionChildTasks {
+			break
+		}
+	}
+	if len(children) == 0 {
+		return nil
+	}
+	return children
+}
+
+func childPhaseFromStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending":
+		return "PREPARING"
+	case "submitted", "running", "queued":
+		return "RUNNING"
+	case "succeeded", "success", "completed", "done":
+		return "SUCCEEDED"
+	case "failed", "error":
+		return "FAILED"
+	case "cancelled", "canceled":
+		return "CANCELLED"
+	default:
+		return ""
+	}
+}
+
+func decodeChildErrorCode(raw json.RawMessage) *string {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil
+	}
+	value = strings.TrimSpace(value)
+	if !childTokenPattern.MatchString(value) {
+		return nil
+	}
+	return &value
+}
+
+func projectionChildTaskCount(taskIDCount, childCount int) int {
+	if childCount == 0 {
+		return taskIDCount
+	}
+	if taskIDCount != 0 && taskIDCount != childCount {
+		return taskIDCount
+	}
+	return childCount
+}
+
+func cloneBotRunChildren(in []BotRunChild) []BotRunChild {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]BotRunChild, len(in))
+	for i, child := range in {
+		out[i] = child
+		if child.ErrorCode != nil {
+			code := *child.ErrorCode
+			out[i].ErrorCode = &code
+		}
+	}
+	return out
 }

@@ -241,6 +241,61 @@ func TestDecodeRunProjectionStoresOnlyBoundedChildCount(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionProjectsChildrenWithoutIdentities(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-children",
+		Agent:   "design",
+		Status:  "running",
+		TaskIDs: []string{"child-secret-1", "child-secret-2"},
+		Result: json.RawMessage(`{"execution":{"tasks":[
+			{"id":"child-secret-1","accepted":true,"status":"succeeded","kind":"protein_structure_analysis","error_code":null},
+			{"id":"child-secret-2","accepted":false,"status":"failed","kind":"promoter_analysis","error_code":"input_rejected"},
+			{"id":"child-secret-3","accepted":false,"status":"failed","kind":"Not A Kind","error_code":"Traceback: boom"}
+		]}}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ChildTaskCount != 2 {
+		t.Fatalf("child_task_count=%d want 2 (prefer task_ids)", got.ChildTaskCount)
+	}
+	if len(got.Children) != 3 {
+		t.Fatalf("children=%v", got.Children)
+	}
+	if got.Children[0].Ordinal != 1 || got.Children[0].Phase != "SUCCEEDED" || got.Children[0].Kind != "protein_structure_analysis" {
+		t.Fatalf("child0=%v", got.Children[0])
+	}
+	if got.Children[1].Phase != "FAILED" || got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
+		t.Fatalf("child1=%v", got.Children[1])
+	}
+	if got.Children[2].Kind != "" || got.Children[2].ErrorCode != nil {
+		t.Fatalf("invalid kind/error_code retained: %v", got.Children[2])
+	}
+
+	persisted, err := marshalPersistedProjection(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"child-secret-1", "child-secret-2", "child-secret-3", "Traceback: boom"} {
+		if strings.Contains(persisted, secret) {
+			t.Fatalf("persisted projection retained %q: %s", secret, persisted)
+		}
+	}
+
+	loaded, _, err := unmarshalPersistedProjectionWithContext(persisted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Children) != 3 || loaded.Children[0].Kind != "protein_structure_analysis" {
+		t.Fatalf("loaded children=%v", loaded.Children)
+	}
+	if loaded.Children[1].ErrorCode == nil || *loaded.Children[1].ErrorCode != "input_rejected" {
+		t.Fatalf("loaded child1=%v", loaded.Children[1])
+	}
+}
+
 func TestDecodeRunProjectionAcceptsFiniteWorkStages(t *testing.T) {
 	for _, stage := range []string{"input_resolution", "planning", "execution", "report_assembly"} {
 		t.Run(stage, func(t *testing.T) {
