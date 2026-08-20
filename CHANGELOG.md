@@ -13,6 +13,14 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Wait card follows remote completion without reload
+
+- A running Chat wait card leaves the running state when lifecycle reports
+  SUCCEEDED, FAILED, or CANCELLED, including while the tab is in the
+  background.
+- Fan-out children (Design, Research) show on the wait card, including
+  destined-to-fail rows.
+
 ### 🐛 Wait card keeps elapsed progress after reload
 
 - Reopening a running wait card after login or refresh reconstructs elapsed
