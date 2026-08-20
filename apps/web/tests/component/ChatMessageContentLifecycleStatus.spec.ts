@@ -32,7 +32,10 @@ vi.mock("@/views/chat/components/StreamMessage.vue", () => ({
   default: { template: "<div />" },
 }));
 
-const lifecycle = (phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle => ({
+const lifecycle = (
+  phase: AgentTaskLifecycle["phase"],
+  extra: Partial<AgentTaskLifecycle> = {}
+): AgentTaskLifecycle => ({
   id: 901,
   phase,
   terminal: ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(phase),
@@ -47,6 +50,7 @@ const lifecycle = (phase: AgentTaskLifecycle["phase"]): AgentTaskLifecycle => ({
   reconciliation: "FRESH",
   tracking_degraded: false,
   error_code: null,
+  ...extra,
 });
 
 function mountContent(
@@ -129,6 +133,42 @@ describe("ChatMessageContent lifecycle status", () => {
 
     expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("Task created successfully");
+  });
+
+  it("lists Design children including a failed destined-to-fail row", () => {
+    const wrapper = mountContent(
+      {
+        tool_name: "DigitalDesignAgent",
+        content: "",
+        status: "RUNNING",
+      },
+      {
+        ...lifecycle("RUNNING"),
+        child_task_count: 2,
+        child_work_accepted: true,
+        children: [
+          {
+            ordinal: 1,
+            phase: "SUCCEEDED",
+            kind: "protein_structure_analysis",
+            error_code: null,
+          },
+          {
+            ordinal: 2,
+            phase: "FAILED",
+            kind: "promoter_analysis",
+            error_code: "input_rejected",
+          },
+        ],
+      }
+    );
+
+    const rows = wrapper.findAll('[data-test="wait-child"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain("Protein structure");
+    expect(rows[1].text()).toContain("Promoter design");
+    expect(rows[1].text()).toMatch(/not valid/i);
+    expect(wrapper.html()).not.toContain("child-secret");
   });
 
   it("shows a lifecycle status for analysis agents without image branches", () => {

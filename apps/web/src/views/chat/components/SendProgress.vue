@@ -86,6 +86,25 @@
         </li>
       </ol>
     </details>
+    <ul
+      v-if="children.length > 0"
+      class="send-progress__children"
+      data-test="wait-children"
+    >
+      <li
+        v-for="child in children"
+        :key="child.ordinal"
+        class="send-progress__child"
+        data-test="wait-child"
+        :data-phase="child.phase"
+      >
+        <span>{{ childKindLabel(child) }}</span>
+        <span>{{ t(`chat.lifecycle.${child.phase.toLowerCase()}`) }}</span>
+        <span v-if="child.phase === 'FAILED' || child.error_code">
+          {{ childErrorLabel(child) }}
+        </span>
+      </li>
+    </ul>
   </div>
 </template>
 
@@ -99,6 +118,7 @@ import {
   watch,
 } from "vue";
 import { useI18n } from "vue-i18n";
+import type { AgentTaskChild } from "@/api/types";
 import {
   COT_FLUSH_STEP_MS,
   ETA_I18N_KEYS,
@@ -109,19 +129,25 @@ import {
   stepDurationMs,
 } from "../utils/agentProgress";
 
-const props = defineProps<{
-  startedAt: number | null;
-  agentName: string;
-  completing: boolean;
-  stageLabel?: string;
-  forceLastStage?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    startedAt: number | null;
+    agentName: string;
+    completing: boolean;
+    stageLabel?: string;
+    forceLastStage?: boolean;
+    children?: AgentTaskChild[];
+  }>(),
+  {
+    children: () => [],
+  }
+);
 
 const emit = defineEmits<{
   flushed: [];
 }>();
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const config = computed(() => progressConfigFor(props.agentName));
 const etaId = `send-progress-eta-${getCurrentInstance()?.uid ?? "default"}`;
 const cotOpen = ref(true);
@@ -295,6 +321,24 @@ watch(
   },
   { immediate: true }
 );
+
+function childKindLabel(child: AgentTaskChild): string {
+  const kind = child.kind.trim();
+  const kindKey = `chat.lifecycle.childKind.${kind}`;
+  if (kind && te(kindKey)) {
+    return t(kindKey);
+  }
+  return t("chat.lifecycle.childKindFallback", { ordinal: child.ordinal });
+}
+
+function childErrorLabel(child: AgentTaskChild): string {
+  const code = child.error_code?.trim() ?? "";
+  const errorKey = `chat.lifecycle.childError.${code}`;
+  if (code && te(errorKey)) {
+    return t(errorKey);
+  }
+  return t("chat.lifecycle.childError.fallback");
+}
 </script>
 
 <style scoped>
@@ -415,6 +459,20 @@ watch(
 .send-progress__cot-item[data-current="true"] {
   color: var(--phy-color-text);
   font-weight: 600;
+}
+.send-progress__children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.send-progress__child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--phy-space-8);
+  color: var(--phy-color-text);
+  font-size: 0.75rem;
+  line-height: 1.45;
 }
 
 @keyframes send-progress-spin {

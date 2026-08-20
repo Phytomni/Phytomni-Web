@@ -24,6 +24,7 @@
         :started-at="resolvedProgressStartedAt"
         :agent-name="progressAgentName"
         :completing="isFlushingOfficialResult"
+        :children="props.lifecycle?.children ?? []"
         @flushed="onCotFlushed"
       />
     </div>
@@ -59,6 +60,7 @@
           :agent-name="progressAgentName"
           :completing="false"
           :force-last-stage="cotFlushed && !showWaitProgress"
+          :children="props.lifecycle?.children ?? []"
         />
       </div>
     </div>

@@ -744,6 +744,26 @@ export default {
       cancelled: "Cancelled",
       resultUnavailable:
         "The task finished, but the report is not yet available.",
+      childKindFallback: "Child {ordinal}",
+      childKind: {
+        analyst: "Analysis",
+        research: "Research unit",
+        network: "Network analysis",
+        design: "Design analysis",
+        protein_structure_analysis: "Protein structure",
+        promoter_analysis: "Promoter design",
+        protein_design_analysis: "Protein design",
+        promoter_design_analysis: "Promoter design",
+        gene_network_analysis: "Gene network analysis",
+      },
+      childError: {
+        input_rejected:
+          "This child was rejected because the input is not valid.",
+        plan_rejected: "This child was rejected because the plan is not valid.",
+        remote_failed: "This child did not succeed.",
+        remote_cancelled: "This child was cancelled.",
+        fallback: "This child did not succeed.",
+      },
     },
     logUpdatedSuccess: "Log updated successfully",
     logUpdateFailed: "Failed to update log",
