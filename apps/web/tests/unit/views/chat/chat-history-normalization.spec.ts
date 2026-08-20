@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeHistoryRows,
+  projectHistoryForTransport,
   resolveHistoryQuestion,
 } from "@/views/chat/utils/chat-history-normalization";
 
@@ -39,6 +40,25 @@ describe("chat history normalization", () => {
         "sidebar title"
       )
     ).toBe(rawQuery);
+  });
+
+  it("projects streamed Markdown when blocking content is empty", () => {
+    expect(
+      projectHistoryForTransport([
+        {
+          role: "assistant",
+          content: "",
+          blocks: [
+            {
+              type: "markdown",
+              authority: "web",
+              text: "Rice has 12 chromosomes.",
+              complete: true,
+            },
+          ],
+        },
+      ])
+    ).toEqual([{ role: "assistant", content: "Rice has 12 chromosomes." }]);
   });
 
   it("uses trimmed legacy fallbacks when the persisted query is blank", () => {

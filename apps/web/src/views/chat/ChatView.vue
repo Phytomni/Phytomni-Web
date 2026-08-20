@@ -754,7 +754,7 @@ import {
   upsertPendingChatListEntry,
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
-import { chatContentToText } from "./messageTypes";
+import { messagePlainText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import {
@@ -2293,7 +2293,7 @@ const copyMessageWithDocs = (message: ChatMessage, index: number) => {
           .join("\n")
       : "";
   const text =
-    chatContentToText(message.content) +
+    messagePlainText(message) +
     (docs && docs !== "" ? "\nReferences:\n" : "") +
     docs;
   fallbackCopyText(text, index + 1);
@@ -2301,7 +2301,7 @@ const copyMessageWithDocs = (message: ChatMessage, index: number) => {
 
 const handleMessageCopy = (message: ChatMessage, index: number) => {
   if (message.role === "user") {
-    fallbackCopyText(chatContentToText(message.content), index + 1);
+    fallbackCopyText(messagePlainText(message), index + 1);
     return;
   }
   if (message.tableHeaders) {

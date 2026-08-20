@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../types";
-import { chatContentToText } from "../messageTypes";
+import { messagePlainText } from "../messageTypes";
 
 export const MAX_CONVERSATION_HISTORY_MESSAGES = 20;
 const MAX_HISTORY_CONTENT_CODE_POINTS = 32768;
@@ -34,7 +34,7 @@ export function projectHistoryForTransport(
     .map((message) => ({
       role: message.role,
       content: boundCodePoints(
-        chatContentToText(message.content),
+        messagePlainText(message),
         MAX_HISTORY_CONTENT_CODE_POINTS
       ),
     }));

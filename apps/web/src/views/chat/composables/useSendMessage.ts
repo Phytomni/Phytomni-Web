@@ -51,7 +51,7 @@ import {
   chatContentToText,
   decodeAgentSteps,
   decodeFollowUpQuestions,
-  streamMarkdownToText,
+  messagePlainText,
 } from "../messageTypes";
 import {
   completedUploadDisplays,
@@ -149,11 +149,7 @@ function isHistoryMessage(value: unknown): value is ChatMessage {
 }
 
 function historyText(message: ChatMessage): string {
-  const content = chatContentToText(message.content);
-  if (content.trim()) {
-    return message.role === "user" ? content : content.trim();
-  }
-  return streamMarkdownToText(message.blocks);
+  return messagePlainText(message);
 }
 
 function historyAttachments(message: ChatMessage) {

@@ -260,3 +260,16 @@ function markdownBlocksToText(
     .filter(Boolean)
     .join("\n\n");
 }
+
+/** Visible copy/history text: blocking content, else streamed Markdown. */
+export function messagePlainText(message: {
+  role?: string;
+  content: ChatContent;
+  blocks?: readonly StreamContentBlock[];
+}): string {
+  const content = chatContentToText(message.content);
+  if (content.trim()) {
+    return message.role === "user" ? content : content.trim();
+  }
+  return streamMarkdownToText(message.blocks);
+}

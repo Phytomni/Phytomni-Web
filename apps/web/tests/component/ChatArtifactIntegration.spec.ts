@@ -561,7 +561,7 @@ describe("Chat artifact message ownership", () => {
 
   it("keeps the existing copy action wired to complete message source", () => {
     expect(CHAT_SOURCE).toContain('@copy="handleMessageCopy(message, index)"');
-    expect(CHAT_SOURCE).toContain("chatContentToText(message.content)");
+    expect(CHAT_SOURCE).toContain("messagePlainText(message)");
     expect(CHAT_SOURCE).toContain('"\\nReferences:\\n"');
     expect(CHAT_SOURCE).not.toMatch(
       /handleMessageCopy[\s\S]{0,500}artifactPreview/

@@ -128,6 +128,21 @@ describe("useCopyDownload", () => {
       expect(mockElSuccess).not.toHaveBeenCalled();
       expect(copyVisible.value).toBe(0);
     });
+
+    it("blank payload reports copy failure without writing the clipboard", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal("isSecureContext", true);
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+      const { fallbackCopyText } = makeComposable();
+      fallbackCopyText("   ", 2);
+      await flushPromises();
+
+      expect(writeText).not.toHaveBeenCalled();
+      expect(mockElError).toHaveBeenCalledWith("chat.copyFailed");
+      expect(mockElSuccess).not.toHaveBeenCalled();
+      expect(copyVisible.value).toBe(0);
+    });
   });
 
   describe("downloadFile", () => {

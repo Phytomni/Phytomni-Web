@@ -5,6 +5,7 @@ import {
   chatContentToText,
   decodeChatContent,
   decodeStreamContentBlock,
+  messagePlainText,
 } from "@/views/chat/messageTypes";
 
 function firstAttachment(result: ReturnType<typeof parseMessageWithFiles>) {
@@ -120,5 +121,46 @@ describe("chat message boundary decoders", () => {
         interactive: true,
       })
     ).toBeUndefined();
+  });
+
+  it("copies streamed Markdown when blocking content is empty", () => {
+    expect(
+      messagePlainText({
+        role: "assistant",
+        content: "",
+        blocks: [
+          {
+            type: "step",
+            authority: "web",
+            label: "plan",
+          },
+          {
+            type: "markdown",
+            authority: "web",
+            text: "Rice has 12 chromosomes.",
+            complete: true,
+          },
+        ],
+      })
+    ).toBe("Rice has 12 chromosomes.");
+    expect(
+      messagePlainText({
+        role: "assistant",
+        content: "  Blocking answer  ",
+        blocks: [
+          {
+            type: "markdown",
+            authority: "web",
+            text: "streamed",
+          },
+        ],
+      })
+    ).toBe("Blocking answer");
+    expect(
+      messagePlainText({
+        role: "user",
+        content: "  keep padding  ",
+      })
+    ).toBe("  keep padding  ");
   });
 });

@@ -39,6 +39,10 @@ export function useCopyDownload(opts: {
   };
 
   const fallbackCopyText = (text: string, index: number) => {
+    if (text.trim() === "") {
+      ElMessage.error(t("chat.copyFailed"));
+      return;
+    }
     try {
       if (window.isSecureContext) {
         navigator.clipboard

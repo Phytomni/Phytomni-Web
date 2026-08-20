@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Instant Chat copy is no longer empty
+
+- Copy on Instant ChatAgent (and other stream-family replies) writes the
+  visible Markdown from stream blocks. An empty payload reports copy failed
+  instead of a successful blank clipboard.
+
 ### 🐛 Wait card follows remote completion without reload
 
 - A running Chat wait card leaves the running state when lifecycle reports
