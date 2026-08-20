@@ -132,6 +132,8 @@ describe("ChatMessageContent lifecycle status", () => {
     await nextTick();
 
     expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Waiting for analysis results");
     expect(wrapper.text()).not.toContain("Task created successfully");
   });
 

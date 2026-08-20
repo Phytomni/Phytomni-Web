@@ -87,12 +87,12 @@
       </ol>
     </details>
     <ul
-      v-if="children.length > 0"
+      v-if="waitChildren.length > 0"
       class="send-progress__children"
       data-test="wait-children"
     >
       <li
-        v-for="child in children"
+        v-for="child in waitChildren"
         :key="child.ordinal"
         class="send-progress__child"
         data-test="wait-child"
@@ -136,10 +136,10 @@ const props = withDefaults(
     completing: boolean;
     stageLabel?: string;
     forceLastStage?: boolean;
-    children?: AgentTaskChild[];
+    waitChildren?: AgentTaskChild[];
   }>(),
   {
-    children: () => [],
+    waitChildren: () => [],
   }
 );
 

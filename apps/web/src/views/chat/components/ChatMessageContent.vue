@@ -24,7 +24,7 @@
         :started-at="resolvedProgressStartedAt"
         :agent-name="progressAgentName"
         :completing="isFlushingOfficialResult"
-        :children="props.lifecycle?.children ?? []"
+        :wait-children="props.lifecycle?.children ?? []"
         @flushed="onCotFlushed"
       />
     </div>
@@ -53,14 +53,18 @@
          assigns phyto.references → doc_list, the same blocks rerender to
          #m<index>-ref-N links. Live-session only — history reload does not
          invent persisted streaming references. -->
-    <div v-if="showInlineCot" class="agent-wait-inline" data-test="agent-wait">
+    <div
+      v-if="showInlineCot"
+      class="agent-wait-inline"
+      :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
+    >
       <div class="agent-lifecycle" role="status" aria-live="polite">
         <SendProgress
           :started-at="resolvedProgressStartedAt"
           :agent-name="progressAgentName"
-          :completing="false"
+          :completing="!showWaitProgress"
           :force-last-stage="cotFlushed && !showWaitProgress"
-          :children="props.lifecycle?.children ?? []"
+          :wait-children="props.lifecycle?.children ?? []"
         />
       </div>
     </div>
@@ -257,14 +261,16 @@
       @finish="emit('finish')"
     />
     <ScientificMarkdownTypewriter
-      v-else-if="message?.instantMessage && isLastMessage"
+      v-else-if="
+        message?.instantMessage && isLastMessage && !hideWaitPlaceholderBody
+      "
       :source="chatContentToText(message.content)"
       :citation-namespace="'m' + index"
       surface="chat"
       @finish="emit('finish')"
     />
     <ScientificMarkdown
-      v-else
+      v-else-if="!hideWaitPlaceholderBody"
       :source="chatContentToText(message.content)"
       :citation-namespace="'m' + index"
       surface="chat"
@@ -563,8 +569,7 @@ const resolvedProgressStartedAt = computed(() =>
     props.progressStartedAt ?? parseProgressStartedAt(props.message.created_at)
   )
 );
-const isWaitOnlyBody = computed(() => {
-  if (!showWaitProgress.value) return false;
+const isWaitOnlyBodyContent = computed(() => {
   if (isDeepGenomeMessage.value && !hasArtifactPresentation.value) return true;
   if (hasArtifactPresentation.value) return false;
   if (hasMeaningfulDeepGenomeReport.value) return false;
@@ -574,12 +579,23 @@ const isWaitOnlyBody = computed(() => {
   if (props.message.doc_list && props.message.doc_list.length > 0) return false;
   return true;
 });
+const isWaitOnlyBody = computed(
+  () => showWaitProgress.value && isWaitOnlyBodyContent.value
+);
 const isFlushingOfficialResult = computed(
   () =>
     sawActiveWait.value &&
     !showWaitProgress.value &&
     !cotFlushed.value &&
-    effectiveLifecyclePhase.value === "SUCCEEDED"
+    effectiveLifecyclePhase.value === "SUCCEEDED" &&
+    !isWaitOnlyBodyContent.value
+);
+const hideWaitPlaceholderBody = computed(
+  () =>
+    props.message.role === "assistant" &&
+    sawActiveWait.value &&
+    !showWaitProgress.value &&
+    isWaitOnlyBodyContent.value
 );
 const showStandaloneCot = computed(
   () =>
