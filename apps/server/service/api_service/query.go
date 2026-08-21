@@ -1754,6 +1754,9 @@ func failV1Submission(
 			return err
 		}
 		if private != nil && private.Replacement != nil {
+			if private.Replacement.TerminalResult != nil {
+				return nil
+			}
 			replacementConflict = true
 			next := private.clone()
 			next.Replacement = nil

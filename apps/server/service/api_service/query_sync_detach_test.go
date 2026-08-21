@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -331,6 +332,81 @@ func TestQueryDataReplacementDetachErrorClearsRunningCandidate(t *testing.T) {
 	if private.Replacement != nil &&
 		(private.Replacement.ActiveStatus == "RUNNING" || isDurablePendingRunID(private.Replacement.ActiveBotRunID)) {
 		t.Fatalf("unpollable replacement still running: %#v", private.Replacement)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, seed.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != statusSucceeded || row.Answer != seed.Answer {
+		t.Fatalf("public replacement row=%#v, want preserved SUCCEEDED", row)
+	}
+}
+
+func TestQueryDataReplacementDetachDefiniteFailureKeepsTerminal(t *testing.T) {
+	useConversationV1(t)
+	gdb := setupExpertTestDB(t)
+	seed := seedResearchReplacementTarget(t, gdb)
+	var botCalls atomic.Int64
+	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agents/data/runs" {
+			http.NotFound(w, r)
+			return
+		}
+		botCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(
+			`{"error":{"code":"invalid_request","message":"private upstream detail","retryable":false}}`,
+		))
+	})
+
+	input := QueryInput{
+		Query:        "replace with a table",
+		Mode:         "expert",
+		Tool:         "DataAgent",
+		ClientTurnID: "data-replace-4xx-1",
+		RefreshId:    seed.Id,
+		Surface:      QuerySurfaceChat,
+	}
+	out, err := NewService().Query(context.Background(), "alice", input)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.Id != seed.Id || out.Status != "RUNNING" {
+		t.Fatalf("detach Query=%#v, want RUNNING on seed id %d", out, seed.Id)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var private persistedConversationContext
+	for time.Now().Before(deadline) {
+		private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if private.Replacement == nil {
+			t.Fatalf("definite 4xx wiped the replacement envelope")
+		}
+		if private.Replacement.TerminalResult != nil {
+			time.Sleep(50 * time.Millisecond)
+			private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if private.Replacement == nil || private.Replacement.TerminalResult == nil ||
+		private.Replacement.TerminalResult.Status != "FAILED" {
+		t.Fatalf("want FAILED replacement terminal, got %#v", private)
+	}
+
+	retry, err := NewService().Query(context.Background(), "alice", input)
+	if err != nil || retry == nil || retry.Id != seed.Id || retry.Status != "FAILED" {
+		t.Fatalf("retry=%+v error=%v", retry, err)
+	}
+	if got := botCalls.Load(); got != 1 {
+		t.Fatalf("Bot calls=%d, want 1", got)
 	}
 	var row model.QuestionAgentLog
 	if err := gdb.First(&row, seed.Id).Error; err != nil {
