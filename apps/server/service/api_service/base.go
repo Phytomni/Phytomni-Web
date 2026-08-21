@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	rxBot "phytomni-server/external/bot"
@@ -28,11 +29,16 @@ type agentCatalogReader interface {
 	GetAgents(context.Context) (*rxBot.AgentsListResponse, error)
 }
 
+type runStreamReader interface {
+	RunStreamWithMeta(context.Context, string, int64) (io.ReadCloser, rxBot.ResponseMeta, error)
+}
+
 type Service struct {
 	runReader      agentRunReader
 	runCanceller   agentRunCanceller
 	deliveryClient resultDeliveryClient
 	catalogReader  agentCatalogReader
+	runStream      runStreamReader
 	streamHub      *StreamHub
 	streamHubOnce  sync.Once
 }
@@ -61,6 +67,13 @@ func (ps *Service) agentRunCanceller() agentRunCanceller {
 func (ps *Service) archiveDeliveryClient() resultDeliveryClient {
 	if ps != nil && ps.deliveryClient != nil {
 		return ps.deliveryClient
+	}
+	return rxBot.NewClient()
+}
+
+func (ps *Service) runStreamReader() runStreamReader {
+	if ps != nil && ps.runStream != nil {
+		return ps.runStream
 	}
 	return rxBot.NewClient()
 }

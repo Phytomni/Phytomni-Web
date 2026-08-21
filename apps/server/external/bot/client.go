@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -353,6 +354,33 @@ func (c *Client) ChatCompletionStreamWithMeta(ctx context.Context, req ChatCompl
 			return nil, meta, wrapTransportError(readErr)
 		}
 		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/chat/completions", resp.StatusCode, raw), meta.BotRequestID)
+	}
+	return resp.Body, meta, nil
+}
+
+// RunStreamWithMeta opens the owner-scoped AG-UI resume stream for one Bot run.
+func (c *Client) RunStreamWithMeta(ctx context.Context, runID string, after int64) (io.ReadCloser, ResponseMeta, error) {
+	path := "/v1/runs/" + url.PathEscape(runID) + "/stream"
+	if after > 0 {
+		path += "?after=" + strconv.FormatInt(after, 10)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.userKey)
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, ResponseMeta{}, wrapTransportError(err)
+	}
+	meta := responseMeta(resp)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, meta, wrapTransportError(readErr)
+		}
+		return nil, meta, preferBotRequestID(botError(http.MethodGet, path, resp.StatusCode, raw), meta.BotRequestID)
 	}
 	return resp.Body, meta, nil
 }

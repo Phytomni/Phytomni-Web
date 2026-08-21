@@ -1,8 +1,10 @@
 package api_service
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"io"
 	"strings"
 
 	"phytomni-server/model"
@@ -14,7 +16,8 @@ var ErrStreamRunMissing = errors.New("stream run is missing from this gateway")
 
 // ResumeQuestionStream replays AG-UI frames with seq > afterSeq then tails the
 // process-local hub. Missing or foreign rows return the same not-found error as
-// history. A live row with no hub returns ErrStreamRunMissing.
+// history. A live row with no hub resupplies from Bot when bot_run_id is set;
+// otherwise it returns ErrStreamRunMissing.
 func (ps *Service) ResumeQuestionStream(
 	ctx context.Context,
 	username string,
@@ -40,12 +43,53 @@ func (ps *Service) ResumeQuestionStream(
 		if terminal {
 			return nil
 		}
-		return ErrStreamRunMissing
+		if err := ps.resupplyQuestionStreamFromBot(ctx, row.BotRunId, messageID); err != nil {
+			return ErrStreamRunMissing
+		}
 	}
 	if terminal {
 		return forwardResumeFrames(hub.After(messageID, afterSeq), forward)
 	}
 	return followResumeStream(ctx, hub, messageID, afterSeq, forward)
+}
+
+func botRunIDForResupply(botRunID string) string {
+	id := strings.TrimSpace(botRunID)
+	if id == "" || strings.HasPrefix(id, "web-pending-") {
+		return ""
+	}
+	return id
+}
+
+func (ps *Service) resupplyQuestionStreamFromBot(
+	ctx context.Context,
+	botRunID string,
+	messageID int64,
+) error {
+	runID := botRunIDForResupply(botRunID)
+	if runID == "" {
+		return ErrStreamRunMissing
+	}
+	botCtx := context.WithoutCancel(ctx)
+	rc, meta, err := ps.runStreamReader().RunStreamWithMeta(botCtx, runID, 0)
+	logBotResponseMeta(ctx, meta)
+	if err != nil || rc == nil {
+		return ErrStreamRunMissing
+	}
+	go copyBotRunStreamToHub(ps.hub(), messageID, rc)
+	return nil
+}
+
+func copyBotRunStreamToHub(hub *StreamHub, messageID int64, rc io.ReadCloser) {
+	defer rc.Close()
+	defer hub.Finish(messageID)
+	scanner := bufio.NewScanner(rc)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Split(splitSSEFrames)
+	for scanner.Scan() {
+		frame := append([]byte(nil), scanner.Bytes()...)
+		hub.Append(messageID, frame)
+	}
 }
 
 func resumeStreamTerminal(status string) bool {
