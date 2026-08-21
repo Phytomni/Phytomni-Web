@@ -96,6 +96,12 @@ describe("blocking Bot response identity", () => {
             .mockResolvedValue(undefined),
         }),
         getHistoryQuestionData,
+        reconcileDialogueIdentity: (tempId, serverId) => ({
+          status: "reconciled",
+          tempId,
+          serverId,
+          rekey: { outcome: tempId === serverId ? "same-id" : "moved" },
+        }),
         chatList: ref([
           {
             id: 41,

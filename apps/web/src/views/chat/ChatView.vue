@@ -2169,6 +2169,7 @@ const { sendMessage } = useSendMessage({
   t,
   userStore,
   getHistoryQuestionData,
+  reconcileDialogueIdentity: reconcileMatchedDialogue,
   chatList,
   timestamp,
   selectChat,

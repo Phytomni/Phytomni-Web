@@ -110,6 +110,10 @@ type HistoryQuestionLookup = (
   sendingDialogueId?: string,
   options?: { blockingDialogueId?: string }
 ) => Promise<DialogueReconciliationResult | undefined>;
+type DialogueIdentityReconciler = (
+  tempId: string,
+  serverId: string
+) => DialogueReconciliationResult;
 
 describe("useSendMessage", () => {
   // One mutable state per dialogueId; repeated getChatState(id) returns the same object
@@ -121,6 +125,7 @@ describe("useSendMessage", () => {
   let chatList: Ref<Chat[]>;
   let timestamp: Ref<number>;
   let getHistoryQuestionData: Mock<HistoryQuestionLookup>;
+  let reconcileDialogueIdentity: Mock<DialogueIdentityReconciler>;
   let selectChat: Mock<(dialogueId: string) => Promise<void>>;
   let scrollToBottom: Mock<() => Promise<void>>;
 
@@ -203,6 +208,14 @@ describe("useSendMessage", () => {
     getHistoryQuestionData = vi
       .fn<HistoryQuestionLookup>()
       .mockResolvedValue(undefined);
+    reconcileDialogueIdentity = vi
+      .fn<DialogueIdentityReconciler>()
+      .mockImplementation((tempId, serverId) => ({
+        status: "reconciled",
+        tempId,
+        serverId,
+        rekey: { outcome: tempId === serverId ? "same-id" : "moved" },
+      }));
     selectChat = vi.fn<(dialogueId: string) => Promise<void>>();
     selectChat.mockResolvedValue(undefined);
     scrollToBottom = vi.fn().mockResolvedValue(undefined);
@@ -263,6 +276,7 @@ describe("useSendMessage", () => {
         FedLogOut: vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
       }),
       getHistoryQuestionData,
+      reconcileDialogueIdentity,
       chatList,
       timestamp,
       selectChat,
@@ -2236,50 +2250,77 @@ describe("useSendMessage", () => {
     });
   });
 
-  it("rekeys from stream identity headers without waiting for RunFinished", async () => {
+  it("rekeys stream identity before an independent failing sidebar refresh", async () => {
     vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const chatStatesApi = useChatStates();
     const tempId = "new_stream_identity";
-    const state = makeState({ messageInput: "stream identity rekey" });
-    states.set(tempId, state);
-    currentChatId.value = tempId;
+    const serverId = "canonical-stream-dialogue";
+    chatStatesApi.currentChatId.value = tempId;
+    currentChatId = chatStatesApi.currentChatId;
+    const state = chatStatesApi.getChatState(tempId);
+    state.messageInput = "stream identity rekey";
+    state.mode = "instant";
     currentChat.value = { messages: [] };
+    getChatState = (dialogueId: string) =>
+      chatStatesApi.getChatState(dialogueId);
+    window.history.replaceState({}, "", "/chat");
 
-    const order: string[] = [];
-    getHistoryQuestionData.mockImplementation(async (_id, opts) => {
-      order.push(`history:${opts?.blockingDialogueId ?? "none"}`);
+    const sidebarRefresh = deferred<DialogueReconciliationResult | undefined>();
+    getHistoryQuestionData.mockReturnValueOnce(sidebarRefresh.promise);
+    reconcileDialogueIdentity.mockImplementationOnce((fromId, toId) => {
+      const rekey = chatStatesApi.rekeyChatState(fromId, toId);
+      if (currentChatId.value === fromId) {
+        currentChatId.value = toId;
+        const url = new URL(window.location.href);
+        url.searchParams.set("dialogue_id", toId);
+        window.history.pushState({}, "", url.toString());
+      }
       return {
         status: "reconciled",
-        tempId,
-        serverId: mustGet(opts?.blockingDialogueId, "identity server id"),
-        rekey: { outcome: "moved" },
+        tempId: fromId,
+        serverId: toId,
+        rekey,
       };
     });
 
     streamHarness.streamMessage.mockImplementationOnce(async (input) => {
-      order.push("stream-start");
       input.onIdentity?.({
-        dialogueId: "canonical-stream-dialogue",
+        dialogueId: serverId,
         messageId: "42",
       });
-      order.push("stream-end");
+
+      expect(currentChatId.value).toBe(serverId);
+      expect(
+        new URL(window.location.href).searchParams.get("dialogue_id")
+      ).toBe(serverId);
+      expect(chatStatesApi.chatStates.value[tempId]).toBeUndefined();
+      expect(chatStatesApi.chatStates.value[serverId]).toBe(state);
+      expect(
+        chatStatesApi.chatStates.value[serverId]?.renderedChat?.messages.at(-1)
+      ).toBe(input.placeholder);
+      expect(
+        mustGet(
+          streamHarness.capturedGetChatState,
+          "stream chat-state accessor"
+        )(serverId)
+      ).toBe(state);
+      expect(getHistoryQuestionData).not.toHaveBeenCalled();
       return {
-        dialogueId: "canonical-stream-dialogue",
+        dialogueId: serverId,
         messageId: "42",
         completed: true,
       };
     });
 
-    await makeComposable().sendMessage();
+    await expect(makeComposable().sendMessage()).resolves.toBeUndefined();
 
-    expect(order).toEqual([
-      "stream-start",
-      "history:canonical-stream-dialogue",
-      "stream-end",
-    ]);
+    expect(reconcileDialogueIdentity).toHaveBeenCalledWith(tempId, serverId);
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
-    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
-      blockingDialogueId: "canonical-stream-dialogue",
-    });
+    expect(getHistoryQuestionData.mock.calls).toEqual([[]]);
+
+    sidebarRefresh.reject(new Error("sidebar unavailable"));
+    await Promise.resolve();
+    await Promise.resolve();
   });
 
   it("stamps streaming placeholder streamPresentationKey with the request id (not message.id)", async () => {

@@ -270,6 +270,12 @@ describe("useSendMessage stream reactivity", () => {
               .mockResolvedValue(undefined),
           }),
           getHistoryQuestionData: vi.fn().mockResolvedValue(undefined),
+          reconcileDialogueIdentity: (tempId, serverId) => ({
+            status: "reconciled",
+            tempId,
+            serverId,
+            rekey: { outcome: tempId === serverId ? "same-id" : "moved" },
+          }),
           chatList,
           timestamp: ref(0),
           selectChat: vi.fn().mockResolvedValue(undefined),

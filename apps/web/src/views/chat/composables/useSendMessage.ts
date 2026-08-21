@@ -402,6 +402,10 @@ export function useSendMessage(opts: {
     | Promise<DialogueReconciliationResult | undefined>
     | DialogueReconciliationResult
     | undefined;
+  reconcileDialogueIdentity: (
+    tempId: string,
+    serverId: string
+  ) => DialogueReconciliationResult;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
@@ -418,6 +422,7 @@ export function useSendMessage(opts: {
     t,
     userStore,
     getHistoryQuestionData,
+    reconcileDialogueIdentity,
     chatList,
     timestamp,
     selectChat,
@@ -524,8 +529,7 @@ export function useSendMessage(opts: {
     const sendingTitle = currentMessage;
     let blockingDialogueId: string | undefined;
     let acceptedTurn = false;
-    let identityReconciliation:
-      Promise<DialogueReconciliationResult | undefined> | undefined;
+    let identityReconciliation: DialogueReconciliationResult | undefined;
 
     if (parentRowId === null) {
       // Hard no-send: missing/ambiguous existing parent mapping.
@@ -681,11 +685,13 @@ export function useSendMessage(opts: {
             if (chatState.activeRequestId !== requestKey) return;
             blockingDialogueId = dialogueId;
             if (identityReconciliation) return;
-            identityReconciliation = Promise.resolve(
-              getHistoryQuestionData(sendingDialogueId, {
-                blockingDialogueId: dialogueId,
-              })
+            identityReconciliation = reconcileDialogueIdentity(
+              sendingDialogueId,
+              dialogueId
             );
+            void Promise.resolve()
+              .then(() => getHistoryQuestionData())
+              .catch(() => undefined);
           },
         });
         if (
@@ -1276,9 +1282,7 @@ export function useSendMessage(opts: {
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
         const wasStopped = chatState.generationStopped;
-        const identityResult = identityReconciliation
-          ? await identityReconciliation
-          : undefined;
+        const identityResult = identityReconciliation;
         const identityAlreadyReconciled =
           identityResult?.status === "reconciled" &&
           identityResult.serverId === blockingDialogueId;
@@ -1306,9 +1310,9 @@ export function useSendMessage(opts: {
         }
         const historyOpts =
           blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
-        const reconciliation = identityAlreadyReconciled
-          ? identityResult
-          : await getHistoryQuestionData(sendingDialogueId, historyOpts);
+        const reconciliation =
+          identityResult ??
+          (await getHistoryQuestionData(sendingDialogueId, historyOpts));
         if (reconciliation?.status === "reconciled") {
           chatState.historyHydration = "ready";
         }
