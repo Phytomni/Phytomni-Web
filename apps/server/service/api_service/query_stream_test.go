@@ -567,6 +567,84 @@ func TestQueryStreamBrowserLeaveKeepsRunningThenSucceeds(t *testing.T) {
 	}
 }
 
+func TestQueryStreamBrowserLeaveOnReadyKeepsRunningThenSucceeds(t *testing.T) {
+	useConversationV1(t)
+	gdb := setupStreamTestDB(t)
+	email := "stream-leave-onready@example.com"
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		email,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+	const leaveDelta = "onready leave delta"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		var request rxBot.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode stream request: %v", err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			`event: RunStarted` + "\n" +
+				`data: {"type":"RunStarted","run_id":"run-leave-onready"}` + "\n\n" +
+				`event: TextMessageContent` + "\n" +
+				`data: {"type":"TextMessageContent","delta":` +
+				strconv.Quote(leaveDelta) + "}" + "\n\n",
+		))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(50 * time.Millisecond)
+		stage := contextStageForStream(request)
+		encoded, _ := json.Marshal(stage)
+		_, _ = w.Write([]byte(
+			`event: Custom` + "\n" +
+				`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+				string(encoded) + "}" + "\n\n" +
+				`event: RunFinished` + "\n" +
+				`data: {"type":"RunFinished","run_id":"run-leave-onready"}` + "\n\n",
+		))
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out, err := streamCapableService().QueryStream(
+		ctx,
+		email,
+		QueryInput{
+			Query: "leave onready", Mode: "instant",
+			ClientTurnID: "stream-leave-onready",
+		},
+		func(StreamIdentity) { cancel() },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("onReady leave is not a stream error: %v", err)
+	}
+	if out == nil || out.Status == "SUBMITTING" || out.Answer == "" {
+		t.Fatalf("onReady leave result = %#v, want non-empty success", out)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != statusSucceeded || !strings.Contains(row.Answer, leaveDelta) {
+		t.Fatalf("onReady leave row status/answer = %q/%q", row.Status, row.Answer)
+	}
+}
+
 func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -4342,11 +4342,12 @@ func (ps *Service) QueryStream(
 				break
 			}
 			if ev.Type == "RunStarted" && acc.RunID() != persistedRunID {
+				var persistErr error
 				if streamReplacement {
 					// Keep a replacement run inside the bounded private candidate;
 					// the previously accepted public projection remains visible until
 					// this stream proves RunFinished.
-					_, err := persistReplacementActiveResult(ctx, username, submission, &QueryData{
+					_, persistErr = persistReplacementActiveResult(botCtx, username, submission, &QueryData{
 						Id:           id,
 						ToolName:     slugToToolName[slug],
 						ReactionType: "0",
@@ -4355,19 +4356,21 @@ func (ps *Service) QueryStream(
 						BotRunID:     acc.RunID(),
 						Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 					})
-					if err != nil {
-						streamErr = err
-						break
-					}
 				} else {
 					// Persist the cross-service join key before the browser can receive
 					// RunStarted (and therefore before any later interactive frame).
-					if err := ps.setQuestionStreamRunID(ctx, username, identity, acc.RunID()); err != nil {
-						streamErr = err
+					persistErr = ps.setQuestionStreamRunID(botCtx, username, identity, acc.RunID())
+				}
+				if persistErr != nil {
+					// Leave cancels gin ctx; it must not abort the Bot read or skip
+					// later frames. Real persist failures still stop the scan.
+					if !errors.Is(persistErr, context.Canceled) {
+						streamErr = persistErr
 						break
 					}
+				} else {
+					persistedRunID = acc.RunID()
 				}
-				persistedRunID = acc.RunID()
 			}
 		}
 		// Stamp the frame into the process-local hub, then forward the stamped
@@ -4391,17 +4394,15 @@ func (ps *Service) QueryStream(
 	// failures.
 	status := statusSucceeded
 	if scanErr := scanner.Err(); scanErr != nil {
-		status = "FAILED"
-		if streamErr == nil {
-			streamErr = scanErr
+		// Bot body uses WithoutCancel; a leftover Canceled is not a stream error.
+		if !errors.Is(scanErr, context.Canceled) {
+			status = "FAILED"
+			if streamErr == nil {
+				streamErr = scanErr
+			}
 		}
 	} else if streamErr != nil || acc.Err() != nil {
 		status = "FAILED"
-	}
-	if errors.Is(streamErr, context.Canceled) {
-		// Forward/browser abort is not a Bot cancel. Only scanner/Bot errors
-		// remain stream errors after this point.
-		streamErr = nil
 	}
 	if acc.Finished() && acc.Err() == nil && streamErr == nil {
 		status = statusSucceeded
