@@ -3,6 +3,7 @@ package api_service
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -129,5 +130,97 @@ func TestStreamHubFinishDuringCatchupDeliversLoggedFrames(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("timeout draining; got %d frames: %v", len(seen), seen)
 		}
+	}
+}
+
+func TestStreamHubBlockedFollowerReadsEveryStoredFrame(t *testing.T) {
+	h := NewStreamHub()
+	h.Begin(11)
+	ch, unsub := h.Follow(11, 0)
+	defer unsub()
+
+	const total = 64
+	for i := 0; i < total; i++ {
+		h.Append(11, []byte(fmt.Sprintf("event: token\ndata: {\"i\":%d}\n\n", i)))
+	}
+	h.Finish(11)
+
+	var got []int64
+	for frame := range ch {
+		got = append(got, frame.Seq)
+	}
+	if len(got) != total {
+		t.Fatalf("blocked follower got %d frames, want %d: %v", len(got), total, got)
+	}
+	for i, seq := range got {
+		if seq != int64(i+1) {
+			t.Fatalf("frame %d seq=%d, want %d", i, seq, i+1)
+		}
+	}
+}
+
+func TestStreamHubConcurrentFollowersReadStoredCursorInOrder(t *testing.T) {
+	h := NewStreamHub()
+	h.Begin(12)
+
+	const followers = 6
+	const total = 80
+	results := make(chan []int64, followers)
+	var ready sync.WaitGroup
+	ready.Add(followers)
+	for i := 0; i < followers; i++ {
+		ch, unsub := h.Follow(12, 0)
+		go func() {
+			defer unsub()
+			ready.Done()
+			var seen []int64
+			for frame := range ch {
+				seen = append(seen, frame.Seq)
+			}
+			results <- seen
+		}()
+	}
+	ready.Wait()
+
+	var writers sync.WaitGroup
+	for i := 0; i < total; i++ {
+		writers.Add(1)
+		go func(value int) {
+			defer writers.Done()
+			h.Append(12, []byte(fmt.Sprintf("event: token\ndata: {\"i\":%d}\n\n", value)))
+		}(i)
+	}
+	writers.Wait()
+	h.Finish(12)
+
+	for i := 0; i < followers; i++ {
+		seen := <-results
+		if len(seen) != total {
+			t.Fatalf("follower %d got %d frames, want %d", i, len(seen), total)
+		}
+		for j, seq := range seen {
+			if seq != int64(j+1) {
+				t.Fatalf("follower %d frame %d seq=%d, want %d", i, j, seq, j+1)
+			}
+		}
+	}
+}
+
+func TestStreamHubProducerStatesDistinguishStartingActiveAndFinished(t *testing.T) {
+	h := NewStreamHub()
+	if got := h.ProducerState(13); got != StreamProducerMissing {
+		t.Fatalf("initial state=%v, want missing", got)
+	}
+	h.Begin(13)
+	if got := h.ProducerState(13); got != StreamProducerStarting {
+		t.Fatalf("begun state=%v, want starting", got)
+	}
+	h.Append(13, []byte("event: RunStarted\ndata: {}\n\n"))
+	if got := h.ProducerState(13); got != StreamProducerActive {
+		t.Fatalf("appended state=%v, want active", got)
+	}
+	h.Finish(13)
+	if got := h.ProducerState(13); got != StreamProducerFinished {
+		t.Fatalf("finished state=%v, want finished", got)
 	}
 }

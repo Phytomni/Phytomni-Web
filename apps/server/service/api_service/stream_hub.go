@@ -12,8 +12,19 @@ type StreamFrame struct {
 	Bytes []byte // original AG-UI frame plus `id: <seq>\n` prefix
 }
 
+// StreamProducerState distinguishes an empty live stream from a missing log.
+type StreamProducerState uint8
+
+const (
+	StreamProducerMissing StreamProducerState = iota
+	StreamProducerStarting
+	StreamProducerActive
+	StreamProducerFinished
+)
+
 type streamFollower struct {
 	ch        chan StreamFrame
+	wake      chan struct{}
 	stop      chan struct{}
 	stopOnce  sync.Once
 	closeOnce sync.Once
@@ -22,7 +33,15 @@ type streamFollower struct {
 func newStreamFollower() *streamFollower {
 	return &streamFollower{
 		ch:   make(chan StreamFrame, 16),
+		wake: make(chan struct{}, 1),
 		stop: make(chan struct{}),
+	}
+}
+
+func (f *streamFollower) signal() {
+	select {
+	case f.wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -46,7 +65,7 @@ func (f *streamFollower) send(frame StreamFrame) bool {
 type streamEntry struct {
 	frames    []StreamFrame
 	nextSeq   int64
-	done      bool
+	producer  StreamProducerState
 	followers map[*streamFollower]struct{}
 }
 
@@ -60,37 +79,61 @@ func NewStreamHub() *StreamHub {
 	return &StreamHub{messages: make(map[int64]*streamEntry)}
 }
 
+func newStreamEntry(state StreamProducerState) *streamEntry {
+	return &streamEntry{
+		nextSeq:   1,
+		producer:  state,
+		followers: make(map[*streamFollower]struct{}),
+	}
+}
+
+// Begin records a producer before its first frame can arrive.
+func (h *StreamHub) Begin(messageID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if entry := h.messages[messageID]; entry != nil && entry.producer != StreamProducerFinished {
+		if entry.producer == StreamProducerMissing {
+			entry.producer = StreamProducerStarting
+		}
+		return
+	}
+	h.messages[messageID] = newStreamEntry(StreamProducerStarting)
+}
+
+func (h *StreamHub) ProducerState(messageID int64) StreamProducerState {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if entry := h.messages[messageID]; entry != nil {
+		return entry.producer
+	}
+	return StreamProducerMissing
+}
+
 // Append assigns the next seq for messageID, stamps `id: N\n` onto raw, stores
-// the frame, and non-blocking-sends it to current followers.
+// the frame, and wakes current followers. Followers read from the stored log,
+// so a coalesced wake notification cannot drop data under backpressure.
 func (h *StreamHub) Append(messageID int64, raw []byte) StreamFrame {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	e := h.messages[messageID]
-	if e == nil {
-		e = &streamEntry{
-			nextSeq:   1,
-			followers: make(map[*streamFollower]struct{}),
-		}
-		h.messages[messageID] = e
+	entry := h.messages[messageID]
+	if entry == nil || entry.producer == StreamProducerFinished {
+		entry = newStreamEntry(StreamProducerStarting)
+		h.messages[messageID] = entry
 	}
-	seq := e.nextSeq
-	e.nextSeq++
+	seq := entry.nextSeq
+	entry.nextSeq++
+	entry.producer = StreamProducerActive
 
 	prefix := []byte(fmt.Sprintf("id: %d\n", seq))
 	stamped := make([]byte, 0, len(prefix)+len(raw))
 	stamped = append(stamped, prefix...)
 	stamped = append(stamped, raw...)
 	frame := StreamFrame{Seq: seq, Bytes: stamped}
-	e.frames = append(e.frames, frame)
+	entry.frames = append(entry.frames, frame)
 
-	if !e.done {
-		for fol := range e.followers {
-			select {
-			case fol.ch <- frame:
-			default:
-			}
-		}
+	for follower := range entry.followers {
+		follower.signal()
 	}
 	return frame
 }
@@ -99,161 +142,107 @@ func (h *StreamHub) Append(messageID int64, raw []byte) StreamFrame {
 func (h *StreamHub) After(messageID int64, afterSeq int64) []StreamFrame {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
-	e := h.messages[messageID]
-	if e == nil {
-		return nil
-	}
-	var out []StreamFrame
-	for _, fr := range e.frames {
-		if fr.Seq > afterSeq {
-			out = append(out, fr)
-		}
-	}
-	return out
+	return framesAfter(h.messages[messageID], afterSeq)
 }
 
-// Follow replays After(messageID, afterSeq), then live Append frames, and
-// closes ch when Finish runs. Missing messageID waits until Append or Finish.
-// unsub is safe to call more than once.
+func framesAfter(entry *streamEntry, afterSeq int64) []StreamFrame {
+	if entry == nil {
+		return nil
+	}
+	var frames []StreamFrame
+	for _, frame := range entry.frames {
+		if frame.Seq > afterSeq {
+			frames = append(frames, frame)
+		}
+	}
+	return frames
+}
+
+// Follow replays After(messageID, afterSeq), then reads newly appended frames
+// from the stored log until Finish. unsub is safe to call more than once.
 func (h *StreamHub) Follow(messageID int64, afterSeq int64) (ch <-chan StreamFrame, unsub func()) {
-	fol := newStreamFollower()
+	follower := newStreamFollower()
 
 	var once sync.Once
 	unsub = func() {
 		once.Do(func() {
 			h.mu.Lock()
-			if e := h.messages[messageID]; e != nil {
-				delete(e.followers, fol)
+			for _, entry := range h.messages {
+				delete(entry.followers, follower)
 			}
 			h.mu.Unlock()
-			fol.requestStop()
+			follower.requestStop()
 		})
 	}
 
 	h.mu.Lock()
-	e := h.messages[messageID]
-	if e == nil {
-		e = &streamEntry{
-			nextSeq:   1,
-			followers: make(map[*streamFollower]struct{}),
-		}
-		h.messages[messageID] = e
+	entry := h.messages[messageID]
+	if entry == nil {
+		entry = newStreamEntry(StreamProducerMissing)
+		h.messages[messageID] = entry
 	}
-	var replay []StreamFrame
-	for _, fr := range e.frames {
-		if fr.Seq > afterSeq {
-			replay = append(replay, fr)
-		}
-	}
-	done := e.done
+	entry.followers[follower] = struct{}{}
 	h.mu.Unlock()
 
-	go h.deliverFollow(messageID, afterSeq, replay, done, fol)
-	return fol.ch, unsub
+	go h.deliverFollow(messageID, afterSeq, follower)
+	return follower.ch, unsub
 }
 
-func (h *StreamHub) deliverFollow(
-	messageID int64,
-	afterSeq int64,
-	replay []StreamFrame,
-	done bool,
-	fol *streamFollower,
-) {
-	defer fol.closeCh()
+func (h *StreamHub) deliverFollow(messageID int64, cursor int64, follower *streamFollower) {
+	defer follower.closeCh()
 
-	for _, fr := range replay {
-		if !fol.send(fr) {
-			return
-		}
-	}
-	if done {
-		return
-	}
-
-	last := afterSeq
-	if n := len(replay); n > 0 {
-		last = replay[n-1].Seq
-	}
-
-	// Deliver catch-up before registering so Finish cannot abort mid-catch-up
-	// and drop frames that are already in the log. Only unsub aborts early
-	// (fol.send). Re-check under the lock until catch-up is empty, then register.
 	for {
 		h.mu.Lock()
-		e := h.messages[messageID]
-		if e == nil {
-			h.mu.Unlock()
-			return
-		}
-		var catchup []StreamFrame
-		for _, fr := range e.frames {
-			if fr.Seq > last {
-				catchup = append(catchup, fr)
-			}
-		}
-		if e.done {
-			h.mu.Unlock()
-			for _, fr := range catchup {
-				if !fol.send(fr) {
-					return
-				}
-			}
-			return
-		}
-		if len(catchup) == 0 {
-			e.followers[fol] = struct{}{}
-			h.mu.Unlock()
-			<-fol.stop
-			return
-		}
+		entry := h.messages[messageID]
+		frames := framesAfter(entry, cursor)
+		finished := entry != nil && entry.producer == StreamProducerFinished
 		h.mu.Unlock()
 
-		for _, fr := range catchup {
-			if !fol.send(fr) {
+		for _, frame := range frames {
+			if !follower.send(frame) {
 				return
 			}
-			last = fr.Seq
+			cursor = frame.Seq
+		}
+		if finished {
+			return
+		}
+
+		select {
+		case <-follower.wake:
+		case <-follower.stop:
+			return
 		}
 	}
 }
 
-// Finish marks the stream done, closes followers, and retains the snapshot for
-// 30s so a late resume can still After before the entry is deleted.
+// Finish marks the stream done, wakes followers so they drain the stored log,
+// and retains the snapshot for 30s for late resume.
 func (h *StreamHub) Finish(messageID int64) {
 	h.mu.Lock()
-	e := h.messages[messageID]
-	if e == nil {
-		e = &streamEntry{
-			nextSeq:   1,
-			done:      true,
-			followers: make(map[*streamFollower]struct{}),
-		}
-		h.messages[messageID] = e
-		h.mu.Unlock()
-		h.scheduleDelete(messageID)
-		return
-	}
-	if e.done {
+	entry := h.messages[messageID]
+	if entry == nil {
+		entry = newStreamEntry(StreamProducerFinished)
+		h.messages[messageID] = entry
+	} else if entry.producer == StreamProducerFinished {
 		h.mu.Unlock()
 		return
+	} else {
+		entry.producer = StreamProducerFinished
 	}
-	e.done = true
-	followers := e.followers
-	e.followers = make(map[*streamFollower]struct{})
+	for follower := range entry.followers {
+		follower.signal()
+	}
 	h.mu.Unlock()
 
-	for fol := range followers {
-		fol.requestStop()
-	}
-	h.scheduleDelete(messageID)
+	h.scheduleDelete(messageID, entry)
 }
 
-func (h *StreamHub) scheduleDelete(messageID int64) {
+func (h *StreamHub) scheduleDelete(messageID int64, finished *streamEntry) {
 	time.AfterFunc(30*time.Second, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		if cur := h.messages[messageID]; cur != nil && cur.done {
+		if current := h.messages[messageID]; current == finished && current.producer == StreamProducerFinished {
 			delete(h.messages, messageID)
 		}
 	})

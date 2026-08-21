@@ -4573,6 +4573,7 @@ func (ps *Service) QueryStream(
 		}
 	}
 	identity := StreamIdentity{DialogueID: dialogueID, MessageID: id}
+	ps.hub().Begin(id)
 	if onReady != nil {
 		onReady(identity)
 	}

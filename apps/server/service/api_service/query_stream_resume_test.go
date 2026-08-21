@@ -211,6 +211,47 @@ type fakeRunStream struct {
 	called      int
 }
 
+type scriptedRunStream struct {
+	mu      sync.Mutex
+	bodies  []string
+	afters  []int64
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (f *scriptedRunStream) RunStreamWithMeta(
+	ctx context.Context,
+	_runID string,
+	after int64,
+) (io.ReadCloser, rxBot.ResponseMeta, error) {
+	f.mu.Lock()
+	call := len(f.afters)
+	f.afters = append(f.afters, after)
+	var body string
+	if call < len(f.bodies) {
+		body = f.bodies[call]
+	}
+	f.mu.Unlock()
+	if f.started != nil {
+		f.once.Do(func() { close(f.started) })
+	}
+	if f.release != nil {
+		select {
+		case <-f.release:
+		case <-ctx.Done():
+			return nil, rxBot.ResponseMeta{}, ctx.Err()
+		}
+	}
+	return io.NopCloser(strings.NewReader(body)), rxBot.ResponseMeta{}, nil
+}
+
+func (f *scriptedRunStream) calledAfters() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int64(nil), f.afters...)
+}
+
 func (f *fakeRunStream) RunStreamWithMeta(
 	ctx context.Context,
 	runID string,
@@ -288,7 +329,7 @@ func TestResumeQuestionStreamResuppliesFromBotWhenHubMissing(t *testing.T) {
 	}
 }
 
-func TestResumeQuestionStreamNonterminalBotEOFDoesNotFinishHub(t *testing.T) {
+func TestResumeQuestionStreamNonterminalBotEOFFailsHub(t *testing.T) {
 	gdb := setupStreamTestDB(t)
 	streamer := &fakeRunStream{
 		body: "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-truncated\"}\n\n",
@@ -303,41 +344,24 @@ func TestResumeQuestionStreamNonterminalBotEOFDoesNotFinishHub(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	forwarded := make(chan StreamFrame, 1)
-	done := make(chan error, 1)
-	go func() {
-		done <- svc.ResumeQuestionStream(
-			ctx, "alice@example.com", "dlg-truncated", row.Id, 0,
-			func(frame StreamFrame) error {
-				forwarded <- frame
-				return nil
-			},
-		)
-	}()
-	select {
-	case frame := <-forwarded:
-		if frame.Seq != 1 || !strings.Contains(string(frame.Bytes), "RunStarted") {
-			t.Fatalf("frame=%+v", frame)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("resume did not forward the Bot prefix")
+	var forwarded []StreamFrame
+	if err := svc.ResumeQuestionStream(
+		context.Background(), "alice@example.com", "dlg-truncated", row.Id, 0,
+		func(frame StreamFrame) error {
+			forwarded = append(forwarded, frame)
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("ResumeQuestionStream: %v", err)
 	}
-	select {
-	case err := <-done:
-		t.Fatalf("nonterminal Bot EOF finished the hub; err=%v", err)
-	case <-time.After(80 * time.Millisecond):
-		// Still following the open hub: expected until the request is cancelled.
+	if len(forwarded) != 4 || !strings.Contains(string(forwarded[3].Bytes), "stream_replay_incomplete") {
+		t.Fatalf("forwarded=%q, want three attempts and terminal RunError", forwarded)
 	}
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("err after cancel=%v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("resume did not stop after request cancellation")
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "FAILED" {
+		t.Fatalf("row status=%q, want FAILED", row.Status)
 	}
 }
 
@@ -429,5 +453,175 @@ func TestResumeQuestionStreamPendingBotRunIDDoesNotCallBot(t *testing.T) {
 	}
 	if called, _, _ := streamer.snapshot(); called != 0 {
 		t.Fatalf("called=%d, want 0", called)
+	}
+}
+
+func TestResumeQuestionStreamStartingProducerDoesNotTriggerResupply(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	streamer := &fakeRunStream{err: errors.New("Bot resupply must not run")}
+	svc := streamCapableService()
+	svc.runStream = streamer
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-starting", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+		BotRunId: "bot-starting",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc.hub().Begin(row.Id)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.ResumeQuestionStream(
+			context.Background(), "alice@example.com", row.DialogueId, row.Id, 0,
+			func(StreamFrame) error { return nil },
+		)
+	}()
+	time.Sleep(30 * time.Millisecond)
+	svc.hub().Append(row.Id, []byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-starting\"}\n\n"))
+	svc.hub().Append(row.Id, []byte("event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-starting\"}\n\n"))
+	svc.hub().Finish(row.Id)
+	if err := <-done; err != nil {
+		t.Fatalf("ResumeQuestionStream: %v", err)
+	}
+	if called, _, _ := streamer.snapshot(); called != 0 {
+		t.Fatalf("Bot resupply calls=%d, want 0 during pre-first-frame producer window", called)
+	}
+}
+
+func TestResumeQuestionStreamResupplySurvivesBrowserLeaveAndSettlesRow(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	release := make(chan struct{})
+	streamer := &scriptedRunStream{
+		started: make(chan struct{}),
+		release: release,
+		bodies: []string{
+			"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-detached\"}\n\n" +
+				"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"message_id\":\"m\",\"delta\":\"recovered answer\"}\n\n" +
+				"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-detached\"}\n\n",
+		},
+	}
+	svc := streamCapableService()
+	svc.runStream = streamer
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-detached", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+		BotRunId: "bot-detached",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.ResumeQuestionStream(
+			ctx, row.UserName, row.DialogueId, row.Id, 0,
+			func(StreamFrame) error { return nil },
+		)
+	}()
+	<-streamer.started
+	cancel()
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("browser subscriber did not leave")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := gdb.First(&row, row.Id).Error; err != nil {
+			t.Fatal(err)
+		}
+		if row.Status == "SUCCEEDED" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if row.Status != "SUCCEEDED" || !strings.Contains(row.Answer, "recovered answer") {
+		t.Fatalf("row after detached resupply=%#v", row)
+	}
+	if got := svc.hub().ProducerState(row.Id); got != StreamProducerFinished {
+		t.Fatalf("producer state=%v, want finished", got)
+	}
+}
+
+func TestResumeQuestionStreamNonterminalEOFRetriesThenFailsDurably(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	streamer := &scriptedRunStream{bodies: []string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-truncated\"}\n\n" +
+			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"message_id\":\"m\",\"delta\":\"partial\"}\n\n",
+		"",
+		"",
+	}}
+	svc := streamCapableService()
+	svc.runStream = streamer
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-truncated-durable", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+		BotRunId: "bot-truncated",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.ResumeQuestionStream(
+		context.Background(), row.UserName, row.DialogueId, row.Id, 0,
+		func(StreamFrame) error { return nil },
+	); err != nil {
+		t.Fatalf("ResumeQuestionStream: %v", err)
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "FAILED" || !strings.Contains(row.Answer, "partial") {
+		t.Fatalf("row after truncated replay=%#v", row)
+	}
+	if got := svc.hub().ProducerState(row.Id); got != StreamProducerFinished {
+		t.Fatalf("producer state=%v, want finished", got)
+	}
+	if got := streamer.calledAfters(); len(got) != 3 || got[0] != 0 || got[1] != 2 || got[2] != 2 {
+		t.Fatalf("Bot replay cursors=%v, want [0 2 2]", got)
+	}
+}
+
+func TestResumeQuestionStreamGatewayRestartReplaySettlesOwnerRow(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	streamer := &scriptedRunStream{bodies: []string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-restart\"}\n\n" +
+			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"message_id\":\"m\",\"delta\":\"after restart\"}\n\n" +
+			"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-restart\"}\n\n",
+	}}
+	restarted := streamCapableService()
+	restarted.runStream = streamer
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-restart", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+		BotRunId: "bot-restart",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	var frames []StreamFrame
+	if err := restarted.ResumeQuestionStream(
+		context.Background(), row.UserName, row.DialogueId, row.Id, 0,
+		func(frame StreamFrame) error {
+			frames = append(frames, frame)
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("ResumeQuestionStream: %v", err)
+	}
+	if len(frames) != 3 {
+		t.Fatalf("replayed frames=%d, want 3", len(frames))
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "SUCCEEDED" || !strings.Contains(row.Answer, "after restart") {
+		t.Fatalf("restarted row=%#v", row)
 	}
 }

@@ -4,26 +4,34 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+
+	"gorm.io/gorm"
 )
 
 // ErrStreamRunMissing means the owner row is still live but this process has no
 // frame log to replay or tail. Resume does not start a second Bot run.
 var ErrStreamRunMissing = errors.New("stream run is missing from this gateway")
 
+const (
+	streamResupplyAttempts = 3
+	streamResupplyTimeout  = 30 * time.Minute
+)
+
 type streamResupply struct {
 	ready chan struct{}
-	err   error
 }
 
 // ResumeQuestionStream replays AG-UI frames with seq > afterSeq then tails the
 // process-local hub. Missing or foreign rows return the same not-found error as
-// history. A live row with no hub resupplies from Bot when bot_run_id is set;
-// otherwise it returns ErrStreamRunMissing.
+// history. A missing hub resupplies the same durable Bot run when bot_run_id is
+// set; it never starts a second generation.
 func (ps *Service) ResumeQuestionStream(
 	ctx context.Context,
 	username string,
@@ -44,17 +52,21 @@ func (ps *Service) ResumeQuestionStream(
 	}
 
 	hub := ps.hub()
-	terminal := resumeStreamTerminal(row.Status)
-	if len(hub.After(messageID, 0)) == 0 {
-		if terminal {
+	switch hub.ProducerState(messageID) {
+	case StreamProducerFinished:
+		return forwardResumeFrames(hub.After(messageID, afterSeq), forward)
+	case StreamProducerStarting, StreamProducerActive:
+		return followResumeStream(ctx, hub, messageID, afterSeq, forward)
+	}
+
+	if botRunIDForResupply(row.BotRunId) == "" {
+		if resumeStreamTerminal(row.Status) {
 			return nil
 		}
-		if err := ps.resupplyQuestionStreamFromBot(ctx, row.BotRunId, messageID); err != nil {
-			return ErrStreamRunMissing
-		}
+		return ErrStreamRunMissing
 	}
-	if terminal {
-		return forwardResumeFrames(hub.After(messageID, afterSeq), forward)
+	if err := ps.resupplyQuestionStreamFromBot(ctx, row); err != nil {
+		return err
 	}
 	return followResumeStream(ctx, hub, messageID, afterSeq, forward)
 }
@@ -68,34 +80,30 @@ func botRunIDForResupply(botRunID string) string {
 }
 
 func (ps *Service) resupplyQuestionStreamFromBot(
-	ctx context.Context,
-	botRunID string,
-	messageID int64,
+	requestCtx context.Context,
+	row model.QuestionAgentLog,
 ) error {
-	runID := botRunIDForResupply(botRunID)
+	runID := botRunIDForResupply(row.BotRunId)
 	if runID == "" {
 		return ErrStreamRunMissing
 	}
-	state, owner := ps.claimStreamResupply(messageID)
+	state, owner := ps.claimStreamResupply(row.Id)
 	if !owner {
 		select {
 		case <-state.ready:
-			return state.err
-		case <-ctx.Done():
-			return ctx.Err()
+			return nil
+		case <-requestCtx.Done():
+			return requestCtx.Err()
 		}
 	}
 
-	rc, meta, err := ps.runStreamReader().RunStreamWithMeta(ctx, runID, 0)
-	logBotResponseMeta(ctx, meta)
-	if err != nil || rc == nil {
-		ps.finishStreamResupplySetup(messageID, state, ErrStreamRunMissing)
-		return ErrStreamRunMissing
-	}
-	ps.finishStreamResupplySetup(messageID, state, nil)
+	ps.hub().Begin(row.Id)
+	close(state.ready)
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(requestCtx), streamResupplyTimeout)
 	go func() {
-		defer ps.clearStreamResupply(messageID, state)
-		copyBotRunStreamToHub(ps.hub(), messageID, rc)
+		defer cancel()
+		defer ps.clearStreamResupply(row.Id, state)
+		ps.copyBotRunStreamToHub(runCtx, row, runID)
 	}()
 	return nil
 }
@@ -114,14 +122,6 @@ func (ps *Service) claimStreamResupply(messageID int64) (*streamResupply, bool) 
 	return state, true
 }
 
-func (ps *Service) finishStreamResupplySetup(messageID int64, state *streamResupply, err error) {
-	state.err = err
-	if err != nil {
-		ps.clearStreamResupply(messageID, state)
-	}
-	close(state.ready)
-}
-
 func (ps *Service) clearStreamResupply(messageID int64, state *streamResupply) {
 	ps.resupplyMu.Lock()
 	defer ps.resupplyMu.Unlock()
@@ -130,30 +130,133 @@ func (ps *Service) clearStreamResupply(messageID int64, state *streamResupply) {
 	}
 }
 
-func copyBotRunStreamToHub(hub *StreamHub, messageID int64, rc io.ReadCloser) {
-	defer rc.Close()
-	scanner := bufio.NewScanner(rc)
+func (ps *Service) copyBotRunStreamToHub(
+	ctx context.Context,
+	row model.QuestionAgentLog,
+	runID string,
+) {
+	hub := ps.hub()
+	accumulator := rxBot.NewAGUIAccumulator("")
+	var cursor int64
+	terminal := false
+
+	for attempt := 0; attempt < streamResupplyAttempts && !terminal; attempt++ {
+		reader, meta, err := ps.runStreamReader().RunStreamWithMeta(ctx, runID, cursor)
+		logBotResponseMeta(ctx, meta)
+		if err == nil && reader != nil {
+			cursor, terminal = copyBotRunStreamAttempt(hub, row.Id, cursor, reader, accumulator)
+		}
+		if terminal || ctx.Err() != nil {
+			break
+		}
+		if attempt+1 < streamResupplyAttempts {
+			select {
+			case <-ctx.Done():
+			case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
+			}
+		}
+	}
+
+	status := resuppliedTerminalStatus(accumulator)
+	if !terminal {
+		status = "FAILED"
+		hub.Append(row.Id, []byte(
+			"event: RunError\n"+
+				"data: {\"type\":\"RunError\",\"code\":\"stream_replay_incomplete\",\"message\":\"Bot replay ended before a terminal event\"}\n\n",
+		))
+	}
+	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	_ = ps.settleResuppliedQuestionStream(settleCtx, row, accumulator, status)
+	hub.Finish(row.Id)
+}
+
+func copyBotRunStreamAttempt(
+	hub *StreamHub,
+	messageID int64,
+	cursor int64,
+	reader io.ReadCloser,
+	accumulator *rxBot.AGUIAccumulator,
+) (int64, bool) {
+	defer reader.Close()
+	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	scanner.Split(splitSSEFrames)
 	terminal := false
 	for scanner.Scan() {
 		frame := append([]byte(nil), scanner.Bytes()...)
-		hub.Append(messageID, frame)
-		if isTerminalAGUIFrame(frame) {
-			terminal = true
+		stored := hub.Append(messageID, frame)
+		cursor = stored.Seq
+		if event, ok := rxBot.ParseAGUIFrame(frame); ok {
+			accumulator.Observe(event)
+			terminal = isTerminalAGUIFrame(frame)
+		}
+		if terminal {
+			break
 		}
 	}
-	if terminal {
-		hub.Finish(messageID)
+	return cursor, terminal
+}
+
+func resuppliedTerminalStatus(accumulator *rxBot.AGUIAccumulator) string {
+	if runErr := accumulator.Err(); runErr != nil {
+		if strings.Contains(strings.ToLower(runErr.Code), "cancel") {
+			return "CANCELLED"
+		}
+		return "FAILED"
 	}
+	if accumulator.Finished() {
+		return statusSucceeded
+	}
+	return "FAILED"
+}
+
+func (ps *Service) settleResuppliedQuestionStream(
+	ctx context.Context,
+	row model.QuestionAgentLog,
+	accumulator *rxBot.AGUIAccumulator,
+	status string,
+) error {
+	return model.DB(ctx).Transaction(func(tx *gorm.DB) error {
+		var stored model.QuestionAgentLog
+		if err := tx.Model(&model.QuestionAgentLog{}).
+			Select("id, user_name, dialogue_id, tool_name, status, answer").
+			Where("id = ? AND user_name = ? AND dialogue_id = ?", row.Id, row.UserName, row.DialogueId).
+			Take(&stored).Error; err != nil {
+			return err
+		}
+		updates := map[string]interface{}{
+			"follow_up_questions": accumulator.FollowUpJSON(),
+		}
+		if !resumeStreamTerminal(stored.Status) {
+			updates["status"] = status
+		}
+		if answer := accumulator.AnswerText(); strings.TrimSpace(answer) != "" {
+			slug, ok := rxBot.SlugFor(stored.ToolName)
+			if !ok {
+				return fmt.Errorf("unknown stream tool %q", stored.ToolName)
+			}
+			updates["answer"] = rxBot.ShapeAnswer(slug, answer, nil)
+		}
+		result := tx.Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND dialogue_id = ?", row.Id, row.UserName, row.DialogueId).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("stream row %d not found", row.Id)
+		}
+		return nil
+	})
 }
 
 func isTerminalAGUIFrame(frame []byte) bool {
-	ev, ok := rxBot.ParseAGUIFrame(frame)
+	event, ok := rxBot.ParseAGUIFrame(frame)
 	if !ok {
 		return false
 	}
-	switch ev.Type {
+	switch event.Type {
 	case "RunFinished", "RunError":
 		return true
 	default:
