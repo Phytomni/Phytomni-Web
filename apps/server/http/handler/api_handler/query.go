@@ -185,6 +185,37 @@ func parseNonnegativeInt64(raw string) (int64, bool) {
 	return value, true
 }
 
+func parsePositiveInt64(raw string) (int64, bool) {
+	value, ok := parseNonnegativeInt64(raw)
+	if !ok || value < 1 {
+		return 0, false
+	}
+	return value, true
+}
+
+// parseResumeAfterSeq reads Last-Event-ID, or ?after= when the header is
+// absent. Missing both yields 0. A present but unparseable value is invalid.
+func parseResumeAfterSeq(ctx *gin.Context) (int64, bool) {
+	if ctx == nil || ctx.Request == nil {
+		return 0, true
+	}
+	if values := ctx.Request.Header.Values("Last-Event-ID"); len(values) > 0 {
+		afterSeq, err := strconv.ParseInt(strings.TrimSpace(values[0]), 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return afterSeq, true
+	}
+	if raw, ok := ctx.GetQuery("after"); ok {
+		afterSeq, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return afterSeq, true
+	}
+	return 0, true
+}
+
 // parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
 // future authority fields out of the Chat/Agent request contract.
@@ -707,6 +738,77 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 	ctx.JSON(errs.SucResp(data))
+}
+
+// ResumeQuestionStream is the owner-only SSE resume for an in-flight chat
+// message. It replays unseen hub frames then tails until the run finishes.
+func (ph *Handler) ResumeQuestionStream(ctx *gin.Context) {
+	name, _ := ctx.Get("username")
+	dialogueID := ctx.Param("id")
+	messageID, ok := parsePositiveInt64(ctx.Param("message_id"))
+	if !ok {
+		writeQueryError(ctx, http.StatusBadRequest, "invalid message id")
+		return
+	}
+	afterSeq, ok := parseResumeAfterSeq(ctx)
+	if !ok {
+		writeQueryError(ctx, http.StatusBadRequest, "invalid after")
+		return
+	}
+
+	flusher, canFlush := ctx.Writer.(http.Flusher)
+	if !canFlush {
+		writeQueryError(ctx, http.StatusInternalServerError, "request failed")
+		return
+	}
+
+	headerSent := false
+	ensureSSE := func() {
+		if headerSent {
+			return
+		}
+		ctx.Header("Content-Type", "text/event-stream")
+		ctx.Header("Cache-Control", "no-cache")
+		ctx.Header("Connection", "keep-alive")
+		ctx.Header("X-Accel-Buffering", "no")
+		ctx.Status(http.StatusOK)
+		headerSent = true
+	}
+	forward := func(frame api_service.StreamFrame) error {
+		ensureSSE()
+		if _, err := ctx.Writer.Write(frame.Bytes); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+
+	err := ph.service.ResumeQuestionStream(ctx, name.(string), dialogueID, messageID, afterSeq, forward)
+	if err == nil {
+		ensureSSE()
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, api_service.ErrConversationLedgerNotFound) {
+		writeQueryError(ctx, http.StatusNotFound, "conversation not found")
+		return
+	}
+	if errors.Is(err, api_service.ErrStreamRunMissing) {
+		ensureSSE()
+		_, _ = ctx.Writer.Write([]byte("event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"stream_run_missing\"}\n\n"))
+		flusher.Flush()
+		return
+	}
+	status, msg := queryErrorStatus(err)
+	if headerSent {
+		msgJSON, _ := json.Marshal(msg)
+		_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%s}\n\n", msgJSON)
+		flusher.Flush()
+		return
+	}
+	if status >= http.StatusInternalServerError {
+		rxLog.Sugar().Errorw("ResumeQuestionStream failed", "user", name, "err", err)
+	}
+	writeQueryError(ctx, status, msg)
 }
 
 // QueryAnalystUpdateLog syncs a finished remote task result back into the

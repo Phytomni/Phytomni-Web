@@ -841,3 +841,181 @@ func TestQuery_StreamV1ForwardsTypedContextFrameAndIdentity(t *testing.T) {
 		t.Fatalf("persisted V1 stream row = %#v", row)
 	}
 }
+
+func newResumeStreamContext(
+	t *testing.T,
+	username string,
+	dialogueID string,
+	messageID string,
+	rawQuery string,
+) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	path := "/api/v1/conversations/" + dialogueID + "/messages/" + messageID + "/stream"
+	if rawQuery != "" {
+		path += "?" + rawQuery
+	}
+	c.Request = httptest.NewRequest(http.MethodGet, path, nil)
+	c.Request.Header.Set("Accept", "text/event-stream")
+	c.Params = gin.Params{{Key: "id", Value: dialogueID}, {Key: "message_id", Value: messageID}}
+	c.Set("username", username)
+	return c, w
+}
+
+func TestResumeQuestionStreamRejectsOtherOwner(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-resume", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	c, w := newResumeStreamContext(t, "bob@example.com", "dlg-resume", strconv.FormatInt(row.Id, 10), "")
+	NewHandler().ResumeQuestionStream(c)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%q, want 404", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("foreign owner must not receive SSE, Content-Type=%q", ct)
+	}
+}
+
+func TestResumeQuestionStreamReplays(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupStreamHandlerTestDB(t)
+	body := strings.Join([]string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_resume\"}\n",
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"hello\"}\n",
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run_resume\"}\n",
+	}, "\n")
+	srv := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	ph := NewHandler()
+	start := httptest.NewRecorder()
+	startCtx, _ := gin.CreateTestContext(start)
+	startCtx.Set("username", "headers@example.com")
+	startCtx.Request = newStreamTestRequest(t, "instant")
+	startCtx.Params = gin.Params{{Key: "id", Value: "0"}}
+	ph.Query(startCtx)
+	if start.Code != http.StatusOK {
+		t.Fatalf("start status=%d body=%q", start.Code, start.Body.String())
+	}
+	dialogueID := start.Header().Get("X-Phyto-Dialogue-Id")
+	messageID := start.Header().Get("X-Phyto-Message-Id")
+	if dialogueID == "" || messageID == "" {
+		t.Fatalf("missing identity headers: dialogue=%q message=%q", dialogueID, messageID)
+	}
+
+	c, w := newResumeStreamContext(t, "headers@example.com", dialogueID, messageID, "")
+	ph.ResumeQuestionStream(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("resume status=%d body=%q", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type=%q, want text/event-stream", ct)
+	}
+	got := w.Body.String()
+	for _, marker := range []string{"id: 1\n", "RunStarted", "TextMessageContent", "RunFinished"} {
+		if !strings.Contains(got, marker) {
+			t.Fatalf("resume body missing %q: %q", marker, got)
+		}
+	}
+}
+
+func TestResumeQuestionStreamLastEventIDWinsOverQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupStreamHandlerTestDB(t)
+	body := strings.Join([]string{
+		"event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_resume_after\"}\n",
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"hello\"}\n",
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run_resume_after\"}\n",
+	}, "\n")
+	srv := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	ph := NewHandler()
+	start := httptest.NewRecorder()
+	startCtx, _ := gin.CreateTestContext(start)
+	startCtx.Set("username", "headers@example.com")
+	startCtx.Request = newStreamTestRequest(t, "instant")
+	startCtx.Params = gin.Params{{Key: "id", Value: "0"}}
+	ph.Query(startCtx)
+	if start.Code != http.StatusOK {
+		t.Fatalf("start status=%d body=%q", start.Code, start.Body.String())
+	}
+	dialogueID := start.Header().Get("X-Phyto-Dialogue-Id")
+	messageID := start.Header().Get("X-Phyto-Message-Id")
+
+	c, w := newResumeStreamContext(t, "headers@example.com", dialogueID, messageID, "after=0")
+	c.Request.Header.Set("Last-Event-ID", "1")
+	ph.ResumeQuestionStream(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("resume status=%d body=%q", w.Code, w.Body.String())
+	}
+	got := w.Body.String()
+	if strings.Contains(got, "id: 1\n") {
+		t.Fatalf("Last-Event-ID=1 must skip seq 1: %q", got)
+	}
+	if !strings.Contains(got, "id: 2\n") {
+		t.Fatalf("resume body missing seq 2: %q", got)
+	}
+}
+
+func TestResumeQuestionStreamInvalidAfterIs400(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, w := newResumeStreamContext(t, "alice@example.com", "dlg-resume", "1", "after=nope")
+	NewHandler().ResumeQuestionStream(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%q, want 400", w.Code, w.Body.String())
+	}
+}
+
+func TestResumeQuestionStreamInvalidMessageIDIs400(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, w := newResumeStreamContext(t, "alice@example.com", "dlg-resume", "abc", "")
+	NewHandler().ResumeQuestionStream(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%q, want 400", w.Code, w.Body.String())
+	}
+}
+
+func TestResumeQuestionStreamMissingRunWritesRunError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-resume-missing", UserName: "alice@example.com",
+		Query: "q", ToolName: "ChatAgent", Status: "RUNNING", Mode: "instant",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	c, w := newResumeStreamContext(t, "alice@example.com", "dlg-resume-missing", strconv.FormatInt(row.Id, 10), "")
+	NewHandler().ResumeQuestionStream(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q, want 200 SSE", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type=%q, want text/event-stream", ct)
+	}
+	got := w.Body.String()
+	if !strings.Contains(got, "event: RunError") || !strings.Contains(got, "stream_run_missing") {
+		t.Fatalf("missing RunError frame: %q", got)
+	}
+}
