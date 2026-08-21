@@ -4046,16 +4046,28 @@ func replayStoredStreamSnapshot(out *QueryData, forward func([]byte) error) erro
 	})
 }
 
+func (ps *Service) hub() *StreamHub {
+	if ps == nil {
+		return NewStreamHub()
+	}
+	ps.streamHubOnce.Do(func() {
+		ps.streamHub = NewStreamHub()
+	})
+	return ps.streamHub
+}
+
 // QueryStream is the SSE variant of Query for chat-family slugs. V1 and keyed
 // V0 allocate an owner row before opening Bot. Fresh keyed V0 submissions then
 // promote that row to RUNNING, while a keyed replacement keeps the prior public
 // result visible and stages its active run privately until RunFinished. Keyless
 // legacy V0 still creates or refreshes its RUNNING row before onReady. All paths
-// publish the durable identity through onReady, then forward each raw frame
-// while teeing it into an accumulator. RunStarted is persisted before it is
-// forwarded, so the A2UI dialogue + user + run authorization boundary is live
-// before an interactive frame reaches the browser. A forward() error stops
-// forwarding but never aborts the Bot read or durable finalization.
+// publish the durable identity through onReady, then append each frame to the
+// process-local hub and forward the stamped bytes while teeing a copy into an
+// accumulator. The Bot stream uses a context that outlives browser abort.
+// RunStarted is persisted before it is forwarded, so the A2UI dialogue + user
+// + run authorization boundary is live before an interactive frame reaches
+// the browser. A forward() error stops forwarding but never aborts the Bot
+// read or durable finalization.
 func (ps *Service) QueryStream(
 	ctx context.Context,
 	username string,
@@ -4202,6 +4214,8 @@ func (ps *Service) QueryStream(
 		permissions.AllowedTools,
 	)
 
+	botCtx := context.WithoutCancel(ctx)
+
 	req := rxBot.ChatCompletionRequest{
 		Model:        chatModel,
 		Messages:     chatMessagesForRequest(in.History, in.Query),
@@ -4222,7 +4236,7 @@ func (ps *Service) QueryStream(
 	var rc io.ReadCloser
 	for {
 		var meta rxBot.ResponseMeta
-		rc, meta, err = streamClient.ChatCompletionStreamWithMeta(ctx, req)
+		rc, meta, err = streamClient.ChatCompletionStreamWithMeta(botCtx, req)
 		logBotResponseMeta(ctx, meta)
 		if err == nil {
 			break
@@ -4296,10 +4310,11 @@ func (ps *Service) QueryStream(
 	if onReady != nil {
 		onReady(identity)
 	}
+	defer ps.hub().Finish(id)
 
 	// Forward + tee, splitting the SSE body on blank-line frame separators. The
-	// split token includes its original separator so the bytes reaching Web are
-	// exactly the bytes Bot sent; only the accumulator parses a copy.
+	// split token includes its original separator so the hub can stamp a resume
+	// id without rewriting AG-UI data. The accumulator parses a copy.
 	expectedTurnID := ""
 	if instantConversation {
 		expectedTurnID = submission.envelope.TurnID
@@ -4355,22 +4370,25 @@ func (ps *Service) QueryStream(
 				persistedRunID = acc.RunID()
 			}
 		}
-		// Forward the raw frame, including Bot's original separator, to the
-		// browser. Never re-encode or normalize an AG-UI frame in the gateway.
+		// Stamp the frame into the process-local hub, then forward the stamped
+		// bytes. A subscriber write failure stops forwarding only; Bot frames
+		// keep appending until the run finishes.
 		out := append([]byte(nil), frame...)
+		hubFrame := ps.hub().Append(id, out)
 		if forwarding && forward != nil {
-			if err := forward(out); err != nil {
+			if err := forward(hubFrame.Bytes); err != nil {
 				forwarding = false
 			}
 		}
 	}
 
 	// Ground the persisted status in what actually happened on the wire, not a
-	// hardcoded optimism: a mid-stream read error (network drop, ctx cancel,
-	// frame over the 1MB scanner cap) or a RunError event both mean the answer
-	// is partial/failed. A blank status would strand the row out of the GA
-	// cron's WHERE status='RUNNING' poll set, so use "FAILED" (a terminal
-	// non-RUNNING state) rather than "" for these paths.
+	// hardcoded optimism: a mid-stream read error (network drop, frame over the
+	// 1MB scanner cap) or a RunError event both mean the answer is
+	// partial/failed. Browser leave is not a stream error. A blank status would
+	// strand the row out of the GA cron's WHERE status='RUNNING' poll set, so
+	// use "FAILED" (a terminal non-RUNNING state) rather than "" for Bot
+	// failures.
 	status := statusSucceeded
 	if scanErr := scanner.Err(); scanErr != nil {
 		status = "FAILED"
@@ -4379,6 +4397,14 @@ func (ps *Service) QueryStream(
 		}
 	} else if streamErr != nil || acc.Err() != nil {
 		status = "FAILED"
+	}
+	if errors.Is(streamErr, context.Canceled) {
+		// Forward/browser abort is not a Bot cancel. Only scanner/Bot errors
+		// remain stream errors after this point.
+		streamErr = nil
+	}
+	if acc.Finished() && acc.Err() == nil && streamErr == nil {
+		status = statusSucceeded
 	}
 	if streamReplacement && status == statusSucceeded && !acc.Finished() {
 		status = "FAILED"

@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"sync"
 
 	rxBot "phytomni-server/external/bot"
 )
@@ -32,6 +33,8 @@ type Service struct {
 	runCanceller   agentRunCanceller
 	deliveryClient resultDeliveryClient
 	catalogReader  agentCatalogReader
+	streamHub      *StreamHub
+	streamHubOnce  sync.Once
 }
 
 func (ps *Service) agentCatalogReader() agentCatalogReader {

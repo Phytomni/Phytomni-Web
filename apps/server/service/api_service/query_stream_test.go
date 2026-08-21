@@ -10,8 +10,10 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 	rxBot "phytomni-server/external/bot"
@@ -81,6 +83,22 @@ func v1ContextStream(stage rxBot.ContextStageMetadata, answer string) string {
 		`event: RunFinished` + "\n" +
 			`data: {"type":"RunFinished","run_id":"run-context"}` + "\n",
 	}, "\n")
+}
+
+func stampedSSE(raw string) string {
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Split(splitSSEFrames)
+	var b strings.Builder
+	seq := int64(0)
+	for scanner.Scan() {
+		seq++
+		b.WriteString("id: ")
+		b.WriteString(strconv.FormatInt(seq, 10))
+		b.WriteByte('\n')
+		b.Write(scanner.Bytes())
+	}
+	return b.String()
 }
 
 func assertValidAGUIReplay(t *testing.T, raw string) []string {
@@ -465,30 +483,48 @@ func TestQueryStreamContextFailuresNeverCommitAssistantSummary(t *testing.T) {
 	}
 }
 
-func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testing.T) {
+func TestQueryStreamBrowserLeaveKeepsRunningThenSucceeds(t *testing.T) {
 	useConversationV1(t)
 	gdb := setupStreamTestDB(t)
-	email := "stream-cancel-v1@example.com"
+	email := "stream-leave-v1@example.com"
 	if err := gdb.Exec(
 		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
 		email,
 	).Error; err != nil {
 		t.Fatal(err)
 	}
+	const leaveDelta = "leave delta"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		var request rxBot.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode stream request: %v", err)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(
 			`event: RunStarted` + "\n" +
-				`data: {"type":"RunStarted","run_id":"run-cancel-v1"}` +
-				"\n\n" +
+				`data: {"type":"RunStarted","run_id":"run-leave-v1"}` + "\n\n" +
 				`event: TextMessageContent` + "\n" +
-				`data: {"type":"TextMessageContent","delta":"partial secret"}` +
-				"\n\n",
+				`data: {"type":"TextMessageContent","delta":` +
+				strconv.Quote(leaveDelta) + "}" + "\n\n",
 		))
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
 		}
-		<-r.Context().Done()
+		time.Sleep(50 * time.Millisecond)
+		stage := contextStageForStream(request)
+		encoded, _ := json.Marshal(stage)
+		_, _ = w.Write([]byte(
+			`event: Custom` + "\n" +
+				`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+				string(encoded) + "}" + "\n\n" +
+				`event: RunFinished` + "\n" +
+				`data: {"type":"RunFinished","run_id":"run-leave-v1"}` + "\n\n",
+		))
 	}))
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
@@ -504,8 +540,8 @@ func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testin
 		ctx,
 		email,
 		QueryInput{
-			Query: "cancel", Mode: "instant",
-			ClientTurnID: "stream-cancel-v1",
+			Query: "leave", Mode: "instant",
+			ClientTurnID: "stream-leave-v1",
 		},
 		nil,
 		func(frame []byte) error {
@@ -516,25 +552,18 @@ func TestQueryStreamContextCancellationRetainsSubmittingWithoutSummary(t *testin
 			return nil
 		},
 	)
-	if err == nil {
-		t.Fatal("canceled V1 stream must return its transport error")
+	if err != nil {
+		t.Fatalf("browser leave is not a stream error: %v", err)
 	}
-	if out == nil || out.Status != "SUBMITTING" || out.Answer != "" {
-		t.Fatalf("canceled result = %#v, want empty SUBMITTING row", out)
+	if out == nil || out.Status == "SUBMITTING" || out.Answer == "" {
+		t.Fatalf("leave result = %#v, want non-empty success", out)
 	}
 	var row model.QuestionAgentLog
 	if err := gdb.First(&row, out.Id).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Status != "SUBMITTING" || row.Answer != "" {
-		t.Fatalf("canceled row status/answer = %q/%q", row.Status, row.Answer)
-	}
-	private, err := LoadBotConversationContext(context.Background(), email, out.Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if private.AssistantSummary != "" || private.Stage != nil {
-		t.Fatalf("canceled private context committed summary: %#v", private)
+	if row.Status != statusSucceeded || !strings.Contains(row.Answer, leaveDelta) {
+		t.Fatalf("leave row status/answer = %q/%q", row.Status, row.Answer)
 	}
 }
 
@@ -1268,17 +1297,7 @@ func TestQueryStream_InitialPersistenceFailureForwardsNothing(t *testing.T) {
 
 func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 	gdb := setupStreamTestDB(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run_cancel\"}\n\n"))
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		<-r.Context().Done()
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
+	sseChatServer(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1288,21 +1307,93 @@ func TestQueryStream_CancelFinalizesReadyRow(t *testing.T) {
 		func(got StreamIdentity) { identity = got },
 		func([]byte) error { cancel(); return context.Canceled },
 	)
-	if err == nil {
-		t.Fatal("canceled upstream stream must report its read error")
+	if err != nil {
+		t.Fatalf("browser leave must not fail the stream: %v", err)
 	}
 	if out == nil || identity.MessageID == 0 {
-		t.Fatalf("cancel must retain the ready identity: out=%+v identity=%+v", out, identity)
+		t.Fatalf("leave must retain the ready identity: out=%+v identity=%+v", out, identity)
 	}
-	var status, runID string
-	if err := gdb.Raw(
-		`SELECT COALESCE(status,''), COALESCE(bot_run_id,'') FROM question_agent_logs WHERE id=?`,
-		identity.MessageID,
-	).Row().Scan(&status, &runID); err != nil {
-		t.Fatalf("read canceled stream row: %v", err)
+	status, answer := readStatusAnswer(t, gdb, identity.MessageID)
+	if status == "FAILED" || !strings.Contains(answer, "hello") {
+		t.Fatalf("leave row status/answer = %q/%q, want success with Bot delta", status, answer)
 	}
-	if status != "FAILED" || runID != "run_cancel" {
-		t.Fatalf("canceled row status/run = %q/%q, want FAILED/run_cancel", status, runID)
+	if out.Status == "SUBMITTING" || out.Answer == "" {
+		t.Fatalf("leave result = %#v", out)
+	}
+}
+
+func TestQueryStreamOwnerCancelStillFails(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	email := "owner-cancel@example.com"
+	if err := gdb.Exec(
+		`INSERT INTO users (email, code) VALUES (?, 'admin')`,
+		email,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	var cancelOnce sync.Once
+	cancelled := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			`event: RunStarted` + "\n" +
+				`data: {"type":"RunStarted","run_id":"run_owner_cancel"}` + "\n\n",
+		))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-cancelled:
+		case <-time.After(5 * time.Second):
+			t.Error("owner cancel did not reach Bot")
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	fake := &cancelFakeRunCanceller{
+		record: cancelDraftRunRecord("run_owner_cancel", "owner stopped"),
+		onCall: func() {
+			cancelOnce.Do(func() { close(cancelled) })
+		},
+	}
+	svc := streamCapableService()
+	svc.runCanceller = fake
+
+	identity := StreamIdentity{}
+	out, err := svc.QueryStream(
+		context.Background(),
+		email,
+		QueryInput{Query: "hi", Tool: "", Mode: "instant"},
+		func(got StreamIdentity) { identity = got },
+		func(frame []byte) error {
+			if !strings.Contains(string(frame), "RunStarted") {
+				return nil
+			}
+			if _, cancelErr := svc.AgentTaskCancel(
+				context.Background(),
+				identity.MessageID,
+				email,
+			); cancelErr != nil {
+				t.Errorf("owner cancel API: %v", cancelErr)
+			}
+			return nil
+		},
+	)
+	if identity.MessageID == 0 {
+		t.Fatal("owner cancel must run after ready identity")
+	}
+	if len(fake.calls) == 0 || fake.calls[0] != "run_owner_cancel" {
+		t.Fatalf("owner cancel Bot calls = %q, want run_owner_cancel", fake.calls)
+	}
+	status, _ := readStatusAnswer(t, gdb, identity.MessageID)
+	if status != "CANCELLED" && status != "FAILED" {
+		t.Fatalf("owner-cancel row status = %q, want CANCELLED or FAILED (err=%v out=%#v)", status, err, out)
+	}
+	if out != nil && out.Status != "CANCELLED" && out.Status != "FAILED" {
+		t.Fatalf("owner-cancel result status = %q, want terminal cancel/failed", out.Status)
 	}
 }
 
@@ -1852,7 +1943,7 @@ func TestQueryStream_CompatibilityModelsPreserveAGUIBytes(t *testing.T) {
 			if gotModel != tc.model {
 				t.Fatalf("stream model = %q, want %q", gotModel, tc.model)
 			}
-			if forwarded.String() != fixture {
+			if forwarded.String() != stampedSSE(fixture) {
 				t.Fatalf("forwarded AG-UI bytes changed:\n got %q\nwant %q", forwarded.String(), fixture)
 			}
 			var runID string
@@ -1922,7 +2013,7 @@ func TestQueryStream_CombinedAGUICompatibilityFixture(t *testing.T) {
 			if gotModel != tc.model {
 				t.Fatalf("stream model = %q, want %q", gotModel, tc.model)
 			}
-			if forwarded.String() != fixture {
+			if forwarded.String() != stampedSSE(fixture) {
 				t.Fatalf("forwarded AG-UI bytes changed:\n got %q\nwant %q", forwarded.String(), fixture)
 			}
 			if strings.Count(forwarded.String(), "event: RunStarted") != 1 {
@@ -1969,8 +2060,8 @@ func TestQueryStream_CombinedRunErrorFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("terminal RunError must not synthesize a second transport error: %v", err)
 	}
-	if forwarded.String() != fixture {
-		t.Fatalf("forwarded terminal fixture changed:\n got %q\nwant %q", forwarded.String(), fixture)
+	if forwarded.String() != stampedSSE(fixture) {
+		t.Fatalf("forwarded terminal fixture changed:\n got %q\nwant %q", forwarded.String(), stampedSSE(fixture))
 	}
 	if strings.Count(forwarded.String(), "event: RunError") != 1 {
 		t.Fatalf("RunError event count = %d, want one", strings.Count(forwarded.String(), "event: RunError"))
