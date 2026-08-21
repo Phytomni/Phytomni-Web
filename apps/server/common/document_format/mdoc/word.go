@@ -70,7 +70,7 @@ func (w *wordWriter) writeBlock(b block, indent int) error {
 			level = 6
 		}
 		p := w.doc.AddEmptyParagraph()
-		p.Style(fmt.Sprintf("Heading %d", level))
+		p.Style(fmt.Sprintf("Heading%d", level))
 		return w.writeInlines(p, b.inlines)
 	case blockParagraph:
 		p := w.doc.AddEmptyParagraph()

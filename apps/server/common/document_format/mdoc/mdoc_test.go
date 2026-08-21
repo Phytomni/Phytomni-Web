@@ -3,7 +3,9 @@ package mdoc
 import (
 	"archive/zip"
 	"bytes"
+	"compress/zlib"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -51,8 +53,12 @@ func TestRenderWordStructuresMarkdown(t *testing.T) {
 	}
 	xml := wordDocumentXML(t, body)
 	plain := stripXMLTags(xml)
-	if !strings.Contains(xml, "Heading1") && !strings.Contains(xml, "Heading 1") {
-		t.Fatalf("missing heading style in word xml")
+	styles := wordPStyleValues(xml)
+	if !containsString(styles, "Heading1") {
+		t.Fatalf("missing built-in Heading1 styleId, pStyle=%v xml=%s", styles, xml)
+	}
+	if containsString(styles, "Heading 1") {
+		t.Fatalf("Word used display name Heading 1 instead of styleId Heading1: %v", styles)
 	}
 	if !strings.Contains(xml, "w:b") && !strings.Contains(xml, "w:bCs") {
 		t.Fatalf("missing bold run in word xml")
@@ -74,6 +80,23 @@ func TestRenderWordStructuresMarkdown(t *testing.T) {
 	}
 }
 
+func TestRenderWordUsesBuiltInHeadingStyleIds(t *testing.T) {
+	src := "# Heading One\n\nbody paragraph under h1\n\n## Heading Two\n\nmore body\n"
+	body, err := RenderWord(src, Options{})
+	if err != nil {
+		t.Fatalf("RenderWord: %v", err)
+	}
+	styles := wordPStyleValues(wordDocumentXML(t, body))
+	if !containsString(styles, "Heading1") || !containsString(styles, "Heading2") {
+		t.Fatalf("want Heading1 and Heading2 styleIds, got %v", styles)
+	}
+	for _, style := range styles {
+		if strings.Contains(style, " ") {
+			t.Fatalf("Word heading styleId %q is not a built-in OOXML id", style)
+		}
+	}
+}
+
 func TestRenderPDFDropsMarkdownMarkers(t *testing.T) {
 	body, err := RenderPDF(fixtureMarkdown, Options{})
 	if err != nil {
@@ -87,6 +110,30 @@ func TestRenderPDFDropsMarkdownMarkers(t *testing.T) {
 	}
 	if bytes.Contains(body, []byte("<script>alert(1)</script>")) {
 		t.Fatalf("raw HTML leaked into PDF")
+	}
+}
+
+func TestRenderPDFHeadingsUseOutlineAndSize(t *testing.T) {
+	src := "# Heading One\n\nbody paragraph under h1\n\n## Heading Two\n\nmore body\n"
+	body, err := RenderPDF(src, Options{})
+	if err != nil {
+		t.Fatalf("RenderPDF: %v", err)
+	}
+	if !bytes.Contains(body, []byte("/Outlines")) {
+		t.Fatal("PDF missing /Outlines bookmark dictionary")
+	}
+	sizes := pdfTfSizes(t, body)
+	if !containsString(sizes, "18.00") {
+		t.Fatalf("PDF H1 size 18.00 missing, Tf=%v", sizes)
+	}
+	if !containsString(sizes, "16.00") {
+		t.Fatalf("PDF H2 size 16.00 missing, Tf=%v", sizes)
+	}
+	if !containsString(sizes, "11.00") {
+		t.Fatalf("PDF body size 11.00 missing, Tf=%v", sizes)
+	}
+	if containsString(sizes, "16.50") || containsString(sizes, "15.00") {
+		t.Fatalf("PDF still uses 18-level*1.5 heading sizes, Tf=%v", sizes)
 	}
 }
 
@@ -183,6 +230,59 @@ func wordZipHasMediaPNG(t *testing.T, body []byte) bool {
 	for _, f := range zr.File {
 		name := strings.ToLower(f.Name)
 		if strings.HasPrefix(name, "word/media/") && strings.HasSuffix(name, ".png") {
+			return true
+		}
+	}
+	return false
+}
+
+func wordPStyleValues(xml string) []string {
+	matches := regexp.MustCompile(`w:pStyle[^>]*w:val="([^"]+)"`).FindAllStringSubmatch(xml, -1)
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+func pdfTfSizes(t *testing.T, body []byte) []string {
+	t.Helper()
+	var sizes []string
+	seen := map[string]bool{}
+	re := regexp.MustCompile(`([0-9]+\.[0-9]+) Tf`)
+	for _, stream := range pdfDecodedStreams(body) {
+		for _, m := range re.FindAllStringSubmatch(string(stream), -1) {
+			if !seen[m[1]] {
+				seen[m[1]] = true
+				sizes = append(sizes, m[1])
+			}
+		}
+	}
+	return sizes
+}
+
+func pdfDecodedStreams(body []byte) [][]byte {
+	re := regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`)
+	var out [][]byte
+	for _, m := range re.FindAllSubmatch(body, -1) {
+		raw := m[1]
+		r, err := zlib.NewReader(bytes.NewReader(raw))
+		if err != nil {
+			continue
+		}
+		decoded, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			continue
+		}
+		out = append(out, decoded)
+	}
+	return out
+}
+
+func containsString(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
 			return true
 		}
 	}

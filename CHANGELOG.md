@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Downloaded Word and PDF keep heading styles
+
+- Generated Word downloads bind Markdown headings to built-in `Heading1`…
+  style IDs, so Word/WPS show heading formatting and an outline.
+- Generated PDF downloads add an outline bookmark per heading and use a
+  fixed heading size table (18/16/14…) instead of body-sized text.
+
 ### 🐛 Instant Chat copy is no longer empty
 
 - Copy on Instant ChatAgent (and other stream-family replies) writes the

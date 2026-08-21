@@ -1,8 +1,11 @@
 package document_format
 
 import (
+	"archive/zip"
 	"bytes"
+	"io"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -54,6 +57,12 @@ func TestChatAgentDownloadsWordAndPDF(t *testing.T) {
 		if bytes.Contains(content, []byte("# Rice genomics")) {
 			t.Fatalf("%s still contains raw markdown heading", format)
 		}
+		if format == "Word" {
+			assertWordHeadingStyleID(t, content)
+		}
+		if format == "PDF" && !bytes.Contains(content, []byte("/Outlines")) {
+			t.Fatal("ChatAgent PDF missing heading outline")
+		}
 	}
 }
 
@@ -70,6 +79,12 @@ func TestKnowledgeAgentDownloadsWordAndPDFFromMarkdownAnswer(t *testing.T) {
 		}
 		if len(content) == 0 {
 			t.Fatalf("%s download returned empty body, filename=%s", format, filename)
+		}
+		if format == "Word" {
+			assertWordHeadingStyleID(t, content)
+		}
+		if format == "PDF" && !bytes.Contains(content, []byte("/Outlines")) {
+			t.Fatal("KnowledgeAgent PDF missing heading outline")
 		}
 	}
 }
@@ -104,6 +119,12 @@ func TestReviewAgentDownloadsWordAndPDFFromMarkdownAnswer(t *testing.T) {
 		if len(content) == 0 {
 			t.Fatalf("%s download returned empty body, filename=%s", format, filename)
 		}
+		if format == "Word" {
+			assertWordHeadingStyleID(t, content)
+		}
+		if format == "PDF" && !bytes.Contains(content, []byte("/Outlines")) {
+			t.Fatal("ReviewAgent PDF missing heading outline")
+		}
 	}
 }
 
@@ -125,5 +146,49 @@ func TestDeepGenomeAgentDownloadsPDFFromCitedAnswer(t *testing.T) {
 	}
 	if !strings.HasPrefix(filename, "deepgenome_") || !strings.HasSuffix(filename, ".pdf") {
 		t.Fatalf("DeepGenome PDF filename = %q, want deepgenome_*.pdf", filename)
+	}
+	if !bytes.Contains(content, []byte("/Outlines")) {
+		t.Fatal("DeepGenome PDF missing heading outline")
+	}
+}
+
+func assertWordHeadingStyleID(t *testing.T, body []byte) {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var xml string
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open document.xml: %v", err)
+		}
+		raw, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read document.xml: %v", err)
+		}
+		xml = string(raw)
+		break
+	}
+	if xml == "" {
+		t.Fatal("document.xml missing")
+	}
+	vals := regexp.MustCompile(`w:pStyle[^>]*w:val="([^"]+)"`).FindAllStringSubmatch(xml, -1)
+	found := false
+	for _, m := range vals {
+		if m[1] == "Heading1" {
+			found = true
+		}
+		if strings.Contains(m[1], " ") {
+			t.Fatalf("Word heading styleId %q is not a built-in OOXML id", m[1])
+		}
+	}
+	if !found {
+		t.Fatalf("missing Heading1 styleId in Word download, xml=%s", xml)
 	}
 }

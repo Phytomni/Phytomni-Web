@@ -15,6 +15,21 @@ const (
 	pdfLine        = 6.0
 )
 
+func pdfHeadingSize(level int) float64 {
+	switch level {
+	case 1:
+		return 18
+	case 2:
+		return 16
+	case 3:
+		return 14
+	case 4:
+		return 13
+	default:
+		return 12
+	}
+}
+
 // RenderPDF turns Markdown into a structured PDF with embedded CJK fonts.
 func RenderPDF(src string, opts Options) ([]byte, error) {
 	blocks, err := parse(src, opts)
@@ -57,13 +72,18 @@ func (w *pdfWriter) writeBlocks(blocks []block, indent int) {
 func (w *pdfWriter) writeBlock(b block, indent int) {
 	switch b.kind {
 	case blockHeading:
-		w.pdf.Ln(3)
-		size := 18.0 - float64(b.level)*1.5
-		if size < 12 {
-			size = 12
+		level := b.level
+		if level < 1 {
+			level = 1
 		}
+		title := plainText(b.inlines)
+		w.pdf.Ln(3)
+		if title != "" {
+			w.pdf.Bookmark(title, level-1, -1)
+		}
+		size := pdfHeadingSize(level)
 		w.pdf.SetFont("msyh", "B", size)
-		w.pdf.MultiCell(0, size*0.55, plainText(b.inlines), "", "", false)
+		w.pdf.MultiCell(0, size*0.55, title, "", "", false)
 		w.pdf.SetFont("msyh", "", 11)
 		w.pdf.Ln(1)
 	case blockParagraph:
