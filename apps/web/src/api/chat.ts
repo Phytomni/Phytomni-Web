@@ -1,5 +1,7 @@
 import type { AxiosProgressEvent } from "axios";
 
+import { getToken } from "@/utils/auth";
+import i18n from "@/locales";
 import { createAbortableRequest } from "@/utils/request";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import type { RemoteAgentTool } from "@/constants/agents";
@@ -162,6 +164,32 @@ export function runAgentProductAbortable(
       ...(headers ? { headers } : {}),
     },
     decodeQueryData
+  );
+}
+
+export function resumeMessageStream(opts: {
+  dialogueId: string;
+  messageId: string;
+  lastEventId?: string;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const lastEventId = opts.lastEventId?.trim();
+  return fetch(
+    `/api/v1/conversations/${encodeURIComponent(
+      opts.dialogueId
+    )}/messages/${encodeURIComponent(opts.messageId)}/stream`,
+    {
+      method: "GET",
+      signal: opts.signal,
+      headers: {
+        Accept: "text/event-stream",
+        "Accept-Language": i18n.global.locale.value,
+        platform: "bcemis",
+        Authorization: "Bearer " + getToken(),
+        satoken: getToken() ?? "",
+        ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
+      },
+    }
   );
 }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseAGUIFrame,
+  parseSSEFrameId,
   splitSSEFrames,
   type AguiEvent,
 } from "@/views/chat/streaming/aguiEvents";
@@ -101,6 +102,34 @@ describe("parseAGUIFrame multi-line data", () => {
   it("falls back to the event: line when data has no type", () => {
     const ev = parseAGUIFrame('event: RunFinished\ndata: {"run_id":"r1"}');
     expect(ev?.type).toBe("RunFinished");
+  });
+});
+
+describe("parseSSEFrameId", () => {
+  it("reads the SSE id field", () => {
+    expect(
+      parseSSEFrameId(
+        'id: 3\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}\n\n'
+      )
+    ).toBe("3");
+  });
+
+  it("keeps the last id field when it is a positive integer", () => {
+    expect(
+      parseSSEFrameId(
+        'id: 1\nid: 9\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}'
+      )
+    ).toBe("9");
+  });
+
+  it("rejects missing, zero, and non-integer id fields", () => {
+    expect(
+      parseSSEFrameId(
+        'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}'
+      )
+    ).toBeUndefined();
+    expect(parseSSEFrameId("id: 0\ndata: {}\n\n")).toBeUndefined();
+    expect(parseSSEFrameId("id: abc\ndata: {}\n\n")).toBeUndefined();
   });
 });
 

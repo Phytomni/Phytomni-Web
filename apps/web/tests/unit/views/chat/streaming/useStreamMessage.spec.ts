@@ -1383,4 +1383,118 @@ describe("useStreamMessage", () => {
     };
     expect(historyReload.doc_list).toBeUndefined();
   });
+
+  it("resumes GET stream with Last-Event-ID and stamps streamSeq", async () => {
+    const body = sseStream([
+      'id: 4\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"tail"}\n\n',
+      'id: 5\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r-resume"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "42",
+        },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+      streamSeq: "3",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    const result = await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      lastEventId: "3",
+      requestId: "resume:42",
+    });
+
+    expect(result.completed).toBe(true);
+    expect(placeholder.streamSeq).toBe("5");
+    expect(markdownBlock(placeholder, "resumed stream").text).toBe("tail");
+    expect(placeholder.streaming).toBe(false);
+    const [url, init] = fetchCallAt(0, "resume GET");
+    expect(url).toBe(
+      `/api/v1/conversations/${CANONICAL_DIALOGUE_ID}/messages/42/stream`
+    );
+    expect(init?.method).toBe("GET");
+    expect(init?.headers).toEqual(
+      expect.objectContaining({
+        Accept: "text/event-stream",
+        Authorization: "Bearer tok",
+        satoken: "tok",
+        "Last-Event-ID": "3",
+      })
+    );
+  });
+
+  it("does not mark streamTerminalFailure when resume aborts without Stop", async () => {
+    const abortErr = new Error("unmount abort");
+    abortErr.name = "AbortError";
+    mockedFetch().mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:unmount",
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBeUndefined();
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
+  });
+
+  it("marks resume abort as cancelled only after owner Stop", async () => {
+    const abortErr = new Error("owner stop");
+    abortErr.name = "AbortError";
+    mockedFetch().mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+    };
+    const chatState = makeStreamState();
+    chatState.generationStopped = true;
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:stop",
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBe("cancelled");
+    expect(placeholder.streaming).toBe(false);
+  });
 });

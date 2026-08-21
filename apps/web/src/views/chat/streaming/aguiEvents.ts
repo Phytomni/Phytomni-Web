@@ -145,6 +145,22 @@ export function parseAGUIFrame(frame: string): AguiEvent | null {
   return { type: type as AguiEventType, data: parsed } as AguiEvent;
 }
 
+const POSITIVE_SSE_ID = /^[1-9]\d*$/;
+
+// parseSSEFrameId returns the last SSE `id:` field when it is a positive
+// integer string. Invalid or missing ids stay undefined so Last-Event-ID
+// can be omitted and the hub will replay from the start.
+export function parseSSEFrameId(frame: string): string | undefined {
+  let lastId: string | undefined;
+  for (const raw of frame.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (!line.startsWith("id:")) continue;
+    lastId = line.slice(3).replace(/^ /, "");
+  }
+  if (!lastId || !POSITIVE_SSE_ID.test(lastId)) return undefined;
+  return lastId;
+}
+
 // splitSSEFrames splits a streaming buffer on LF or CRLF blank-line frame
 // separators, returning complete frames plus the trailing partial (rest) to
 // be prepended to the next chunk. The frame slices are intentionally not

@@ -7,6 +7,7 @@ import {
 import {
   splitSSEFrames,
   parseAGUIFrame,
+  parseSSEFrameId,
   type AguiEvent,
 } from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
@@ -19,6 +20,7 @@ import {
 } from "../types";
 import type { ConversationContextNotice } from "@/api/types";
 import { reduceContextStagedNotice } from "../streaming/botLifecycleReducer";
+import { resumeMessageStream } from "@/api/chat";
 
 export interface StreamInput {
   dialogueId: string;
@@ -28,6 +30,14 @@ export interface StreamInput {
   /** Logical turn identity; the send path normally already appended it. */
   clientTurnId?: string;
   onIdentity?: (identity: { dialogueId: string; messageId: string }) => void;
+}
+
+export interface ResumeStreamInput {
+  dialogueId: string;
+  messageId: string;
+  placeholder: ChatMessage;
+  requestId?: string;
+  lastEventId?: string;
 }
 
 export interface StreamResult {
@@ -125,25 +135,24 @@ export function useStreamMessage(opts: {
 }) {
   const { getChatState, t } = opts;
 
-  const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
+  const executeStream = async (execution: {
+    placeholder: ChatMessage;
+    requestId: string;
+    chatState: ChatUIState;
+    open: (signal: AbortSignal) => Promise<Response>;
+    onIdentity?: StreamInput["onIdentity"];
+    abortFailure: "cancelled" | "resume";
+    seedReducer: boolean;
+  }): Promise<StreamResult> => {
     const {
-      dialogueId,
-      formData,
-      requestId,
       placeholder,
-      clientTurnId,
+      requestId,
+      chatState,
+      open,
       onIdentity,
-    } = input;
-    if (clientTurnId && !formData.has("client_turn_id")) {
-      formData.append("client_turn_id", clientTurnId);
-    }
-    assertReferenceOnlyFormData(formData);
-    const clientTurnHeader = formData.get("client_turn_id");
-    const chatState = getChatState(dialogueId);
-    // The send route still accepts the captured parent row id. It is not a
-    // canonical conversation identity and must never address A2UI actions.
-    const parentRowId = formData.get("id")?.toString() ?? "0";
-
+      abortFailure,
+      seedReducer,
+    } = execution;
     const controller = new AbortController();
     registerAbortController(requestId, controller); // reuse the shared abort UI
     chatState.isStreaming = true;
@@ -151,6 +160,18 @@ export function useStreamMessage(opts: {
     placeholder.streamTerminalFailure = undefined;
 
     let state = initReducerState();
+    if (seedReducer) {
+      state = {
+        ...state,
+        blocks: (placeholder.blocks ?? []).map((block) => ({ ...block })),
+        runId: placeholder.a2uiRuntime?.runId ?? "",
+        followUp: placeholder.followUpQuestions
+          ? [...placeholder.followUpQuestions]
+          : [],
+        references: placeholder.doc_list ? [...placeholder.doc_list] : [],
+        contextNotice: placeholder.contextNotice,
+      };
+    }
     let contextNotice: ConversationContextNotice = {};
     let result: StreamResult = {};
     const applyTerminalState = () => {
@@ -179,24 +200,7 @@ export function useStreamMessage(opts: {
       result.completed = state.done && !state.error;
     };
     try {
-      const resp = await fetch(
-        `/api/v1/conversations/${parentRowId}/messages`,
-        {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-          headers: {
-            Accept: "text/event-stream",
-            "Accept-Language": i18n.global.locale.value,
-            platform: "bcemis",
-            Authorization: "Bearer " + getToken(),
-            satoken: getToken() ?? "",
-            ...(typeof clientTurnHeader === "string" && clientTurnHeader !== ""
-              ? { "X-Phyto-Client-Turn-Id": clientTurnHeader }
-              : {}),
-          },
-        }
-      );
+      const resp = await open(controller.signal);
       if (!resp.ok || !resp.body) {
         result.preDispatch4xx = isDefinitePreDispatch4xx({
           response: { status: resp.status, headers: resp.headers },
@@ -226,7 +230,7 @@ export function useStreamMessage(opts: {
         placeholder.a2uiRuntime = {
           dialogueId: canonicalDialogueId,
           messageId: canonicalMessageId,
-          runId: "",
+          runId: placeholder.a2uiRuntime?.runId ?? "",
           transport: createFetchA2uiTransport({
             conversationId: canonicalDialogueId,
             getToken,
@@ -244,6 +248,8 @@ export function useStreamMessage(opts: {
       const decoder = new TextDecoder();
       let buffer = "";
       const consumeFrame = (frame: string) => {
+        const frameId = parseSSEFrameId(frame);
+        if (frameId) placeholder.streamSeq = frameId;
         // Some Bot-compatible providers close with the legacy [DONE] sentinel
         // instead of a RunFinished event. Treat that sentinel as terminal while
         // leaving all other AG-UI bytes untouched for the existing parser.
@@ -297,7 +303,14 @@ export function useStreamMessage(opts: {
       if (!state.done) {
         placeholder.a2uiRuntime = undefined;
         if (isAbortError(error)) {
-          placeholder.streamTerminalFailure = "cancelled";
+          // Live POST Stop still marks cancelled. Resume unmount/leave must
+          // not; only owner Stop (generationStopped) uses that cancel path.
+          if (
+            abortFailure === "cancelled" ||
+            (abortFailure === "resume" && chatState.generationStopped)
+          ) {
+            placeholder.streamTerminalFailure = "cancelled";
+          }
         } else {
           placeholder.content = t("chat.streamInterrupted");
           placeholder.streamTerminalFailure = "interrupted";
@@ -322,7 +335,76 @@ export function useStreamMessage(opts: {
     return result;
   };
 
-  return { streamMessage };
+  const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
+    const {
+      dialogueId,
+      formData,
+      requestId,
+      placeholder,
+      clientTurnId,
+      onIdentity,
+    } = input;
+    if (clientTurnId && !formData.has("client_turn_id")) {
+      formData.append("client_turn_id", clientTurnId);
+    }
+    assertReferenceOnlyFormData(formData);
+    const clientTurnHeader = formData.get("client_turn_id");
+    const chatState = getChatState(dialogueId);
+    // The send route still accepts the captured parent row id. It is not a
+    // canonical conversation identity and must never address A2UI actions.
+    const parentRowId = formData.get("id")?.toString() ?? "0";
+
+    return executeStream({
+      placeholder,
+      requestId,
+      chatState,
+      onIdentity,
+      abortFailure: "cancelled",
+      seedReducer: false,
+      open: (signal) =>
+        fetch(`/api/v1/conversations/${parentRowId}/messages`, {
+          method: "POST",
+          body: formData,
+          signal,
+          headers: {
+            Accept: "text/event-stream",
+            "Accept-Language": i18n.global.locale.value,
+            platform: "bcemis",
+            Authorization: "Bearer " + getToken(),
+            satoken: getToken() ?? "",
+            ...(typeof clientTurnHeader === "string" && clientTurnHeader !== ""
+              ? { "X-Phyto-Client-Turn-Id": clientTurnHeader }
+              : {}),
+          },
+        }),
+    });
+  };
+
+  const resumeStreamMessage = async (
+    input: ResumeStreamInput
+  ): Promise<StreamResult> => {
+    const { dialogueId, messageId, placeholder } = input;
+    const requestId = input.requestId ?? `resume:${messageId}`;
+    const lastEventId = (input.lastEventId ?? placeholder.streamSeq)?.trim();
+    const chatState = getChatState(dialogueId);
+    placeholder.streaming = true;
+    return executeStream({
+      placeholder,
+      requestId,
+      chatState,
+      abortFailure: "resume",
+      seedReducer: Boolean(lastEventId),
+      open: (signal) =>
+        resumeMessageStream({
+          dialogueId,
+          messageId,
+          lastEventId: lastEventId || undefined,
+          signal,
+        }),
+    });
+  };
+
+  return { streamMessage, resumeStreamMessage };
 }
 
 function isAbortError(error: unknown): boolean {

@@ -105,6 +105,8 @@ export interface ChatMessage {
   task_id?: string; // task ID
   server_file_path?: string; // server file path
   streaming?: boolean; // true while AG-UI stream is in flight (renderer shows cursor)
+  /** Last painted SSE `id:` (positive integer string) for resume Last-Event-ID. */
+  streamSeq?: string;
   blocks?: StreamContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
   /**
    * Runtime-only UI identity for Activity disclosure while a stream placeholder

@@ -23,6 +23,10 @@ import {
   reduceAGUIEvent,
 } from "@/views/chat/streaming/eventReducer";
 
+const { mockResumeStreamMessage } = vi.hoisted(() => ({
+  mockResumeStreamMessage: vi.fn(async () => ({})),
+}));
+
 vi.mock("element-plus", () => ({
   ElMessage: { warning: vi.fn() },
 }));
@@ -30,6 +34,13 @@ vi.mock("element-plus", () => ({
 // Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
+}));
+
+vi.mock("@/views/chat/composables/useStreamMessage", () => ({
+  useStreamMessage: () => ({
+    streamMessage: vi.fn(),
+    resumeStreamMessage: mockResumeStreamMessage,
+  }),
 }));
 
 vi.mock("@/views/chat/utils/agent-log", () => ({
@@ -56,6 +67,8 @@ describe("useSelectChat", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResumeStreamMessage.mockReset();
+    mockResumeStreamMessage.mockResolvedValue({});
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
@@ -1737,6 +1750,92 @@ describe("useSelectChat", () => {
       renderedFor("d1", "blank background rows").messages.map((message) =>
         String(message.id ?? "")
       )
-    ).not.toEqual(expect.arrayContaining(["206", "207", "malformed"]));
+    ).not.toEqual(expect.arrayContaining(["207", "malformed"]));
+  });
+
+  describe("stream resume hydrate", () => {
+    it.each(["ChatAgent", "KnowledgeAgent", "BriefGeneAgent"] as const)(
+      "hydrates a %s RUNNING empty answer as a streaming assistant and kicks resume",
+      async (tool_name) => {
+        mockGetAnswerCheck.mockResolvedValueOnce(
+          historyResponse([
+            buildChatHistoryRecord({
+              id: "42",
+              query: "continue",
+              answer: "",
+              status: "RUNNING",
+              tool_name,
+            }),
+          ])
+        );
+
+        await makeComposable().selectChat("d1");
+
+        const assistant = messageAt("d1", 1, `${tool_name} running hydrate`);
+        expect(assistant).toMatchObject({
+          role: "assistant",
+          id: "42",
+          tool_name,
+          streaming: true,
+          content: "",
+        });
+        expect(mockResumeStreamMessage).toHaveBeenCalledTimes(1);
+        expect(mockResumeStreamMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dialogueId: "d1",
+            messageId: "42",
+            placeholder: expect.objectContaining({
+              id: "42",
+              streaming: true,
+              tool_name,
+            }),
+          })
+        );
+      }
+    );
+
+    it("kicks resume once per message id across hydrate and reload", async () => {
+      mockGetAnswerCheck.mockResolvedValue(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "88",
+            query: "resume me",
+            answer: "",
+            status: "RUNNING",
+            tool_name: "ChatAgent",
+          }),
+        ])
+      );
+
+      const { selectChat, reloadChat } = makeComposable();
+      await selectChat("d1");
+      await reloadChat("d1");
+
+      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(1);
+      expect(mockResumeStreamMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: "88" })
+      );
+    });
+
+    it("does not resume a completed ChatAgent answer", async () => {
+      mockGetAnswerCheck.mockResolvedValueOnce(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "7",
+            query: "done",
+            answer: "final",
+            status: "SUCCEEDED",
+            tool_name: "ChatAgent",
+          }),
+        ])
+      );
+
+      await makeComposable().selectChat("d1");
+
+      expect(messageAt("d1", 1, "completed ChatAgent").streaming).not.toBe(
+        true
+      );
+      expect(mockResumeStreamMessage).not.toHaveBeenCalled();
+    });
   });
 });

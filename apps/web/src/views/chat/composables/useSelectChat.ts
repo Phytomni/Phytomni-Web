@@ -43,6 +43,46 @@ import {
 } from "../utils/asset-attachments";
 import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 import { artifactPresentationForMessage } from "../utils/artifact-policy";
+import { STREAM_CAPABLE_AGENTS } from "../streaming/sendBranch";
+import { useStreamMessage } from "./useStreamMessage";
+
+const STREAM_FAMILY_TOOLS: ReadonlySet<string> = new Set(STREAM_CAPABLE_AGENTS);
+const kickedStreamResumes = new WeakMap<ChatUIState, Set<string>>();
+
+function isStreamFamilyTool(tool: unknown): boolean {
+  return typeof tool === "string" && STREAM_FAMILY_TOOLS.has(tool);
+}
+
+function isNonTerminalStreamStatus(status: unknown): boolean {
+  const normalized = String(status ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    normalized === "RUNNING" ||
+    normalized === "SUBMITTING" ||
+    normalized === "PENDING"
+  );
+}
+
+function shouldHydrateStreamResume(item: Partial<ChatResponse>): boolean {
+  return (
+    isStreamFamilyTool(item.tool_name) && isNonTerminalStreamStatus(item.status)
+  );
+}
+
+function takeStreamResumeSlot(
+  chatState: ChatUIState,
+  messageId: string
+): boolean {
+  let ids = kickedStreamResumes.get(chatState);
+  if (!ids) {
+    ids = new Set();
+    kickedStreamResumes.set(chatState, ids);
+  }
+  if (ids.has(messageId)) return false;
+  ids.add(messageId);
+  return true;
+}
 
 export type ChatReloadResult = "applied" | "failed" | "superseded";
 
@@ -221,6 +261,10 @@ export function useSelectChat(opts: {
     typeof opts.username === "function"
       ? opts.username()
       : (opts.username?.value ?? "");
+  const { resumeStreamMessage } = useStreamMessage({
+    getChatState,
+    t: (key) => String(i18n.global.t(key)),
+  });
   const loadAttachmentMetadata = async (): Promise<
     ReadonlyMap<string, AttachmentMetadata>
   > => {
@@ -487,7 +531,28 @@ export function useSelectChat(opts: {
             }
           }
 
+          const emptyAnswer =
+            typeof item.answer !== "string" || item.answer.trim() === "";
+          const hydrateStreamResume = shouldHydrateStreamResume(item);
           const isBlankBackground = blankBackgroundAssistantRow(item);
+          if (hydrateStreamResume && emptyAnswer && item.id !== undefined) {
+            messages.push({
+              role: "assistant",
+              ...assistantMetadata,
+              content: "",
+              status: item.status || "",
+              id: String(item.id),
+              tool_name: item.tool_name,
+              streaming: true,
+              blocks: [],
+              followUpQuestions: decodeFollowUpQuestions(
+                item.follow_up_questions
+              ),
+              showFollowUpQuestions: false,
+              showLog: false,
+              instantMessage: false,
+            });
+          }
           if (isBlankBackground) {
             messages.push({
               role: "assistant",
@@ -512,7 +577,8 @@ export function useSelectChat(opts: {
           if (
             a2uiBlocks &&
             !isBlankBackground &&
-            (typeof item.answer !== "string" || item.answer.trim() === "")
+            !(hydrateStreamResume && emptyAnswer) &&
+            emptyAnswer
           ) {
             messages.push({
               role: "assistant",
@@ -823,6 +889,18 @@ export function useSelectChat(opts: {
                 .forEach(stripActiveArchiveLegacyFields);
             }
           }
+
+          if (hydrateStreamResume && item.id !== undefined) {
+            const rowAssistant = messages
+              .slice(rowMessageStart)
+              .reverse()
+              .find((message) => message.role === "assistant");
+            if (rowAssistant) {
+              rowAssistant.streaming = true;
+              rowAssistant.id = String(item.id);
+              if (!rowAssistant.blocks) rowAssistant.blocks = [];
+            }
+          }
         });
       }
 
@@ -884,6 +962,22 @@ export function useSelectChat(opts: {
       };
       chatState.historyHydration =
         messages.length > 0 ? "ready" : "history-empty";
+
+      for (const message of mergedMessages) {
+        if (message.role !== "assistant" || !message.streaming) continue;
+        if (!isStreamFamilyTool(message.tool_name)) continue;
+        const messageId = String(message.id ?? "").trim();
+        if (!messageId || !takeStreamResumeSlot(chatState, messageId)) {
+          continue;
+        }
+        resumeStreamMessage({
+          dialogueId: capturedDialogueId,
+          messageId,
+          placeholder: message,
+          lastEventId: message.streamSeq,
+          requestId: `resume:${messageId}`,
+        }).catch(() => undefined);
+      }
 
       // Foreground shell effects only while this dialogue is still selected
       if (
