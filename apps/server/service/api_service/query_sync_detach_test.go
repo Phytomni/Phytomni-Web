@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,8 @@ import (
 func TestQueryDataReturnsRunningWithoutWaiting(t *testing.T) {
 	testQueryDetachReturnsRunningWithoutWaiting(t, queryDetachCase{
 		tool:         "DataAgent",
+		slug:         "data",
+		runID:        "run-data-accepted",
 		botPath:      "/v1/agents/data/runs",
 		clientTurnID: "data-detach-turn-1",
 		useV1:        true,
@@ -28,17 +31,20 @@ func TestQueryDataReturnsRunningWithoutWaiting(t *testing.T) {
 func TestQueryReviewReturnsRunningWithoutWaiting(t *testing.T) {
 	testQueryDetachReturnsRunningWithoutWaiting(t, queryDetachCase{
 		tool:         "ReviewAgent",
-		botPath:      "/v1/chat/completions",
+		slug:         "review",
+		runID:        "run-review-accepted",
+		botPath:      "/v1/agents/review/runs",
 		clientTurnID: "review-detach-turn-1",
 	})
 }
 
 type queryDetachCase struct {
 	tool         string
+	slug         string
+	runID        string
 	botPath      string
 	clientTurnID string
 	useV1        bool
-	successBody  string
 }
 
 func testQueryDetachReturnsRunningWithoutWaiting(t *testing.T, tc queryDetachCase) {
@@ -48,24 +54,45 @@ func testQueryDetachReturnsRunningWithoutWaiting(t *testing.T, tc queryDetachCas
 	}
 	gdb := setupExpertTestDB(t)
 
-	botEntered := make(chan struct{})
-	botRelease := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseBot := func() { releaseOnce.Do(func() { close(botRelease) }) }
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != tc.botPath {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		close(botEntered)
-		select {
-		case <-botRelease:
-		case <-r.Context().Done():
+		response := map[string]interface{}{
+			"id": tc.runID, "run_id": tc.runID,
+			"object": "agent.run", "agent": tc.slug,
+			"status": "running", "task_ids": []string{},
+			"result": map[string]interface{}{},
 		}
+		if tc.useV1 {
+			var request rxBot.AgentRunRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode agent request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if request.Conversation == nil {
+				t.Error("missing conversation envelope")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			response["conversation_context"] = rxBot.ContextStageMetadata{
+				SchemaVersion:                  1,
+				TurnID:                         request.Conversation.TurnID,
+				SelectedAgentID:                tc.tool,
+				RouteSource:                    "explicit_selection",
+				RouteReasonCode:                "EXPLICIT_SELECTION",
+				BaseBusinessContextVersion:     request.Conversation.BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: request.Conversation.BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor:        request.Conversation.LedgerCursor,
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	t.Cleanup(func() {
-		releaseBot()
 		srv.Close()
 		rxBot.BotConfig = nil
 	})
@@ -96,122 +123,24 @@ func testQueryDetachReturnsRunningWithoutWaiting(t *testing.T, tc queryDetachCas
 	if out == nil || out.Status != "RUNNING" || out.Id <= 0 || strings.TrimSpace(out.DialogueId) == "" {
 		t.Fatalf("Query = %#v, want RUNNING with Id and DialogueId in %s", out, elapsed)
 	}
-	if strings.TrimSpace(out.BotRunID) == "" || !isDurablePendingRunID(out.BotRunID) {
-		t.Fatalf("Query BotRunID = %q, want web-pending placeholder", out.BotRunID)
-	}
-
-	select {
-	case <-botEntered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Bot call was not started after Query returned RUNNING")
+	if out.BotRunID != tc.runID || isDurablePendingRunID(out.BotRunID) {
+		t.Fatalf("Query BotRunID = %q, want real run %q", out.BotRunID, tc.runID)
 	}
 
 	var row model.QuestionAgentLog
 	if err := gdb.First(&row, out.Id).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Status != "RUNNING" {
-		t.Fatalf("row status = %q, want RUNNING while Bot is blocked", row.Status)
-	}
-
-	releaseBot()
-	row = waitForQuestionRowTerminal(t, gdb, out.Id)
-	if row.Status == "SUBMITTING" || row.Status == "RUNNING" {
-		t.Fatalf("row stayed pollable after Bot error: %#v", row)
-	}
-	if row.Status != "FAILED" {
-		t.Fatalf("row status = %q, want FAILED after Bot I/O error", row.Status)
+	if row.Status != "RUNNING" || row.BotRunId != tc.runID {
+		t.Fatalf("row = %#v, want RUNNING with real run %q", row, tc.runID)
 	}
 }
 
 func testQueryPendingRunOwnerCancelStaysCancelled(t *testing.T, tc queryDetachCase) {
 	t.Helper()
-	gdb := setupExpertTestDB(t)
-	fake := &cancelFakeRunCanceller{}
-
-	botEntered := make(chan struct{})
-	botRelease := make(chan struct{})
-	botDone := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseBot := func() { releaseOnce.Do(func() { close(botRelease) }) }
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != tc.botPath {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		close(botEntered)
-		select {
-		case <-botRelease:
-		case <-r.Context().Done():
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(tc.successBody))
-		close(botDone)
-	}))
-	t.Cleanup(func() {
-		releaseBot()
-		srv.Close()
-		rxBot.BotConfig = nil
+	testQueryStopUsesRealRunBeforeProducerRelease(t, queryRealRunCancelCase{
+		tool: tc.tool, slug: tc.slug, runID: tc.runID, botPath: tc.botPath,
 	})
-	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-	}
-
-	out, err := (&Service{runCanceller: fake}).Query(context.Background(), "alice", QueryInput{
-		Query:   "cancel while waiting " + tc.tool,
-		Mode:    "expert",
-		Tool:    tc.tool,
-		Surface: QuerySurfaceChat,
-	})
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	if out.Status != "RUNNING" || out.Id <= 0 || !isDurablePendingRunID(out.BotRunID) {
-		t.Fatalf("Query = %#v, want RUNNING with pending run id", out)
-	}
-	select {
-	case <-botEntered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Bot call was not started")
-	}
-
-	got, cancelErr := (&Service{runCanceller: fake}).AgentTaskCancel(context.Background(), out.Id, "alice")
-	if cancelErr != nil {
-		t.Fatalf("AgentTaskCancel: %v", cancelErr)
-	}
-	if got.Phase != "CANCELLED" {
-		t.Fatalf("cancel lifecycle=%+v", got)
-	}
-	for _, runID := range fake.calls {
-		if isDurablePendingRunID(runID) {
-			t.Fatalf("Stop called Bot with pending placeholder %q", runID)
-		}
-	}
-
-	releaseBot()
-	select {
-	case <-botDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Bot success body was not written after release")
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	var row model.QuestionAgentLog
-	for time.Now().Before(deadline) {
-		if err := gdb.First(&row, out.Id).Error; err != nil {
-			t.Fatal(err)
-		}
-		if row.Status == statusSucceeded {
-			t.Fatalf("cancelled row flipped to SUCCEEDED after Bot finished: %#v", row)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err := gdb.First(&row, out.Id).Error; err != nil {
-		t.Fatal(err)
-	}
-	if row.Status != "CANCELLED" {
-		t.Fatalf("row status=%q, want CANCELLED after Bot success", row.Status)
-	}
 }
 
 func waitForQuestionRowTerminal(t *testing.T, gdb *gorm.DB, id int64) model.QuestionAgentLog {
@@ -286,18 +215,125 @@ func waitForReplacementResolved(t *testing.T, username string, rowID int64) pers
 
 func TestQueryDataPendingRunOwnerCancelStaysCancelled(t *testing.T) {
 	testQueryPendingRunOwnerCancelStaysCancelled(t, queryDetachCase{
-		tool:        "DataAgent",
-		botPath:     "/v1/agents/data/runs",
-		successBody: `{"id":"run-data-late","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"late table"}}}`,
+		tool: "DataAgent", slug: "data", runID: "run-data-stays-cancelled",
+		botPath: "/v1/agents/data/runs",
 	})
 }
 
 func TestQueryReviewPendingRunOwnerCancelStaysCancelled(t *testing.T) {
 	testQueryPendingRunOwnerCancelStaysCancelled(t, queryDetachCase{
-		tool:        "ReviewAgent",
-		botPath:     "/v1/chat/completions",
-		successBody: `{"id":"run-review-late","run_id":"run-review-late","object":"chat.completion","status":"succeeded","choices":[{"index":0,"message":{"role":"assistant","content":"late review"}}],"formatted":{"answer":"late review"}}`,
+		tool: "ReviewAgent", slug: "review", runID: "run-review-stays-cancelled",
+		botPath: "/v1/agents/review/runs",
 	})
+}
+
+func TestQueryDataStopUsesRealRunBeforeProducerRelease(t *testing.T) {
+	testQueryStopUsesRealRunBeforeProducerRelease(t, queryRealRunCancelCase{
+		tool:    "DataAgent",
+		slug:    "data",
+		runID:   "run-data-gated",
+		botPath: "/v1/agents/data/runs",
+	})
+}
+
+func TestQueryReviewStopUsesRealRunBeforeProducerRelease(t *testing.T) {
+	testQueryStopUsesRealRunBeforeProducerRelease(t, queryRealRunCancelCase{
+		tool:    "ReviewAgent",
+		slug:    "review",
+		runID:   "run-review-gated",
+		botPath: "/v1/agents/review/runs",
+	})
+}
+
+type queryRealRunCancelCase struct {
+	tool    string
+	slug    string
+	runID   string
+	botPath string
+}
+
+func testQueryStopUsesRealRunBeforeProducerRelease(t *testing.T, tc queryRealRunCancelCase) {
+	t.Helper()
+	gdb := setupExpertTestDB(t)
+	producerRelease := make(chan struct{})
+	cancelReachedBot := make(chan struct{})
+	var cancelOnce sync.Once
+	fake := &cancelFakeRunCanceller{
+		record: cancelDraftRunRecord(tc.runID, ""),
+		onCall: func() {
+			select {
+			case <-producerRelease:
+				t.Error("Stop reached Bot only after the producer was released")
+			default:
+			}
+			cancelOnce.Do(func() { close(cancelReachedBot) })
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != tc.botPath {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"` + tc.runID + `","run_id":"` + tc.runID + `","object":"agent.run","agent":"` + tc.slug + `","status":"running","task_ids":[],"result":{}}`))
+	}))
+	t.Cleanup(func() {
+		select {
+		case <-producerRelease:
+		default:
+			close(producerRelease)
+		}
+		srv.Close()
+		rxBot.BotConfig = nil
+	})
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
+
+	out, err := (&Service{runCanceller: fake}).Query(context.Background(), "alice", QueryInput{
+		Query:   "cancel gated " + tc.tool,
+		Mode:    "expert",
+		Tool:    tc.tool,
+		Surface: QuerySurfaceChat,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out.Status != "RUNNING" || out.BotRunID != tc.runID {
+		t.Fatalf("Query = %#v, want RUNNING with real Bot run %q", out, tc.runID)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.BotRunId != tc.runID {
+		t.Fatalf("persisted Bot run = %q, want %q", row.BotRunId, tc.runID)
+	}
+
+	got, err := (&Service{runCanceller: fake}).AgentTaskCancel(context.Background(), out.Id, "alice")
+	if err != nil {
+		t.Fatalf("AgentTaskCancel: %v", err)
+	}
+	if got.Phase != "CANCELLED" {
+		t.Fatalf("cancel lifecycle = %+v", got)
+	}
+	select {
+	case <-cancelReachedBot:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not reach Bot while the producer was gated")
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != tc.runID {
+		t.Fatalf("Bot cancel calls = %q, want [%q]", fake.calls, tc.runID)
+	}
+	close(producerRelease)
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "CANCELLED" {
+		t.Fatalf("row status = %q, want CANCELLED", row.Status)
+	}
 }
 
 func TestQueryDataReplacementDetachErrorClearsRunningCandidate(t *testing.T) {
@@ -305,21 +341,16 @@ func TestQueryDataReplacementDetachErrorClearsRunningCandidate(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	seed := seedResearchReplacementTarget(t, gdb)
 
-	botEntered := make(chan struct{})
-	botRelease := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseBot := func() { releaseOnce.Do(func() { close(botRelease) }) }
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/agents/data/runs" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		close(botEntered)
-		<-botRelease
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"invalid request","retryable":false}}`))
 	}))
 	t.Cleanup(func() {
-		releaseBot()
 		srv.Close()
 		rxBot.BotConfig = nil
 	})
@@ -335,28 +366,10 @@ func TestQueryDataReplacementDetachErrorClearsRunningCandidate(t *testing.T) {
 		RefreshId:    seed.Id,
 		Surface:      QuerySurfaceChat,
 	})
-	if err != nil {
-		t.Fatalf("Query: %v", err)
+	if err == nil || out != nil {
+		t.Fatalf("replacement Query = %#v error = %v, want rejected submission", out, err)
 	}
-	if out.Id != seed.Id || out.Status != "RUNNING" || !isDurablePendingRunID(out.BotRunID) {
-		t.Fatalf("replacement Query = %#v, want RUNNING on seed id %d", out, seed.Id)
-	}
-	staged, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if staged.Replacement == nil || staged.Replacement.ActiveStatus != "RUNNING" ||
-		!isDurablePendingRunID(staged.Replacement.ActiveBotRunID) {
-		t.Fatalf("replacement not staged as RUNNING pending: %#v", staged.Replacement)
-	}
-	select {
-	case <-botEntered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Bot replacement run was not started")
-	}
-	releaseBot()
-
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		private, loadErr := LoadBotConversationContext(context.Background(), "alice", seed.Id)
 		if loadErr != nil {
@@ -421,11 +434,8 @@ func TestQueryDataReplacementDetachDefiniteFailureKeepsTerminal(t *testing.T) {
 		Surface:      QuerySurfaceChat,
 	}
 	out, err := NewService().Query(context.Background(), "alice", input)
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	if out.Id != seed.Id || out.Status != "RUNNING" {
-		t.Fatalf("detach Query=%#v, want RUNNING on seed id %d", out, seed.Id)
+	if err == nil || out != nil {
+		t.Fatalf("Query=%#v error=%v, want definite submission failure", out, err)
 	}
 
 	deadline := time.Now().Add(5 * time.Second)

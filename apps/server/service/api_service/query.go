@@ -2657,7 +2657,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		useExpertContextRoute: useExpertContextRoute,
 		interop:               interop,
 	}
-	if slug == "data" || slug == "review" || autonomousExpertQuery(in) {
+	if autonomousExpertQuery(in) {
 		running := QueryData{
 			ToolName:        slugToToolName[slug],
 			ReactionType:    "0",
@@ -2853,7 +2853,7 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 				out.Answer = "Task created: " + taskID
 			}
 		}
-	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat {
+	} else if chatModel, isChat := rxBot.ChatModelFor(slug); isChat && slug != "review" {
 		messages := chatMessagesForRequest(in.History, in.Query)
 		if conversationV1 {
 			messages = []rxBot.ChatMessage{{Role: "user", Content: in.Query}}
@@ -3057,7 +3057,12 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		if interopAgent(slug) && interopMetadata.failed(len(resp.TaskIDs) == 0 && strings.TrimSpace(resp.Result.TaskID) == "") {
 			responseStatus = "FAILED"
 		}
-		if responseStatus == "SUCCEEDED" {
+		reviewAnswer := ""
+		if resp.Result.Formatted != nil {
+			reviewAnswer = resp.Result.Formatted.Answer
+		}
+		reviewAnswerCompleted := reviewAnswerCompletesPause(slug, responseStatus, reviewAnswer)
+		if responseStatus == "SUCCEEDED" || reviewAnswerCompleted {
 			// Synchronous agent (e.g. data): the answer is already here.
 			if resp.Result.Formatted != nil {
 				// Reshape the sync agent payload (data -> {headers, rows}).
@@ -3065,6 +3070,13 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 			// out.Status stays "SUCCEEDED".
+		} else if responseStatus == "INPUT_REQUIRED" && slug == "review" {
+			surface, surfaceErr := decodeInputRequiredSurface(resp.Interrupt)
+			if surfaceErr != nil {
+				return nil, v1SubmissionError(ctx, username, submission, surfaceErr)
+			}
+			out.Status = "INPUT_REQUIRED"
+			out.A2UI = surface
 		} else if terminalStatus, terminal := canonicalImmediateTerminalStatus(responseStatus); terminal {
 			// Bot's bounded interop metadata is authoritative for a terminal
 			// required failure even when the umbrella response still says running.

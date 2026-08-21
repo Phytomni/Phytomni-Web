@@ -22,7 +22,7 @@ const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","actio
 func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	gdb := setupExpertTestDB(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/agents/review/runs" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -42,8 +42,8 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	if out.ToolName != "ReviewAgent" || out.Id <= 0 {
 		t.Fatalf("out = %#v", out)
 	}
-	if out.Status != "RUNNING" && out.Status != "INPUT_REQUIRED" {
-		t.Fatalf("out status = %q, want RUNNING then INPUT_REQUIRED", out.Status)
+	if out.Status != "INPUT_REQUIRED" || out.BotRunID != "run-review-1" {
+		t.Fatalf("out status/run = %q/%q, want INPUT_REQUIRED/run-review-1", out.Status, out.BotRunID)
 	}
 	row := waitForQuestionRowTerminal(t, gdb, out.Id)
 	if row.Status != "INPUT_REQUIRED" || row.ToolName != "ReviewAgent" || row.BotRunId != "run-review-1" {
@@ -79,8 +79,8 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 		response string
 	}{
 		{
-			name:     "forced Review chat completion",
-			path:     "/v1/chat/completions",
+			name:     "forced Review agent run",
+			path:     "/v1/agents/review/runs",
 			query:    QueryInput{Query: "review", Mode: "expert", Tool: "ReviewAgent"},
 			response: `{"id":"run-review-complete-chat","run_id":"run-review-complete-chat","object":"agent.run","agent":"review","status":"input_required","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-stale-chat","widget":"confirm","props":{"title":"Approve"}}}},"task_ids":[],"result":{"formatted":{"answer":"# Complete review\n\nFinal evidence-backed answer.","references":[{"file_id":"f1","title":"Review source"}]}}}`,
 		},
@@ -96,7 +96,7 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != tt.path {
+				if r.Method != http.MethodPost || r.URL.Path != tt.path {
 					w.WriteHeader(http.StatusNotFound)
 					return
 				}

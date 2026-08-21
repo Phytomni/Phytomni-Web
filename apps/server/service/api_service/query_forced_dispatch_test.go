@@ -30,8 +30,9 @@ func forcedDispatchServer(t *testing.T, hitPath *string, chatBody *rxBot.ChatCom
 			}
 			_, _ = w.Write([]byte(`{"id":"c1","run_id":"run-chat","object":"chat.completion","status":"succeeded","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}],"formatted":{"answer":"hi"}}`))
 		case strings.HasPrefix(r.URL.Path, "/v1/agents/") && strings.HasSuffix(r.URL.Path, "/runs"):
+			slug := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/agents/"), "/runs")
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"id":"run-agent","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
+			_, _ = w.Write([]byte(`{"id":"run-agent","run_id":"run-agent","object":"agent.run","agent":"` + slug + `","status":"running","task_ids":[],"result":{}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -45,24 +46,21 @@ func forcedDispatchServer(t *testing.T, hitPath *string, chatBody *rxBot.ChatCom
 
 // TestQuery_ExpertForcedChatFamilyDispatchesToChatCompletions locks the core of
 // the direct-dispatch change: every chat-family forced tool (chat, knowledge,
-// review, brief_gene) is invoked directly on /v1/chat/completions, never the LLM
+// and brief_gene) is invoked directly on /v1/chat/completions, never the LLM
 // router. This is the fix for the @KnowledgeAgent 502 (forced tool no longer
 // depends on Pangu's rejected named-tool tool_choice).
 func TestQuery_ExpertForcedChatFamilyDispatchesToChatCompletions(t *testing.T) {
-	for _, tool := range []string{"ChatAgent", "KnowledgeAgent", "ReviewAgent", "BriefGeneAgent"} {
+	for _, tool := range []string{"ChatAgent", "KnowledgeAgent", "BriefGeneAgent"} {
 		t.Run(tool, func(t *testing.T) {
-			gdb := setupExpertTestDB(t)
+			setupExpertTestDB(t)
 			var hit string
 			forcedDispatchServer(t, &hit, nil)
 
-			out, err := NewService().Query(context.Background(), "alice", QueryInput{
+			_, err := NewService().Query(context.Background(), "alice", QueryInput{
 				Query: "rice breeding", Mode: "expert", Tool: tool,
 			})
 			if err != nil {
 				t.Fatalf("Query: %v", err)
-			}
-			if tool == "ReviewAgent" {
-				_ = waitForQuestionRowTerminal(t, gdb, out.Id)
 			}
 			if hit != "/v1/chat/completions" {
 				t.Fatalf("forced %s must dispatch to /v1/chat/completions, hit %q", tool, hit)
@@ -120,22 +118,31 @@ func TestQuery_ExpertForcedNonBriefGeneOmitsResolveGeneID(t *testing.T) {
 }
 
 // TestQuery_ExpertForcedNonChatDispatchesToAgentRuns locks that a forced
-// non-chat agent (data) is invoked directly on /v1/agents/{slug}/runs, not the
+// non-chat local agent is invoked directly on /v1/agents/{slug}/runs, not the
 // router. (analyst/deep_genome/research/design/network follow the same branch.)
 func TestQuery_ExpertForcedNonChatDispatchesToAgentRuns(t *testing.T) {
-	gdb := setupExpertTestDB(t)
-	var hit string
-	forcedDispatchServer(t, &hit, nil)
+	for _, tc := range []struct{ tool, path string }{
+		{tool: "DataAgent", path: "/v1/agents/data/runs"},
+		{tool: "ReviewAgent", path: "/v1/agents/review/runs"},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			setupExpertTestDB(t)
+			var hit string
+			forcedDispatchServer(t, &hit, nil)
 
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "show me the table", Mode: "expert", Tool: "DataAgent",
-	})
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
-	if hit != "/v1/agents/data/runs" {
-		t.Fatalf("forced DataAgent must dispatch to /v1/agents/data/runs, hit %q", hit)
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query: "run local agent", Mode: "expert", Tool: tc.tool,
+			})
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if out.Status != "RUNNING" || out.BotRunID != "run-agent" {
+				t.Fatalf("result = %#v, want durable RUNNING", out)
+			}
+			if hit != tc.path {
+				t.Fatalf("forced %s must dispatch to %s, hit %q", tc.tool, tc.path, hit)
+			}
+		})
 	}
 }
 
