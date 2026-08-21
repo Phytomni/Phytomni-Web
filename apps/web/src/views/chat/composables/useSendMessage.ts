@@ -661,6 +661,8 @@ export function useSendMessage(opts: {
           streamPresentationKey: requestKey,
         };
         sendingMessages.push(placeholder);
+        const streamPlaceholder =
+          sendingMessages[sendingMessages.length - 1] ?? placeholder;
         // Bind stream lookups to the captured state object so a post-rekey
         // getChatState(oldTempId) cannot resurrect an empty temp record.
         const getStreamChatState = (id: string) =>
@@ -673,7 +675,7 @@ export function useSendMessage(opts: {
           dialogueId: sendingDialogueId,
           formData: queryData,
           requestId: requestKey,
-          placeholder,
+          placeholder: streamPlaceholder,
           clientTurnId,
           onIdentity: ({ dialogueId }) => {
             if (chatState.activeRequestId !== requestKey) return;
@@ -704,7 +706,7 @@ export function useSendMessage(opts: {
           streamResult.completed === true
         ) {
           acceptedTurn = true;
-          commitSuccessfulTurn(chatState, userMessage, placeholder);
+          commitSuccessfulTurn(chatState, userMessage, streamPlaceholder);
           if (streamResult.messageId) {
             settlePendingTurnIdentity(
               chatState,
