@@ -1779,7 +1779,7 @@ func failV1Submission(
 		return ErrBotProjectionConflict
 	}
 	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Where("id = ? AND user_name = ? AND status = ?", rowID, username, "SUBMITTING").
+		Where("id = ? AND user_name = ? AND status IN ?", rowID, username, []string{"SUBMITTING", "RUNNING"}).
 		Update("status", "FAILED")
 	if result.Error != nil {
 		return result.Error
@@ -2303,6 +2303,27 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 	rxLog.SugarContext(ctx).Debugw("Bot response received", "bot_request_id", meta.BotRequestID)
 }
 
+// durableQueryTurn is the blocking Query dispatch after identity allocation.
+// Data and Review persist RUNNING immediately, then complete this turn on a
+// context that outlives browser abort.
+type durableQueryTurn struct {
+	username              string
+	in                    QueryInput
+	slug                  string
+	dialogueID            string
+	fID                   int64
+	conversationV1        bool
+	ownerAllocated        bool
+	submission            *v1Submission
+	target                v1SubmissionTarget
+	permissions           AgentPermissionResolution
+	executionClient       *rxBot.Client
+	contextClient         *rxBot.Client
+	useExpertContextRoute bool
+	interop               interopDecision
+	persistedID           int64
+}
+
 // Query is the gateway orchestration: dispatch opaque asset references to the
 // resolved agent, persist a Web-side row (Bot owns the content; Web keeps the
 // ownership/threading record plus a transitional content fallback), and return
@@ -2578,6 +2599,70 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	_, forcedChatFamily := rxBot.ChatModelFor(slug)
 	useExpertContextRoute := in.Mode == "expert" &&
 		(in.Tool == "" || (conversationV1 && forcedChatFamily))
+	turn := durableQueryTurn{
+		username:              username,
+		in:                    in,
+		slug:                  slug,
+		dialogueID:            dialogueID,
+		fID:                   fID,
+		conversationV1:        conversationV1,
+		ownerAllocated:        ownerAllocated,
+		submission:            submission,
+		target:                target,
+		permissions:           permissions,
+		executionClient:       executionClient,
+		contextClient:         contextClient,
+		useExpertContextRoute: useExpertContextRoute,
+		interop:               interop,
+	}
+	if slug == "data" || slug == "review" {
+		running := QueryData{
+			ToolName:        slugToToolName[slug],
+			ReactionType:    "0",
+			DialogueId:      dialogueID,
+			Status:          "RUNNING",
+			RequestID:       requestIDFromContext(ctx),
+			DegradedInterop: interop.Degraded,
+			InterOp:         queryInteropProvenancePtr(slug, interop),
+		}
+		if err := ps.persistDurableRunningTurn(context.WithoutCancel(ctx), &turn, &running); err != nil {
+			return nil, err
+		}
+		if running.Status == "CANCELLED" {
+			return &running, nil
+		}
+		turn.persistedID = running.Id
+		botCtx := context.WithoutCancel(ctx)
+		go func() {
+			if _, err := ps.completeDurableTurn(botCtx, turn); err != nil {
+				rxLog.SugarContext(botCtx).Warnw(
+					"durable blocking turn failed",
+					"slug", turn.slug,
+					"id", turn.persistedID,
+					"error", err,
+				)
+			}
+		}()
+		return &running, nil
+	}
+	return ps.completeDurableTurn(ctx, turn)
+}
+
+func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTurn) (*QueryData, error) {
+	username := turn.username
+	in := turn.in
+	slug := turn.slug
+	dialogueID := turn.dialogueID
+	fID := turn.fID
+	conversationV1 := turn.conversationV1
+	ownerAllocated := turn.ownerAllocated
+	submission := turn.submission
+	target := turn.target
+	permissions := turn.permissions
+	executionClient := turn.executionClient
+	contextClient := turn.contextClient
+	useExpertContextRoute := turn.useExpertContextRoute
+	interop := turn.interop
 
 	// 3. Dispatch. Web Go never runs an LLM; it forwards free-form query text
 	//    and opaque asset references to Bot's resolver.
@@ -2593,6 +2678,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 	if slug != "" {
 		out.ToolName = slugToToolName[slug]
 	}
+	var err error
 	var botRunID, serverID, taskID, logStatus string
 	var submissionProjection *BotRunProjection
 	var contextStage *rxBot.ContextStageMetadata
@@ -3099,7 +3185,11 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 			conversationV1,
 		)
 	} else {
-		id, err = ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
+		refreshID := in.RefreshId
+		if turn.persistedID > 0 {
+			refreshID = turn.persistedID
+		}
+		id, err = ps.persistQuestionLog(ctx, username, refreshID, &row)
 	}
 	if err != nil {
 		return nil, err
@@ -3122,6 +3212,83 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		}
 	}
 	return out, nil
+}
+
+func (ps *Service) persistDurableRunningTurn(
+	ctx context.Context,
+	turn *durableQueryTurn,
+	out *QueryData,
+) error {
+	if turn == nil || out == nil {
+		return errors.New("durable running turn requires identity")
+	}
+	username := turn.username
+	in := turn.in
+	out.Status = "RUNNING"
+	out.DialogueId = turn.dialogueID
+	if turn.slug != "" && out.ToolName == "" {
+		out.ToolName = slugToToolName[turn.slug]
+	}
+	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), in.Attachments...)
+	if turn.submission != nil && turn.submission.replacement {
+		persisted, err := persistReplacementActiveResult(ctx, username, turn.submission, out)
+		if err != nil {
+			return err
+		}
+		*out = *persisted
+		return nil
+	}
+	titleQuery := ""
+	if turn.fID == 0 && in.RefreshId == 0 {
+		titleQuery = conversationTitle(in.Query)
+	}
+	attachmentProjection, err := attachmentProjectionJSON(in.Attachments)
+	if err != nil {
+		return err
+	}
+	row := model.QuestionAgentLog{
+		DialogueId:        turn.dialogueID,
+		FId:               turn.fID,
+		UserName:          username,
+		Query:             in.Query,
+		TitleQuery:        titleQuery,
+		ToolName:          out.ToolName,
+		Status:            "RUNNING",
+		LogStatus:         "sync_running",
+		Mode:              in.Mode,
+		ReactionType:      "0",
+		CollectType:       "0",
+		BotProjectionJSON: attachmentProjection,
+	}
+	if turn.ownerAllocated {
+		row.BotProjectionJSON = ""
+	}
+	var id int64
+	if turn.ownerAllocated {
+		id, err = ps.persistOwnerAllocatedQuestionLog(
+			ctx,
+			username,
+			turn.submission,
+			&row,
+			turn.conversationV1,
+		)
+	} else {
+		id, err = ps.persistQuestionLog(ctx, username, in.RefreshId, &row)
+	}
+	if err != nil {
+		return err
+	}
+	out.Id = id
+	ps.adoptOwnerCancelIfPresent(ctx, username, id, out, "")
+	if turn.conversationV1 && out.Status == "RUNNING" {
+		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		err := lockConversationRootMode(lockCtx, username, turn.dialogueID)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // resolveDialogue returns the dialogue_id and f_id for this turn, scoping every

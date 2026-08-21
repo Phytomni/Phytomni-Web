@@ -20,7 +20,7 @@ import (
 const validA2uiActionBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
 
 func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
-	setupExpertTestDB(t)
+	gdb := setupExpertTestDB(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			w.WriteHeader(http.StatusNotFound)
@@ -39,24 +39,18 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.ToolName != "ReviewAgent" || out.Status != "INPUT_REQUIRED" || out.BotRunID != "run-review-1" || out.A2UI == nil {
+	if out.ToolName != "ReviewAgent" || out.Id <= 0 {
 		t.Fatalf("out = %#v", out)
 	}
-	if out.A2UI.SurfaceID != "surface-1" || out.A2UI.Widget != "confirm" {
-		t.Fatalf("surface = %#v", out.A2UI)
+	if out.Status != "RUNNING" && out.Status != "INPUT_REQUIRED" {
+		t.Fatalf("out status = %q, want RUNNING then INPUT_REQUIRED", out.Status)
 	}
-	encoded, err := json.Marshal(out)
-	if err != nil {
-		t.Fatalf("marshal QueryData: %v", err)
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != "INPUT_REQUIRED" || row.ToolName != "ReviewAgent" || row.BotRunId != "run-review-1" {
+		t.Fatalf("settled row = %#v", row)
 	}
-	if strings.Contains(string(encoded), "interrupt") || strings.Contains(string(encoded), "draft") {
-		t.Fatalf("raw pause leaked into QueryData: %s", encoded)
-	}
-	if !strings.Contains(string(encoded), `"a2ui"`) {
-		t.Fatalf("bounded surface missing from QueryData: %s", encoded)
-	}
-	if !strings.Contains(string(encoded), `"title":"Approve"`) || strings.Contains(string(encoded), "confirm_label") || strings.Contains(string(encoded), "cancel_label") {
-		t.Fatalf("unexpected confirmation props in QueryData: %s", encoded)
+	if strings.Contains(row.Answer, "interrupt") || strings.Contains(row.Answer, `"draft"`) {
+		t.Fatalf("raw pause leaked into persisted answer: %q", row.Answer)
 	}
 }
 
@@ -102,8 +96,12 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.ToolName != "ReviewAgent" || out.Status != "SUCCEEDED" {
+			if out.ToolName != "ReviewAgent" || out.Id <= 0 {
 				t.Fatalf("out = %#v", out)
+			}
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "SUCCEEDED" || row.ToolName != "ReviewAgent" {
+				t.Fatalf("settled row = %#v", row)
 			}
 			if out.A2UI != nil {
 				t.Fatalf("stale confirmation surfaced: %#v", out.A2UI)
@@ -114,18 +112,11 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 					Title string `json:"title"`
 				} `json:"doc_list"`
 			}
-			if err := json.Unmarshal([]byte(out.Answer), &cited); err != nil {
-				t.Fatalf("answer is not cited JSON: %v (%q)", err, out.Answer)
+			if err := json.Unmarshal([]byte(row.Answer), &cited); err != nil {
+				t.Fatalf("answer is not cited JSON: %v (%q)", err, row.Answer)
 			}
 			if cited.Content != "# Complete review\n\nFinal evidence-backed answer." || len(cited.DocList) != 1 || cited.DocList[0].Title != "Review source" {
 				t.Fatalf("cited answer = %#v", cited)
-			}
-			var persistedStatus, persistedAnswer string
-			if err := gdb.Raw(`SELECT COALESCE(status,''), COALESCE(answer,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&persistedStatus, &persistedAnswer); err != nil {
-				t.Fatalf("read persisted Review row: %v", err)
-			}
-			if persistedStatus != "SUCCEEDED" || persistedAnswer != out.Answer {
-				t.Fatalf("persisted status=%q answer=%q", persistedStatus, persistedAnswer)
 			}
 		})
 	}

@@ -292,6 +292,7 @@ func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
 	if dispatchPath != "/v1/agents/data/runs" || settleCalls != 1 {
 		t.Fatalf("forced DataAgent under v1 dispatch/settle = %q/%d", dispatchPath, settleCalls)
 	}
@@ -374,11 +375,13 @@ func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_forced_data"}}
-	if _, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
+	out, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
 		Query: "q", Mode: "expert", Tool: "DataAgent", Attachments: refs,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
 	if hit != "/v1/agents/data/runs" {
 		t.Fatalf("forced DataAgent must dispatch directly to /v1/agents/data/runs, hit %q", hit)
 	}

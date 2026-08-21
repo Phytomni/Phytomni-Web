@@ -4,22 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
 
 	rxBot "phytomni-server/external/bot"
-	"phytomni-server/model"
 )
 
 func TestQueryV1ForcedDataAgentForwardsAndSettlesConversation(t *testing.T) {
+	useConversationV1(t)
 	gdb := setupExpertTestDB(t)
-	var captured rxBot.AgentRunRequest
+	var (
+		mu       sync.Mutex
+		captured rxBot.AgentRunRequest
+	)
 	settleCalls := 0
 
 	v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/agents/data/runs":
-			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			mu.Lock()
+			err := json.NewDecoder(r.Body).Decode(&captured)
+			mu.Unlock()
+			if err != nil {
 				t.Errorf("decode agent request: %v", err)
 			}
 			_, _ = w.Write([]byte(`{
@@ -59,22 +66,24 @@ func TestQueryV1ForcedDataAgentForwardsAndSettlesConversation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.Status != statusSucceeded || out.Answer != `{"headers":[],"rows":[]}` {
+	if out.Id <= 0 || (out.Status != "RUNNING" && out.Status != statusSucceeded) {
 		t.Fatalf("result=%#v", out)
 	}
-	if captured.Conversation == nil || captured.Conversation.TurnID != "1" {
-		t.Fatalf("conversation envelope=%#v", captured.Conversation)
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != statusSucceeded || row.Answer != `{"headers":[],"rows":[]}` {
+		t.Fatalf("settled row=%#v", row)
 	}
-	if captured.Conversation.RequestedAgentID == nil || *captured.Conversation.RequestedAgentID != "DataAgent" {
-		t.Fatalf("requested agent=%#v", captured.Conversation.RequestedAgentID)
+	mu.Lock()
+	got := captured
+	mu.Unlock()
+	if got.Conversation == nil || got.Conversation.TurnID != "1" {
+		t.Fatalf("conversation envelope=%#v", got.Conversation)
+	}
+	if got.Conversation.RequestedAgentID == nil || *got.Conversation.RequestedAgentID != "DataAgent" {
+		t.Fatalf("requested agent=%#v", got.Conversation.RequestedAgentID)
 	}
 	if settleCalls != 1 {
 		t.Fatalf("settlement calls=%d, want 1", settleCalls)
-	}
-
-	var row model.QuestionAgentLog
-	if err := gdb.First(&row, out.Id).Error; err != nil {
-		t.Fatal(err)
 	}
 	private, err := LoadBotConversationContext(context.Background(), "alice", row.Id)
 	if err != nil {

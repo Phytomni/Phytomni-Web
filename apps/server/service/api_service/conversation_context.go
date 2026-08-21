@@ -605,7 +605,7 @@ func settleBlockingConversationContext(
 				)
 			}
 		} else {
-			if stored.Status != "SUBMITTING" {
+			if stored.Status != "SUBMITTING" && stored.Status != "RUNNING" {
 				return ErrBotProjectionConflict
 			}
 			if currentPrivate != nil && private.ClientTurnID == "" {
@@ -656,7 +656,7 @@ func settleBlockingConversationContext(
 			updates["server_file_path"] = ""
 			updates["download_path"] = ""
 		}
-		expectedStatus := "SUBMITTING"
+		expectedStatus := stored.Status
 		if replacement {
 			expectedStatus = statusSucceeded
 		}

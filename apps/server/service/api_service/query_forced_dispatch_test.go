@@ -51,14 +51,18 @@ func forcedDispatchServer(t *testing.T, hitPath *string, chatBody *rxBot.ChatCom
 func TestQuery_ExpertForcedChatFamilyDispatchesToChatCompletions(t *testing.T) {
 	for _, tool := range []string{"ChatAgent", "KnowledgeAgent", "ReviewAgent", "BriefGeneAgent"} {
 		t.Run(tool, func(t *testing.T) {
-			setupExpertTestDB(t)
+			gdb := setupExpertTestDB(t)
 			var hit string
 			forcedDispatchServer(t, &hit, nil)
 
-			if _, err := NewService().Query(context.Background(), "alice", QueryInput{
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{
 				Query: "rice breeding", Mode: "expert", Tool: tool,
-			}); err != nil {
+			})
+			if err != nil {
 				t.Fatalf("Query: %v", err)
+			}
+			if tool == "ReviewAgent" {
+				_ = waitForQuestionRowTerminal(t, gdb, out.Id)
 			}
 			if hit != "/v1/chat/completions" {
 				t.Fatalf("forced %s must dispatch to /v1/chat/completions, hit %q", tool, hit)
@@ -119,15 +123,17 @@ func TestQuery_ExpertForcedNonBriefGeneOmitsResolveGeneID(t *testing.T) {
 // non-chat agent (data) is invoked directly on /v1/agents/{slug}/runs, not the
 // router. (analyst/deep_genome/research/design/network follow the same branch.)
 func TestQuery_ExpertForcedNonChatDispatchesToAgentRuns(t *testing.T) {
-	setupExpertTestDB(t)
+	gdb := setupExpertTestDB(t)
 	var hit string
 	forcedDispatchServer(t, &hit, nil)
 
-	if _, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query: "show me the table", Mode: "expert", Tool: "DataAgent",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
 	if hit != "/v1/agents/data/runs" {
 		t.Fatalf("forced DataAgent must dispatch to /v1/agents/data/runs, hit %q", hit)
 	}
