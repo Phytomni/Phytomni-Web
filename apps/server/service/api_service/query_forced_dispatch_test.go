@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	rxBot "phytomni-server/external/bot"
 )
@@ -166,5 +168,94 @@ func TestQuery_ExpertAutonomousStillUsesRouter(t *testing.T) {
 	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	if hit != "/v1/query/route" {
 		t.Fatalf("autonomous Expert must still hit /v1/query/route, hit %q", hit)
+	}
+}
+
+func TestQuery_ExpertAutonomousRoutedKnowledgeStartsRunStreamOnce(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var routerCalls, unexpectedCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/query/route" {
+			routerCalls.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-auto-knowledge","run_id":"run-auto-knowledge","object":"agent.run","agent":"knowledge","status":"running","task_ids":[],"result":{}}`))
+			return
+		}
+		unexpectedCalls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	streamer := &fakeRunStream{body: strings.Join([]string{
+		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-auto-knowledge"}` + "\n",
+		`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"routed knowledge"}` + "\n",
+		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-auto-knowledge"}` + "\n",
+	}, "\n")}
+	svc := NewService()
+	svc.runStream = streamer
+
+	out, err := svc.Query(context.Background(), "alice", QueryInput{
+		Query: "route and stream", Mode: "expert", Surface: QuerySurfaceChat,
+	})
+	if err != nil || out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, error = %v", out, err)
+	}
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != "SUCCEEDED" || row.ToolName != "KnowledgeAgent" || row.BotRunId != "run-auto-knowledge" {
+		t.Fatalf("settled routed stream row = %#v", row)
+	}
+	if !strings.Contains(row.Answer, "routed knowledge") {
+		t.Fatalf("routed stream answer = %q", row.Answer)
+	}
+	streamCalls, runID, after := streamer.snapshot()
+	if routerCalls.Load() != 1 || streamCalls != 1 || runID != "run-auto-knowledge" || after != 0 || unexpectedCalls.Load() != 0 {
+		t.Fatalf("router=%d stream=%d run=%q after=%d unexpected=%d", routerCalls.Load(), streamCalls, runID, after, unexpectedCalls.Load())
+	}
+}
+
+func TestQuery_ExpertAutonomousRoutedDataKeepsWaitingWithoutRunStream(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var routerCalls, unexpectedCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/query/route" {
+			routerCalls.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-auto-data","run_id":"run-auto-data","object":"agent.run","agent":"data","status":"running","task_ids":[],"result":{}}`))
+			return
+		}
+		unexpectedCalls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	streamStarted := make(chan struct{})
+	streamer := &fakeRunStream{started: streamStarted}
+	svc := NewService()
+	svc.runStream = streamer
+
+	out, err := svc.Query(context.Background(), "alice", QueryInput{
+		Query: "route and wait", Mode: "expert", Surface: QuerySurfaceChat,
+	})
+	if err != nil || out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, error = %v", out, err)
+	}
+	row := waitForDetachedQueryProgress(t, gdb, out.Id)
+	if row.Status != "RUNNING" || row.ToolName != "DataAgent" || row.BotRunId != "run-auto-data" {
+		t.Fatalf("routed wait row = %#v", row)
+	}
+	select {
+	case <-streamStarted:
+		t.Fatal("routed DataAgent must not open a chat-family run stream")
+	case <-time.After(100 * time.Millisecond):
+	}
+	streamCalls, _, _ := streamer.snapshot()
+	if routerCalls.Load() != 1 || streamCalls != 0 || unexpectedCalls.Load() != 0 {
+		t.Fatalf("router=%d stream=%d unexpected=%d", routerCalls.Load(), streamCalls, unexpectedCalls.Load())
 	}
 }

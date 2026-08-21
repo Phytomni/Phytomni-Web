@@ -3251,6 +3251,7 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		return nil, err
 	}
 	out.Id = id
+	row.Id = id
 	ps.adoptOwnerCancelIfPresent(ctx, username, id, out, botRunID)
 	if conversationV1 && (out.Status == "RUNNING" || out.Status == "INPUT_REQUIRED") {
 		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
@@ -3270,6 +3271,13 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 	if err := persistConversationActiveA2UI(ctx, username, id, out); err != nil {
 		_ = failDetachedDurableTurn(ctx, username, id)
 		return nil, err
+	}
+	if autonomousExpertQuery(in) && out.Status == "RUNNING" {
+		if _, streamCapable := rxBot.StreamModelFor(slug); streamCapable {
+			if err := ps.resupplyQuestionStreamFromBot(ctx, row); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return out, nil
 }
