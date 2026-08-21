@@ -77,6 +77,9 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 			rxLog.Sugar().Warnf("pollable row %d has no bot run identity; skipping bot sync", row.Id)
 			continue
 		}
+		if isDurablePendingRunID(runID) {
+			continue
+		}
 		rec, meta, err := client.GetRunWithMeta(ctx, runID)
 		if err != nil {
 			rxLog.Sugar().Error(err)

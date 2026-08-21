@@ -77,6 +77,9 @@ type persistedConversationContext struct {
 	InteropTargets    []string                          `json:"interop_targets,omitempty"`
 	RetiredIdentities []persistedClientTurnIdentity     `json:"retired_identities,omitempty"`
 	Replacement       *persistedConversationReplacement `json:"replacement,omitempty"`
+	// ActiveA2UI is the bounded public pause surface for an INPUT_REQUIRED
+	// Review row. Replacement pauses stay on Replacement.ActiveA2UI.
+	ActiveA2UI json.RawMessage `json:"active_a2ui,omitempty"`
 }
 
 type persistedClientTurnIdentity struct {
@@ -148,6 +151,7 @@ func (value persistedConversationContext) clone() persistedConversationContext {
 	copyValue.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.InputAttachments...)
 	copyValue.InteropTargets = append([]string(nil), value.InteropTargets...)
 	copyValue.RetiredIdentities = append([]persistedClientTurnIdentity(nil), value.RetiredIdentities...)
+	copyValue.ActiveA2UI = append(json.RawMessage(nil), value.ActiveA2UI...)
 	if value.Replacement != nil {
 		replacement := *value.Replacement
 		replacement.InputAttachments = append([]rxBot.AssetAttachmentRef(nil), value.Replacement.InputAttachments...)
@@ -249,6 +253,14 @@ func (value persistedConversationContext) validate() error {
 		}
 		if err := value.Replacement.validate(); err != nil {
 			return err
+		}
+	}
+	if len(value.ActiveA2UI) > maxPersistedActiveA2UIBytes {
+		return persistedContextError("active_a2ui exceeds bounds")
+	}
+	if len(value.ActiveA2UI) > 0 {
+		if _, err := DecodeA2uiSurface(value.ActiveA2UI); err != nil {
+			return persistedContextError("active_a2ui is invalid")
 		}
 	}
 	return nil
@@ -783,6 +795,52 @@ func lockConversationRootMode(
 	return model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return lockConversationRootModeWithDB(ctx, tx, username, dialogueID)
 	})
+}
+
+func encodePersistedActiveA2UI(surface *A2uiSurfaceDTO) (json.RawMessage, error) {
+	if surface == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(surface)
+	if err != nil || len(encoded) > maxPersistedActiveA2UIBytes {
+		return nil, ErrInvalidA2uiSurface
+	}
+	if _, err := DecodeA2uiSurface(encoded); err != nil {
+		return nil, ErrInvalidA2uiSurface
+	}
+	return encoded, nil
+}
+
+func decodeConversationActiveA2UI(private persistedConversationContext) *A2uiSurfaceDTO {
+	if len(private.ActiveA2UI) == 0 {
+		return nil
+	}
+	surface, err := DecodeA2uiSurface(private.ActiveA2UI)
+	if err != nil {
+		return nil
+	}
+	return surface
+}
+
+func persistConversationActiveA2UI(
+	ctx context.Context,
+	username string,
+	rowID int64,
+	out *QueryData,
+) error {
+	if out == nil || rowID <= 0 || out.Status != "INPUT_REQUIRED" || out.A2UI == nil {
+		return nil
+	}
+	encoded, err := encodePersistedActiveA2UI(out.A2UI)
+	if err != nil {
+		return err
+	}
+	private, err := LoadBotConversationContext(ctx, username, rowID)
+	if err != nil {
+		return err
+	}
+	private.ActiveA2UI = encoded
+	return SaveBotConversationContext(ctx, username, rowID, private)
 }
 
 func invalidateConversationContextsAfter(

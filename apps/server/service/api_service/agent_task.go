@@ -146,6 +146,7 @@ type ConversationHistoryRow struct {
 	Attachments     []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ResultArchiveV1 bool                       `json:"result_archive_v1,omitempty"`
 	Delivery        *AgentTaskDeliveryDTO      `json:"delivery,omitempty"`
+	A2UI            *A2uiSurfaceDTO            `json:"a2ui,omitempty"`
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
 	RouteReasonCode string                     `json:"route_reason_code,omitempty"`
@@ -167,6 +168,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			return nil, contextErr
 		}
 		historyRow.Attachments = append([]rxBot.AssetAttachmentRef(nil), private.InputAttachments...)
+		historyRow.A2UI = decodeConversationActiveA2UI(private)
 		projection, _, projectionErr := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
 		if projectionErr != nil {
 			return nil, projectionErr

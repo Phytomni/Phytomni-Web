@@ -94,6 +94,9 @@ func testQueryDetachReturnsRunningWithoutWaiting(t *testing.T, tc queryDetachCas
 	if out == nil || out.Status != "RUNNING" || out.Id <= 0 || strings.TrimSpace(out.DialogueId) == "" {
 		t.Fatalf("Query = %#v, want RUNNING with Id and DialogueId in %s", out, elapsed)
 	}
+	if strings.TrimSpace(out.BotRunID) == "" || !isDurablePendingRunID(out.BotRunID) {
+		t.Fatalf("Query BotRunID = %q, want web-pending placeholder", out.BotRunID)
+	}
 
 	select {
 	case <-botEntered:
@@ -110,18 +113,12 @@ func testQueryDetachReturnsRunningWithoutWaiting(t *testing.T, tc queryDetachCas
 	}
 
 	releaseBot()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if err := gdb.First(&row, out.Id).Error; err != nil {
-			t.Fatal(err)
-		}
-		if row.Status == "SUBMITTING" {
-			t.Fatalf("row flipped to SUBMITTING after Bot cancel: %#v", row)
-		}
-		time.Sleep(20 * time.Millisecond)
+	row = waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status == "SUBMITTING" || row.Status == "RUNNING" {
+		t.Fatalf("row stayed pollable after Bot error: %#v", row)
 	}
-	if row.Status == "SUBMITTING" {
-		t.Fatalf("row status SUBMITTING after Bot cancel")
+	if row.Status != "FAILED" {
+		t.Fatalf("row status = %q, want FAILED after Bot I/O error", row.Status)
 	}
 }
 

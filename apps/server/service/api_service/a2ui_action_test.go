@@ -52,6 +52,23 @@ func TestQueryChatReturnsInputRequiredSurface(t *testing.T) {
 	if strings.Contains(row.Answer, "interrupt") || strings.Contains(row.Answer, `"draft"`) {
 		t.Fatalf("raw pause leaked into persisted answer: %q", row.Answer)
 	}
+	history, err := NewService().AnswerCheck(context.Background(), "alice@x.com", row.DialogueId)
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(history) != 1 || history[0] == nil || history[0].A2UI == nil {
+		t.Fatalf("history a2ui missing: %#v", history)
+	}
+	if history[0].A2UI.SurfaceID != "surface-1" || history[0].A2UI.Widget != "confirm" {
+		t.Fatalf("history a2ui = %#v", history[0].A2UI)
+	}
+	encoded, err := json.Marshal(history[0])
+	if err != nil {
+		t.Fatalf("marshal history row: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"surface_id":"surface-1"`) {
+		t.Fatalf("settled row JSON missing surface_id: %s", encoded)
+	}
 }
 
 func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {

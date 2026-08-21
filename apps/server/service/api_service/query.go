@@ -1784,10 +1784,61 @@ func failV1Submission(
 	if result.Error != nil {
 		return result.Error
 	}
-	if result.RowsAffected != 1 {
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	var stored model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, status").
+		Where("id = ? AND user_name = ?", rowID, username).
+		Take(&stored).Error; err != nil {
 		return fmt.Errorf("submitting row %d not found", rowID)
 	}
-	return nil
+	status := strings.ToUpper(strings.TrimSpace(stored.Status))
+	if status == "FAILED" || status == "SUCCEEDED" || status == "INPUT_REQUIRED" {
+		return nil
+	}
+	if _, terminal := canonicalImmediateTerminalStatus(status); terminal {
+		return nil
+	}
+	return fmt.Errorf("submitting row %d not found", rowID)
+}
+
+func failDetachedDurableTurn(ctx context.Context, username string, rowID int64) error {
+	if rowID <= 0 || strings.TrimSpace(username) == "" {
+		return nil
+	}
+	var current model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, bot_run_id, status, bot_projection_json").
+		Where("id = ? AND user_name = ?", rowID, username).
+		Take(&current).Error; err == nil && ownerTaskAlreadyCancelled(&current) {
+		return nil
+	}
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND status IN ?", rowID, username, []string{"SUBMITTING", "RUNNING"}).
+		Update("status", "FAILED")
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	var stored model.QuestionAgentLog
+	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("status").
+		Where("id = ? AND user_name = ?", rowID, username).
+		Take(&stored).Error; err != nil {
+		return err
+	}
+	status := strings.ToUpper(strings.TrimSpace(stored.Status))
+	if status == "FAILED" || status == "SUCCEEDED" || status == "INPUT_REQUIRED" {
+		return nil
+	}
+	if _, terminal := canonicalImmediateTerminalStatus(status); terminal {
+		return nil
+	}
+	return fmt.Errorf("detached row %d not failed", rowID)
 }
 
 // isV1DefiniteFailure distinguishes a completed Bot rejection or malformed
@@ -1965,6 +2016,9 @@ func (ps *Service) decorateConversationQueryData(
 	if private.SettlementState == conversationSettlementRebuildRequired {
 		out.ContextDegraded = true
 	}
+	if out.A2UI == nil {
+		out.A2UI = decodeConversationActiveA2UI(private)
+	}
 	return nil
 }
 
@@ -1989,6 +2043,16 @@ var slugToToolName = map[string]string{
 	"research":    "InSilicoResearchAgent",
 	"design":      "DigitalDesignAgent",
 	"network":     "GeneNetworkAgent",
+}
+
+const durablePendingRunIDPrefix = "web-pending-"
+
+func newDurablePendingRunID() string {
+	return durablePendingRunIDPrefix + uuid.NewString()
+}
+
+func isDurablePendingRunID(runID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(runID), durablePendingRunIDPrefix)
 }
 
 // ExpertModeEnabled reports that Expert routing is locally always enabled.
@@ -2635,11 +2699,13 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		botCtx := context.WithoutCancel(ctx)
 		go func() {
 			if _, err := ps.completeDurableTurn(botCtx, turn); err != nil {
+				settleErr := failDetachedDurableTurn(botCtx, turn.username, turn.persistedID)
 				rxLog.SugarContext(botCtx).Warnw(
 					"durable blocking turn failed",
 					"slug", turn.slug,
 					"id", turn.persistedID,
 					"error", err,
+					"settle_error", settleErr,
 				)
 			}
 		}()
@@ -3211,6 +3277,10 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			return nil, err
 		}
 	}
+	if err := persistConversationActiveA2UI(ctx, username, id, out); err != nil {
+		_ = failDetachedDurableTurn(ctx, username, id)
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -3228,6 +3298,9 @@ func (ps *Service) persistDurableRunningTurn(
 	out.DialogueId = turn.dialogueID
 	if turn.slug != "" && out.ToolName == "" {
 		out.ToolName = slugToToolName[turn.slug]
+	}
+	if strings.TrimSpace(out.BotRunID) == "" {
+		out.BotRunID = newDurablePendingRunID()
 	}
 	out.Attachments = append([]rxBot.AssetAttachmentRef(nil), in.Attachments...)
 	if turn.submission != nil && turn.submission.replacement {
@@ -3249,6 +3322,7 @@ func (ps *Service) persistDurableRunningTurn(
 	row := model.QuestionAgentLog{
 		DialogueId:        turn.dialogueID,
 		FId:               turn.fID,
+		BotRunId:          out.BotRunID,
 		UserName:          username,
 		Query:             in.Query,
 		TitleQuery:        titleQuery,
@@ -3279,7 +3353,7 @@ func (ps *Service) persistDurableRunningTurn(
 		return err
 	}
 	out.Id = id
-	ps.adoptOwnerCancelIfPresent(ctx, username, id, out, "")
+	ps.adoptOwnerCancelIfPresent(ctx, username, id, out, out.BotRunID)
 	if turn.conversationV1 && out.Status == "RUNNING" {
 		lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		err := lockConversationRootMode(lockCtx, username, turn.dialogueID)
@@ -4009,6 +4083,9 @@ func (ps *Service) persistOwnerAllocatedQuestionLog(
 			} else {
 				clearConversationV1Lifecycle(&next)
 			}
+		}
+		if row.Status != "INPUT_REQUIRED" {
+			next.ActiveA2UI = nil
 		}
 		raw, err := marshalPersistedProjectionWithContext(projection, &next)
 		if err != nil {
