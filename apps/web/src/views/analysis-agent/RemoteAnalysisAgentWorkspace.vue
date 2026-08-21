@@ -446,6 +446,7 @@ const uploadQueue = useResumableUploads({
   getChatState,
   uploadCapability,
   username: uploadUsername,
+  targetTool: () => props.tool,
   onValidationError: (error) => {
     const message = attachmentErrorMessage(error);
     fileError.value = message;

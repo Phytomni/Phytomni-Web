@@ -46,6 +46,7 @@ export interface ResumableUploadQueueOptions {
   browserMemoryLimit?: number;
   onValidationError?: (error: ChatAttachmentValidationError) => void;
   onDuplicate?: (localId: string, fileName: string) => void;
+  targetTool?: () => string;
 }
 
 function defaultBrowserMemoryLimit(): number {
@@ -195,8 +196,12 @@ export function useResumableUploads(options: ResumableUploadQueueOptions) {
       idempotencyKey: string
     ): Promise<{ session: UploadSession; data: UploadDataPlane }> {
       const capability = options.uploadCapability.value;
+      const tool = options.targetTool?.().trim() ?? "";
       const session = envelopeData(
-        await createUpload(metadata, idempotencyKey)
+        await createUpload(
+          tool ? { ...metadata, tool } : metadata,
+          idempotencyKey
+        )
       );
       return { session, data: capabilityData(capability, session) };
     },

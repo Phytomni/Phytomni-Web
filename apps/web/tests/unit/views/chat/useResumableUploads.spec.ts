@@ -170,7 +170,10 @@ function retainedItem(
   };
 }
 
-function setup(store = fakeStore()) {
+function setup(
+  store = fakeStore(),
+  options: { targetTool?: () => string } = {}
+) {
   const currentChatId = ref("A");
   const states = new Map<string, ChatUIState>();
   const getChatState = (dialogueId: string): ChatUIState => {
@@ -193,6 +196,7 @@ function setup(store = fakeStore()) {
     random: () => 0.5,
     onValidationError,
     onDuplicate,
+    targetTool: options.targetTool,
   });
   return {
     currentChatId,
@@ -799,6 +803,28 @@ describe("useResumableUploads", () => {
         size_bytes: 3,
         content_type_hint: "application/octet-stream",
         last_modified_ms: expect.any(Number),
+      },
+      expect.any(String)
+    );
+    await queue.dispose();
+  });
+
+  it("forwards the selected tool so Web can classify neutral uploads", async () => {
+    const { queue, getChatState } = setup(fakeStore(), {
+      targetTool: () => "KnowledgeAgent",
+    });
+
+    await queue.queueFiles([fixtureFile("test.txt", { type: "text/plain" })]);
+    await vi.waitFor(() => {
+      expect(getChatState("A").fileList[0]?.status).toBe("completed");
+    });
+    expect(mocks.createUpload).toHaveBeenCalledWith(
+      {
+        filename: "test.txt",
+        size_bytes: 3,
+        content_type_hint: "text/plain",
+        last_modified_ms: expect.any(Number),
+        tool: "KnowledgeAgent",
       },
       expect.any(String)
     );

@@ -24,10 +24,12 @@ type uploadCreateBody struct {
 	SizeBytes    int64  `json:"size_bytes"`
 	ContentType  string `json:"content_type_hint,omitempty"`
 	LastModified int64  `json:"last_modified_ms,omitempty"`
+	Tool         string `json:"tool,omitempty"`
 }
 
 // CreateUpload accepts metadata only. The authenticated Web identity supplies
-// the owner and the server classifies the attachment purpose from its filename.
+// the owner. The server classifies purpose from the filename, using the
+// selected tool's attachment channels for neutral names such as .txt.
 func (ph *Handler) CreateUpload(ctx *gin.Context) {
 	username, ok := uploadUsername(ctx)
 	if !ok {
@@ -63,6 +65,7 @@ func (ph *Handler) CreateUpload(ctx *gin.Context) {
 		SizeBytes:    request.SizeBytes,
 		ContentType:  request.ContentType,
 		LastModified: request.LastModified,
+		Tool:         request.Tool,
 	}, keys[0])
 	if err != nil {
 		writeUploadServiceError(ctx, err)

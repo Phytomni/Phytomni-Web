@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasAttachmentChannel,
   resolveAttachmentTarget,
+  resolveUploadTargetTool,
 } from "@/views/chat/utils/attachment-target";
 
 const BOT_FAITHFUL_CHANNELS: Record<string, boolean> = {
@@ -102,6 +103,32 @@ describe("resolveAttachmentTarget", () => {
         authorizedTools: ["DataAgent", "BriefGeneAgent", "DeepGenomeAgent"],
       })
     ).toEqual({ available: false, reason: "agent_incompatible" });
+  });
+});
+
+describe("resolveUploadTargetTool", () => {
+  it("pins Instant uploads to ChatAgent", () => {
+    expect(
+      resolveUploadTargetTool({
+        chatMode: "instant",
+        selectedAgent: "KnowledgeAgent",
+      })
+    ).toBe("ChatAgent");
+  });
+
+  it("uses the Expert selection and leaves Auto blank", () => {
+    expect(
+      resolveUploadTargetTool({
+        chatMode: "expert",
+        selectedAgent: "KnowledgeAgent",
+      })
+    ).toBe("KnowledgeAgent");
+    expect(
+      resolveUploadTargetTool({
+        chatMode: "expert",
+        selectedAgent: "  ",
+      })
+    ).toBe("");
   });
 });
 

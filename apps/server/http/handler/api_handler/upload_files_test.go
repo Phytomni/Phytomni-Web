@@ -31,7 +31,19 @@ func uploadHandlerAgentManifest(t *testing.T) string {
 	t.Helper()
 	descriptors := make([]rxBot.AgentDescriptor, 0, len(rxBot.WebAgentDefinitions))
 	for _, definition := range rxBot.WebAgentDefinitions {
-		descriptors = append(descriptors, rxBot.AgentDescriptor{Slug: definition.Slug, Tool: definition.Tool})
+		attachments := rxBot.AgentDescriptorAttachments{}
+		switch definition.Slug {
+		case "data", "brief_gene", "deep_genome":
+		default:
+			attachments.DocumentContext = &struct{}{}
+		}
+		descriptors = append(descriptors, rxBot.AgentDescriptor{
+			Slug: definition.Slug,
+			Tool: definition.Tool,
+			Capabilities: rxBot.AgentDescriptorCapabilities{
+				Attachments: attachments,
+			},
+		})
 	}
 	body, err := json.Marshal(rxBot.AgentsListResponse{
 		Object:    "list",
@@ -168,7 +180,7 @@ func TestCreateUploadHandlerClassificationErrorsAreLocalized(t *testing.T) {
 	var calls int
 	server := uploadHandlerServer(t, nil, &calls)
 	setupUploadHandler(t, server.URL)
-	response := invokeUploadHandlerWithLanguage(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":1}`, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", "zh-CN", NewHandler().CreateUpload)
+	response := invokeUploadHandlerWithLanguage(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":1,"tool":"DataAgent"}`, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", "zh-CN", NewHandler().CreateUpload)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
 	}
@@ -181,9 +193,6 @@ func TestCreateUploadHandlerClassificationErrorsAreLocalized(t *testing.T) {
 	}
 	if payload.Code != "attachment_type_unsupported" || payload.Message != "文件名无法识别为受支持的附件类型" {
 		t.Fatalf("localized error response=%#v", payload)
-	}
-	if calls != 0 {
-		t.Fatalf("unsupported filename reached Bot %d times", calls)
 	}
 }
 
@@ -203,38 +212,49 @@ func TestCreateUploadHandlerSuccessSetsNoStore(t *testing.T) {
 	}
 }
 
-func TestCreateUploadHandlerRejectsUnknownOrAmbiguousFilename(t *testing.T) {
-	for name, test := range map[string]struct {
-		body, code, message string
+func TestCreateUploadHandlerAcceptsNeutralTxtUsingAgentChannels(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		purpose string
 	}{
-		"unknown":   {body: `{"filename":"sample.bin","size_bytes":9}`, code: "attachment_type_unsupported", message: "file name does not identify a supported attachment type"},
-		"ambiguous": {body: `{"filename":"counts-paper.txt","size_bytes":9}`, code: "attachment_type_ambiguous", message: "file name matches both document and analysis data"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var calls int
-			server := uploadHandlerServer(t, nil, &calls)
+		{name: "txt document", body: `{"filename":"test.txt","size_bytes":8,"content_type_hint":"text/plain"}`, purpose: "document"},
+		{name: "knowledge document", body: `{"filename":"test.txt","size_bytes":8,"content_type_hint":"text/plain","tool":"KnowledgeAgent"}`, purpose: "document"},
+		{name: "unknown dataset", body: `{"filename":"image.png","size_bytes":8,"content_type_hint":"image/png"}`, purpose: "dataset"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var captures []uploadHandlerCreateCapture
+			server := uploadHandlerServer(t, &captures, nil)
 			setupUploadHandler(t, server.URL)
 			response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", test.body, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
-			if response.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+			if response.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
-			var payload struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			}
-			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
-				t.Fatalf("decode error response: %v", err)
-			}
-			if payload.Code != test.code || payload.Message != test.message {
-				t.Fatalf("error response=%#v, want code=%q message=%q", payload, test.code, test.message)
-			}
-			if strings.Contains(response.Body.String(), "provider") || strings.Contains(response.Body.String(), "upstream") {
-				t.Fatalf("classification response leaked provider detail: %s", response.Body.String())
-			}
-			if calls != 0 {
-				t.Fatalf("invalid filename reached Bot %d times", calls)
+			if len(captures) != 1 || captures[0].Purpose != test.purpose {
+				t.Fatalf("Bot request=%#v, want purpose %q", captures, test.purpose)
 			}
 		})
+	}
+}
+
+func TestCreateUploadHandlerRejectsAgentWithoutAttachmentChannels(t *testing.T) {
+	var calls int
+	server := uploadHandlerServer(t, nil, &calls)
+	setupUploadHandler(t, server.URL)
+	response := invokeUploadHandler(t, http.MethodPost, "/api/v1/files", `{"filename":"sample.bin","size_bytes":9,"tool":"DataAgent"}`, "application/json", "alice@example.com", "550e8400-e29b-41d4-a716-446655440000", NewHandler().CreateUpload)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if payload.Code != "attachment_type_unsupported" || payload.Message != "file name does not identify a supported attachment type" {
+		t.Fatalf("error response=%#v", payload)
 	}
 }
 

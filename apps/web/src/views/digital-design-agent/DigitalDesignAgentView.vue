@@ -430,6 +430,7 @@ const uploadQueue = useResumableUploads({
   getChatState,
   uploadCapability: capabilities.upload,
   username: uploadUsername,
+  targetTool: () => "DigitalDesignAgent",
   onValidationError: (error) => {
     const message = attachmentErrorMessage(error);
     fileError.value = message;

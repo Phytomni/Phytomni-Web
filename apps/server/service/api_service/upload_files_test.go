@@ -311,21 +311,53 @@ func TestCreateUploadDerivesPurposeFromFilename(t *testing.T) {
 	}
 }
 
-func TestCreateUploadRejectsUnsupportedOrAmbiguousFilenameBeforeBot(t *testing.T) {
-	for _, filename := range []string{"sample.bin", "counts-paper.txt"} {
-		t.Run(filename, func(t *testing.T) {
-			var calls int
-			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
-			t.Cleanup(server.Close)
+func TestCreateUploadDerivesNeutralPurposeFromAgentChannels(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		tool     string
+		purpose  string
+	}{
+		{name: "txt defaults document", filename: "test.txt", purpose: "document"},
+		{name: "gene list txt is document", filename: "loc_gene_id.txt", purpose: "document"},
+		{name: "knowledge document only", filename: "test.txt", tool: "KnowledgeAgent", purpose: "document"},
+		{name: "txt on knowledge", filename: "counts-paper.txt", tool: "KnowledgeAgent", purpose: "document"},
+		{name: "txt on auto", filename: "counts-paper.txt", purpose: "document"},
+		{name: "unknown suffix defaults dataset", filename: "image.png", purpose: "dataset"},
+		{name: "bin defaults dataset", filename: "sample.bin", purpose: "dataset"},
+		{name: "strong suffix ignores tool", filename: "counts.csv", tool: "KnowledgeAgent", purpose: "dataset"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var captured []uploadCreateCapture
+			server := uploadControlServer(t, true, "", &captured, http.StatusOK)
 			useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
-			_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: filename, SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
-			if !errors.Is(err, ErrUploadMetadataInvalid) {
-				t.Fatalf("filename %q error=%v, want invalid metadata", filename, err)
+			_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{
+				Filename:  test.filename,
+				SizeBytes: 1,
+				Tool:      test.tool,
+			}, "550e8400-e29b-41d4-a716-446655440000")
+			if err != nil {
+				t.Fatalf("CreateUpload error: %v", err)
 			}
-			if calls != 0 {
-				t.Fatalf("invalid filename reached Bot %d times", calls)
+			if len(captured) != 1 || captured[0].Purpose != test.purpose {
+				t.Fatalf("Bot request=%#v, want purpose %q", captured, test.purpose)
 			}
 		})
+	}
+}
+
+func TestCreateUploadRejectsInvalidFilenameBeforeBot(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	t.Cleanup(server.Close)
+	useUploadBotConfig(t, rxBot.Config{ProxyEnabled: true, UploadPublicOrigin: server.URL}, server.URL)
+	_, err := NewService().CreateUpload(context.Background(), "alice@example.com", UploadCreateInput{Filename: "a/b.txt", SizeBytes: 1}, "550e8400-e29b-41d4-a716-446655440000")
+	if !errors.Is(err, ErrUploadMetadataInvalid) {
+		t.Fatalf("error=%v, want invalid metadata", err)
+	}
+	if calls != 0 {
+		t.Fatalf("invalid filename reached Bot %d times", calls)
 	}
 }
 

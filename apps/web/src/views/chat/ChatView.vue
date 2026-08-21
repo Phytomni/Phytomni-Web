@@ -711,6 +711,7 @@ import type { UploadValidationLimits } from "./upload/validation";
 import {
   hasAttachmentChannel,
   resolveAttachmentTarget,
+  resolveUploadTargetTool,
 } from "./utils/attachment-target";
 import { useComposer } from "./composables/useComposer";
 import {
@@ -1139,6 +1140,11 @@ const uploadQueue = useResumableUploads({
   getChatState,
   uploadCapability: botCapabilities.upload,
   username: uploadUsername,
+  targetTool: () =>
+    resolveUploadTargetTool({
+      chatMode: chatMode.value,
+      selectedAgent: selectedAgent.value,
+    }),
   onValidationError: onAttachmentValidationError,
   onDuplicate: (localId, fileName) => {
     onAttachmentDuplicate(localId, fileName).catch(() => undefined);

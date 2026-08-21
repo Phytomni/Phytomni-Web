@@ -81,11 +81,8 @@ func TestClassifyAttachmentFilenameArchiveSuffixes(t *testing.T) {
 		".bgz", ".bgzip", ".bz", ".lz", ".lzma", ".lz4", ".lzo", ".br", ".z",
 		".cab", ".ace", ".arj",
 	} {
-		t.Run("reject"+suffix, func(t *testing.T) {
-			class, err := classifyAttachmentFilename("bundle" + suffix)
-			if class != "" || !errors.Is(err, ErrAttachmentTypeUnsupported) {
-				t.Fatalf("class=%q err=%v, want unsupported", class, err)
-			}
+		t.Run("unknown"+suffix, func(t *testing.T) {
+			assertAttachmentClass(t, "bundle"+suffix, attachmentClassDataset)
 		})
 	}
 }
@@ -155,63 +152,29 @@ func TestClassifyAttachmentFilenamePrecedence(t *testing.T) {
 	}
 }
 
-func TestClassifyAttachmentFilenameNeutralTokens(t *testing.T) {
-	tokenSets := []struct {
-		name   string
-		tokens []string
-		want   attachmentClass
-	}{
-		{
-			name: "dataset",
-			tokens: []string{
-				"count", "counts", "matrix", "expression", "reads", "read", "sequence", "sequences",
-				"variant", "variants", "genotype", "phenotype", "metadata", "sample", "samples",
-				"abundance", "peak", "peaks", "annotation", "annotations", "coordinate", "coordinates",
-				"network", "edge", "edges", "node", "nodes",
-			},
-			want: attachmentClassDataset,
-		},
-		{
-			name: "document",
-			tokens: []string{
-				"readme", "license", "paper", "article", "manuscript", "protocol", "report",
-				"reference", "references", "literature", "note", "notes",
-			},
-			want: attachmentClassDocument,
-		},
-	}
-
-	for _, tokenSet := range tokenSets {
-		t.Run(tokenSet.name, func(t *testing.T) {
-			for _, token := range tokenSet.tokens {
-				assertAttachmentClass(t, token+".txt", tokenSet.want)
-				assertAttachmentClass(t, "experiment-"+token, tokenSet.want)
-			}
-		})
-	}
-}
-
-func TestClassifyAttachmentFilenameErrors(t *testing.T) {
+func TestClassifyAttachmentFilenameTextAndUnknownDefaults(t *testing.T) {
 	tests := []struct {
 		filename string
-		wantErr  error
+		want     attachmentClass
 	}{
-		{filename: "sample_report.txt", wantErr: ErrAttachmentTypeAmbiguous},
-		{filename: "counts-paper", wantErr: ErrAttachmentTypeAmbiguous},
-		{filename: "input.unknown", wantErr: ErrAttachmentTypeUnsupported},
-		{filename: "misc.txt", wantErr: ErrAttachmentTypeUnsupported},
-		{filename: "misc-01", wantErr: ErrAttachmentTypeUnsupported},
-		{filename: "report.txt.bak", wantErr: ErrAttachmentTypeUnsupported},
-		{filename: "discount.txt", wantErr: ErrAttachmentTypeUnsupported},
-		{filename: "sequences2.txt", wantErr: ErrAttachmentTypeUnsupported},
+		{filename: "test.txt", want: attachmentClassDocument},
+		{filename: "notes.txt", want: attachmentClassDocument},
+		{filename: "counts.txt", want: attachmentClassDocument},
+		{filename: "sample_report.txt", want: attachmentClassDocument},
+		{filename: "misc.txt", want: attachmentClassDocument},
+		{filename: "readme.text", want: attachmentClassDocument},
+		{filename: "input.unknown", want: attachmentClassDataset},
+		{filename: "image.png", want: attachmentClassDataset},
+		{filename: "script.py", want: attachmentClassDataset},
+		{filename: "sample.bin", want: attachmentClassDataset},
+		{filename: "report.txt.bak", want: attachmentClassDataset},
+		{filename: "misc-01", want: attachmentClassDataset},
+		{filename: "counts-paper", want: attachmentClassDataset},
 	}
 
 	for _, test := range tests {
 		t.Run(test.filename, func(t *testing.T) {
-			_, err := classifyAttachmentFilename(test.filename)
-			if !errors.Is(err, test.wantErr) {
-				t.Fatalf("classifyAttachmentFilename(%q) error = %v, want %v", test.filename, err, test.wantErr)
-			}
+			assertAttachmentClass(t, test.filename, test.want)
 		})
 	}
 }
@@ -226,7 +189,7 @@ func TestClassifyAttachmentFilenameSafeBasenameEdges(t *testing.T) {
 		{name: "NFC Unicode", filename: "r\u00e9sum\u00e9_report.txt", want: attachmentClassDocument},
 		{name: "surrounding Unicode whitespace", filename: "\u2003counts.csv\u00a0", want: attachmentClassDataset},
 		{name: "hidden neutral name", filename: ".counts", want: attachmentClassDataset},
-		{name: "trailing dot", filename: "counts.", wantErr: ErrAttachmentTypeUnsupported},
+		{name: "trailing dot", filename: "counts.", want: attachmentClassDataset},
 		{name: "safe markup-like basename", filename: "<img src=x onerror=alert(1)>.pdf", want: attachmentClassDocument},
 	}
 
@@ -254,6 +217,50 @@ func TestClassifyAttachmentFilenameDoesNotAcceptMIME(t *testing.T) {
 	got, err := classifier("reads.fastq")
 	if err != nil || got != attachmentClassDataset {
 		t.Fatalf("classifier(reads.fastq) = %q, %v; want %q, nil", got, err, attachmentClassDataset)
+	}
+}
+
+func TestClassifyAttachmentUsesAgentChannelsForNeutralNames(t *testing.T) {
+	documentOnly := []attachmentClass{attachmentClassDocument}
+	datasetOnly := []attachmentClass{attachmentClassDataset}
+	both := []attachmentClass{attachmentClassDocument, attachmentClassDataset}
+
+	tests := []struct {
+		filename string
+		allowed  []attachmentClass
+		want     attachmentClass
+		wantErr  error
+	}{
+		{filename: "test.txt", allowed: documentOnly, want: attachmentClassDocument},
+		{filename: "loc_gene_id.txt", allowed: documentOnly, want: attachmentClassDocument},
+		{filename: "test.txt", allowed: datasetOnly, want: attachmentClassDataset},
+		{filename: "test.txt", allowed: both, want: attachmentClassDocument},
+		{filename: "notes.txt", allowed: both, want: attachmentClassDocument},
+		{filename: "counts.txt", allowed: documentOnly, want: attachmentClassDocument},
+		{filename: "counts-paper.txt", allowed: documentOnly, want: attachmentClassDocument},
+		{filename: "counts-paper.txt", allowed: both, want: attachmentClassDocument},
+		{filename: "image.png", allowed: both, want: attachmentClassDataset},
+		{filename: "image.png", allowed: documentOnly, want: attachmentClassDocument},
+		{filename: "sample.bin", allowed: both, want: attachmentClassDataset},
+		{filename: "paper.pdf", allowed: datasetOnly, want: attachmentClassDocument},
+		{filename: "test.yaml", allowed: documentOnly, want: attachmentClassDataset},
+		{filename: "test.txt", allowed: nil, want: attachmentClassDocument},
+		{filename: "image.png", allowed: []attachmentClass{}, wantErr: ErrAttachmentTypeUnsupported},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s/%v", test.filename, test.allowed), func(t *testing.T) {
+			got, err := classifyAttachment(test.filename, test.allowed)
+			if test.wantErr != nil {
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("classifyAttachment(%q, %v) err=%v, want %v", test.filename, test.allowed, err, test.wantErr)
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("classifyAttachment(%q, %v) = %q, %v; want %q, nil", test.filename, test.allowed, got, err, test.want)
+			}
+		})
 	}
 }
 

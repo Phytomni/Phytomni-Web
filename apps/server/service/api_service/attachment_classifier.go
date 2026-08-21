@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sort"
 	"strings"
-	"unicode"
 )
 
 type attachmentClass string
@@ -54,16 +53,8 @@ var documentAttachmentSuffixes = map[string]struct{}{
 	".html": {}, ".htm": {}, ".epub": {},
 }
 
-var datasetAttachmentTokens = map[string]struct{}{
-	"count": {}, "counts": {}, "matrix": {}, "expression": {}, "reads": {}, "read": {}, "sequence": {}, "sequences": {},
-	"variant": {}, "variants": {}, "genotype": {}, "phenotype": {}, "metadata": {}, "sample": {}, "samples": {},
-	"abundance": {}, "peak": {}, "peaks": {}, "annotation": {}, "annotations": {}, "coordinate": {}, "coordinates": {},
-	"network": {}, "edge": {}, "edges": {}, "node": {}, "nodes": {},
-}
-
-var documentAttachmentTokens = map[string]struct{}{
-	"readme": {}, "license": {}, "paper": {}, "article": {}, "manuscript": {}, "protocol": {}, "report": {},
-	"reference": {}, "references": {}, "literature": {}, "note": {}, "notes": {},
+var textAttachmentSuffixes = map[string]struct{}{
+	".txt": {}, ".text": {},
 }
 
 // RequiredResearchDatasetFormats returns the detached scientific suffix
@@ -81,39 +72,55 @@ func RequiredResearchDatasetFormats() []string {
 }
 
 func classifyAttachmentFilename(filename string) (attachmentClass, error) {
+	return classifyAttachment(filename, nil)
+}
+
+func classifyAttachment(filename string, allowed []attachmentClass) (attachmentClass, error) {
 	comparisonKey := strings.ToLower(strings.TrimSpace(filename))
 
-	if hasAttachmentSuffix(comparisonKey, archiveAttachmentSuffixes) {
-		return attachmentClassDataset, nil
+	strong := false
+	var class attachmentClass
+	switch {
+	case hasAttachmentSuffix(comparisonKey, archiveAttachmentSuffixes),
+		hasAttachmentSuffix(comparisonKey, datasetAttachmentSuffixes):
+		strong = true
+		class = attachmentClassDataset
+	case hasAttachmentSuffix(comparisonKey, documentAttachmentSuffixes):
+		strong = true
+		class = attachmentClassDocument
+	case hasAttachmentSuffix(comparisonKey, textAttachmentSuffixes):
+		class = attachmentClassDocument
+	default:
+		class = attachmentClassDataset
 	}
-	if hasAttachmentSuffix(comparisonKey, datasetAttachmentSuffixes) {
-		return attachmentClassDataset, nil
+	if strong {
+		return class, nil
 	}
-	if hasAttachmentSuffix(comparisonKey, documentAttachmentSuffixes) {
-		return attachmentClassDocument, nil
-	}
+	return applyAllowedChannels(class, allowed)
+}
 
-	neutralKey, ok := neutralAttachmentKey(comparisonKey)
-	if !ok {
+func applyAllowedChannels(class attachmentClass, allowed []attachmentClass) (attachmentClass, error) {
+	if allowed == nil {
+		return class, nil
+	}
+	if len(allowed) == 0 {
 		return "", ErrAttachmentTypeUnsupported
 	}
-
-	var hasDatasetToken, hasDocumentToken bool
-	for _, token := range strings.FieldsFunc(neutralKey, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	}) {
-		_, datasetMatch := datasetAttachmentTokens[token]
-		_, documentMatch := documentAttachmentTokens[token]
-		hasDatasetToken = hasDatasetToken || datasetMatch
-		hasDocumentToken = hasDocumentToken || documentMatch
+	var hasDocument, hasDataset bool
+	for _, purpose := range allowed {
+		switch purpose {
+		case attachmentClassDocument:
+			hasDocument = true
+		case attachmentClassDataset:
+			hasDataset = true
+		}
 	}
-
 	switch {
-	case hasDatasetToken && hasDocumentToken:
-		return "", ErrAttachmentTypeAmbiguous
-	case hasDatasetToken:
+	case hasDocument && hasDataset:
+		return class, nil
+	case hasDataset:
 		return attachmentClassDataset, nil
-	case hasDocumentToken:
+	case hasDocument:
 		return attachmentClassDocument, nil
 	default:
 		return "", ErrAttachmentTypeUnsupported
@@ -127,16 +134,4 @@ func hasAttachmentSuffix(filename string, suffixes map[string]struct{}) bool {
 		}
 	}
 	return false
-}
-
-func neutralAttachmentKey(comparisonKey string) (string, bool) {
-	if strings.HasSuffix(comparisonKey, ".txt") {
-		return strings.TrimSuffix(comparisonKey, ".txt"), true
-	}
-
-	withoutLeadingDots := strings.TrimLeft(comparisonKey, ".")
-	if !strings.ContainsRune(withoutLeadingDots, '.') {
-		return withoutLeadingDots, true
-	}
-	return "", false
 }

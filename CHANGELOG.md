@@ -13,6 +13,15 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Text uploads default to document; unknown suffixes default to dataset
+
+- Known text suffixes (`.txt`, `.text`) create a `document` upload.
+- Unknown suffixes such as `.png` / `.py` / `.bin` create a `dataset`
+  upload instead of failing with 422.
+- Strong suffixes such as `.yaml` / `.pdf` / `.csv` keep their existing
+  classification. A single-channel agent still coerces only these
+  defaulted names onto its one channel.
+
 ### 🐛 Downloaded Word and PDF keep heading styles
 
 - Generated Word downloads bind Markdown headings to built-in `Heading1`…

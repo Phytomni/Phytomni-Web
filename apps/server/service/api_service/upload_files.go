@@ -48,6 +48,7 @@ type UploadCreateInput struct {
 	SizeBytes    int64
 	ContentType  string
 	LastModified int64
+	Tool         string
 }
 
 // UploadCreateResult is the safe browser-facing upload session envelope. It
@@ -89,7 +90,27 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 	if err != nil {
 		return nil, err
 	}
-	purpose, err := classifyAttachmentFilename(filename)
+	tool, err := normalizeUploadTool(input.Tool)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var origin string
+	allowed := []attachmentClass{attachmentClassDocument, attachmentClassDataset}
+	if tool != "" {
+		var manifest BotCapabilityManifest
+		origin, manifest, err = ps.uploadControlContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		allowed, err = allowedUploadPurposes(manifest, tool)
+		if err != nil {
+			return nil, err
+		}
+	}
+	purpose, err := classifyAttachment(filename, allowed)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUploadMetadataInvalid, err)
 	}
@@ -108,12 +129,11 @@ func (ps *Service) CreateUpload(ctx context.Context, ownerSubject string, input 
 		return nil, err
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	origin, err := ps.uploadControlOrigin(ctx)
-	if err != nil {
-		return nil, err
+	if origin == "" {
+		origin, err = ps.uploadControlOrigin(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	client := rxBot.NewClient()
 	out, _, err := client.CreateUpload(ctx, rxBot.UploadCreateRequest{
@@ -220,19 +240,76 @@ func compensateRejectedUpload(ctx context.Context, client *rxBot.Client, assetID
 }
 
 func (ps *Service) uploadControlOrigin(ctx context.Context) (string, error) {
+	origin, _, err := ps.uploadControlContext(ctx)
+	return origin, err
+}
+
+func (ps *Service) uploadControlContext(ctx context.Context) (string, BotCapabilityManifest, error) {
+	var disabled BotCapabilityManifest
 	cfg := rxBot.BotConfig
 	if cfg == nil || !cfg.ProxyEnabled {
-		return "", ErrUploadControlDisabled
+		return "", disabled, ErrUploadControlDisabled
 	}
 	origin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)
 	if !validOrigin {
-		return "", ErrUploadControlDisabled
+		return "", disabled, ErrUploadControlDisabled
 	}
 	manifest, err := ps.BotCapabilities(ctx, "")
 	if err != nil || !manifest.Upload.Enabled {
-		return "", ErrUploadControlDisabled
+		return "", disabled, ErrUploadControlDisabled
 	}
-	return origin, nil
+	return origin, manifest, nil
+}
+
+func allowedUploadPurposes(manifest BotCapabilityManifest, tool string) ([]attachmentClass, error) {
+	if tool == "" {
+		return []attachmentClass{attachmentClassDocument, attachmentClassDataset}, nil
+	}
+	for _, agent := range manifest.Agents {
+		if agent.Tool != tool {
+			continue
+		}
+		return parseAttachmentPurposeClasses(agent.AttachmentPurposes), nil
+	}
+	return nil, fmt.Errorf("%w: tool", ErrUploadMetadataInvalid)
+}
+
+func parseAttachmentPurposeClasses(values []string) []attachmentClass {
+	out := make([]attachmentClass, 0, 2)
+	seen := make(map[attachmentClass]struct{}, 2)
+	for _, value := range values {
+		var class attachmentClass
+		switch value {
+		case string(attachmentClassDocument):
+			class = attachmentClassDocument
+		case string(attachmentClassDataset):
+			class = attachmentClassDataset
+		default:
+			continue
+		}
+		if _, exists := seen[class]; exists {
+			continue
+		}
+		seen[class] = struct{}{}
+		out = append(out, class)
+	}
+	return out
+}
+
+func normalizeUploadTool(raw string) (string, error) {
+	if !utf8.ValidString(raw) {
+		return "", fmt.Errorf("%w: tool", ErrUploadMetadataInvalid)
+	}
+	tool := strings.TrimSpace(raw)
+	if tool == "" {
+		return "", nil
+	}
+	for _, canonical := range rxBot.CanonicalAgentTool {
+		if canonical == tool {
+			return tool, nil
+		}
+	}
+	return "", fmt.Errorf("%w: tool", ErrUploadMetadataInvalid)
 }
 
 func validateUploadOwner(raw string) (string, error) {

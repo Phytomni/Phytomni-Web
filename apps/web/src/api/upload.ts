@@ -12,6 +12,7 @@ export interface UploadCreateMetadata {
   size_bytes: number;
   content_type_hint: string;
   last_modified_ms: number;
+  tool?: string;
 }
 
 export interface UploadSession {

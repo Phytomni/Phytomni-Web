@@ -39,6 +39,7 @@ describe("upload control API", () => {
           size_bytes: 42,
           content_type_hint: "application/gzip",
           last_modified_ms: 123,
+          tool: "KnowledgeAgent",
         },
         "1c2d3e4f-5061-4789-8abc-def012345678"
       )
@@ -52,6 +53,7 @@ describe("upload control API", () => {
         size_bytes: 42,
         content_type_hint: "application/gzip",
         last_modified_ms: 123,
+        tool: "KnowledgeAgent",
       },
       headers: {
         "Content-Type": "application/json",

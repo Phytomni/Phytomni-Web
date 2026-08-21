@@ -17,6 +17,14 @@ export function hasAttachmentChannel(
   );
 }
 
+export function resolveUploadTargetTool(input: {
+  chatMode: "instant" | "expert";
+  selectedAgent: string;
+}): string {
+  if (input.chatMode === "instant") return "ChatAgent";
+  return input.selectedAgent.trim();
+}
+
 export function resolveAttachmentTarget(input: {
   uploadEnabled: boolean;
   chatMode: "instant" | "expert";
