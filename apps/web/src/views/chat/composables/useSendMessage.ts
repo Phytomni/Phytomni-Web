@@ -26,6 +26,7 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
@@ -92,6 +93,21 @@ function safeWebRequestID(value: unknown): string | undefined {
 function hasDurableRowId(value: unknown): boolean {
   if (typeof value === "string") return value.trim() !== "";
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isDurableSelectingWait(data: QueryData): boolean {
+  const toolName =
+    typeof data.tool_name === "string" ? data.tool_name.trim() : "";
+  if (toolName !== "") return false;
+  const status =
+    typeof data.status === "string" ? data.status.trim().toUpperCase() : "";
+  if (status !== "RUNNING" && status !== "SUBMITTING") return false;
+  try {
+    normalizePositiveTaskRowId(data.id ?? "");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function clearPendingTurnIdentity(
@@ -746,12 +762,12 @@ export function useSendMessage(opts: {
           (botProjection === undefined &&
             typeof responseData.status === "string" &&
             responseData.status.trim().toUpperCase() === "SUCCEEDED");
-        const acceptedExpertResponse = isAcceptedExpertResponse(
-          expertSucceeded,
-          botProjection
-        );
+        const acceptedExpertResponse =
+          isDurableSelectingWait(responseData) ||
+          isAcceptedExpertResponse(expertSucceeded, botProjection);
         if (
           capturedMode === "expert" &&
+          !isDurableSelectingWait(responseData) &&
           (!isCanonicalToolName(responseData.tool_name) ||
             (botProjection && botProjection.agent !== responseData.tool_name) ||
             hasMalformedExpertRunIdentity(responseData) ||

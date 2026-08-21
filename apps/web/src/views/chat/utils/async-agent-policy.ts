@@ -21,3 +21,8 @@ export function isPollableChatAgentTool(
 ): tool is PollableChatAgentTool {
   return typeof tool === "string" && POLLABLE_CHAT_AGENT_TOOL_SET.has(tool);
 }
+
+export function isPollableWaitTool(tool: unknown): boolean {
+  const name = typeof tool === "string" ? tool.trim() : "";
+  return name === "" || isPollableChatAgentTool(name);
+}

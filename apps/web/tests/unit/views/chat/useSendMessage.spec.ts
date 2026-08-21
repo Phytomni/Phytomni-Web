@@ -2832,6 +2832,49 @@ describe("useSendMessage", () => {
     }
   );
 
+  it.each(["RUNNING", "SUBMITTING"] as const)(
+    "keeps Expert Auto selecting wait from an empty-tool %s durable row",
+    async (status) => {
+      const state = stateFor("A");
+      state.messageInput = "choose an agent";
+      state.mode = "expert";
+      state.selectedAgent = "";
+      mockGetQueryAbortable.mockResolvedValueOnce(
+        invalidInput<ApiEnvelope<DecodedQueryData>>({
+          data: {
+            tool_name: "",
+            answer: "",
+            status,
+            id: "5",
+            bot_run_id: "web-pending-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            dialogue_id: "A",
+            follow_up_questions: [],
+          },
+        })
+      );
+
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(vi.fn());
+      try {
+        await makeComposable().sendMessage();
+      } finally {
+        consoleError.mockRestore();
+      }
+
+      const assistant = lastMessageFor(state, "Expert Auto selecting wait");
+      expect(assistant).toMatchObject({
+        role: "assistant",
+        tool_name: "",
+        status,
+        id: "5",
+        content: "",
+      });
+      expect(assistant.content).not.toBe("chat.sendFailed");
+      expect(state.pendingTurnId).toBeNull();
+    }
+  );
+
   it("Expert rejects a non-terminal response without bot run identity", async () => {
     stateFor("A").messageInput = "research without identity";
     stateFor("A").mode = "expert";

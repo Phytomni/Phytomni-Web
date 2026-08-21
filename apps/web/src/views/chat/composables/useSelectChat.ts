@@ -41,7 +41,7 @@ import {
   isSafeAssetId,
   type AttachmentMetadata,
 } from "../utils/asset-attachments";
-import { isPollableChatAgentTool } from "../utils/async-agent-policy";
+import { isPollableWaitTool } from "../utils/async-agent-policy";
 import { artifactPresentationForMessage } from "../utils/artifact-policy";
 import { STREAM_CAPABLE_AGENTS } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
@@ -158,9 +158,7 @@ function isSuccessfulHistoryStatus(status: unknown): boolean {
 function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.answer !== "string" || item.answer.trim()) return false;
   if (isSuccessfulHistoryStatus(item.status)) return false;
-  const toolName =
-    typeof item.tool_name === "string" ? item.tool_name.trim() : "";
-  if (toolName !== "" && !isPollableChatAgentTool(toolName)) return false;
+  if (!isPollableWaitTool(item.tool_name)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");
     return true;

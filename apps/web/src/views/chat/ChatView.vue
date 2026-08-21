@@ -723,7 +723,7 @@ import {
 import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
-import { isPollableChatAgentTool } from "./utils/async-agent-policy";
+import { isPollableWaitTool } from "./utils/async-agent-policy";
 import { progressHintForWait } from "./utils/agentProgress";
 import { useSendMessage } from "./composables/useSendMessage";
 import { useA2uiInteraction } from "./composables/useA2uiInteraction";
@@ -935,7 +935,7 @@ const hasActivePollableAssistantWait = computed(() => {
   const messages = currentChat.value?.messages ?? [];
   const last = messages[messages.length - 1];
   if (!last || last.role !== "assistant") return false;
-  if (!isPollableChatAgentTool(last.tool_name)) return false;
+  if (!isPollableWaitTool(last.tool_name)) return false;
   const status = (last.status ?? "").trim().toUpperCase();
   return status === "" || !POLLABLE_WAIT_TERMINAL.has(status);
 });

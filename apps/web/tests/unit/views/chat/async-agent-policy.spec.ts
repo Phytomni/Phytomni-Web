@@ -3,6 +3,7 @@ import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
   POLLABLE_CHAT_AGENT_TOOLS,
   isPollableChatAgentTool,
+  isPollableWaitTool,
 } from "@/views/chat/utils/async-agent-policy";
 
 const EXACT_POLLABLE_TOOLS = [
@@ -34,5 +35,16 @@ describe("asynchronous Chat Agent policy", () => {
     undefined,
   ])("rejects non-pollable tool %j", (tool) => {
     expect(isPollableChatAgentTool(tool)).toBe(false);
+  });
+
+  it("treats empty tool_name as a wait-card tool without expanding the pollable set", () => {
+    expect(isPollableWaitTool("")).toBe(true);
+    expect(isPollableWaitTool("   ")).toBe(true);
+    expect(isPollableWaitTool("AnalystAgent")).toBe(true);
+    expect(isPollableWaitTool("DataAgent")).toBe(true);
+    expect(isPollableWaitTool("ChatAgent")).toBe(false);
+    expect(isPollableWaitTool("KnowledgeAgent")).toBe(false);
+    expect(isPollableWaitTool("BriefGeneAgent")).toBe(false);
+    expect(POLLABLE_CHAT_AGENT_TOOLS).not.toContain("");
   });
 });

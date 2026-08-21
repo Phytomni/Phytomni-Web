@@ -1085,6 +1085,34 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
+  it("watches Expert Auto empty-tool RUNNING rows until a tool is written", async () => {
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        messages: [
+          buildChatMessage({
+            id: "5",
+            tool_name: "",
+            status: "RUNNING",
+            content: "",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ a: state });
+    const fetchLifecycle = vi.fn().mockResolvedValue(response(lifecycle(5)));
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat: vi.fn().mockResolvedValue("applied"),
+      fetchLifecycle,
+    });
+
+    await flush();
+    expect(fetchLifecycle.mock.calls.map(([rowId]) => rowId)).toEqual(["5"]);
+    coordinator.dispose();
+  });
+
   it("keeps a scientifically succeeded background row watchable while delivery is pending", async () => {
     vi.useFakeTimers();
     const state = buildChatState({
