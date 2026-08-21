@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import {
   POLLABLE_CHAT_AGENT_TOOLS,
+  isActivePollableAssistantWait,
   isPollableChatAgentTool,
   isPollableWaitTool,
 } from "@/views/chat/utils/async-agent-policy";
@@ -46,5 +47,36 @@ describe("asynchronous Chat Agent policy", () => {
     expect(isPollableWaitTool("KnowledgeAgent")).toBe(false);
     expect(isPollableWaitTool("BriefGeneAgent")).toBe(false);
     expect(POLLABLE_CHAT_AGENT_TOOLS).not.toContain("");
+  });
+
+  it("does not treat sendFailed or first-turn Stop drafts as an active wait", () => {
+    expect(
+      isActivePollableAssistantWait({
+        role: "assistant",
+        content: "chat.sendFailed",
+        tool_name: "",
+        status: "",
+        instantMessage: true,
+      })
+    ).toBe(false);
+    expect(
+      isActivePollableAssistantWait({
+        role: "assistant",
+        content: "chat.generationStopped",
+        instantMessage: true,
+      })
+    ).toBe(false);
+  });
+
+  it("keeps Expert Auto selecting rows with a positive id as an active wait", () => {
+    expect(
+      isActivePollableAssistantWait({
+        role: "assistant",
+        tool_name: "",
+        status: "RUNNING",
+        id: "5",
+        content: "",
+      })
+    ).toBe(true);
   });
 });

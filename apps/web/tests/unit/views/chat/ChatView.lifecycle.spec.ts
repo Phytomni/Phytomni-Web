@@ -234,4 +234,117 @@ describe("ChatView lifecycle cleanup", () => {
 
     wrapper.unmount();
   });
+
+  it("does not lock the composer on sendFailed or first-turn Stop drafts without a row id", async () => {
+    const context = createTestAppContext({ locale: "en-US" });
+    const wrapper = context.mount(ChatView, {
+      global: {
+        stubs: {
+          RouterLink: {
+            name: "RouterLink",
+            props: ["to"],
+            template: '<a :href="to"><slot /></a>',
+          },
+          ChatComposer: {
+            name: "ChatComposer",
+            props: ["isSending"],
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({
+                openHeader: vi.fn(),
+                closeHeader: vi.fn(),
+                popoverVisible: false,
+              });
+              return {};
+            },
+            template:
+              '<div data-testid="composer-sending">{{ isSending }}</div>',
+          },
+          ChatMessageActions: true,
+          ScientificMarkdown: true,
+          DeepGenomeResultViewer: true,
+          ChatSidebarNav: true,
+          ChatHistoryList: true,
+          FollowUpQuestions: true,
+          ChatActivity: true,
+          ChatAnalystLog: true,
+          StreamMessage: true,
+          TransferProgress: true,
+          ElTour: true,
+          ElTourStep: true,
+          ElBacktop: true,
+          ElDialog: true,
+          ElAvatar: true,
+          ElIcon: true,
+          ElTable: true,
+          ElTableColumn: true,
+          ElButton: {
+            template: '<button type="button"><slot /></button>',
+          },
+        },
+      },
+    });
+
+    const state = testState.chatStates;
+    if (!state) throw new Error("Chat state capture was not initialized");
+    const dialogueId = "draft-unlock-dialogue";
+    state.currentChatId.value = dialogueId;
+    const chatState = state.getChatState(dialogueId);
+    chatState.isSending = false;
+    chatState.generationStopped = false;
+
+    chatState.renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        { role: "user", content: "q" },
+        {
+          role: "assistant",
+          content: "chat.sendFailed",
+          tool_name: "",
+          status: "",
+          instantMessage: true,
+        },
+      ],
+    };
+    await nextTick();
+    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe(
+      "false"
+    );
+
+    chatState.renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        { role: "user", content: "q" },
+        {
+          role: "assistant",
+          content: "chat.generationStopped",
+          instantMessage: true,
+        },
+      ],
+    };
+    await nextTick();
+    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe(
+      "false"
+    );
+
+    chatState.renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        { role: "user", content: "q" },
+        {
+          role: "assistant",
+          content: "",
+          tool_name: "",
+          status: "RUNNING",
+          id: "5",
+        },
+      ],
+    };
+    await nextTick();
+    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe("true");
+
+    wrapper.unmount();
+  });
 });
