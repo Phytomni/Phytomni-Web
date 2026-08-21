@@ -24,7 +24,7 @@ func (ps *Service) AgentTaskCancel(ctx context.Context, rowID int64, username st
 		return AgentTaskLifecycleDTO{}, ErrAgentTaskCancelConflict
 	}
 
-	if strings.TrimSpace(row.BotRunId) == "" {
+	if strings.TrimSpace(row.BotRunId) == "" || isDurablePendingRunID(row.BotRunId) {
 		if err := persistOwnerTaskCancelled(ctx, row); err != nil {
 			return AgentTaskLifecycleDTO{}, err
 		}

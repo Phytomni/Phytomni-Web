@@ -1808,37 +1808,7 @@ func failDetachedDurableTurn(ctx context.Context, username string, rowID int64) 
 	if rowID <= 0 || strings.TrimSpace(username) == "" {
 		return nil
 	}
-	var current model.QuestionAgentLog
-	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Select("id, user_name, bot_run_id, status, bot_projection_json").
-		Where("id = ? AND user_name = ?", rowID, username).
-		Take(&current).Error; err == nil && ownerTaskAlreadyCancelled(&current) {
-		return nil
-	}
-	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Where("id = ? AND user_name = ? AND status IN ?", rowID, username, []string{"SUBMITTING", "RUNNING"}).
-		Update("status", "FAILED")
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 1 {
-		return nil
-	}
-	var stored model.QuestionAgentLog
-	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-		Select("status").
-		Where("id = ? AND user_name = ?", rowID, username).
-		Take(&stored).Error; err != nil {
-		return err
-	}
-	status := strings.ToUpper(strings.TrimSpace(stored.Status))
-	if status == "FAILED" || status == "SUCCEEDED" || status == "INPUT_REQUIRED" {
-		return nil
-	}
-	if _, terminal := canonicalImmediateTerminalStatus(status); terminal {
-		return nil
-	}
-	return fmt.Errorf("detached row %d not failed", rowID)
+	return failV1Submission(ctx, username, rowID)
 }
 
 // isV1DefiniteFailure distinguishes a completed Bot rejection or malformed
@@ -4018,8 +3988,11 @@ func (ps *Service) persistOwnerAllocatedQuestionLog(
 		}
 		if ownerTaskAlreadyCancelled(&stored) {
 			updates := map[string]interface{}{}
-			if strings.TrimSpace(row.BotRunId) != "" && strings.TrimSpace(stored.BotRunId) == "" {
-				updates["bot_run_id"] = row.BotRunId
+			if realID := strings.TrimSpace(row.BotRunId); realID != "" && !isDurablePendingRunID(realID) {
+				storedID := strings.TrimSpace(stored.BotRunId)
+				if storedID == "" || isDurablePendingRunID(storedID) {
+					updates["bot_run_id"] = realID
+				}
 			}
 			if strings.TrimSpace(row.Answer) != "" && strings.TrimSpace(stored.Answer) == "" {
 				updates["answer"] = row.Answer
@@ -4165,12 +4138,53 @@ func (ps *Service) persistOwnerAllocatedQuestionLog(
 // only the persistence branch so the two paths cannot drift.
 func (ps *Service) persistQuestionLog(ctx context.Context, username string, refreshID int64, row *model.QuestionAgentLog) (int64, error) {
 	if refreshID != 0 {
-		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", refreshID, username).Updates(row).Error; err != nil {
-			return 0, err
+		cancelled := []string{"CANCELLED", "CANCELED"}
+		result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+			Where("id = ? AND user_name = ? AND status NOT IN ?", refreshID, username, cancelled).
+			Updates(row)
+		if result.Error != nil {
+			return 0, result.Error
+		}
+		if result.RowsAffected == 0 {
+			var stored model.QuestionAgentLog
+			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Select("id, user_name, bot_run_id, status, answer, follow_up_questions, tool_name, bot_projection_json").
+				Where("id = ? AND user_name = ?", refreshID, username).
+				Take(&stored).Error; err != nil {
+				return 0, err
+			}
+			if !ownerTaskAlreadyCancelled(&stored) {
+				return 0, fmt.Errorf("question row %d not updated", refreshID)
+			}
+			updates := map[string]interface{}{}
+			if realID := strings.TrimSpace(row.BotRunId); realID != "" && !isDurablePendingRunID(realID) {
+				storedID := strings.TrimSpace(stored.BotRunId)
+				if storedID == "" || isDurablePendingRunID(storedID) {
+					updates["bot_run_id"] = realID
+				}
+			}
+			if strings.TrimSpace(row.Answer) != "" && strings.TrimSpace(stored.Answer) == "" {
+				updates["answer"] = row.Answer
+			}
+			if strings.TrimSpace(row.FollowUpQuestions) != "" &&
+				strings.TrimSpace(stored.FollowUpQuestions) == "" {
+				updates["follow_up_questions"] = row.FollowUpQuestions
+			}
+			if strings.TrimSpace(row.ToolName) != "" {
+				updates["tool_name"] = row.ToolName
+			}
+			if len(updates) == 0 {
+				return refreshID, nil
+			}
+			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+				Where("id = ? AND user_name = ? AND status IN ?", refreshID, username, cancelled).
+				Updates(updates).Error; err != nil {
+				return 0, err
+			}
+			return refreshID, nil
 		}
 		if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
-			Where("id = ? AND user_name = ?", refreshID, username).
+			Where("id = ? AND user_name = ? AND status NOT IN ?", refreshID, username, cancelled).
 			Updates(map[string]interface{}{
 				"server_id":        row.ServerId,
 				"task_id":          row.TaskId,
@@ -4972,7 +4986,7 @@ func (ps *Service) adoptOwnerCancelIfPresent(
 	}
 	out.Status = "CANCELLED"
 	cancelID := strings.TrimSpace(row.BotRunId)
-	if cancelID == "" {
+	if cancelID == "" || isDurablePendingRunID(cancelID) {
 		cancelID = strings.TrimSpace(runID)
 	}
 	ps.cancelKnownOwnerRun(ctx, cancelID)
@@ -4980,7 +4994,7 @@ func (ps *Service) adoptOwnerCancelIfPresent(
 
 func (ps *Service) cancelKnownOwnerRun(ctx context.Context, runID string) {
 	runID = strings.TrimSpace(runID)
-	if runID == "" || ps.agentRunCanceller() == nil {
+	if runID == "" || isDurablePendingRunID(runID) || ps.agentRunCanceller() == nil {
 		return
 	}
 	_, _, _ = ps.agentRunCanceller().CancelRunWithMeta(context.WithoutCancel(ctx), runID)

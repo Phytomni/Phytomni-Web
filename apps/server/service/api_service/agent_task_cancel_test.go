@@ -83,6 +83,38 @@ func TestAgentTaskCancelLocalRowKeepsDraftWithoutBotCall(t *testing.T) {
 	}
 }
 
+func TestAgentTaskCancelPendingRunIDKeepsDraftWithoutBotCall(t *testing.T) {
+	gdb := setupAgentTaskLifecycleDB(t)
+	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+		id:             21,
+		username:       "alice",
+		runID:          "web-pending-aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee",
+		status:         "RUNNING",
+		answer:         "",
+		reportRevision: -1,
+	})
+	fake := &cancelFakeRunCanceller{
+		err: &rxBot.APIError{Status: 404, Path: "/v1/runs/web-pending/cancel"},
+	}
+	got, err := (&Service{runCanceller: fake}).AgentTaskCancel(context.Background(), 21, "alice")
+	if err != nil {
+		t.Fatalf("pending cancel: %v", err)
+	}
+	if got.Phase != "CANCELLED" || !got.Terminal {
+		t.Fatalf("lifecycle=%+v", got)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("pending placeholder called Bot: %q", fake.calls)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("id = ?", 21).Take(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "CANCELLED" {
+		t.Fatalf("row status=%q, want CANCELLED", row.Status)
+	}
+}
+
 func TestAgentTaskCancelIdempotentWhenAlreadyCancelled(t *testing.T) {
 	gdb := setupAgentTaskLifecycleDB(t)
 	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
