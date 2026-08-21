@@ -37,11 +37,12 @@ describe("shouldStream", () => {
         agents: ["KnowledgeAgent"],
       })
     ).toBe(false);
+    // Expert-selected ChatAgent is a stream-family agent.
     expect(
       shouldStream("ChatAgent", "expert", {
         agents: ["ChatAgent"],
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldStream("DataAgent", "instant", {
         agents: ["DataAgent"],

@@ -792,6 +792,47 @@ describe("useStreamMessage", () => {
     );
   });
 
+  it("invokes onIdentity from headers before the first body frame", async () => {
+    const order: string[] = [];
+    mockedFetch().mockImplementation(async () => {
+      order.push("fetch");
+      return new Response(
+        sseStream([
+          'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
+          'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+        ]),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": "42",
+          },
+        }
+      );
+    });
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (key) => key,
+    });
+    await streamMessage({
+      dialogueId: "temp",
+      formData: new FormData(),
+      requestId: "req-id",
+      placeholder,
+      onIdentity: ({ dialogueId, messageId }) => {
+        order.push(`id:${dialogueId}:${messageId}`);
+      },
+    });
+    expect(order[0]).toBe("fetch");
+    expect(order[1]).toBe(`id:${CANONICAL_DIALOGUE_ID}:42`);
+  });
+
   it("captures safe Web and Bot request ids without using temporary A2UI identity", async () => {
     const body = sseStream([
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-safe-ids"}\n\n',

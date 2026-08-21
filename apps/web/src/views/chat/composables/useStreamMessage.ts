@@ -27,6 +27,7 @@ export interface StreamInput {
   placeholder: ChatMessage;
   /** Logical turn identity; the send path normally already appended it. */
   clientTurnId?: string;
+  onIdentity?: (identity: { dialogueId: string; messageId: string }) => void;
 }
 
 export interface StreamResult {
@@ -125,8 +126,14 @@ export function useStreamMessage(opts: {
   const { getChatState, t } = opts;
 
   const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
-    const { dialogueId, formData, requestId, placeholder, clientTurnId } =
-      input;
+    const {
+      dialogueId,
+      formData,
+      requestId,
+      placeholder,
+      clientTurnId,
+      onIdentity,
+    } = input;
     if (clientTurnId && !formData.has("client_turn_id")) {
       formData.append("client_turn_id", clientTurnId);
     }
@@ -226,6 +233,11 @@ export function useStreamMessage(opts: {
             acceptLanguage: i18n.global.locale.value,
           }),
         };
+        // Rekey before the body loop so leave/resume can use the server id.
+        onIdentity?.({
+          dialogueId: canonicalDialogueId,
+          messageId: canonicalMessageId,
+        });
       }
 
       const reader = resp.body.getReader();

@@ -50,6 +50,7 @@ type StreamInput = {
   requestId: string;
   dialogueId: string;
   formData: FormData;
+  onIdentity?: (identity: { dialogueId: string; messageId: string }) => void;
 };
 
 const streamHarness = vi.hoisted(() => ({
@@ -2230,6 +2231,52 @@ describe("useSendMessage", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
+    expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
+      blockingDialogueId: "canonical-stream-dialogue",
+    });
+  });
+
+  it("rekeys from stream identity headers without waiting for RunFinished", async () => {
+    vi.stubEnv("VITE_STREAM_ENABLED", "true");
+    const tempId = "new_stream_identity";
+    const state = makeState({ messageInput: "stream identity rekey" });
+    states.set(tempId, state);
+    currentChatId.value = tempId;
+    currentChat.value = { messages: [] };
+
+    const order: string[] = [];
+    getHistoryQuestionData.mockImplementation(async (_id, opts) => {
+      order.push(`history:${opts?.blockingDialogueId ?? "none"}`);
+      return {
+        status: "reconciled",
+        tempId,
+        serverId: mustGet(opts?.blockingDialogueId, "identity server id"),
+        rekey: { outcome: "moved" },
+      };
+    });
+
+    streamHarness.streamMessage.mockImplementationOnce(async (input) => {
+      order.push("stream-start");
+      input.onIdentity?.({
+        dialogueId: "canonical-stream-dialogue",
+        messageId: "42",
+      });
+      order.push("stream-end");
+      return {
+        dialogueId: "canonical-stream-dialogue",
+        messageId: "42",
+        completed: true,
+      };
+    });
+
+    await makeComposable().sendMessage();
+
+    expect(order).toEqual([
+      "stream-start",
+      "history:canonical-stream-dialogue",
+      "stream-end",
+    ]);
+    expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
     expect(getHistoryQuestionData).toHaveBeenCalledWith(tempId, {
       blockingDialogueId: "canonical-stream-dialogue",
     });

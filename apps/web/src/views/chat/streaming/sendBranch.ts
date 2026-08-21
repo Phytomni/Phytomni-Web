@@ -18,10 +18,13 @@ function modeRoutesStreamAgent(
   agent: string,
   mode: "instant" | "expert"
 ): boolean {
-  return agent === "ChatAgent"
-    ? mode === "instant"
-    : (agent === "KnowledgeAgent" || agent === "BriefGeneAgent") &&
-        mode === "expert";
+  if (agent === "ChatAgent") {
+    return true;
+  }
+  return (
+    (agent === "KnowledgeAgent" || agent === "BriefGeneAgent") &&
+    mode === "expert"
+  );
 }
 
 export function shouldStream(
