@@ -143,15 +143,20 @@ func TestQuery_ExpertForcedNonChatDispatchesToAgentRuns(t *testing.T) {
 // remaining router use: Expert with NO forced tool must still hit /v1/query/route
 // so Bot's LLM picks the agent.
 func TestQuery_ExpertAutonomousStillUsesRouter(t *testing.T) {
-	setupExpertTestDB(t)
+	gdb := setupExpertTestDB(t)
 	var hit string
 	botRouter(t, &hit)
 
-	if _, err := NewService().Query(context.Background(), "alice", QueryInput{
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
 		Query: "what can you do", Mode: "expert",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	if hit != "/v1/query/route" {
 		t.Fatalf("autonomous Expert must still hit /v1/query/route, hit %q", hit)
 	}

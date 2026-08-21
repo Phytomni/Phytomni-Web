@@ -163,6 +163,11 @@ func ownerAllocatedSubmissionEnabled(in QueryInput) bool {
 			serviceClientTurnIDPattern.MatchString(strings.TrimSpace(in.ClientTurnID))
 }
 
+func autonomousExpertQuery(in QueryInput) bool {
+	return strings.EqualFold(strings.TrimSpace(in.Mode), "expert") &&
+		strings.TrimSpace(in.Tool) == ""
+}
+
 func researchOwnerAllocatedSubmission(in QueryInput) bool {
 	return dedicatedResearchProductSubmission(in) ||
 		in.Surface == QuerySurfaceChat &&
@@ -2341,8 +2346,8 @@ func logBotResponseMeta(ctx context.Context, meta rxBot.ResponseMeta) {
 }
 
 // durableQueryTurn is the blocking Query dispatch after identity allocation.
-// Data and Review persist RUNNING immediately, then complete this turn on a
-// context that outlives browser abort.
+// Data, Review, and autonomous Expert persist RUNNING immediately, then
+// complete this turn on a context that outlives browser abort.
 type durableQueryTurn struct {
 	username              string
 	in                    QueryInput
@@ -2652,7 +2657,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		useExpertContextRoute: useExpertContextRoute,
 		interop:               interop,
 	}
-	if slug == "data" || slug == "review" {
+	if slug == "data" || slug == "review" || autonomousExpertQuery(in) {
 		running := QueryData{
 			ToolName:        slugToToolName[slug],
 			ReactionType:    "0",

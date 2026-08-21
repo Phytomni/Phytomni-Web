@@ -232,6 +232,58 @@ func waitForQuestionRowTerminal(t *testing.T, gdb *gorm.DB, id int64) model.Ques
 	return row
 }
 
+func waitForDetachedQueryProgress(t *testing.T, gdb *gorm.DB, id int64) model.QuestionAgentLog {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var row model.QuestionAgentLog
+	for time.Now().Before(deadline) {
+		if err := gdb.First(&row, id).Error; err != nil {
+			t.Fatal(err)
+		}
+		status := strings.ToUpper(strings.TrimSpace(row.Status))
+		switch status {
+		case "SUCCEEDED", "FAILED", "INPUT_REQUIRED", "CANCELLED", "TIMED_OUT":
+			return row
+		}
+		if strings.TrimSpace(row.ToolName) != "" {
+			return row
+		}
+		if runID := strings.TrimSpace(row.BotRunId); runID != "" && !isDurablePendingRunID(runID) {
+			return row
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("row %d still selecting after 5s: status=%q tool=%q run=%q", id, row.Status, row.ToolName, row.BotRunId)
+	return row
+}
+
+func waitForReplacementResolved(t *testing.T, username string, rowID int64) persistedConversationContext {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var private persistedConversationContext
+	for time.Now().Before(deadline) {
+		got, err := LoadBotConversationContext(context.Background(), username, rowID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		private = got
+		if private.Replacement == nil {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if private.Replacement.TerminalResult != nil {
+			return private
+		}
+		if strings.TrimSpace(private.Replacement.ToolName) != "" &&
+			!isDurablePendingRunID(private.Replacement.ActiveBotRunID) {
+			return private
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("replacement still selecting after 5s: %#v", private.Replacement)
+	return private
+}
+
 func TestQueryDataPendingRunOwnerCancelStaysCancelled(t *testing.T) {
 	testQueryPendingRunOwnerCancelStaysCancelled(t, queryDetachCase{
 		tool:        "DataAgent",

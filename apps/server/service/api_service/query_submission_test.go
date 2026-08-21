@@ -2880,19 +2880,28 @@ func TestQuerySubmissionDefiniteBotFailuresSettleFailed(t *testing.T) {
 				_, _ = w.Write([]byte(tc.response))
 			})
 
-			_, err := NewService().Query(context.Background(), "alice", QueryInput{
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{
 				Query:        "definite failure",
 				Mode:         tc.mode,
 				ClientTurnID: "definite-" + strings.ReplaceAll(tc.name, " ", "-"),
 			})
-			if err == nil {
+			if tc.mode == "expert" {
+				if err != nil {
+					t.Fatalf("Query: %v", err)
+				}
+				if out == nil || out.Id <= 0 {
+					t.Fatalf("Query = %#v, want durable selecting row", out)
+				}
+			} else if err == nil {
 				t.Fatal("expected Bot failure")
 			}
-			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+			if tc.wantErr != nil && err != nil && !errors.Is(err, tc.wantErr) {
 				t.Fatalf("error = %v, want %v", err, tc.wantErr)
 			}
 			var row model.QuestionAgentLog
-			if err := gdb.First(&row).Error; err != nil {
+			if tc.mode == "expert" {
+				row = waitForQuestionRowTerminal(t, gdb, out.Id)
+			} else if err := gdb.First(&row).Error; err != nil {
 				t.Fatal(err)
 			}
 			if row.Status != "FAILED" {
@@ -3003,11 +3012,24 @@ func TestQuerySubmissionResearchMissingRunIDBeforePersistence(t *testing.T) {
 				Query: "resolve Research inputs", Mode: "expert", Tool: tt.tool,
 				ClientTurnID: fmt.Sprintf("research-run-id-%d", index),
 			})
-			if !errors.Is(err, ErrMissingBotRunID) {
-				t.Fatalf("error = %v, want ErrMissingBotRunID", err)
-			}
-			if out != nil {
-				t.Fatalf("missing run identity returned output: %+v", out)
+			if tt.tool == "" {
+				if err != nil {
+					t.Fatalf("Query: %v", err)
+				}
+				if out == nil || out.Id <= 0 {
+					t.Fatalf("missing run identity returned %#v, want durable selecting row", out)
+				}
+				row := waitForQuestionRowTerminal(t, gdb, out.Id)
+				if row.Status != "FAILED" {
+					t.Fatalf("missing Research run identity row=%#v, want FAILED", row)
+				}
+			} else {
+				if !errors.Is(err, ErrMissingBotRunID) {
+					t.Fatalf("error = %v, want ErrMissingBotRunID", err)
+				}
+				if out != nil {
+					t.Fatalf("missing run identity returned output: %+v", out)
+				}
 			}
 			if calls != 1 {
 				t.Fatalf("Bot calls = %d, want 1", calls)
@@ -3015,7 +3037,7 @@ func TestQuerySubmissionResearchMissingRunIDBeforePersistence(t *testing.T) {
 
 			var pollableRows int64
 			if err := gdb.Model(&model.QuestionAgentLog{}).
-				Where("status IN ? OR COALESCE(bot_run_id, '') != ''", []string{"SUBMITTING", "RUNNING"}).
+				Where("status IN ?", []string{"SUBMITTING", "RUNNING"}).
 				Count(&pollableRows).Error; err != nil {
 				t.Fatalf("count pollable question rows: %v", err)
 			}
@@ -3274,5 +3296,86 @@ func TestOversizedPrivateReplacementTerminalAnswerIsOmittedNotTruncated(t *testi
 	}
 	if terminal.FollowUpQuestions != "" {
 		t.Fatalf("oversized invalid private follow-up persisted %d bytes", len(terminal.FollowUpQuestions))
+	}
+}
+
+func TestQueryExpertAutoReturnsRunningWithoutWaiting(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+
+	botEntered := make(chan struct{})
+	botRelease := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseBot := func() { releaseOnce.Do(func() { close(botRelease) }) }
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/query/route" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		close(botEntered)
+		select {
+		case <-botRelease:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() {
+		releaseBot()
+		srv.Close()
+		rxBot.BotConfig = nil
+	})
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	out, err := NewService().Query(ctx, "alice", QueryInput{
+		Query:   "durable expert auto",
+		Mode:    "expert",
+		Tool:    "",
+		Surface: QuerySurfaceChat,
+	})
+	elapsed := time.Since(started)
+	cancel()
+
+	if elapsed >= 200*time.Millisecond {
+		t.Fatalf("Query blocked for %s (err=%v out=%#v), want RUNNING or SUBMITTING in <200ms", elapsed, err, out)
+	}
+	if err != nil {
+		t.Fatalf("Query: %v (elapsed %s)", err, elapsed)
+	}
+	if out == nil || out.Id <= 0 || strings.TrimSpace(out.DialogueId) == "" {
+		t.Fatalf("Query = %#v, want durable row in %s", out, elapsed)
+	}
+	if out.Status != "RUNNING" && out.Status != "SUBMITTING" {
+		t.Fatalf("Query status = %q, want RUNNING or SUBMITTING in %s", out.Status, elapsed)
+	}
+
+	select {
+	case <-botEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RouteQuery was not started after Query returned a durable row")
+	}
+
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "RUNNING" && row.Status != "SUBMITTING" {
+		t.Fatalf("row status = %q, want RUNNING or SUBMITTING while RouteQuery is blocked", row.Status)
+	}
+	if strings.TrimSpace(row.ToolName) != "" {
+		t.Fatalf("selecting row tool_name = %q, want empty until routing writes a tool", row.ToolName)
+	}
+
+	releaseBot()
+	row = waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status == "SUBMITTING" || row.Status == "RUNNING" {
+		t.Fatalf("row stayed pollable after RouteQuery error: %#v", row)
+	}
+	if row.Status != "FAILED" {
+		t.Fatalf("row status = %q, want FAILED after RouteQuery I/O error", row.Status)
 	}
 }

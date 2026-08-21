@@ -113,7 +113,10 @@ func TestQueryReviewFormattedAnswerSettlesWithoutConfirmation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.ToolName != "ReviewAgent" || out.Id <= 0 {
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("out = %#v", out)
+			}
+			if strings.TrimSpace(tt.query.Tool) != "" && out.ToolName != "ReviewAgent" {
 				t.Fatalf("out = %#v", out)
 			}
 			row := waitForQuestionRowTerminal(t, gdb, out.Id)

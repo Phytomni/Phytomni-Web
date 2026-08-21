@@ -1794,6 +1794,31 @@ describe("useSelectChat", () => {
     expect(mockResumeStreamMessage).not.toHaveBeenCalled();
   });
 
+  it("hydrates an Expert Auto empty-tool RUNNING row as a selecting wait assistant", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "5",
+          answer: "",
+          status: "RUNNING",
+          tool_name: "",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    const assistant = messageAt("d1", 1, "Expert Auto selecting hydrate");
+    expect(assistant).toMatchObject({
+      role: "assistant",
+      id: "5",
+      tool_name: "",
+      status: "RUNNING",
+      content: "",
+    });
+    expect(mockResumeStreamMessage).not.toHaveBeenCalled();
+  });
+
   describe("stream resume hydrate", () => {
     it.each(["ChatAgent", "KnowledgeAgent", "BriefGeneAgent"] as const)(
       "hydrates a %s RUNNING empty answer as a streaming assistant and kicks resume",

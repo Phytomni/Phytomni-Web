@@ -280,12 +280,20 @@ func TestQueryExpertUsesNativeIDAcrossResolvedAgentMatrix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.BotRunID != runID || out.Status != strings.ToUpper(tt.status) {
-				t.Fatalf("expert response identity/status = %#v", out)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+			}
+			row := waitForDetachedQueryProgress(t, gdb, out.Id)
+			wantStatus := strings.ToUpper(tt.status)
+			if tt.status == "succeeded" {
+				row = waitForQuestionRowTerminal(t, gdb, out.Id)
+			}
+			if row.BotRunId != runID || strings.ToUpper(row.Status) != wantStatus {
+				t.Fatalf("expert row identity/status = %#v, want run=%q status=%q", row, runID, wantStatus)
 			}
 			if tt.status == "running" && tt.slug != "deep_genome" {
-				if out.TaskId != "" || out.Answer != "" {
-					t.Fatalf("expert fabricated child surface task=%q answer=%q", out.TaskId, out.Answer)
+				if row.TaskId != "" || row.Answer != "" {
+					t.Fatalf("expert fabricated child surface task=%q answer=%q", row.TaskId, row.Answer)
 				}
 			}
 			var persisted struct {
@@ -326,15 +334,24 @@ func TestQueryRemoteMissingRunIdentityDoesNotPersistPollableRow(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-	if !errors.Is(err, ErrMissingBotRunID) {
-		t.Fatalf("missing umbrella run identity error=%v, want ErrMissingBotRunID", err)
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
 	}
-	var rows int64
-	if err := gdb.Model(&struct{}{}).Table("question_agent_logs").Count(&rows).Error; err != nil {
-		t.Fatalf("count rows: %v", err)
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable selecting row", out)
 	}
-	if rows != 0 {
-		t.Fatalf("unpollable running response persisted %d row(s)", rows)
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != "FAILED" {
+		t.Fatalf("missing umbrella run identity row=%#v, want FAILED", row)
+	}
+	var pollable int64
+	if err := gdb.Model(&struct{}{}).Table("question_agent_logs").
+		Where("status IN ?", []string{"SUBMITTING", "RUNNING"}).
+		Count(&pollable).Error; err != nil {
+		t.Fatalf("count pollable rows: %v", err)
+	}
+	if pollable != 0 {
+		t.Fatalf("unpollable running response left %d pollable row(s)", pollable)
 	}
 }

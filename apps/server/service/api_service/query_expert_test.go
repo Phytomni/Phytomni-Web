@@ -217,14 +217,18 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
 	if hit != "/v1/query/route" {
 		t.Fatalf("expert must hit /v1/query/route, hit %q (ChatAgent collapse?)", hit)
 	}
-	if out.ToolName != "KnowledgeAgent" {
-		t.Errorf("expected resolved tool_name KnowledgeAgent, got %q", out.ToolName)
+	if row.ToolName != "KnowledgeAgent" {
+		t.Errorf("expected resolved tool_name KnowledgeAgent, got %q", row.ToolName)
 	}
-	if !strings.Contains(out.Answer, "doc_list") || !strings.Contains(out.Answer, "Doc A") {
-		t.Errorf("expert answer not reshaped by resolved slug: %q", out.Answer)
+	if !strings.Contains(row.Answer, "doc_list") || !strings.Contains(row.Answer, "Doc A") {
+		t.Errorf("expert answer not reshaped by resolved slug: %q", row.Answer)
 	}
 	var mode string
 	gdb.Raw(`SELECT COALESCE(mode,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&mode)
@@ -323,11 +327,16 @@ func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
 	permissionRouteServer(t, effects, &captured)
 
 	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_route_reads"}, {AssetID: "file_route_variants"}}
-	if _, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{
+	out, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{
 		Query: "q", Mode: "expert", Attachments: refs,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
 	if !reflect.DeepEqual(captured.AllowedTools, want) {
 		t.Fatalf("allowed tools = %#v, want %#v", captured.AllowedTools, want)
@@ -414,20 +423,30 @@ func TestQuery_ExpertAllowsOneRemoteProductGrant(t *testing.T) {
 	seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
 	expertRouteServer(t, `{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`)
 
-	if _, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+	out, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 }
 
 func TestQuery_ExpertAdminUsesEveryCurrentlyAvailableTool(t *testing.T) {
-	setupExpertTestDB(t)
+	gdb := setupExpertTestDB(t)
 	effects := &queryPermissionEffects{}
 	var captured rxBot.RouteQueryRequest
 	permissionRouteServer(t, effects, &captured)
 
-	if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"}); err != nil {
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	want := rxBot.CanonicalAgentDisplayTools()
 	if !reflect.DeepEqual(captured.AllowedTools, want) {
 		t.Fatalf("admin allowed tools = %#v, want %#v", captured.AllowedTools, want)
@@ -747,11 +766,15 @@ func TestQuery_ExpertRunningArm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.Status != "RUNNING" {
-		t.Errorf("expected out.Status=RUNNING, got %q", out.Status)
+	if out == nil || out.Id <= 0 || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("Query = %#v, want durable RUNNING/SUBMITTING row", out)
 	}
-	if !strings.Contains(out.Answer, "task-async-1") {
-		t.Errorf("expected answer to contain task-async-1, got %q", out.Answer)
+	row := waitForDetachedQueryProgress(t, gdb, out.Id)
+	if row.Status != "RUNNING" {
+		t.Errorf("expected row.Status=RUNNING, got %q", row.Status)
+	}
+	if !strings.Contains(row.Answer, "task-async-1") {
+		t.Errorf("expected answer to contain task-async-1, got %q", row.Answer)
 	}
 	var botRunID, taskID string
 	gdb.Raw(`SELECT COALESCE(bot_run_id,''), COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).
@@ -776,6 +799,10 @@ func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	var taskID string
 	gdb.Raw(`SELECT COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&taskID)
 	if taskID != "dedup-77" {
@@ -844,8 +871,12 @@ func TestQuery_ExpertResolvedCanonicalRemoteSlugsKeepWebMappings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.ToolName != tc.tool || out.Status != "RUNNING" {
-				t.Fatalf("output=%+v, want tool=%q status=RUNNING", out, tc.tool)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+			}
+			row := waitForDetachedQueryProgress(t, gdb, out.Id)
+			if row.ToolName != tc.tool || row.Status != "RUNNING" {
+				t.Fatalf("row=%+v, want tool=%q status=RUNNING", row, tc.tool)
 			}
 			projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
 			if err != nil {
@@ -885,18 +916,15 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":`+string(agentJSON)+`,"status":"running","task_ids":["child-bad"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-			if !errors.Is(err, ErrExpertRouteContract) {
-				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
+			if err != nil {
+				t.Fatalf("Query: %v", err)
 			}
-			if out != nil {
-				t.Fatalf("unknown resolved slug returned output: %+v", out)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("unknown resolved slug returned %#v, want durable selecting row", out)
 			}
-			var count int64
-			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
-				t.Fatalf("count rows: %v", err)
-			}
-			if count != 0 {
-				t.Fatalf("unknown resolved slug wrote %d row(s)", count)
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "FAILED" {
+				t.Fatalf("unknown resolved slug row=%#v, want FAILED", row)
 			}
 		})
 	}
@@ -951,26 +979,31 @@ func TestQuery_ExpertResolvedToolContractFailuresHaveNoRows(t *testing.T) {
 			out, err := NewService().Query(context.Background(), tc.username, QueryInput{
 				Query: "contract check", Mode: "expert", Tool: tc.tool,
 			})
-			if !errors.Is(err, ErrExpertRouteContract) {
-				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
-			}
-			if out != nil {
-				t.Fatalf("contract failure returned output=%+v", out)
-			}
-			var rows int64
-			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
-				t.Fatalf("count question rows: %v", err)
-			}
-			if rows != 0 {
-				t.Fatalf("contract failure persisted %d question rows", rows)
-			}
-			var projections int64
-			if err := gdb.Model(&model.QuestionAgentLog{}).
-				Where("bot_projection_json IS NOT NULL AND bot_projection_json != ''").Count(&projections).Error; err != nil {
-				t.Fatalf("count projections: %v", err)
-			}
-			if projections != 0 {
-				t.Fatalf("contract failure persisted %d projections", projections)
+			if strings.TrimSpace(tc.tool) != "" {
+				if !errors.Is(err, ErrExpertRouteContract) {
+					t.Fatalf("err=%v, want ErrExpertRouteContract", err)
+				}
+				if out != nil {
+					t.Fatalf("contract failure returned output=%+v", out)
+				}
+				var rows int64
+				if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+					t.Fatalf("count question rows: %v", err)
+				}
+				if rows != 0 {
+					t.Fatalf("contract failure persisted %d question rows", rows)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Query: %v", err)
+				}
+				if out == nil || out.Id <= 0 {
+					t.Fatalf("contract failure returned %#v, want durable selecting row", out)
+				}
+				row := waitForQuestionRowTerminal(t, gdb, out.Id)
+				if row.Status != "FAILED" {
+					t.Fatalf("contract failure row=%#v, want FAILED", row)
+				}
 			}
 		})
 	}
@@ -981,18 +1014,15 @@ func TestQuery_ExpertMissingRunIdentityKeepsConflictSentinel(t *testing.T) {
 	expertRouteServer(t, `{"object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "missing run", Mode: "expert"})
-	if !errors.Is(err, ErrMissingBotRunID) {
-		t.Fatalf("err=%v, want ErrMissingBotRunID", err)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
 	}
-	if out != nil {
-		t.Fatalf("missing run identity returned output=%+v", out)
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("missing run identity returned %#v, want durable selecting row", out)
 	}
-	var rows int64
-	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
-		t.Fatalf("count question rows: %v", err)
-	}
-	if rows != 0 {
-		t.Fatalf("missing run identity persisted %d question rows", rows)
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != "FAILED" {
+		t.Fatalf("missing run identity row=%#v, want FAILED", row)
 	}
 }
 
@@ -1016,18 +1046,15 @@ func TestQuery_ExpertDuplicateRouteKeysFailsBeforePersistence(t *testing.T) {
 			expertRouteServer(t, tc.body)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-			if err == nil {
-				t.Fatalf("duplicate route response returned output=%+v", out)
+			if err != nil {
+				t.Fatalf("Query: %v", err)
 			}
-			if !errors.Is(err, ErrExpertRouteContract) {
-				t.Fatalf("err=%v, want ErrExpertRouteContract", err)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("duplicate route response returned %#v, want durable selecting row", out)
 			}
-			var count int64
-			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
-				t.Fatalf("count rows: %v", err)
-			}
-			if count != 0 {
-				t.Fatalf("duplicate route response persisted %d row(s)", count)
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "FAILED" {
+				t.Fatalf("duplicate route response row=%#v, want FAILED", row)
 			}
 		})
 	}
@@ -1058,7 +1085,7 @@ func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			setupExpertTestDB(t)
+			gdb := setupExpertTestDB(t)
 			var captured rxBot.RouteQueryRequest
 			var settleCalls int
 			var dispatchPath string
@@ -1113,9 +1140,13 @@ func TestQueryExpertContextSelectionSettlement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.Status != "SUCCEEDED" || out.ToolName != test.selectedTool ||
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("Query = %#v, want durable row", out)
+			}
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "SUCCEEDED" || row.ToolName != test.selectedTool ||
 				dispatchPath != test.expectedPath || settleCalls != 1 {
-				t.Fatalf("result=%#v settle calls=%d", out, settleCalls)
+				t.Fatalf("result=%#v row=%#v settle calls=%d", out, row, settleCalls)
 			}
 			if len(captured.History) != 0 || captured.Conversation == nil {
 				t.Fatalf("route request leaked browser history: %#v", captured)
@@ -1166,15 +1197,12 @@ func TestQueryExpertContextAsyncKeepsRunningLifecycleWithoutSettlement(t *testin
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.Status != "RUNNING" || out.BotRunID != "run-async-context" || settleCalls != 0 {
-		t.Fatalf("result=%#v settle calls=%d", out, settleCalls)
+	if out == nil || out.Id <= 0 || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("Query = %#v, want durable RUNNING/SUBMITTING row", out)
 	}
-	var row model.QuestionAgentLog
-	if err := gdb.First(&row, out.Id).Error; err != nil {
-		t.Fatal(err)
-	}
-	if row.Status != "RUNNING" || row.BotRunId != "run-async-context" {
-		t.Fatalf("async row=%#v", row)
+	row := waitForDetachedQueryProgress(t, gdb, out.Id)
+	if row.Status != "RUNNING" || row.BotRunId != "run-async-context" || settleCalls != 0 {
+		t.Fatalf("async row=%#v settle calls=%d", row, settleCalls)
 	}
 }
 
@@ -1211,12 +1239,11 @@ func TestQueryExpertReplacementPinsAutonomousResolvedTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("autonomous replacement: %v", err)
 	}
-	private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
-	if err != nil {
-		t.Fatal(err)
+	if out == nil || out.Id != seed.Id || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("autonomous replacement Query=%#v, want RUNNING on seed id %d", out, seed.Id)
 	}
-	if out.Status != "RUNNING" || out.ToolName != "InSilicoResearchAgent" ||
-		private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
+	private := waitForReplacementResolved(t, "alice", seed.Id)
+	if private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
 		t.Fatalf("autonomous resolved tool was not pinned: out=%+v private=%+v", out, private.Replacement)
 	}
 
@@ -1278,13 +1305,14 @@ func TestQueryExpertAutonomousReplacementRetainsUnresolvedTerminalIdentity(t *te
 				ClientTurnID: key, RefreshId: seed.Id, Surface: QuerySurfaceChat,
 			}
 
-			if out, err := service.Query(context.Background(), "alice", input); out != nil || err == nil {
-				t.Fatalf("first unresolved failure=%+v error=%v", out, err)
-			}
-			private, err := LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			out, err := service.Query(context.Background(), "alice", input)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("first unresolved Query: %v", err)
 			}
+			if out == nil || out.Id != seed.Id {
+				t.Fatalf("first unresolved Query=%#v, want seed id %d", out, seed.Id)
+			}
+			private := waitForReplacementResolved(t, "alice", seed.Id)
 			if private.Replacement == nil || private.Replacement.ClientTurnID != key ||
 				private.Replacement.ToolName != "" || private.Replacement.TerminalResult == nil ||
 				private.Replacement.TerminalResult.ToolName != "" ||
@@ -1303,9 +1331,12 @@ func TestQueryExpertAutonomousReplacementRetainsUnresolvedTerminalIdentity(t *te
 			nextInput.ClientTurnID = key + "-next"
 			nextInput.Query = "replace again after terminal failure"
 			next, err := service.Query(context.Background(), "alice", nextInput)
-			if err != nil || next == nil || next.Status != "RUNNING" ||
-				next.ToolName != "InSilicoResearchAgent" {
+			if err != nil || next == nil || next.Id != seed.Id {
 				t.Fatalf("new replacement after unresolved terminal=%+v error=%v", next, err)
+			}
+			private = waitForReplacementResolved(t, "alice", seed.Id)
+			if private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
+				t.Fatalf("new replacement after unresolved terminal private=%+v", private.Replacement)
 			}
 			private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
 			if err != nil {
