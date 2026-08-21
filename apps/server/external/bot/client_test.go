@@ -521,6 +521,21 @@ func TestNewClientUsesGlobalTimeout(t *testing.T) {
 	}
 }
 
+func TestNewStreamingClientHasNoOverallTimeout(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewStreamingClient()
+	if got := client.http.Timeout; got != 0 {
+		t.Fatalf("streaming timeout=%s, want no overall client timeout", got)
+	}
+}
+
 func TestCancelRunUsesStrictAuthenticatedPost(t *testing.T) {
 	var gotMethod, gotEscapedPath, gotAuth, gotContentType string
 	var gotBody []byte

@@ -44,6 +44,16 @@ func NewClientWithTimeout(timeout time.Duration) *Client {
 	}
 }
 
+// NewStreamingClient builds a Client for long-lived SSE responses. The request
+// context still cancels the call; the http.Client has no whole-body deadline.
+func NewStreamingClient() *Client {
+	return &Client{
+		http:    &http.Client{},
+		baseURL: BotConfig.BaseURL,
+		userKey: BotConfig.UserAPIKey,
+	}
+}
+
 // ErrBotTimeout marks a Web→Bot relay call that exceeded the HTTP client
 // timeout (or had its context deadline expire) before the Bot replied. It is a
 // wrapped sentinel so queryErrorStatus can map it to 504 instead of a generic

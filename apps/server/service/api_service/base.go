@@ -41,6 +41,8 @@ type Service struct {
 	runStream      runStreamReader
 	streamHub      *StreamHub
 	streamHubOnce  sync.Once
+	resupplyMu     sync.Mutex
+	resupplies     map[int64]*streamResupply
 }
 
 func (ps *Service) agentCatalogReader() agentCatalogReader {
@@ -75,5 +77,5 @@ func (ps *Service) runStreamReader() runStreamReader {
 	if ps != nil && ps.runStream != nil {
 		return ps.runStream
 	}
-	return rxBot.NewClient()
+	return rxBot.NewStreamingClient()
 }
