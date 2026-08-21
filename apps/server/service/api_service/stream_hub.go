@@ -176,37 +176,46 @@ func (h *StreamHub) deliverFollow(
 		last = replay[n-1].Seq
 	}
 
-	h.mu.Lock()
-	e := h.messages[messageID]
-	if e == nil {
-		h.mu.Unlock()
-		return
-	}
-	var catchup []StreamFrame
-	for _, fr := range e.frames {
-		if fr.Seq > last {
-			catchup = append(catchup, fr)
+	// Deliver catch-up before registering so Finish cannot abort mid-catch-up
+	// and drop frames that are already in the log. Only unsub aborts early
+	// (fol.send). Re-check under the lock until catch-up is empty, then register.
+	for {
+		h.mu.Lock()
+		e := h.messages[messageID]
+		if e == nil {
+			h.mu.Unlock()
+			return
 		}
-	}
-	if e.done {
+		var catchup []StreamFrame
+		for _, fr := range e.frames {
+			if fr.Seq > last {
+				catchup = append(catchup, fr)
+			}
+		}
+		if e.done {
+			h.mu.Unlock()
+			for _, fr := range catchup {
+				if !fol.send(fr) {
+					return
+				}
+			}
+			return
+		}
+		if len(catchup) == 0 {
+			e.followers[fol] = struct{}{}
+			h.mu.Unlock()
+			<-fol.stop
+			return
+		}
 		h.mu.Unlock()
+
 		for _, fr := range catchup {
 			if !fol.send(fr) {
 				return
 			}
-		}
-		return
-	}
-	e.followers[fol] = struct{}{}
-	h.mu.Unlock()
-
-	for _, fr := range catchup {
-		if !fol.send(fr) {
-			return
+			last = fr.Seq
 		}
 	}
-
-	<-fol.stop
 }
 
 // Finish marks the stream done, closes followers, and retains the snapshot for

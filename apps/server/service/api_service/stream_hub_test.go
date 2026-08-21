@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -66,5 +67,67 @@ func TestStreamHubUnsubStopsDelivery(t *testing.T) {
 		}
 	case <-time.After(50 * time.Millisecond):
 		// no delivery — expected
+	}
+}
+
+// Finish must not drop already-logged frames if it races with catch-up delivery.
+// Seed a large replay so Follow blocks on the 16-buffer, append more frames that
+// become catch-up, then Finish while catch-up is in flight; the consumer must
+// still see every seq before the channel closes.
+func TestStreamHubFinishDuringCatchupDeliversLoggedFrames(t *testing.T) {
+	h := NewStreamHub()
+	const pre = 20
+	const late = 20
+	for i := 0; i < pre; i++ {
+		h.Append(9, []byte(fmt.Sprintf("event: pre\ndata: {\"i\":%d}\n\n", i)))
+	}
+
+	ch, unsub := h.Follow(9, 0)
+	defer unsub()
+
+	// Allow deliverFollow to fill the buffer and block mid-replay.
+	time.Sleep(20 * time.Millisecond)
+	for i := 0; i < late; i++ {
+		h.Append(9, []byte(fmt.Sprintf("event: late\ndata: {\"i\":%d}\n\n", i)))
+	}
+
+	want := pre + late
+	seen := make([]int64, 0, want)
+
+	// Drain enough for replay to finish and catch-up to begin, but leave the
+	// buffer under pressure so Finish can race mid-catch-up.
+	for i := 0; i < 8; i++ {
+		select {
+		case fr, ok := <-ch:
+			if !ok {
+				t.Fatal("channel closed before Finish")
+			}
+			seen = append(seen, fr.Seq)
+		case <-time.After(time.Second):
+			t.Fatal("timeout during initial drain")
+		}
+	}
+	time.Sleep(10 * time.Millisecond)
+	h.Finish(9)
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case fr, ok := <-ch:
+			if !ok {
+				if len(seen) != want {
+					t.Fatalf("got %d frames after Finish mid-catch-up, want %d (seqs=%v)", len(seen), want, seen)
+				}
+				for i, s := range seen {
+					if s != int64(i+1) {
+						t.Fatalf("seq order broken at %d: %v", i, seen)
+					}
+				}
+				return
+			}
+			seen = append(seen, fr.Seq)
+		case <-deadline:
+			t.Fatalf("timeout draining; got %d frames: %v", len(seen), seen)
+		}
 	}
 }
