@@ -388,20 +388,36 @@ export function useStreamMessage(opts: {
     const lastEventId = (input.lastEventId ?? placeholder.streamSeq)?.trim();
     const chatState = getChatState(dialogueId);
     placeholder.streaming = true;
-    return executeStream({
-      placeholder,
-      requestId,
-      chatState,
-      abortFailure: "resume",
-      seedReducer: Boolean(lastEventId),
-      open: (signal) =>
-        resumeMessageStream({
-          dialogueId,
-          messageId,
-          lastEventId: lastEventId || undefined,
-          signal,
-        }),
-    });
+    chatState.isSending = true;
+    chatState.activeRequestId = requestId;
+    chatState.sendStartedAt = chatState.sendStartedAt ?? Date.now();
+    chatState.activeAgentName =
+      typeof placeholder.tool_name === "string" ? placeholder.tool_name : "";
+    try {
+      return await executeStream({
+        placeholder,
+        requestId,
+        chatState,
+        abortFailure: "resume",
+        seedReducer: Boolean(lastEventId),
+        open: (signal) =>
+          resumeMessageStream({
+            dialogueId,
+            messageId,
+            lastEventId: lastEventId || undefined,
+            signal,
+          }),
+      });
+    } finally {
+      if (chatState.activeRequestId === requestId) {
+        chatState.activeRequestId = "";
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
+        chatState.generationStopped = false;
+      }
+    }
   };
 
   return { streamMessage, resumeStreamMessage };

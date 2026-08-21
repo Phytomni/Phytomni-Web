@@ -1440,6 +1440,61 @@ describe("useStreamMessage", () => {
     );
   });
 
+  it("owns sending state while a resumed stream is active", async () => {
+    let streamController: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    mockedFetch().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "42",
+        },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+      tool_name: "ChatAgent",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    const resultPromise = resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:42",
+    });
+    await vi.waitFor(() => expect(mockedFetch()).toHaveBeenCalledTimes(1));
+
+    expect(chatState.isSending).toBe(true);
+    expect(chatState.activeRequestId).toBe("resume:42");
+
+    const controller = mustGet(streamController, "resume stream controller");
+    controller.enqueue(
+      new TextEncoder().encode(
+        'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-resume"}\n\n'
+      )
+    );
+    controller.close();
+    await resultPromise;
+
+    expect(chatState.isSending).toBe(false);
+    expect(chatState.activeRequestId).toBe("");
+  });
+
   it("does not mark streamTerminalFailure when resume aborts without Stop", async () => {
     const abortErr = new Error("unmount abort");
     abortErr.name = "AbortError";

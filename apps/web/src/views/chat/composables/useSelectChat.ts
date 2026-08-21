@@ -963,7 +963,8 @@ export function useSelectChat(opts: {
       chatState.historyHydration =
         messages.length > 0 ? "ready" : "history-empty";
 
-      for (const message of mergedMessages) {
+      const hydratedMessages = chatState.renderedChat.messages;
+      for (const message of hydratedMessages) {
         if (message.role !== "assistant" || !message.streaming) continue;
         if (!isStreamFamilyTool(message.tool_name)) continue;
         const messageId = String(message.id ?? "").trim();

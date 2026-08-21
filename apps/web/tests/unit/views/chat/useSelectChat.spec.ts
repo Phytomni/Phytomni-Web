@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
-import { nextTick, ref, type Ref } from "vue";
+import { nextTick, reactive, ref, type Ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
 import type {
   Chat,
@@ -1881,6 +1881,30 @@ describe("useSelectChat", () => {
       expect(mockResumeStreamMessage).toHaveBeenCalledWith(
         expect.objectContaining({ messageId: "88" })
       );
+    });
+
+    it("passes the rendered reactive streaming row to resume", async () => {
+      states.set("d1", reactive(buildChatState()) as ChatUIState);
+      mockGetAnswerCheck.mockResolvedValueOnce(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "91",
+            query: "resume reactive row",
+            answer: "",
+            status: "RUNNING",
+            tool_name: "ChatAgent",
+          }),
+        ])
+      );
+
+      await makeComposable().selectChat("d1");
+
+      const assistant = messageAt("d1", 1, "reactive stream resume row");
+      const [resumeCall] = mustGet(
+        mockResumeStreamMessage.mock.calls[0],
+        "stream resume call"
+      );
+      expect(resumeCall.placeholder).toBe(assistant);
     });
 
     it("does not resume a completed ChatAgent answer", async () => {
