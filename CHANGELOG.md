@@ -13,6 +13,11 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Stream and wait-card resume
+
+- Chat, Knowledge, and Brief Gene keep generating after refresh; the reply continues in the same stream.
+- Data and Review jobs survive leaving the tab and show the wait card until they finish.
+
 ### 🐛 Text uploads default to document; unknown suffixes default to dataset
 
 - Known text suffixes (`.txt`, `.text`) create a `document` upload.
