@@ -1648,8 +1648,10 @@ describe("useSelectChat", () => {
           "AnalystAgent",
           "DeepGenomeAgent",
           "InSilicoResearchAgent",
-          "GeneNetworkAgent",
           "DigitalDesignAgent",
+          "GeneNetworkAgent",
+          "DataAgent",
+          "ReviewAgent",
         ].map((tool_name, index) =>
           buildChatHistoryRecord({
             id: String(201 + index),
@@ -1659,7 +1661,7 @@ describe("useSelectChat", () => {
           })
         ),
         buildChatHistoryRecord({
-          id: "206",
+          id: "208",
           answer: "",
           status: "RUNNING",
           tool_name: "ChatAgent",
@@ -1671,19 +1673,19 @@ describe("useSelectChat", () => {
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "207",
+          id: "209",
           answer: "",
           status: "SUCCEEDED",
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "208",
+          id: "210",
           answer: "",
           status: "FAILED",
           tool_name: "GeneNetworkAgent",
         }),
         buildChatHistoryRecord({
-          id: "209",
+          id: "211",
           answer: "",
           status: "CANCELLED",
           tool_name: "DigitalDesignAgent",
@@ -1719,27 +1721,41 @@ describe("useSelectChat", () => {
         expect.objectContaining({
           role: "assistant",
           id: "204",
-          tool_name: "GeneNetworkAgent",
-          status: "RUNNING",
-          content: "",
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          id: "205",
           tool_name: "DigitalDesignAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "208",
+          id: "205",
+          tool_name: "GeneNetworkAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "206",
+          tool_name: "DataAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "207",
+          tool_name: "ReviewAgent",
+          status: "RUNNING",
+          content: "",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          id: "210",
           tool_name: "GeneNetworkAgent",
           status: "FAILED",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "209",
+          id: "211",
           tool_name: "DigitalDesignAgent",
           status: "CANCELLED",
           content: "",
@@ -1750,7 +1766,32 @@ describe("useSelectChat", () => {
       renderedFor("d1", "blank background rows").messages.map((message) =>
         String(message.id ?? "")
       )
-    ).not.toEqual(expect.arrayContaining(["207", "malformed"]));
+    ).not.toEqual(expect.arrayContaining(["209", "malformed"]));
+  });
+
+  it("hydrates a DataAgent RUNNING empty answer as an assistant wait row", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "99",
+          answer: "",
+          status: "RUNNING",
+          tool_name: "DataAgent",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    const assistant = messageAt("d1", 1, "DataAgent wait hydrate");
+    expect(assistant).toMatchObject({
+      role: "assistant",
+      id: "99",
+      tool_name: "DataAgent",
+      status: "RUNNING",
+      content: "",
+    });
+    expect(mockResumeStreamMessage).not.toHaveBeenCalled();
   });
 
   describe("stream resume hydrate", () => {

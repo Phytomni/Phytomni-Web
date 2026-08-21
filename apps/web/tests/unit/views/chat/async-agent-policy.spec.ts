@@ -11,21 +11,21 @@ const EXACT_POLLABLE_TOOLS = [
   "InSilicoResearchAgent",
   "DigitalDesignAgent",
   "GeneNetworkAgent",
+  "DataAgent",
+  "ReviewAgent",
 ] as const;
 
 describe("asynchronous Chat Agent policy", () => {
   it("locks the exact owner-scoped lifecycle set", () => {
     expect(POLLABLE_CHAT_AGENT_TOOLS).toEqual(EXACT_POLLABLE_TOOLS);
-    expect(CANONICAL_AGENT_TOOLS.filter(isPollableChatAgentTool)).toEqual(
-      EXACT_POLLABLE_TOOLS
-    );
+    expect(
+      [...CANONICAL_AGENT_TOOLS.filter(isPollableChatAgentTool)].sort()
+    ).toEqual([...EXACT_POLLABLE_TOOLS].sort());
   });
 
   it.each([
     "ChatAgent",
     "KnowledgeAgent",
-    "DataAgent",
-    "ReviewAgent",
     "BriefGeneAgent",
     "DeepGenomeAgentLegacy",
     "toString",

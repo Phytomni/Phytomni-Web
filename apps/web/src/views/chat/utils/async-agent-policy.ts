@@ -6,6 +6,8 @@ export const POLLABLE_CHAT_AGENT_TOOLS = [
   "InSilicoResearchAgent",
   "DigitalDesignAgent",
   "GeneNetworkAgent",
+  "DataAgent",
+  "ReviewAgent",
 ] as const satisfies readonly CanonicalAgentTool[];
 
 export type PollableChatAgentTool = (typeof POLLABLE_CHAT_AGENT_TOOLS)[number];
