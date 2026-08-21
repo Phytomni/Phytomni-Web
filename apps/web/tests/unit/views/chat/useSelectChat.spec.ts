@@ -68,7 +68,7 @@ describe("useSelectChat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResumeStreamMessage.mockReset();
-    mockResumeStreamMessage.mockResolvedValue({});
+    mockResumeStreamMessage.mockResolvedValue({ completed: true });
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
@@ -1880,6 +1880,61 @@ describe("useSelectChat", () => {
       expect(mockResumeStreamMessage).toHaveBeenCalledTimes(1);
       expect(mockResumeStreamMessage).toHaveBeenCalledWith(
         expect.objectContaining({ messageId: "88" })
+      );
+    });
+
+    it("releases a failed resume slot so reload can retry", async () => {
+      mockGetAnswerCheck.mockResolvedValue(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "89",
+            query: "retry failed resume",
+            answer: "",
+            status: "RUNNING",
+            tool_name: "KnowledgeAgent",
+          }),
+        ])
+      );
+      mockResumeStreamMessage
+        .mockRejectedValueOnce(new Error("resume unavailable"))
+        .mockResolvedValueOnce({ completed: true });
+
+      const { selectChat, reloadChat } = makeComposable();
+      await selectChat("d1");
+      await Promise.resolve();
+      await reloadChat("d1");
+
+      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(2);
+      expect(mockResumeStreamMessage.mock.calls[1]?.[0]).toEqual(
+        expect.objectContaining({ dialogueId: "d1", messageId: "89" })
+      );
+    });
+
+    it("releases an aborted resume slot so reload can retry", async () => {
+      mockGetAnswerCheck.mockResolvedValue(
+        historyResponse([
+          buildChatHistoryRecord({
+            id: "90",
+            query: "retry aborted resume",
+            answer: "",
+            status: "RUNNING",
+            tool_name: "BriefGeneAgent",
+          }),
+        ])
+      );
+      mockResumeStreamMessage
+        // useStreamMessage resolves without `completed` when leave aborts resume.
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ completed: true });
+
+      const { selectChat, reloadChat } = makeComposable();
+      await selectChat("d1");
+      await Promise.resolve();
+      await reloadChat("d1");
+
+      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(2);
+      expect(mockResumeStreamMessage.mock.calls[1]?.[0]).toEqual(
+        expect.objectContaining({ dialogueId: "d1", messageId: "90" })
       );
     });
 

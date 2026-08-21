@@ -84,6 +84,16 @@ function takeStreamResumeSlot(
   return true;
 }
 
+function releaseStreamResumeSlot(
+  chatState: ChatUIState,
+  messageId: string
+): void {
+  const ids = kickedStreamResumes.get(chatState);
+  if (!ids) return;
+  ids.delete(messageId);
+  if (ids.size === 0) kickedStreamResumes.delete(chatState);
+}
+
 export type ChatReloadResult = "applied" | "failed" | "superseded";
 
 export function historyAssistantMetadata(
@@ -971,13 +981,24 @@ export function useSelectChat(opts: {
         if (!messageId || !takeStreamResumeSlot(chatState, messageId)) {
           continue;
         }
-        resumeStreamMessage({
+        void resumeStreamMessage({
           dialogueId: capturedDialogueId,
           messageId,
           placeholder: message,
           lastEventId: message.streamSeq,
           requestId: `resume:${messageId}`,
-        }).catch(() => undefined);
+        }).then(
+          (result) => {
+            // RunError is an attached terminal outcome, not a retryable transport failure.
+            if (
+              result.completed !== true &&
+              message.streamTerminalFailure !== "run-error"
+            ) {
+              releaseStreamResumeSlot(chatState, messageId);
+            }
+          },
+          () => releaseStreamResumeSlot(chatState, messageId)
+        );
       }
 
       // Foreground shell effects only while this dialogue is still selected
