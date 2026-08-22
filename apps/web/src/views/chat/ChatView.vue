@@ -352,8 +352,9 @@ export function removeDeletedChat(options: {
                   </template>
 
                   <!-- Loading message: real TransferProgress XOR simulated SendProgress,
-           suppressed while an AG-UI stream is in flight — the placeholder already
-           shows streaming content, so both would double the "is responding" cue. -->
+           suppressed while an AG-UI stream is in flight — the placeholder shows
+           StreamMessage, or SendProgress for long-wait Knowledge/BriefGene
+           until the first answer body arrives. -->
                   <ChatMessageRow
                     v-if="
                       isSending &&

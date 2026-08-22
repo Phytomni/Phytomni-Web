@@ -1,3 +1,5 @@
+import { streamMarkdownToText, type StreamContentBlock } from "../messageTypes";
+
 // Perceived-progress parameters for the chat wait card.
 // Keyed by the frontend canonical agent name (available at send time).
 // halfLifeMs (stage width τ) = upper bound of the expected range / 4
@@ -28,6 +30,44 @@ export function isAgentWaitPhase(
   phase: string | null | undefined
 ): phase is AgentWaitPhase {
   return typeof phase === "string" && AGENT_WAIT_PHASE_SET.has(phase);
+}
+
+/**
+ * Expert stream agents whose first visible token is slow enough to reuse the
+ * existing SendProgress wait card. ChatAgent stays on StreamMessage only.
+ */
+export const STREAM_WAIT_PROGRESS_AGENTS = [
+  "KnowledgeAgent",
+  "BriefGeneAgent",
+] as const;
+
+const STREAM_WAIT_PROGRESS_AGENT_SET: ReadonlySet<string> = new Set(
+  STREAM_WAIT_PROGRESS_AGENTS
+);
+
+/** User-visible stream body: Markdown text or an interactive agent surface. */
+export function hasStreamAnswerBody(
+  blocks: readonly StreamContentBlock[] | undefined
+): boolean {
+  if (!blocks?.length) return false;
+  if (blocks.some((block) => block.type === "agent-surface")) return true;
+  return streamMarkdownToText(blocks).length > 0;
+}
+
+/** True while a long-wait stream has started but has no answer body yet. */
+export function isStreamWaitProgressMessage(message: {
+  role?: string;
+  streaming?: boolean;
+  tool_name?: string;
+  blocks?: readonly StreamContentBlock[];
+}): boolean {
+  return (
+    message.role === "assistant" &&
+    message.streaming === true &&
+    typeof message.tool_name === "string" &&
+    STREAM_WAIT_PROGRESS_AGENT_SET.has(message.tool_name) &&
+    !hasStreamAnswerBody(message.blocks)
+  );
 }
 
 const HOUR_MS = 3_600_000;

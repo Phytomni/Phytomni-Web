@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type VueWrapper } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -37,6 +37,7 @@ import {
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 import { mountWithApp } from "../helpers/test-app-context";
 import { isCompletedDeepGenomeMessage } from "@/views/chat/utils/artifact-policy";
+import { resetProgressStartedAtForTests } from "@/views/chat/utils/agentProgress";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -1086,6 +1087,83 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
       .findComponent({ name: "ScientificMarkdownTypewriter" })
       .vm.$emit("finish");
     expect(md.emitted("finish")).toBeTruthy();
+  });
+});
+
+describe("ChatMessageContent long-wait stream SendProgress", () => {
+  afterEach(() => {
+    resetProgressStartedAtForTests();
+  });
+
+  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
+    "shows SendProgress for an empty %s stream and hides StreamMessage",
+    (toolName) => {
+      const wrapper = mountContent({
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [],
+        tool_name: toolName,
+      });
+
+      expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
+        false
+      );
+    }
+  );
+
+  it("keeps SendProgress while a Knowledge stream only has activity steps", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      tool_name: "KnowledgeAgent",
+      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(false);
+  });
+
+  it("hides SendProgress once Knowledge markdown arrives", async () => {
+    const message: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      tool_name: "KnowledgeAgent",
+      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
+    };
+    const wrapper = mountContent(message);
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+
+    await wrapper.setProps({
+      message: {
+        ...message,
+        blocks: [
+          { type: "step", authority: "web", label: "retrieve" },
+          block("Leaves senesce in autumn."),
+        ],
+      },
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
+  });
+
+  it("does not put SendProgress on an empty ChatAgent stream", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "ChatAgent",
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
   });
 });
 

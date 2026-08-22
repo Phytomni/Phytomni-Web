@@ -8,7 +8,9 @@ import {
   progressConfigFor,
   progressAt,
   etaRangeFor,
+  hasStreamAnswerBody,
   isAgentWaitPhase,
+  isStreamWaitProgressMessage,
   parseProgressStartedAt,
   progressHintForWait,
   progressStartedAtFor,
@@ -17,6 +19,7 @@ import {
   remainingCotFlushMs,
   revealedStageCount,
   stageKeyAt,
+  STREAM_WAIT_PROGRESS_AGENTS,
 } from "@/views/chat/utils/agentProgress";
 
 const messageAt = (messages: unknown, path: string) =>
@@ -192,5 +195,64 @@ describe("agentProgress", () => {
     expect(progressConfigFor("DigitalDesignAgent")).toBe(
       AGENT_PROGRESS.DigitalDesignAgent
     );
+  });
+
+  it("reuses SendProgress for Knowledge and BriefGene streams before answer body", () => {
+    expect([...STREAM_WAIT_PROGRESS_AGENTS]).toEqual([
+      "KnowledgeAgent",
+      "BriefGeneAgent",
+    ]);
+    expect(
+      isStreamWaitProgressMessage({
+        role: "assistant",
+        streaming: true,
+        tool_name: "KnowledgeAgent",
+        blocks: [],
+      })
+    ).toBe(true);
+    expect(
+      isStreamWaitProgressMessage({
+        role: "assistant",
+        streaming: true,
+        tool_name: "KnowledgeAgent",
+        blocks: [{ type: "step", authority: "web", label: "retrieve" }],
+      })
+    ).toBe(true);
+    expect(
+      isStreamWaitProgressMessage({
+        role: "assistant",
+        streaming: true,
+        tool_name: "ChatAgent",
+        blocks: [],
+      })
+    ).toBe(false);
+    expect(
+      isStreamWaitProgressMessage({
+        role: "assistant",
+        streaming: true,
+        tool_name: "KnowledgeAgent",
+        blocks: [
+          { type: "markdown", authority: "web", text: "Leaves senesce." },
+        ],
+      })
+    ).toBe(false);
+  });
+
+  it("treats markdown text and agent surfaces as stream answer body", () => {
+    expect(hasStreamAnswerBody(undefined)).toBe(false);
+    expect(
+      hasStreamAnswerBody([{ type: "step", authority: "web", label: "plan" }])
+    ).toBe(false);
+    expect(
+      hasStreamAnswerBody([{ type: "markdown", authority: "web", text: "   " }])
+    ).toBe(false);
+    expect(
+      hasStreamAnswerBody([
+        { type: "markdown", authority: "web", text: "Visible answer." },
+      ])
+    ).toBe(true);
+    expect(
+      hasStreamAnswerBody([{ type: "agent-surface", authority: "agent" }])
+    ).toBe(true);
   });
 });

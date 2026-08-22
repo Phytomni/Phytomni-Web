@@ -353,6 +353,7 @@ import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
 import {
   isAgentWaitPhase,
+  isStreamWaitProgressMessage,
   parseProgressStartedAt,
   progressStartedAtFor,
 } from "../utils/agentProgress";
@@ -543,10 +544,14 @@ const showLeadingLifecycleStatus = computed(
         !(props.message.blocks && props.message.blocks.length))) &&
     !isSpecializedImageAgent.value
 );
+const streamWaitProgress = computed(() =>
+  isStreamWaitProgressMessage(props.message)
+);
 const showWaitProgress = computed(
   () =>
     props.message.role === "assistant" &&
-    isAgentWaitPhase(effectiveLifecyclePhase.value)
+    (isAgentWaitPhase(effectiveLifecyclePhase.value) ||
+      streamWaitProgress.value)
 );
 const sawActiveWait = ref(false);
 const cotFlushed = ref(false);
@@ -574,6 +579,7 @@ const isWaitOnlyBodyContent = computed(() => {
   if (hasArtifactPresentation.value) return false;
   if (hasMeaningfulDeepGenomeReport.value) return false;
   if (hasSpecializedReport.value && !isDeepGenomeMessage.value) return false;
+  if (streamWaitProgress.value) return true;
   if (props.message.streaming) return false;
   if (props.message.blocks && props.message.blocks.length) return false;
   if (props.message.doc_list && props.message.doc_list.length > 0) return false;
