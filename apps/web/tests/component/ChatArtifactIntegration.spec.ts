@@ -1453,6 +1453,45 @@ describe("Chat artifact shell integration", () => {
     );
   });
 
+  it.each([
+    ["KnowledgeAgent", citedMessage, true],
+    [
+      "BriefGeneAgent",
+      {
+        ...citedMessage,
+        id: "brief-1",
+        tool_name: "BriefGeneAgent",
+      } satisfies ChatMessage,
+      true,
+    ],
+    [
+      "ReviewAgent",
+      {
+        ...citedMessage,
+        id: "review-1",
+        tool_name: "ReviewAgent",
+      } satisfies ChatMessage,
+      true,
+    ],
+    ["DeepGenomeAgent", deepGenomeMessage, false],
+  ] as const)(
+    "shows Report ready for a completed %s row without Bot report lifecycle",
+    async (_tool, message, usesCitedAnswer) => {
+      const { wrapper } = await mountProductionChat(1440, {
+        messagesA: [{ ...message }],
+      });
+      await wrapper.get("[data-test=artifact-open]").trigger("click");
+      await nextTick();
+
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        enUS.chat.botReport.complete
+      );
+      expect(wrapper.text()).not.toContain(enUS.chat.botReport.waiting);
+      expect(wrapper.findComponent(BotReportState).exists()).toBe(false);
+      expect(wrapper.findComponent(CitedAnswer).exists()).toBe(usesCitedAnswer);
+    }
+  );
+
   it("renders cited Knowledge references outside the report lifecycle", async () => {
     const citedWithReference: ChatMessage = {
       ...knowledgeZeroReferenceMessage,

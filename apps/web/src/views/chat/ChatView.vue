@@ -1437,16 +1437,19 @@ function reportStatusForArtifact(
 }
 
 const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
-  () =>
-    currentArtifactLifecycle.value
-      ? reportStatusForArtifact(currentArtifactLifecycle.value)
-      : null
+  () => {
+    const state = currentArtifactLifecycle.value;
+    if (state) return reportStatusForArtifact(state);
+    const message = currentArtifactMessage.value;
+    return message ? reportStatusForRow(message) : null;
+  }
 );
 
 function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
   const stage = state.reportStage;
   if (state.status === "TIMED_OUT") return t("chat.lifecycle.timed_out");
   if (state.status === "FAILED") return t("chat.botReport.failed");
+  if (state.status === "CANCELLED") return t("chat.lifecycle.cancelled");
   if (state.status === "INPUT_REQUIRED") {
     return t("chat.botReport.inputRequired");
   }
@@ -1457,6 +1460,32 @@ function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
   if (stage === "intermediate") return t("chat.botReport.partial");
   if (state.status === "RUNNING") return t("chat.botReport.waiting");
   return t("chat.botReport.complete");
+}
+
+function reportStatusForRow(message: ChatMessage): ChatArtifactReportStatus {
+  if (message.streaming === true) return "loading";
+  const status = researchRowLifecycleStatus(String(message.status ?? ""));
+  if (status === "FAILED" || status === "TIMED_OUT" || status === "CANCELLED") {
+    return "failed";
+  }
+  if (status === "SUCCEEDED") return "complete";
+  return "loading";
+}
+
+function artifactStatusLabelForMessage(message: ChatMessage): string {
+  if (message.streaming === true) return t("chat.botReport.waiting");
+  const status = researchRowLifecycleStatus(String(message.status ?? ""));
+  return botReportLabelForLifecycle({
+    runId: null,
+    status,
+    reportRevision: 0,
+    visibleReport: "",
+    intermediateReport: "",
+    finalReport: "",
+    degraded: false,
+    failures: [],
+    artifacts: [],
+  });
 }
 
 const currentArtifactBotReportLabels = computed(() => {
@@ -1489,8 +1518,10 @@ const currentArtifactEmptyReportLabel = computed(() => {
 
 const currentArtifactStatusLabel = computed(() => {
   const state = currentArtifactLifecycle.value;
-  return state
-    ? botReportLabelForLifecycle(state)
+  if (state) return botReportLabelForLifecycle(state);
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactStatusLabelForMessage(message)
     : t("chat.botReport.waiting");
 });
 
