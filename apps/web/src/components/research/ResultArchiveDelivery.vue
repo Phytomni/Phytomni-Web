@@ -48,6 +48,17 @@
       </el-tooltip>
     </template>
 
+    <template
+      v-else-if="
+        delivery?.status === 'failed' &&
+        delivery.error_code === 'no_user_deliverables'
+      "
+    >
+      <span data-test="result-archive-none">{{
+        t("chat.resultArchive.none")
+      }}</span>
+    </template>
+
     <template v-else>
       <span>{{ t("chat.resultArchive.unavailable") }}</span>
     </template>

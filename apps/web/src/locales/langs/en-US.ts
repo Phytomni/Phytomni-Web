@@ -789,6 +789,7 @@ export default {
       preparing: "Preparing result archive",
       download: "Download {name}",
       generationFailed: "Result archive generation failed",
+      none: "Completed with no downloadable attachments",
       unavailable: "Result archive is not available",
       retry: "Retry archive generation",
       retrying: "Retrying archive generation",

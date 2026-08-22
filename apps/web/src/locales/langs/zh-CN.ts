@@ -775,6 +775,7 @@ export default {
       preparing: "正在准备结果归档",
       download: "下载 {name}",
       generationFailed: "结果归档生成失败",
+      none: "已完成，无附件可下载",
       unavailable: "结果归档暂不可用",
       retry: "重试生成归档",
       retrying: "正在重试生成归档",

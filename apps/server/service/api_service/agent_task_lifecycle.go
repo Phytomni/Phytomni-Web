@@ -184,6 +184,9 @@ func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjec
 		}
 		return "RUNNING", false
 	case "failed":
+		if projection.Delivery.ErrorCode == "no_user_deliverables" && phase == "SUCCEEDED" {
+			return "SUCCEEDED", true
+		}
 		return "FAILED", true
 	default:
 		return phase, terminal

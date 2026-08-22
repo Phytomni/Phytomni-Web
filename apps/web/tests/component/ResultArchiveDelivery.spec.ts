@@ -123,4 +123,18 @@ describe("ResultArchiveDelivery", () => {
       false
     );
   });
+
+  it("shows succeeded without attachments for an empty result", () => {
+    const wrapper = mount({ delivery: nonretryableFailure });
+
+    expect(wrapper.get('[data-test="result-archive-none"]').text()).toContain(
+      "no downloadable attachments"
+    );
+    expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="result-archive-download"]').exists()).toBe(
+      false
+    );
+  });
 });

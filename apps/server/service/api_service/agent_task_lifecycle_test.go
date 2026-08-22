@@ -267,6 +267,14 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 			name: "delivery failure is terminal but incomplete", scientificStatus: "SUCCEEDED",
 			delivery: testFailedDelivery(1, testProjectionDigestA, true), wantPhase: "FAILED", wantTerminal: true,
 		},
+		{
+			name: "empty archive keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "no_user_deliverables", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
 	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -695,6 +703,25 @@ func TestAgentTaskLifecycleMarshalsOnlyBoundedArtifactSummary(t *testing.T) {
 		}
 		assertLifecycleJSONIsMinimized(t, got, []string{"legacy private report", "/obs/legacy/output", "alice-legacy"})
 	})
+}
+
+func TestProjectionHasFailedRequiredDeliveryOmitsEmptyArchive(t *testing.T) {
+	empty := BotRunProjection{
+		ResultArchiveV1: true,
+		Delivery: &ProjectionDelivery{
+			Required: true, Status: "failed", ErrorCode: "no_user_deliverables",
+		},
+	}
+	if projectionHasFailedRequiredDelivery(empty) {
+		t.Fatal("empty result treated as failed required delivery")
+	}
+	pack := empty
+	pack.Delivery = &ProjectionDelivery{
+		Required: true, Status: "failed", ErrorCode: "archive_publish_failed",
+	}
+	if !projectionHasFailedRequiredDelivery(pack) {
+		t.Fatal("pack failure ignored")
+	}
 }
 
 func assertLifecycleJSONIsMinimized(t *testing.T, dto AgentTaskLifecycleDTO, privateValues []string) {
