@@ -54,6 +54,79 @@ func TestAccumulator_AnswerRunIDFollowUp(t *testing.T) {
 	}
 }
 
+func TestAccumulator_PhytoReferencesShapeCitedAnswer(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	feed := []string{
+		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run_refs"}`,
+		`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"body [1]"}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A","au":"Archetti"}]}}`,
+		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run_refs"}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	got := ShapeAnswer("knowledge", a.AnswerText(), a.CitedFormatted())
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
+	}
+	if parsed.Content != "body [1]" {
+		t.Fatalf("content = %q, want body [1]", parsed.Content)
+	}
+	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
+		t.Fatalf("doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
+	}
+}
+
+func TestAccumulator_PhytoReferencesMalformedSkipped(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	feed := []string{
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":"not-an-object"}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":"oops"}}`,
+		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run_bad"}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	if a.Err() != nil {
+		t.Fatalf("malformed phyto.references must not fail the stream: %v", a.Err())
+	}
+	if a.CitedFormatted() != nil {
+		t.Fatalf("CitedFormatted = %#v, want nil for unusable frames", a.CitedFormatted())
+	}
+}
+
+func TestAccumulator_PhytoReferencesBlankDoesNotClobber(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	feed := []string{
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A"}]}}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[]}}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A"},"x",null]}}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	got := ShapeAnswer("knowledge", "body", a.CitedFormatted())
+	var parsed struct {
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
+	}
+	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" {
+		t.Fatalf("doc_list = %#v, want Doc A kept across blank and mixed rows", parsed.DocList)
+	}
+}
+
 func TestAccumulator_RunError(t *testing.T) {
 	a := &AGUIAccumulator{}
 	f := `event: RunError` + "\n" + `data: {"type":"RunError","code":"bot_failure","message":"boom"}`

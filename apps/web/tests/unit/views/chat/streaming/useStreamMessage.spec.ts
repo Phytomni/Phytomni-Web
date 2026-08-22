@@ -1370,9 +1370,9 @@ describe("useStreamMessage", () => {
   });
 
   /**
-   * Live-session limitation: phyto.references land on placeholder.doc_list only
-   * for the current stream. History reload does not invent persisted reference
-   * rows — a blocks-only message without doc_list remains references-unavailable.
+   * Live-session: phyto.references land on placeholder.doc_list for the current
+   * stream, and stream end persists them on cited answer JSON. History reload
+   * still does not invent rows for a blocks-only message without doc_list.
    */
   it("documents history-refresh placeholders as references-unavailable", () => {
     const historyReload: ChatMessage = {

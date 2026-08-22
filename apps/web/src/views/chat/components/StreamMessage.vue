@@ -38,11 +38,11 @@
       />
     </template>
     <!--
-      Live-session only: phyto.references → message.doc_list is wired for the
-      current stream so [N] can target #m<index>-ref-N rows. The Go accumulator
-      does not persist a dedicated streaming-reference field, so after history
-      reload these safe links are unavailable unless a separate L2 server/API
-      design lands — do not invent persisted rows here.
+      Live-session: phyto.references → message.doc_list is wired for the current
+      stream so [N] can target #m<index>-ref-N rows. Stream end persists that
+      same list into the cited answer JSON {content, doc_list}; history reload
+      hydrates from the stored answer. A blocks-only message without doc_list
+      still has no safe citation targets — do not invent rows here.
     -->
     <CitationReferenceList
       v-if="references && references.length > 0"

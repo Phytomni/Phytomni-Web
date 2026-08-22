@@ -1227,9 +1227,10 @@ describe("ChatMessageContent live streaming citations", () => {
   });
 
   /**
-   * Live-session limitation: the Go accumulator does not persist a dedicated
-   * streaming-reference field. After history reload, blocks-bearing messages
-   * without doc_list have no safe citation targets — do not invent rows here.
+   * Live-session limitation: the Go accumulator persists phyto.references into
+   * cited answer JSON {content, doc_list}. After history reload, blocks-bearing
+   * messages without doc_list still have no safe citation targets — do not
+   * invent rows here.
    */
   it("documents history-refresh fixtures as references-unavailable", () => {
     // MESSAGE_STREAMING / interleaved fixtures mimic a reloaded stream without

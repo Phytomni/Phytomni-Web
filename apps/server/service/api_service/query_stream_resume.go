@@ -236,7 +236,7 @@ func (ps *Service) settleResuppliedQuestionStream(
 			if !ok {
 				return fmt.Errorf("unknown stream tool %q", stored.ToolName)
 			}
-			updates["answer"] = rxBot.ShapeAnswer(slug, answer, nil)
+			updates["answer"] = rxBot.ShapeAnswer(slug, answer, accumulator.CitedFormatted())
 		}
 		result := tx.Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ? AND dialogue_id = ?", row.Id, row.UserName, row.DialogueId).

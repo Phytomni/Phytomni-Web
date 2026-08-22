@@ -1643,6 +1643,62 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 	}
 }
 
+func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-knowledge-refs"}` + "\n",
+			`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"# report [1]"}` + "\n",
+			`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A","au":"Archetti"}]}}` + "\n",
+			`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-knowledge-refs"}` + "\n",
+		}, "\n")))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true,
+		TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := streamCapableService().QueryStream(
+		context.Background(),
+		"eve@example.com",
+		QueryInput{
+			Query:        "Why do leaves fall in autumn?",
+			Tool:         "KnowledgeAgent",
+			Mode:         "expert",
+			ClientTurnID: "stream-knowledge-refs",
+		},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("QueryStream error: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatalf("load persisted row: %v", err)
+	}
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(row.Answer), &parsed); err != nil {
+		t.Fatalf("persisted answer is not cited JSON: %v (%s)", err, row.Answer)
+	}
+	if parsed.Content != "# report [1]" {
+		t.Fatalf("content = %q, want # report [1]", parsed.Content)
+	}
+	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
+		t.Fatalf("persisted doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
+	}
+}
+
 func TestQueryStream_ExpertChatFamilyOmitsInstantConversationEnvelope(t *testing.T) {
 	useConversationV1(t)
 	tests := []struct {

@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -326,6 +327,57 @@ func TestResumeQuestionStreamResuppliesFromBotWhenHubMissing(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != 1 || got[1] != 2 {
 		t.Fatalf("got=%v, want [1 2]", got)
+	}
+}
+
+func TestResumeQuestionStreamPersistsKnowledgeReferences(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	streamer := &fakeRunStream{
+		body: "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-refs\"}\n\n" +
+			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"# report [1]\"}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"Doc A\",\"au\":\"Archetti\"}]}}\n\n" +
+			"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-refs\"}\n\n",
+	}
+	svc := streamCapableService()
+	svc.runStream = streamer
+	row := model.QuestionAgentLog{
+		DialogueId: "dlg-resupply-refs", UserName: "alice@example.com",
+		Query: "q", ToolName: "KnowledgeAgent", Status: "RUNNING", Mode: "expert",
+		BotRunId: "bot-refs",
+	}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.ResumeQuestionStream(
+			context.Background(), "alice@example.com", "dlg-resupply-refs", row.Id, 0,
+			func(StreamFrame) error { return nil },
+		)
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("err=%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("resume hung waiting for Bot resupply")
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Content string                   `json:"content"`
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(row.Answer), &parsed); err != nil {
+		t.Fatalf("persisted answer is not cited JSON: %v (%s)", err, row.Answer)
+	}
+	if parsed.Content != "# report [1]" {
+		t.Fatalf("content = %q, want # report [1]", parsed.Content)
+	}
+	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
+		t.Fatalf("persisted doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
 	}
 }
 

@@ -71,11 +71,12 @@ func ParseAGUIFrame(frame []byte) (AGUIEvent, bool) {
 
 // AGUIAccumulator tees the stream: while frames are forwarded to the browser
 // it accumulates the fields the Web row needs at stream end (answer text, the
-// Bot run id, follow-up questions JSON, and any RunError).
+// Bot run id, follow-up questions JSON, cited phyto.references, and any RunError).
 type AGUIAccumulator struct {
 	answer         strings.Builder
 	runID          string
 	followUp       string
+	references     json.RawMessage
 	expectedTurnID string
 	contextStage   *ContextStageMetadata
 	protocolErr    error
@@ -116,10 +117,44 @@ func (a *AGUIAccumulator) Observe(ev AGUIEvent) {
 			if v, ok := ev.Data["value"]; ok {
 				a.followUp = string(v)
 			}
+		case "phyto.references":
+			a.observeReferences(ev.Data["value"])
 		case "phyto.context_staged":
 			a.observeContextStage(ev.Data["value"])
 		}
 	}
+}
+
+func (a *AGUIAccumulator) observeReferences(raw json.RawMessage) {
+	if len(raw) == 0 {
+		return
+	}
+	var envelope struct {
+		DocList []json.RawMessage `json:"doc_list"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil {
+		return
+	}
+	kept := make([]json.RawMessage, 0, len(envelope.DocList))
+	for _, item := range envelope.DocList {
+		trimmed := bytes.TrimSpace(item)
+		if len(trimmed) == 0 || trimmed[0] != '{' {
+			continue
+		}
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(item, &obj) != nil || obj == nil {
+			continue
+		}
+		kept = append(kept, append(json.RawMessage(nil), item...))
+	}
+	if len(kept) == 0 {
+		return
+	}
+	encoded, err := json.Marshal(kept)
+	if err != nil {
+		return
+	}
+	a.references = encoded
 }
 
 func (a *AGUIAccumulator) observeContextStage(raw json.RawMessage) {
@@ -151,6 +186,15 @@ func (a *AGUIAccumulator) observeContextStage(raw json.RawMessage) {
 func (a *AGUIAccumulator) AnswerText() string   { return a.answer.String() }
 func (a *AGUIAccumulator) RunID() string        { return a.runID }
 func (a *AGUIAccumulator) FollowUpJSON() string { return a.followUp }
+
+// CitedFormatted is the bibliographic envelope ShapeAnswer needs for cited
+// stream agents. Nil means the stream never yielded usable phyto.references.
+func (a *AGUIAccumulator) CitedFormatted() *Formatted {
+	if len(a.references) == 0 {
+		return nil
+	}
+	return &Formatted{References: append(json.RawMessage(nil), a.references...)}
+}
 func (a *AGUIAccumulator) ContextStage() *ContextStageMetadata {
 	if a.contextStage == nil {
 		return nil

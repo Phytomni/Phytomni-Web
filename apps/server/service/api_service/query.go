@@ -4753,7 +4753,7 @@ func (ps *Service) QueryStream(
 		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 	}
 	if !conversationV1 || status == statusSucceeded {
-		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), nil)
+		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), acc.CitedFormatted())
 		out.FollowUpQuestions = acc.FollowUpJSON()
 	}
 	if retainSubmitting {
