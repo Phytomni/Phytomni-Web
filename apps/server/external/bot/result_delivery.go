@@ -36,6 +36,19 @@ var resultArchiveNames = map[string]string{
 	"design":   "design-results.zip",
 }
 
+func inventoryBuildFailureOmitsDigest(code string) bool {
+	switch code {
+	case "artifact_listing_failed",
+		"artifact_manifest_invalid",
+		"no_user_deliverables",
+		"archive_inventory_limit_exceeded",
+		"archive_contract_invalid":
+		return true
+	default:
+		return false
+	}
+}
+
 // RunArchiveDescriptor is the single immutable archive delivered for a run.
 // DownloadRef is a Bot-to-Web resolver reference and must never be forwarded
 // to a browser.
@@ -313,7 +326,7 @@ func validateRunDeliveryState(delivery RunDelivery, agent string) error {
 			return fmt.Errorf("delivery: archive reference does not match inventory_digest")
 		}
 	case "failed":
-		if delivery.InventoryDigest == "" || delivery.Archive != nil || delivery.ErrorCode == "" {
+		if delivery.Archive != nil || delivery.ErrorCode == "" {
 			return fmt.Errorf("delivery: contradictory failed state")
 		}
 		retryable, ok := resultArchiveRetryability[delivery.ErrorCode]
@@ -322,6 +335,9 @@ func validateRunDeliveryState(delivery RunDelivery, agent string) error {
 		}
 		if delivery.Retryable != retryable {
 			return fmt.Errorf("delivery: retryable does not match error_code")
+		}
+		if delivery.InventoryDigest == "" && !inventoryBuildFailureOmitsDigest(delivery.ErrorCode) {
+			return fmt.Errorf("delivery: contradictory failed state")
 		}
 	default:
 		return fmt.Errorf("delivery: unsupported status")

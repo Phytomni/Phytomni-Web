@@ -243,6 +243,39 @@ func TestDecodeRunDeliveryAcceptsStableFailureCodes(t *testing.T) {
 	}
 }
 
+func TestDecodeRunDeliveryAcceptsInventoryBuildFailuresWithoutDigest(t *testing.T) {
+	codes := []string{
+		"artifact_listing_failed",
+		"artifact_manifest_invalid",
+		"no_user_deliverables",
+		"archive_inventory_limit_exceeded",
+		"archive_contract_invalid",
+	}
+	for agent := range resultArchiveNames {
+		for _, code := range codes {
+			t.Run(agent+"/"+code, func(t *testing.T) {
+				payload := map[string]interface{}{
+					"schema_version":   1,
+					"required":         true,
+					"status":           "failed",
+					"revision":         1,
+					"inventory_digest": "",
+					"archive":          nil,
+					"error_code":       code,
+					"retryable":        resultArchiveRetryability[code],
+				}
+				got, err := DecodeRunDelivery(encodeDeliveryPayload(t, payload), agent, []string{"obs://bucket/owner/run"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.Status != "failed" || got.ErrorCode != code || got.InventoryDigest != "" || got.Archive != nil {
+					t.Fatalf("inventory failure = %#v", got)
+				}
+			})
+		}
+	}
+}
+
 func TestDecodeRunDeliveryRejectsInvalidFailureStates(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -255,7 +288,8 @@ func TestDecodeRunDeliveryRejectsInvalidFailureStates(t *testing.T) {
 		{name: "retryable mismatch true", code: "artifact_manifest_invalid", retryable: true, digest: testArchiveDigest},
 		{name: "retryable mismatch false", code: "archive_publish_failed", retryable: false, digest: testArchiveDigest},
 		{name: "missing error", code: nil, retryable: false, digest: testArchiveDigest},
-		{name: "missing digest", code: "archive_contract_invalid", retryable: false, digest: ""},
+		{name: "publish missing digest", code: "archive_publish_failed", retryable: true, digest: ""},
+		{name: "generation missing digest", code: "archive_generation_failed", retryable: true, digest: ""},
 		{name: "failed with archive", code: "archive_publish_failed", retryable: true, digest: testArchiveDigest, archive: readyDeliveryPayload("research")["archive"]},
 	}
 	for _, tc := range cases {
