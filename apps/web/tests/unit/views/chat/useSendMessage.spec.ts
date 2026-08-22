@@ -1319,6 +1319,20 @@ describe("useSendMessage", () => {
     expect(state.pendingTurnFingerprint).toBeNull();
   });
 
+  it("clears the pending local draft when stream reports pre-dispatch 4xx", async () => {
+    currentChatId.value = "new_limit";
+    states.set(
+      "new_limit",
+      makeState({ messageInput: "这个文章讲了什么内容?" })
+    );
+    streamHarness.streamMessage.mockResolvedValueOnce({
+      preDispatch4xx: true,
+    });
+    await makeComposable({ streamTools: ["ChatAgent"] }).sendMessage();
+    expect(mockClearPendingChat).toHaveBeenCalledWith("new_limit");
+    expect(stateFor("new_limit").pendingTurnId).toBeNull();
+  });
+
   it("two existing dialogues start in the same millisecond with unique keys and distinct parent row ids", async () => {
     stateFor("A").messageInput = "from-A";
     stateFor("B").messageInput = "from-B";

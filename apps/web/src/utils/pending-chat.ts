@@ -60,6 +60,17 @@ export function upsertPendingChatListEntry(
   };
 }
 
+/** Drop the local-only sidebar row for one rejected first turn. */
+export function removePendingChatListEntry(
+  entries: Array<{ dialogue_id: string; isPending?: boolean }>,
+  dialogueId: string
+): void {
+  const index = entries.findIndex(
+    (entry) => entry.dialogue_id === dialogueId && entry.isPending === true
+  );
+  if (index !== -1) entries.splice(index, 1);
+}
+
 /**
  * Returns true iff `data` is a valid pending-chat record.
  * Strict predicate: isPending === true AND Array.isArray(messages) AND messages.length > 0.

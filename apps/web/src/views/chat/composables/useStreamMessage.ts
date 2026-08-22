@@ -21,6 +21,7 @@ import {
 import type { ConversationContextNotice } from "@/api/types";
 import { reduceContextStagedNotice } from "../streaming/botLifecycleReducer";
 import { resumeMessageStream } from "@/api/chat";
+import { isRecord } from "@/api/contracts";
 
 export interface StreamInput {
   dialogueId: string;
@@ -104,6 +105,39 @@ function isEventStreamResponse(resp: Response): boolean {
   return (
     contentType.split(";", 1)[0].trim().toLowerCase() === "text/event-stream"
   );
+}
+
+const MAX_GATEWAY_ERROR_MESSAGE = 512;
+
+async function readGatewayErrorMessage(
+  resp: Response
+): Promise<string | undefined> {
+  const contentType = resp.headers.get("Content-Type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) return undefined;
+  let text: string;
+  try {
+    text = await resp.text();
+  } catch {
+    return undefined;
+  }
+  if (text.length === 0 || text.length > 4096) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!isRecord(parsed)) return undefined;
+    const message = parsed.message;
+    if (typeof message !== "string") return undefined;
+    const trimmed = message.trim();
+    if (
+      trimmed === "" ||
+      trimmed.length > MAX_GATEWAY_ERROR_MESSAGE ||
+      trimmed.includes("\0")
+    ) {
+      return undefined;
+    }
+    return trimmed;
+  } catch {
+    return undefined;
+  }
 }
 
 // Keep transport acceptance bounded even when Bot adds a new AG-UI event. The
@@ -205,7 +239,13 @@ export function useStreamMessage(opts: {
         result.preDispatch4xx = isDefinitePreDispatch4xx({
           response: { status: resp.status, headers: resp.headers },
         });
-        throw new Error(`stream HTTP ${resp.status}`);
+        const gatewayMessage = await readGatewayErrorMessage(resp);
+        placeholder.content = gatewayMessage ?? t("chat.streamInterrupted");
+        placeholder.streamTerminalFailure = result.preDispatch4xx
+          ? "run-error"
+          : "interrupted";
+        placeholder.a2uiRuntime = undefined;
+        return result;
       }
       if (!isEventStreamResponse(resp)) {
         throw new Error("stream response content type mismatch");

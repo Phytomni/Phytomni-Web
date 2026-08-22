@@ -400,8 +400,9 @@ describe("Chat adaptive shell integration", () => {
     );
     expect(sendMessageSource).toContain("blockingDialogueId");
     expect(sendMessageSource).not.toContain(
-      "clearPendingChat(sendingDialogueId)"
+      "clearPendingChat(currentChatId.value)"
     );
+    expect(sendMessageSource).toContain("clearPendingChat(sendingDialogueId)");
     expect(sendMessageSource).not.toMatch(/chatList\.value\[0\]\.dialogue_id/);
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
     expect(sendMessageSource).toContain("getStreamChatState");

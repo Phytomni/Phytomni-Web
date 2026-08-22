@@ -430,7 +430,47 @@ describe("useStreamMessage", () => {
 
     expect(result.preDispatch4xx).toBe(true);
     expect(placeholder.content).toBe("chat.streamInterrupted");
-    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+  });
+
+  it("surfaces the gateway 4xx message instead of the interrupted copy", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 400,
+          message: "Uploaded attachments exceed the allowed limit.",
+          pre_dispatch: true,
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Phyto-Dispatch-State": "not-started",
+          },
+        }
+      )
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+    const result = await streamMessage({
+      dialogueId: "d-limit",
+      formData: new FormData(),
+      requestId: "r-limit",
+      placeholder,
+    });
+    expect(result.preDispatch4xx).toBe(true);
+    expect(placeholder.content).toBe(
+      "Uploaded attachments exceed the allowed limit."
+    );
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
   });
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {

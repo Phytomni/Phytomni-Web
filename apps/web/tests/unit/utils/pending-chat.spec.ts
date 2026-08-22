@@ -8,6 +8,7 @@ import {
   clearPendingChat,
   isLocalStorageChat,
   upsertPendingChatListEntry,
+  removePendingChatListEntry,
   type PendingChatRecord,
   type ChatListEntry,
   type SidebarChatListEntry,
@@ -33,6 +34,24 @@ describe("upsertPendingChatListEntry", () => {
         isFavorite: false,
         isPending: true,
       }),
+    ]);
+  });
+
+  it("removes only the matching pending sidebar row", () => {
+    const chats: SidebarChatListEntry[] = [];
+    upsertPendingChatListEntry(chats, "new_keep", "keep");
+    upsertPendingChatListEntry(chats, "new_drop", "drop");
+    chats.push({
+      id: 9,
+      dialogue_id: "server-row",
+      title: "server",
+      date: "2026-07-21T00:00:00.000Z",
+      isFavorite: false,
+    });
+    removePendingChatListEntry(chats, "new_drop");
+    expect(chats.map((entry) => entry.dialogue_id)).toEqual([
+      "new_keep",
+      "server-row",
     ]);
   });
 });

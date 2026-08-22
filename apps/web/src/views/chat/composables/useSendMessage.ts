@@ -23,6 +23,8 @@ import {
   writePendingChat,
   isLocalStorageChat,
   upsertPendingChatListEntry,
+  clearPendingChat,
+  removePendingChatListEntry,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
@@ -580,6 +582,14 @@ export function useSendMessage(opts: {
     chatState.pendingTurnId = clientTurnId;
     chatState.pendingTurnFingerprint = draftFingerprint;
 
+    const discardRejectedLocalDraft = (): void => {
+      clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
+      if (isLocalStorageChat(sendingDialogueId)) {
+        clearPendingChat(sendingDialogueId);
+        removePendingChatListEntry(chatList.value, sendingDialogueId);
+      }
+    };
+
     const settleAcceptedTurn = (
       assistantMessage: ChatMessage,
       acceptedExpertResponse: boolean
@@ -726,7 +736,7 @@ export function useSendMessage(opts: {
           chatState.activeRequestId === requestKey &&
           streamResult.preDispatch4xx
         ) {
-          clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
+          discardRejectedLocalDraft();
         }
         return;
       }
@@ -1158,7 +1168,7 @@ export function useSendMessage(opts: {
       }
 
       if (isDefinitePreDispatch4xx(error)) {
-        clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
+        discardRejectedLocalDraft();
       }
 
       // check whether it's a token-expired error
