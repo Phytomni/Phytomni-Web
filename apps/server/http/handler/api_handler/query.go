@@ -111,7 +111,14 @@ func localizedQueryErrorStatus(ctx *gin.Context, err error) (int, string) {
 }
 
 func writeQueryError(ctx *gin.Context, status int, message string) {
+	if status >= 400 && status < 500 && status != http.StatusUnauthorized && status != http.StatusForbidden {
+		ctx.Header("X-Phyto-Dispatch-State", "not-started")
+		ctx.Header("Cache-Control", "no-store")
+	}
 	body := gin.H{"code": status, "message": message}
+	if status >= 400 && status < 500 && status != http.StatusUnauthorized && status != http.StatusForbidden {
+		body["pre_dispatch"] = true
+	}
 	if requestID := common.A2uiRequestID(ctx); requestID != "" {
 		body["request_id"] = requestID
 	}

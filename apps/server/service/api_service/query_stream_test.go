@@ -647,10 +647,11 @@ func TestQueryStreamBrowserLeaveOnReadyKeepsRunningThenSucceeds(t *testing.T) {
 
 func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 	tests := []struct {
-		name       string
-		handler    http.HandlerFunc
-		closeFirst bool
-		wantStatus string
+		name        string
+		handler     http.HandlerFunc
+		closeFirst  bool
+		wantStatus  string
+		wantDeleted bool
 	}{
 		{
 			name: "definite rejection",
@@ -660,7 +661,7 @@ func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 					http.StatusBadRequest,
 				)
 			},
-			wantStatus: "FAILED",
+			wantDeleted: true,
 		},
 		{
 			name:       "uncertain transport",
@@ -708,10 +709,20 @@ func TestQueryStreamSubmittingPreFirstByteFailureCertainty(t *testing.T) {
 				t.Fatal("expected pre-first-byte failure")
 			}
 			var status string
+			var deleted bool
 			if err := gdb.Raw(
-				`SELECT COALESCE(status,'') FROM question_agent_logs LIMIT 1`,
-			).Scan(&status).Error; err != nil {
+				`SELECT COALESCE(status,''), delete_at IS NOT NULL FROM question_agent_logs LIMIT 1`,
+			).Row().Scan(&status, &deleted); err != nil {
 				t.Fatal(err)
+			}
+			if test.wantDeleted {
+				if !deleted {
+					t.Fatalf("definite rejection must hide the unstarted row")
+				}
+				return
+			}
+			if deleted {
+				t.Fatalf("uncertain transport must keep the row listed")
 			}
 			if status != test.wantStatus {
 				t.Fatalf("status=%q, want %q", status, test.wantStatus)

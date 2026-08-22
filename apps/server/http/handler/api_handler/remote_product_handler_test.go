@@ -458,8 +458,19 @@ func TestAgentProductResolverRejectsBeforeBot(t *testing.T) {
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, body = %s; want 400", w.Code, w.Body.String())
 			}
-			if w.Body.String() != `{"code":400,"message":"invalid agent resolver"}` {
-				t.Fatalf("resolver error body = %s", w.Body.String())
+			if got := w.Header().Get("X-Phyto-Dispatch-State"); got != "not-started" {
+				t.Fatalf("X-Phyto-Dispatch-State = %q, want not-started", got)
+			}
+			var body struct {
+				Code        int    `json:"code"`
+				Message     string `json:"message"`
+				PreDispatch bool   `json:"pre_dispatch"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode resolver body %s: %v", w.Body.String(), err)
+			}
+			if body.Code != http.StatusBadRequest || body.Message != "invalid agent resolver" || !body.PreDispatch {
+				t.Fatalf("resolver error body = %+v", body)
 			}
 			if hits != 0 {
 				t.Fatalf("invalid resolver reached Bot %d time(s)", hits)

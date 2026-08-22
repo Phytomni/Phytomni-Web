@@ -53,6 +53,33 @@ func TestQueryTimeoutMapsTo504WithWebRequestID(t *testing.T) {
 	if body.RequestID != "web-timeout-13" {
 		t.Fatalf("request_id = %q, want Web request id", body.RequestID)
 	}
+	if w.Header().Get("X-Phyto-Dispatch-State") != "" {
+		t.Fatalf("5xx must not carry a pre-dispatch marker; got %q", w.Header().Get("X-Phyto-Dispatch-State"))
+	}
+}
+
+func TestWriteQueryError_PreDispatch4xxMarksNotStarted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	writeQueryError(c, http.StatusBadRequest, "Uploaded attachments exceed the allowed limit.")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Phyto-Dispatch-State"); got != "not-started" {
+		t.Fatalf("X-Phyto-Dispatch-State = %q, want not-started", got)
+	}
+	var body struct {
+		Code        int    `json:"code"`
+		Message     string `json:"message"`
+		PreDispatch bool   `json:"pre_dispatch"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body %s: %v", w.Body.String(), err)
+	}
+	if !body.PreDispatch || body.Message != "Uploaded attachments exceed the allowed limit." {
+		t.Fatalf("unexpected pre-dispatch body: %+v", body)
+	}
 }
 
 func newChatQueryHandlerRequest(t *testing.T, fields map[string]string) (*gin.Context, *httptest.ResponseRecorder) {

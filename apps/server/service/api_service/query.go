@@ -1873,6 +1873,51 @@ func v1SubmissionError(
 	return err
 }
 
+func v1StreamOpenError(
+	ctx context.Context,
+	username string,
+	submission *v1Submission,
+	err error,
+) error {
+	if submission == nil || !isV1DefiniteFailure(err) {
+		return err
+	}
+	if submission.replacement {
+		return v1SubmissionError(ctx, username, submission, err)
+	}
+	if abandonErr := abandonUnstartedV1Submission(context.WithoutCancel(ctx), username, submission.row.Id); abandonErr != nil {
+		return fmt.Errorf("%v; abandon submission: %w", err, abandonErr)
+	}
+	return err
+}
+
+func abandonUnstartedV1Submission(
+	ctx context.Context,
+	username string,
+	rowID int64,
+) error {
+	now := time.Now()
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where(
+			"id = ? AND user_name = ? AND delete_at IS NULL AND status IN ?",
+			rowID,
+			username,
+			[]string{"SUBMITTING", "RUNNING"},
+		).
+		Where(
+			"(bot_run_id IS NULL OR bot_run_id = '' OR bot_run_id LIKE ?)",
+			durablePendingRunIDPrefix+"%",
+		).
+		Update("delete_at", now)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	return failV1Submission(ctx, username, rowID)
+}
+
 func prepareV1ConversationRebuildRetry(
 	ctx context.Context,
 	username string,
@@ -4547,8 +4592,10 @@ func (ps *Service) QueryStream(
 			}
 		}
 		// Pre-first-byte failure (auth / unsupported) surfaces as a normal
-		// error so the handler can still return a non-SSE status.
-		return nil, v1SubmissionError(ctx, username, submission, err)
+		// error so the handler can still return a non-SSE status. Hide the
+		// unstarted first-turn row so a rejected Instant send does not leave
+		// a FAILED ghost beside the local pending draft.
+		return nil, v1StreamOpenError(ctx, username, submission, err)
 	}
 	defer rc.Close()
 
