@@ -43,15 +43,34 @@
       data-horizontal-scroll="actions"
     >
       <slot name="actions" />
-      <button
-        type="button"
-        class="research-artifact-header__control research-artifact-header__action"
-        :aria-label="actionLabel"
-        data-test="artifact-action"
-        @click="emit('action')"
+      <el-dropdown
+        v-if="menuItems.length > 0"
+        trigger="click"
+        class="research-artifact-header__overflow"
+        @command="onOverflowCommand"
       >
-        <span aria-hidden="true">⋯</span>
-      </button>
+        <button
+          type="button"
+          class="research-artifact-header__control research-artifact-header__action"
+          :aria-label="actionLabel"
+          data-test="artifact-action"
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="item in menuItems"
+              :key="item.id"
+              :command="item.id"
+              :divided="item.divided === true"
+              :data-test="`artifact-action-${item.id}`"
+            >
+              {{ item.label }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <button
         type="button"
         class="research-artifact-header__control research-artifact-header__close research-artifact-header__close--desktop-only"
@@ -68,6 +87,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import AgentDisplayName from "@/components/AgentDisplayName.vue";
+import type { ArtifactOverflowItem } from "./artifact-overflow";
 
 const props = withDefaults(
   defineProps<{
@@ -78,17 +98,23 @@ const props = withDefaults(
     backLabel: string;
     closeLabel: string;
     actionLabel: string;
+    menuItems?: readonly ArtifactOverflowItem[];
   }>(),
   {
     formatScientificAgentName: false,
+    menuItems: () => [],
   }
 );
 
 const emit = defineEmits<{
   (event: "back"): void;
   (event: "close"): void;
-  (event: "action"): void;
+  (event: "action", command: string): void;
 }>();
+
+function onOverflowCommand(command: string | number): void {
+  emit("action", String(command));
+}
 
 const metadataItems = computed(() => {
   if (!props.metadata) return [];
@@ -171,6 +197,16 @@ const metadataItems = computed(() => {
   overflow-x: visible;
   overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.research-artifact-header__overflow {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.research-artifact-header__overflow :deep(.el-tooltip__trigger),
+.research-artifact-header__overflow :deep(.el-dropdown) {
+  display: inline-flex;
 }
 
 .research-artifact-header__control,

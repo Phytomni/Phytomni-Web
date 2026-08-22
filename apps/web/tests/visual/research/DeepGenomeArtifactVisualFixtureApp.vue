@@ -17,9 +17,10 @@
       :back-label="t('common.back')"
       :close-label="t('common.close')"
       :action-label="t('common.operation')"
+      :menu-items="menuItems"
       @back="recordAction('back')"
       @close="recordAction('close')"
-      @action="recordAction('action')"
+      @action="recordAction"
     />
     <output class="sr-only" data-testid="deep-genome-visual-action">
       {{ action }}
@@ -30,7 +31,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { DeepGenomeArtifact } from "@/components/research";
+import {
+  DeepGenomeArtifact,
+  copyCloseArtifactMenuItems,
+} from "@/components/research";
 import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
@@ -57,6 +61,7 @@ const tabLabels = computed(() => ({
   activity: t("chat.log.activityLabel"),
   downloads: t("chat.actions.downloadAttachments"),
 }));
+const menuItems = computed(() => copyCloseArtifactMenuItems(t));
 
 function recordAction(nextAction: string): void {
   action.value = nextAction;

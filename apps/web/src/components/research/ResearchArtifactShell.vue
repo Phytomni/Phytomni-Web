@@ -21,9 +21,10 @@
           :back-label="backLabel"
           :close-label="closeLabel"
           :action-label="actionLabel"
+          :menu-items="menuItems"
           @back="emit('back')"
           @close="emit('close')"
-          @action="emit('action')"
+          @action="emit('action', $event)"
         />
       </slot>
 
@@ -89,6 +90,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from "vue";
+import type { ArtifactOverflowItem } from "./artifact-overflow";
 import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 
 type ResearchArtifactTab = "content" | "evidence" | "activity" | "downloads";
@@ -126,6 +128,7 @@ const props = withDefaults(
     backLabel: string;
     closeLabel: string;
     actionLabel: string;
+    menuItems?: readonly ArtifactOverflowItem[];
   }>(),
   {
     tab: "content",
@@ -133,13 +136,14 @@ const props = withDefaults(
     contentLayout: "reading",
     tablistLabel: "Report sections",
     formatScientificAgentName: false,
+    menuItems: () => [],
   }
 );
 
 const emit = defineEmits<{
   (event: "back"): void;
   (event: "close"): void;
-  (event: "action"): void;
+  (event: "action", command: string): void;
   (event: "tab", tab: ResearchArtifactTab): void;
 }>();
 

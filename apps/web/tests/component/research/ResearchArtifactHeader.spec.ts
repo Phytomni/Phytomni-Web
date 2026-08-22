@@ -1,23 +1,84 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { defineComponent, h, inject, provide } from "vue";
 import { describe, expect, it } from "vitest";
 import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactHeader from "@/components/research/ResearchArtifactHeader.vue";
+
+const MENU_ITEMS = [
+  { id: "copy", label: "Copy" },
+  { id: "close", label: "Close panel" },
+] as const;
+
+const dropdownStubs = {
+  ElDropdown: defineComponent({
+    name: "ElDropdown",
+    emits: ["command"],
+    setup(_, { emit, slots }) {
+      provide("emitOverflowCommand", (id: string) => emit("command", id));
+      return () =>
+        h("div", { class: "el-dropdown-stub" }, [
+          slots.default?.(),
+          slots.dropdown?.(),
+        ]);
+    },
+  }),
+  ElDropdownMenu: defineComponent({
+    name: "ElDropdownMenu",
+    setup(_, { slots }) {
+      return () => h("div", slots.default?.());
+    },
+  }),
+  ElDropdownItem: defineComponent({
+    name: "ElDropdownItem",
+    props: {
+      command: { type: [String, Number], required: true },
+    },
+    setup(props, { slots }) {
+      const emitCommand = inject<(id: string) => void>("emitOverflowCommand");
+      return () =>
+        h(
+          "button",
+          {
+            type: "button",
+            "data-test": `artifact-action-${props.command}`,
+            onClick: () => emitCommand?.(String(props.command)),
+          },
+          slots.default?.()
+        );
+    },
+  }),
+};
+
+function mountHeader(
+  props: Record<string, unknown> = {},
+  slots: Record<string, string> = {}
+) {
+  return mountWithApp(ResearchArtifactHeader, {
+    props: {
+      title: "Report",
+      backLabel: "Back",
+      closeLabel: "Close",
+      actionLabel: "Artifact actions",
+      menuItems: [...MENU_ITEMS],
+      ...props,
+    },
+    slots,
+    global: { stubs: dropdownStubs },
+  });
+}
 
 describe("ResearchArtifactHeader", () => {
   const longTitle =
     "A comparative functional and structural assessment of Os01g0177400 across cultivated rice accessions";
 
   it("renders title, metadata, and status with a long-title truncation hook", () => {
-    const wrapper = mountWithApp(ResearchArtifactHeader, {
-      props: {
-        title: longTitle,
-        metadata: ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"],
-        status: "Complete",
-        backLabel: "Back to conversation",
-        closeLabel: "Close artifact",
-        actionLabel: "Artifact actions",
-      },
+    const wrapper = mountHeader({
+      title: longTitle,
+      metadata: ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"],
+      status: "Complete",
+      backLabel: "Back to conversation",
+      closeLabel: "Close artifact",
     });
     const title = wrapper.get(".research-artifact-header__title");
 
@@ -34,17 +95,10 @@ describe("ResearchArtifactHeader", () => {
   });
 
   it("keeps slotted and built-in actions inside the overflow owner", () => {
-    const wrapper = mountWithApp(ResearchArtifactHeader, {
-      props: {
-        title: "Report",
-        backLabel: "Back",
-        closeLabel: "Close",
-        actionLabel: "Actions",
-      },
-      slots: {
-        actions: '<button data-test="download">Export PDF</button>',
-      },
-    });
+    const wrapper = mountHeader(
+      { actionLabel: "Actions" },
+      { actions: '<button data-test="download">Export PDF</button>' }
+    );
     const actions = wrapper.get(".research-artifact-header__actions");
 
     expect(actions.attributes("data-horizontal-scroll")).toBe("actions");
@@ -53,14 +107,20 @@ describe("ResearchArtifactHeader", () => {
     expect(actions.find("[data-test=artifact-close]").exists()).toBe(true);
   });
 
-  it("emits back, action, and close from labelled controls", async () => {
-    const wrapper = mountWithApp(ResearchArtifactHeader, {
-      props: {
-        title: "Report",
-        backLabel: "Back to conversation",
-        closeLabel: "Close artifact",
-        actionLabel: "Artifact actions",
-      },
+  it("hides the overflow control when there are no menu items", () => {
+    const wrapper = mountHeader({ menuItems: [] });
+
+    expect(wrapper.find("[data-test=artifact-action]").exists()).toBe(false);
+    expect(wrapper.find("[data-test=artifact-action-copy]").exists()).toBe(
+      false
+    );
+    expect(wrapper.find("[data-test=artifact-close]").exists()).toBe(true);
+  });
+
+  it("opens labelled menu items without emitting action from the trigger", async () => {
+    const wrapper = mountHeader({
+      backLabel: "Back to conversation",
+      closeLabel: "Close artifact",
     });
 
     await wrapper.get("[data-test=artifact-back]").trigger("click");
@@ -68,14 +128,26 @@ describe("ResearchArtifactHeader", () => {
     await wrapper.get("[data-test=artifact-close]").trigger("click");
 
     expect(wrapper.emitted("back")).toHaveLength(1);
-    expect(wrapper.emitted("action")).toHaveLength(1);
+    expect(wrapper.emitted("action")).toBeUndefined();
     expect(wrapper.emitted("close")).toHaveLength(1);
     expect(
       wrapper.get("[data-test=artifact-back]").attributes("aria-label")
     ).toBe("Back to conversation");
     expect(
+      wrapper.get("[data-test=artifact-action]").attributes("aria-label")
+    ).toBe("Artifact actions");
+    expect(
       wrapper.get("[data-test=artifact-close]").attributes("aria-label")
     ).toBe("Close artifact");
+  });
+
+  it("emits the selected overflow command", async () => {
+    const wrapper = mountHeader();
+
+    await wrapper.get("[data-test=artifact-action-copy]").trigger("click");
+    await wrapper.get("[data-test=artifact-action-close]").trigger("click");
+
+    expect(wrapper.emitted("action")).toEqual([["copy"], ["close"]]);
   });
 
   it("formats only explicitly identified scientific agent metadata", () => {
@@ -85,13 +157,13 @@ describe("ResearchArtifactHeader", () => {
       backLabel: "Back",
       closeLabel: "Close",
       actionLabel: "Actions",
+      menuItems: [...MENU_ITEMS],
     };
-    expect(
-      mountWithApp(ResearchArtifactHeader, { props: base }).find("em").exists()
-    ).toBe(false);
+    expect(mountHeader(base).find("em").exists()).toBe(false);
 
-    const formatted = mountWithApp(ResearchArtifactHeader, {
-      props: { ...base, formatScientificAgentName: true },
+    const formatted = mountHeader({
+      ...base,
+      formatScientificAgentName: true,
     });
     expect(
       formatted.get(".research-artifact-header__metadata-item em").text()
@@ -99,14 +171,7 @@ describe("ResearchArtifactHeader", () => {
   });
 
   it("marks Back as mobile-only and Close as desktop-only", () => {
-    const wrapper = mountWithApp(ResearchArtifactHeader, {
-      props: {
-        title: "Report",
-        backLabel: "Back",
-        closeLabel: "Close",
-        actionLabel: "Actions",
-      },
-    });
+    const wrapper = mountHeader();
 
     expect(wrapper.get("[data-test=artifact-back]").classes()).toContain(
       "research-artifact-header__back--mobile-only"

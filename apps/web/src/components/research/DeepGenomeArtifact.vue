@@ -12,9 +12,10 @@
       :back-label="backLabel"
       :close-label="closeLabel"
       :action-label="actionLabel"
+      :menu-items="menuItems"
       @back="emit('back')"
       @close="emit('close')"
-      @action="emit('action')"
+      @action="emit('action', $event)"
       @tab="handleTab"
     >
       <template #header>
@@ -25,9 +26,10 @@
           :back-label="backLabel"
           :close-label="closeLabel"
           :action-label="actionLabel"
+          :menu-items="menuItems"
           @back="emit('back')"
           @close="emit('close')"
-          @action="emit('action')"
+          @action="emit('action', $event)"
         >
           <template #actions>
             <button
@@ -88,6 +90,7 @@ import type {
   DeepGenomeDownloadFormat,
   DeepGenomeViewerHandle,
 } from "./deep-genome-types";
+import type { ArtifactOverflowItem } from "./artifact-overflow";
 import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
@@ -117,6 +120,7 @@ const props = withDefaults(
     backLabel: string;
     closeLabel: string;
     actionLabel: string;
+    menuItems?: readonly ArtifactOverflowItem[];
   }>(),
   {
     markdown: "",
@@ -125,13 +129,14 @@ const props = withDefaults(
     tab: "content",
     tabLabels: () => ({}),
     tablistLabel: "Report sections",
+    menuItems: () => [],
   }
 );
 
 const emit = defineEmits<{
   (event: "back"): void;
   (event: "close"): void;
-  (event: "action"): void;
+  (event: "action", command: string): void;
   (event: "tab", tab: ArtifactTab): void;
   (event: "resource-activate", activation: ScientificResourceActivation): void;
 }>();

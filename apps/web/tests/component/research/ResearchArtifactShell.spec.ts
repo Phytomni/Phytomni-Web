@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { defineComponent, h, inject, provide } from "vue";
 import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 
@@ -17,6 +18,46 @@ const tabs = {
   evidence: "Evidence",
   activity: "Activity",
   downloads: "Downloads",
+};
+
+const dropdownStubs = {
+  ElDropdown: defineComponent({
+    name: "ElDropdown",
+    emits: ["command"],
+    setup(_, { emit, slots }) {
+      provide("emitOverflowCommand", (id: string) => emit("command", id));
+      return () =>
+        h("div", { class: "el-dropdown-stub" }, [
+          slots.default?.(),
+          slots.dropdown?.(),
+        ]);
+    },
+  }),
+  ElDropdownMenu: defineComponent({
+    name: "ElDropdownMenu",
+    setup(_, { slots }) {
+      return () => h("div", slots.default?.());
+    },
+  }),
+  ElDropdownItem: defineComponent({
+    name: "ElDropdownItem",
+    props: {
+      command: { type: [String, Number], required: true },
+    },
+    setup(props, { slots }) {
+      const emitCommand = inject<(id: string) => void>("emitOverflowCommand");
+      return () =>
+        h(
+          "button",
+          {
+            type: "button",
+            "data-test": `artifact-action-${props.command}`,
+            onClick: () => emitCommand?.(String(props.command)),
+          },
+          slots.default?.()
+        );
+    },
+  }),
 };
 
 function mountShell(
@@ -37,6 +78,10 @@ function mountShell(
       backLabel: "Back to conversation",
       closeLabel: "Close artifact",
       actionLabel: "Artifact actions",
+      menuItems: [
+        { id: "copy", label: "Copy" },
+        { id: "close", label: "Close panel" },
+      ],
     },
     slots: {
       toc: '<nav data-test="toc">Contents</nav>',
@@ -45,6 +90,7 @@ function mountShell(
       activity: '<section data-test="activity">Activity body</section>',
       downloads: '<section data-test="downloads">Downloads body</section>',
     },
+    global: { stubs: dropdownStubs },
   });
 }
 
@@ -117,7 +163,7 @@ describe("ResearchArtifactShell", () => {
     ).toBe("In Silico");
   });
 
-  it("forwards back, close, and action events from its default header", async () => {
+  it("forwards back, close, and selected overflow commands from its default header", async () => {
     const wrapper = mountShell();
 
     await wrapper.get("[data-test=artifact-back]").trigger("click");
@@ -126,7 +172,10 @@ describe("ResearchArtifactShell", () => {
 
     expect(wrapper.emitted("back")).toHaveLength(1);
     expect(wrapper.emitted("close")).toHaveLength(1);
-    expect(wrapper.emitted("action")).toHaveLength(1);
+    expect(wrapper.emitted("action")).toBeUndefined();
+
+    await wrapper.get("[data-test=artifact-action-copy]").trigger("click");
+    expect(wrapper.emitted("action")).toEqual([["copy"]]);
   });
 
   it("links each tab to its labelled panel with roving tabindex", () => {

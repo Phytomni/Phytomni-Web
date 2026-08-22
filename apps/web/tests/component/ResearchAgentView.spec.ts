@@ -206,7 +206,7 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
       stubs: {
         ResearchArtifactShell: {
           template:
-            '<section><button data-test="research-reset" @click="$emit(\'action\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="downloads"/></section>',
+            '<section><button data-test="research-reset" @click="$emit(\'action\', \'reset\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="downloads"/></section>',
         },
         BotReportState: {
           props: ["state"],

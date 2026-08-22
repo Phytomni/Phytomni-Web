@@ -101,6 +101,8 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatIndex from "@/views/chat/ChatView.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
+import { CANONICAL_AGENT_DISPLAY_ORDER } from "@/constants/agents";
+import type { CanonicalAgentTool } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 import type { ChatMessage } from "@/views/chat/types";
@@ -250,6 +252,69 @@ const deepGenomeMessage: ChatMessage = {
   content: "# Full DeepGenome report",
   doc_list: [{ title: "DeepGenome source" }],
 };
+
+const overflowFileArtifact = {
+  id: "overflow-file",
+  name: "result.txt",
+  kind: "file" as const,
+};
+
+function overflowMessageFor(tool: CanonicalAgentTool): ChatMessage {
+  if (tool === "DeepGenomeAgent") {
+    return { ...deepGenomeMessage, id: `overflow-${tool}` };
+  }
+  if (tool === "ChatAgent" || tool === "DataAgent") {
+    return {
+      role: "assistant",
+      id: `overflow-${tool}`,
+      tool_name: tool,
+      status: "SUCCEEDED",
+      content: `${tool} answer body`,
+      artifacts: [overflowFileArtifact],
+    };
+  }
+  if (
+    tool === "AnalystAgent" ||
+    tool === "InSilicoResearchAgent" ||
+    tool === "DigitalDesignAgent" ||
+    tool === "GeneNetworkAgent"
+  ) {
+    return {
+      ...researchMessage,
+      id: `overflow-${tool}`,
+      tool_name: tool,
+      content: `# Full ${tool} report\n\nComplete results.`,
+    };
+  }
+  return {
+    ...citedMessage,
+    id: `overflow-${tool}`,
+    tool_name: tool,
+    content: `# Full ${tool} report\n\nEvidence-backed finding [1].`,
+  };
+}
+
+function copiedNeedleFor(tool: CanonicalAgentTool): string {
+  if (tool === "DeepGenomeAgent") return "Full DeepGenome report";
+  if (tool === "ChatAgent" || tool === "DataAgent") {
+    return `${tool} answer body`;
+  }
+  return `Full ${tool} report`;
+}
+
+async function chooseArtifactOverflow(
+  wrapper: VueWrapper,
+  command: string
+): Promise<void> {
+  await wrapper.get("[data-test=artifact-action]").trigger("click");
+  await nextTick();
+  const item = document.querySelector(
+    `[data-test="artifact-action-${command}"]`
+  );
+  expect(item).toBeTruthy();
+  (item as HTMLElement).click();
+  await nextTick();
+}
 
 const deepGenomePreview = {
   title: "Finished",
@@ -1543,6 +1608,43 @@ describe("Chat artifact shell integration", () => {
     expect(malformed.wrapper.find("a.citation-ref").exists()).toBe(false);
   });
 
+  it.each([...CANONICAL_AGENT_DISPLAY_ORDER])(
+    "copies the %s artifact from the overflow menu",
+    async (tool) => {
+      const message = overflowMessageFor(tool);
+      const { wrapper, state } = await mountProductionChat(1440, {
+        messagesA: [message],
+      });
+
+      if (tool === "ChatAgent" || tool === "DataAgent") {
+        const chat = state.getChatState("A");
+        chat.activeArtifactIdentity = `message:${message.id}`;
+        chat.artifactOpen = true;
+        await nextTick();
+      } else {
+        await wrapper.get("[data-test=artifact-open]").trigger("click");
+      }
+
+      testState.copiedText.mockClear();
+      await chooseArtifactOverflow(wrapper, "copy");
+      expect(testState.copiedText).toHaveBeenCalled();
+      expect(String(testState.copiedText.mock.calls[0]?.[0])).toContain(
+        copiedNeedleFor(tool)
+      );
+    }
+  );
+
+  it("closes the artifact panel from the overflow menu", async () => {
+    const { wrapper, state } = await mountProductionChat(1440, {
+      messagesA: [citedMessage],
+    });
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    expect(state.getChatState("A").artifactOpen).toBe(true);
+
+    await chooseArtifactOverflow(wrapper, "close");
+    expect(state.getChatState("A").artifactOpen).toBe(false);
+  });
+
   it("keeps an ordinary Chat answer on the normal answer path", async () => {
     const ordinaryChat: ChatMessage = {
       role: "assistant",
@@ -1588,6 +1690,8 @@ describe("Chat artifact shell integration", () => {
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
+    expect(CHAT_SOURCE).toContain(':menu-items="artifactMenuItems"');
+    expect(CHAT_SOURCE).toContain('@action="onArtifactMenu"');
     expect(CHAT_SOURCE).toContain('surface="artifact"');
     expect(CHAT_SOURCE).toContain("<CitedAnswer");
     expect(CHAT_SOURCE).toContain('reference-presentation="external"');

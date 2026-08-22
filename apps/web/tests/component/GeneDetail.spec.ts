@@ -65,6 +65,7 @@ const DeepGenomeArtifactStub = defineComponent({
     backLabel: { type: String, default: "" },
     closeLabel: { type: String, default: "" },
     actionLabel: { type: String, default: "" },
+    menuItems: { type: Array, default: () => [] },
   },
   setup(props, { emit }) {
     return () =>
@@ -83,6 +84,9 @@ const DeepGenomeArtifactStub = defineComponent({
           "data-back-label": props.backLabel,
           "data-close-label": props.closeLabel,
           "data-action-label": props.actionLabel,
+          "data-menu-ids": (props.menuItems as { id?: string }[])
+            .map((item) => item.id)
+            .join(","),
         }),
         h(
           "button",
@@ -158,6 +162,7 @@ describe("Gene Detail research artifact", () => {
     expect(artifact.attributes("data-back-label")).toBe("Back");
     expect(artifact.attributes("data-close-label")).toBe("Close");
     expect(artifact.attributes("data-action-label")).toBe("Operation");
+    expect(artifact.attributes("data-menu-ids")).toBe("copy,close");
     expect(artifact.attributes("data-tablist-label")).toBe("Operation");
     expect(artifact.attributes("data-artifact-id")).toBe(
       "gene-detail-artifact"

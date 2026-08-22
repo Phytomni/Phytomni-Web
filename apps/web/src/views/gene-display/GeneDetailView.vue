@@ -38,8 +38,10 @@
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('common.operation')"
+          :menu-items="artifactMenuItems"
           @back="handleArtifactNavigation"
           @close="handleArtifactNavigation"
+          @action="onArtifactMenu"
         />
       </template>
     </PhyAsyncState>
@@ -53,6 +55,7 @@ import { ElMessage } from "element-plus";
 import { getGeneDetails } from "@/api/gene-display";
 import { isRecord } from "@/api/contracts";
 import { DeepGenomeArtifact } from "@/components/research";
+import { copyCloseArtifactMenuItems } from "@/components/research/artifact-overflow";
 import { useI18n } from "vue-i18n";
 import { buildDisplayContent } from "./gene-markdown";
 import { PhyEmptyState } from "@/components/shell";
@@ -88,6 +91,7 @@ const artifactTabLabels = computed(() => ({
   activity: t("chat.log.activityLabel"),
   downloads: t("chat.actions.downloadAttachments"),
 }));
+const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
 
 const asyncState = computed<AsyncState>(() => {
   if (loading.value) return "loading";
@@ -192,6 +196,27 @@ const handleArtifactNavigation = () => {
       () => undefined
     );
   }
+};
+
+const onArtifactMenu = (command: string) => {
+  if (command === "close") {
+    handleArtifactNavigation();
+    return;
+  }
+  if (command !== "copy") return;
+  const text = processedContent.value.trim();
+  if (!text) {
+    ElMessage.error(t("chat.copyFailed"));
+    return;
+  }
+  void navigator.clipboard.writeText(text).then(
+    () => {
+      ElMessage.success(t("chat.copySuccess"));
+    },
+    () => {
+      ElMessage.error(t("chat.copyFailed"));
+    }
+  );
 };
 
 watch(

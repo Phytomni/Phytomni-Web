@@ -517,8 +517,10 @@ export function removeDeletedChat(options: {
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('common.operation')"
+          :menu-items="artifactMenuItems"
           @back="closeArtifact"
           @close="closeArtifact"
+          @action="onArtifactMenu"
           @tab="selectArtifactTab"
           @resource-activate="activateArtifactResource"
         />
@@ -538,8 +540,10 @@ export function removeDeletedChat(options: {
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('common.operation')"
+          :menu-items="artifactMenuItems"
           @back="closeArtifact"
           @close="closeArtifact"
+          @action="onArtifactMenu"
           @tab="selectArtifactPanelTab"
         >
           <template #content>
@@ -685,6 +689,7 @@ import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
   ResearchEvidencePanel,
+  copyCloseArtifactMenuItems,
 } from "@/components/research";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -1248,6 +1253,7 @@ const artifactTabLabels = computed(() => ({
   activity: t("chat.log.activityLabel"),
   downloads: t("chat.actions.downloadAttachments"),
 }));
+const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
 
 async function activateEvidence(
   activation: ScientificCitationActivation
@@ -2336,6 +2342,20 @@ const handleMessageCopy = (message: ChatMessage, index: number) => {
     return;
   }
   copyMessageWithDocs(message, index);
+};
+
+const onArtifactMenu = (command: string) => {
+  if (command === "close") {
+    closeArtifact();
+    return;
+  }
+  if (command !== "copy") return;
+  const message = currentArtifactMessage.value;
+  if (!message) return;
+  const index = (currentChat.value?.messages ?? []).findIndex(
+    (entry) => entry.id === message.id && entry.role === message.role
+  );
+  handleMessageCopy(message, index >= 0 ? index : 0);
 };
 
 const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {

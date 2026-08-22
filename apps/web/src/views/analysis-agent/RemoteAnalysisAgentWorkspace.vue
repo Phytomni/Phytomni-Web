@@ -209,10 +209,11 @@
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t(`${localePrefix}.reset`)"
+          :menu-items="resetArtifactMenuItems(t(`${localePrefix}.reset`))"
           :tablist-label="t(`${localePrefix}.sectionsLabel`)"
           @back="goBack"
           @close="resetRun"
-          @action="resetRun"
+          @action="onArtifactMenu"
         >
           <template #content>
             <BotReportState
@@ -319,6 +320,7 @@ import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
@@ -852,6 +854,10 @@ function resetRun(): void {
   fileError.value = "";
   formError.value = "";
   downloadError.value = "";
+}
+
+function onArtifactMenu(command: string): void {
+  if (command === "reset") resetRun();
 }
 
 function goBack(): void {

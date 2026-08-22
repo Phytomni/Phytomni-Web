@@ -99,7 +99,7 @@ vi.mock("@/views/chat/composables/useChatStates", () => ({
 vi.mock("@/components/research/ResearchArtifactShell.vue", () => ({
   default: {
     template:
-      '<section><button data-test="network-report-reset" @click="$emit(\'action\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="activity"/><slot name="downloads"/></section>',
+      '<section><button data-test="network-report-reset" @click="$emit(\'action\', \'reset\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="activity"/><slot name="downloads"/></section>',
   },
 }));
 vi.mock("@/components/research/BotReportState.vue", () => ({
@@ -125,7 +125,7 @@ function mountView(options: { state?: BotLifecycleState } = {}) {
       stubs: {
         ResearchArtifactShell: {
           template:
-            '<section><button data-test="network-report-reset" @click="$emit(\'action\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="activity"/><slot name="downloads"/></section>',
+            '<section><button data-test="network-report-reset" @click="$emit(\'action\', \'reset\')">reset</button><slot name="content"/><slot name="evidence"/><slot name="activity"/><slot name="downloads"/></section>',
         },
         BotReportState: {
           props: ["state"],

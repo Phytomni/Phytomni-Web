@@ -251,10 +251,11 @@
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('agents.digitalDesign.reset')"
+          :menu-items="resetArtifactMenuItems(t('agents.digitalDesign.reset'))"
           :tablist-label="t('agents.digitalDesign.sectionsLabel')"
           @back="goBack"
           @close="resetDesign"
-          @action="resetDesign"
+          @action="onArtifactMenu"
         >
           <template #content>
             <BotReportState
@@ -334,6 +335,7 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import AttachmentChipStrip from "@/views/chat/components/AttachmentChipStrip.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
@@ -730,6 +732,10 @@ function resetDesign(): void {
   fileError.value = "";
   formError.value = "";
   downloadError.value = "";
+}
+
+function onArtifactMenu(command: string): void {
+  if (command === "reset") resetDesign();
 }
 
 function goBack(): void {

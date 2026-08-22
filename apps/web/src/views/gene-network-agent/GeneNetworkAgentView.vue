@@ -224,10 +224,11 @@
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('agents.geneNetwork.reset')"
+          :menu-items="resetArtifactMenuItems(t('agents.geneNetwork.reset'))"
           :tablist-label="t('agents.geneNetwork.sectionsLabel')"
           @back="goBack"
           @close="resetNetwork"
-          @action="resetNetwork"
+          @action="onArtifactMenu"
         >
           <template #content>
             <BotReportState
@@ -314,6 +315,7 @@ import { getChatdownloadURL } from "@/api/chat";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
@@ -545,6 +547,10 @@ function resetNetwork(): void {
   validationMessages.value = [];
   formError.value = "";
   downloadError.value = "";
+}
+
+function onArtifactMenu(command: string): void {
+  if (command === "reset") resetNetwork();
 }
 
 function goBack(): void {

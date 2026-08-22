@@ -30,8 +30,10 @@
         :back-label="t('common.back')"
         :close-label="t('common.close')"
         :action-label="t('common.operation')"
+        :menu-items="artifactMenuItems"
         @back="goBack"
         @close="goBack"
+        @action="onArtifactMenu"
       />
     </template>
 
@@ -43,8 +45,12 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { AgentDemoShell } from "@/components/demo";
-import { DeepGenomeArtifact } from "@/components/research";
+import {
+  DeepGenomeArtifact,
+  copyCloseArtifactMenuItems,
+} from "@/components/research";
 import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
@@ -55,6 +61,29 @@ const router = useRouter();
 
 const goBack = () => {
   router.back();
+};
+
+const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
+
+const onArtifactMenu = (command: string) => {
+  if (command === "close") {
+    goBack();
+    return;
+  }
+  if (command !== "copy") return;
+  const text = DEEP_GENOME_CASE_MARKDOWN.trim();
+  if (!text) {
+    ElMessage.error(t("chat.copyFailed"));
+    return;
+  }
+  void navigator.clipboard.writeText(text).then(
+    () => {
+      ElMessage.success(t("chat.copySuccess"));
+    },
+    () => {
+      ElMessage.error(t("chat.copyFailed"));
+    }
+  );
 };
 
 const artifactTabLabels = computed(() => ({
