@@ -65,7 +65,7 @@ func (ps *Service) ResumeQuestionStream(
 		}
 		return ErrStreamRunMissing
 	}
-	if err := ps.resupplyQuestionStreamFromBot(ctx, row); err != nil {
+	if err := ps.resupplyQuestionStreamFromBot(ctx, row, nil); err != nil {
 		return err
 	}
 	return followResumeStream(ctx, hub, messageID, afterSeq, forward)
@@ -82,6 +82,7 @@ func botRunIDForResupply(botRunID string) string {
 func (ps *Service) resupplyQuestionStreamFromBot(
 	requestCtx context.Context,
 	row model.QuestionAgentLog,
+	stream runStreamReader,
 ) error {
 	runID := botRunIDForResupply(row.BotRunId)
 	if runID == "" {
@@ -97,13 +98,16 @@ func (ps *Service) resupplyQuestionStreamFromBot(
 		}
 	}
 
+	if stream == nil {
+		stream = ps.runStreamReader()
+	}
 	ps.hub().Begin(row.Id)
 	close(state.ready)
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(requestCtx), streamResupplyTimeout)
 	go func() {
 		defer cancel()
 		defer ps.clearStreamResupply(row.Id, state)
-		ps.copyBotRunStreamToHub(runCtx, row, runID)
+		ps.copyBotRunStreamToHub(runCtx, row, runID, stream)
 	}()
 	return nil
 }
@@ -134,14 +138,18 @@ func (ps *Service) copyBotRunStreamToHub(
 	ctx context.Context,
 	row model.QuestionAgentLog,
 	runID string,
+	stream runStreamReader,
 ) {
+	if stream == nil {
+		stream = ps.runStreamReader()
+	}
 	hub := ps.hub()
 	accumulator := rxBot.NewAGUIAccumulator("")
 	var cursor int64
 	terminal := false
 
 	for attempt := 0; attempt < streamResupplyAttempts && !terminal; attempt++ {
-		reader, meta, err := ps.runStreamReader().RunStreamWithMeta(ctx, runID, cursor)
+		reader, meta, err := stream.RunStreamWithMeta(ctx, runID, cursor)
 		logBotResponseMeta(ctx, meta)
 		if err == nil && reader != nil {
 			cursor, terminal = copyBotRunStreamAttempt(hub, row.Id, cursor, reader, accumulator)

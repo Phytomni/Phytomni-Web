@@ -2361,6 +2361,7 @@ type durableQueryTurn struct {
 	permissions           AgentPermissionResolution
 	executionClient       *rxBot.Client
 	contextClient         *rxBot.Client
+	streamReader          runStreamReader // captured before Query returns; detached resupply must not reread BotConfig
 	useExpertContextRoute bool
 	interop               interopDecision
 	persistedID           int64
@@ -2654,6 +2655,7 @@ func (ps *Service) Query(ctx context.Context, username string, in QueryInput) (*
 		permissions:           permissions,
 		executionClient:       executionClient,
 		contextClient:         contextClient,
+		streamReader:          ps.runStreamReader(),
 		useExpertContextRoute: useExpertContextRoute,
 		interop:               interop,
 	}
@@ -3274,7 +3276,7 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 	}
 	if autonomousExpertQuery(in) && out.Status == "RUNNING" {
 		if _, streamCapable := rxBot.StreamModelFor(slug); streamCapable {
-			if err := ps.resupplyQuestionStreamFromBot(ctx, row); err != nil {
+			if err := ps.resupplyQuestionStreamFromBot(ctx, row, turn.streamReader); err != nil {
 				return nil, err
 			}
 		}
