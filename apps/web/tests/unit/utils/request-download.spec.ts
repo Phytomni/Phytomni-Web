@@ -129,6 +129,22 @@ describe("download", () => {
     expect(mocks.loadingService).not.toHaveBeenCalled();
   });
 
+  it("saves AxiosResponse.data when the interceptor keeps the envelope", async () => {
+    const blob = new Blob(["zip-bytes"]);
+    mocks.post.mockResolvedValue({
+      data: blob,
+      status: 200,
+      headers: { "content-type": "application/zip" },
+    });
+
+    await download("/api/v1/export", { id: 1 }, "network-results.zip");
+
+    expect(mocks.saveAs).toHaveBeenCalledWith(
+      expect.any(Blob),
+      "network-results.zip"
+    );
+  });
+
   it("drops hostile non-string error fields before showing a download error", async () => {
     const secret = "download-error-secret";
     mocks.blobValidate.mockResolvedValue(false);

@@ -168,6 +168,32 @@ describe("useResultArchiveDelivery", () => {
     expect(mocks.saveAs).toHaveBeenCalledWith(blob, archive.name);
   });
 
+  it("still saves when the transport yields a bare zip Blob", async () => {
+    const states = useChatStates();
+    const delivery = useResultArchiveDelivery({
+      getChatState: states.getChatState,
+    });
+    const archive = {
+      id: "archive-zip",
+      name: "network-results.zip",
+      kind: "archive" as const,
+    };
+    const blob = new Blob(["PK"]);
+    mocks.getConversationArtifactDownloadURL.mockResolvedValueOnce({
+      code: 200,
+      data: "/api/v1/downloads/relay-file?token=short-lived",
+    });
+    mocks.getConversationArtifactFile.mockResolvedValueOnce(blob);
+
+    await delivery.downloadResultArchive({
+      dialogueId: "dialogue-a",
+      messageId: "42",
+      artifact: archive,
+    });
+
+    expect(mocks.saveAs).toHaveBeenCalledWith(blob, archive.name);
+  });
+
   it("fails closed before any request for nonpositive ids or non-archive links", async () => {
     const states = useChatStates();
     const delivery = useResultArchiveDelivery({

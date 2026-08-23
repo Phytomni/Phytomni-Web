@@ -247,15 +247,22 @@ responseInterceptors.use(
       errorCodeLookup[code] ||
       optionalString(responseData ?? {}, "message") ||
       errorCodeLookup.default;
-    // return binary data directly
-    if (res.headers?.["content-type"] === "application/octet-stream") {
-      return res;
-    }
+    // Keep the AxiosResponse for binary downloads. Relayed zips/PDFs/images
+    // are application/zip (etc.), not octet-stream; unwrapping the Blob here
+    // made saveAs(response.data) receive undefined.
     const responseType = isRecord(res.request)
       ? res.request.responseType
       : undefined;
-    if (responseType === "blob" || responseType === "arraybuffer") {
-      return res.data;
+    const contentType =
+      typeof res.headers?.["content-type"] === "string"
+        ? res.headers["content-type"].split(";", 1)[0].trim().toLowerCase()
+        : "";
+    if (
+      responseType === "blob" ||
+      responseType === "arraybuffer" ||
+      contentType === "application/octet-stream"
+    ) {
+      return res;
     }
 
     const detailCode =
@@ -397,6 +404,23 @@ responseInterceptors.use(
 
 let downloadRequestSeq = 0;
 
+/** Normalize interceptor/adapter output to a Blob-bearing Axios response. */
+export function asBinaryResponse(value: unknown): AxiosResponse<Blob> {
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return {
+      data: value,
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: {} as InternalAxiosRequestConfig,
+    };
+  }
+  if (isRecord(value) && value.data instanceof Blob) {
+    return value as unknown as AxiosResponse<Blob>;
+  }
+  throw new TypeError("Invalid binary download body");
+}
+
 // generic download method
 export function download(
   url: string,
@@ -408,9 +432,8 @@ export function download(
   const tracker = createTransferTracker({ phase: "download", requestId });
   registerAbortController(requestId, controller);
 
-  // The response interceptor unwraps `res.data` for `responseType: 'blob'`;
-  // the generic request boundary records that runtime contract explicitly.
-  return request<Blob>({
+  // Binary interceptor returns the AxiosResponse; adapters may still yield a Blob.
+  return request<unknown>({
     url,
     method: "post",
     data: params,
@@ -422,7 +445,8 @@ export function download(
       upsertDownloadTransfer(tracker.update(event));
     },
   })
-    .then(async (data) => {
+    .then(async (payload) => {
+      const data = asBinaryResponse(payload).data;
       const isLogin = await blobValidate(data);
       if (isLogin) {
         const blob = new Blob([data]);

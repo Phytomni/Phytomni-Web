@@ -15,6 +15,7 @@ import {
   removeDownloadTransfer,
   upsertDownloadTransfer,
 } from "@/utils/download-transfers";
+import { asBinaryResponse } from "@/utils/request";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 import type { ArtifactTab, ChatMessage, ChatUIState, ChatView } from "../types";
@@ -177,12 +178,14 @@ export function useArtifactPanel(opts: {
       if (signed.code !== 200 || !signed.data) {
         throw new Error("Artifact signing failed");
       }
-      const response = await getConversationArtifactFile(signed.data, {
-        requestId,
-        onDownloadProgress: (event) => {
-          upsertDownloadTransfer(tracker.update(event));
-        },
-      });
+      const response = asBinaryResponse(
+        await getConversationArtifactFile(signed.data, {
+          requestId,
+          onDownloadProgress: (event) => {
+            upsertDownloadTransfer(tracker.update(event));
+          },
+        })
+      );
       saveAs(response.data, selected.name);
     } catch (error) {
       if (isCanceledRequest(error)) {

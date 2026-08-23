@@ -43,7 +43,7 @@ vi.mock("@/plugins/cache", () => ({
   },
 }));
 
-import service from "@/utils/request";
+import service, { asBinaryResponse } from "@/utils/request";
 import { AxiosError } from "axios";
 import type { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 
@@ -57,6 +57,16 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     requestMocks.message.mockReset();
     requestMocks.sessionGetJSON.mockReset().mockReturnValue(null);
     requestMocks.sessionSetJSON.mockReset();
+  });
+
+  it("re-wraps a bare Blob and rejects non-binary bodies", () => {
+    const blob = new Blob(["zip"]);
+    expect(asBinaryResponse(blob).data).toBe(blob);
+    const envelope = { data: blob, status: 200 };
+    expect(asBinaryResponse(envelope)).toBe(envelope);
+    expect(() => asBinaryResponse({ data: "not-a-blob" })).toThrow(
+      "Invalid binary download body"
+    );
   });
 
   it("attaches Authorization, satoken, and platform on the way out", async () => {
@@ -83,23 +93,39 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     expect(data).toEqual({ code: 200, data: { ok: true } });
   });
 
-  it("returns a Blob for blob responses without changing JSON unwrapping", async () => {
-    const blob = new Blob(["binary"]);
-    service.defaults.adapter = async (config) => ({
-      data: blob,
-      status: 200,
-      statusText: "OK",
-      headers: { "content-type": "application/json" },
-      config: config as InternalAxiosRequestConfig,
-      request: { responseType: "blob" },
-    });
+  it.each([
+    "application/zip",
+    "application/pdf",
+    "image/png",
+    "text/csv",
+    "text/markdown",
+    "application/octet-stream",
+    "application/json",
+  ])(
+    "preserves the full AxiosResponse for blob downloads (%s)",
+    async (contentType) => {
+      const blob = new Blob(["binary"]);
+      service.defaults.adapter = async (config) => ({
+        data: blob,
+        status: 200,
+        statusText: "OK",
+        headers: { "content-type": contentType },
+        config: config as InternalAxiosRequestConfig,
+        request: { responseType: "blob" },
+      });
 
-    await expect(
-      service.post("/api/v1/download", {}, { responseType: "blob" })
-    ).resolves.toBe(blob);
-  });
+      const response = await service.post(
+        "/api/v1/download",
+        {},
+        { responseType: "blob" }
+      );
 
-  it("preserves the full response for octet-stream responses", async () => {
+      expect(response).toMatchObject({ data: blob, status: 200 });
+      expect(response).toHaveProperty("headers.content-type", contentType);
+    }
+  );
+
+  it("preserves the full response for octet-stream even without responseType", async () => {
     const blob = new Blob(["binary"]);
     service.defaults.adapter = async (config) => {
       const response: AxiosResponse = {
@@ -108,16 +134,12 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
         statusText: "OK",
         headers: { "content-type": "application/octet-stream" },
         config: config as InternalAxiosRequestConfig,
-        request: { responseType: "blob" },
+        request: {},
       };
       return response;
     };
 
-    const response = await service.post(
-      "/api/v1/download",
-      {},
-      { responseType: "blob" }
-    );
+    const response = await service.post("/api/v1/download", {});
 
     expect(response).toMatchObject({ data: blob, status: 200 });
     expect(response).toHaveProperty(

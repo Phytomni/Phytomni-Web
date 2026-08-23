@@ -15,6 +15,7 @@ import {
   removeDownloadTransfer,
   upsertDownloadTransfer,
 } from "@/utils/download-transfers";
+import { asBinaryResponse } from "@/utils/request";
 import { createTransferTracker } from "@/utils/transfer-progress";
 import type { ChatUIState } from "../types";
 
@@ -96,12 +97,14 @@ export function useResultArchiveDelivery(options: {
       if (signed.code !== 200 || !signed.data) {
         throw new Error("Archive signing failed");
       }
-      const response = await getConversationArtifactFile(signed.data, {
-        requestId,
-        onDownloadProgress: (event) => {
-          upsertDownloadTransfer(tracker.update(event));
-        },
-      });
+      const response = asBinaryResponse(
+        await getConversationArtifactFile(signed.data, {
+          requestId,
+          onDownloadProgress: (event) => {
+            upsertDownloadTransfer(tracker.update(event));
+          },
+        })
+      );
       saveAs(response.data, artifact.name);
     } catch (error) {
       if (isCanceledRequest(error)) {
