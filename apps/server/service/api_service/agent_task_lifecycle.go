@@ -82,7 +82,7 @@ func (ps *Service) AgentTaskLifecycle(ctx context.Context, rowID int64, username
 	storedProjection := lifecycleStoredProjection(row)
 	pendingDelivery := projectionHasPendingRequiredDelivery(storedProjection) &&
 		!isProjectionFailureStatus(lifecycleScientificStatus(row, storedProjection))
-	if (!pendingDelivery && (rowIsTerminal(row.Status) || rowIsTerminal(storedProjection.Status))) || strings.TrimSpace(row.BotRunId) == "" {
+	if (!pendingDelivery && rowIsTerminal(row.Status)) || strings.TrimSpace(row.BotRunId) == "" {
 		return lifecycleFromStored(row, lifecycleReconciliationCached, nil), nil
 	}
 

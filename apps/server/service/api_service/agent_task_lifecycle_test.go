@@ -149,6 +149,34 @@ func lifecycleDeliveryRunRecord(t *testing.T, runID, scientificStatus, deliveryS
 	}
 }
 
+func lifecycleFailedManifestRunRecord(t *testing.T, runID string) *rxBot.RunRecord {
+	t.Helper()
+	delivery := map[string]interface{}{
+		"schema_version":   1,
+		"required":         true,
+		"status":           "failed",
+		"revision":         int64(1),
+		"inventory_digest": "",
+		"archive":          nil,
+		"error_code":       "artifact_manifest_invalid",
+		"retryable":        false,
+	}
+	result, err := json.Marshal(map[string]interface{}{
+		"report_revision": 3,
+		"final_report":    "# Scientific result",
+		"formatted":       map[string]interface{}{"answer": "# Scientific result"},
+		"execution": map[string]interface{}{
+			"output_dirs": []string{"obs://bucket/owner/run"},
+			"tracking":    map[string]interface{}{"degraded": true},
+			"delivery":    delivery,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal lifecycle run: %v", err)
+	}
+	return &rxBot.RunRecord{RunID: runID, Agent: "design", Status: "succeeded", Result: result}
+}
+
 // Mutation coverage: mapping a legacy zero-child running umbrella run to a
 // terminal or preparing phase would hide its truthful generic running state.
 func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
@@ -209,6 +237,39 @@ func TestAgentTaskLifecycleReadsBackProjectionWinner(t *testing.T) {
 	}
 	if got.Phase != "SUCCEEDED" || !got.Terminal || got.ChildTaskCount != 5 || !got.ChildWorkAccepted || got.ReportRevision != 7 {
 		t.Fatalf("lifecycle=%+v, want persisted winner", got)
+	}
+}
+
+func TestAgentTaskLifecycleSyncsRunningRowAfterInvalidManifest(t *testing.T) {
+	gdb := setupAgentTaskLifecycleDB(t)
+	stored, err := marshalPersistedProjection(BotRunProjection{
+		RunID: "run-manifest-invalid", Agent: "design", Status: "SUCCEEDED", ReportRevision: 3,
+		ResultArchiveV1: true,
+		Delivery: &ProjectionDelivery{
+			SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+			ErrorCode: "artifact_manifest_invalid", Retryable: false,
+		},
+		TrackingDegraded: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal stored projection: %v", err)
+	}
+	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
+		id: 40, username: "alice", runID: "run-manifest-invalid", status: "RUNNING",
+		projection: stored, reportRevision: 3,
+	})
+	fake := &lifecycleFakeRunReader{record: lifecycleFailedManifestRunRecord(t, "run-manifest-invalid")}
+
+	got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 40, "alice")
+	if err != nil {
+		t.Fatalf("AgentTaskLifecycle: %v", err)
+	}
+	if got.Phase != "SUCCEEDED" || !got.Terminal {
+		t.Fatalf("lifecycle=%+v, want SUCCEEDED terminal", got)
+	}
+	status, _ := readStatusAnswer(t, gdb, 40)
+	if status != "SUCCEEDED" {
+		t.Fatalf("business row status=%q, want SUCCEEDED", status)
 	}
 }
 
@@ -404,8 +465,9 @@ func assertDeliveryDTOIsBounded(t *testing.T, dto *AgentTaskDeliveryDTO) {
 	}
 }
 
-// Mutation coverage: checking only row.Status polls Bot for a row whose durable
-// projection is already terminal. The projection winner must be cached instead.
+// Mutation coverage: skipping Bot apply because the stored projection is
+// already terminal leaves question_agent_logs RUNNING. Reconcile until the
+// MySQL row itself is terminal so the ledger matches the scientific snapshot.
 func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing.T) {
 	tests := []struct {
 		status    string
@@ -429,14 +491,21 @@ func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing
 			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
 				id: 9, username: "alice", runID: "run-terminal-projection", status: "RUNNING", projection: stored, reportRevision: 4,
 			})
-			fake := &lifecycleFakeRunReader{err: errors.New("terminal projection must not poll")}
+			fake := &lifecycleFakeRunReader{record: lifecycleRunRecord("run-terminal-projection", strings.ToLower(tt.status))}
 
 			got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 9, "alice")
 			if err != nil {
 				t.Fatalf("AgentTaskLifecycle: %v", err)
 			}
-			if got.Phase != tt.wantPhase || !got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
-				t.Fatalf("lifecycle=%+v calls=%d, want cached terminal projection without polling", got, fake.calls)
+			if got.Phase != tt.wantPhase || !got.Terminal {
+				t.Fatalf("lifecycle=%+v, want %s terminal", got, tt.wantPhase)
+			}
+			if fake.calls != 1 {
+				t.Fatalf("calls=%d, want 1 poll to sync the running row", fake.calls)
+			}
+			status, _ := readStatusAnswer(t, gdb, 9)
+			if status != tt.status {
+				t.Fatalf("business row status=%q, want %q", status, tt.status)
 			}
 		})
 	}
