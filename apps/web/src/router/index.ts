@@ -1,9 +1,9 @@
 import {
   createRouter,
-  createWebHistory,
   type RouteLocationNormalized,
   type RouteLocationRaw,
 } from "vue-router";
+import { createAppWebHistory } from "./webHistory";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
   type RemoteAgentTool,
@@ -344,8 +344,7 @@ export const constantRoutes = [
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  // history: createWebHashHistory(import.meta.env.BASE_URL),
+  history: createAppWebHistory(import.meta.env.BASE_URL),
   routes: constantRoutes,
 });
 

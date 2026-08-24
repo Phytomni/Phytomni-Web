@@ -79,6 +79,7 @@ export default defineConfig({
         "src/views/chat/composables/useStreamMessage.ts",
         "src/stores/actionObserver.ts",
         "src/styles/tokens.ts",
+        "src/router/webHistory.ts",
       ],
       thresholds: {
         autoUpdate: false,
