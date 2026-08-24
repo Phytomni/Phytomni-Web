@@ -2274,6 +2274,7 @@ const { refreshMessage } = useRefreshMessage({
   getHistoryQuestionData,
   getDialogueIdFromChatId,
   timestamp,
+  botCapabilitiesByTool: botCapabilities.byTool,
 });
 
 // Tutorial guide feature — state and logic extracted into the useTutorial composable

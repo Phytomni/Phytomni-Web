@@ -1132,6 +1132,57 @@ func TestQueryRefreshReplaceFailurePreservesAcceptedAnswer(t *testing.T) {
 	}
 }
 
+func TestV1AllocationReplaceAcceptsFailedRow(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	dialogueID := "55555555-5555-4555-8555-555555555555"
+	service := NewService()
+	appendSubmission, err := service.allocateV1Submission(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: "failed answer", Mode: "instant", ClientTurnID: "failed-append-1",
+		},
+		v1SubmissionTarget{
+			dialogueID: dialogueID,
+			mode:       "instant",
+			operation:  "append",
+		},
+		AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("allocate append: %v", err)
+	}
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ?", appendSubmission.row.Id).
+		Update("status", "FAILED").Error; err != nil {
+		t.Fatalf("mark append FAILED: %v", err)
+	}
+
+	replaceSubmission, err := service.allocateV1Submission(
+		context.Background(),
+		"alice",
+		QueryInput{
+			Query: "retry failed answer", Mode: "instant",
+			ClientTurnID: "failed-replace-1",
+			RefreshId:    appendSubmission.row.Id,
+		},
+		v1SubmissionTarget{
+			dialogueID: dialogueID,
+			mode:       "instant",
+			operation:  "replace",
+		},
+		AgentPermissionResolution{AllowedTools: []string{"ChatAgent"}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("allocate replacement on FAILED row: %v", err)
+	}
+	if replaceSubmission.row.Id != appendSubmission.row.Id {
+		t.Fatalf("replacement id = %d, want %d", replaceSubmission.row.Id, appendSubmission.row.Id)
+	}
+}
+
 func TestQueryReplacementPostDispatchDefiniteFailureIsIdempotent(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

@@ -1524,11 +1524,11 @@ func (ps *Service) allocateOwnerSubmissionWithDB(
 		if target.operation == "replace" {
 			var current model.QuestionAgentLog
 			if err := gdb.WithContext(ctx).
-				Where("id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND status = ?",
+				Where("id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL AND status IN ?",
 					in.RefreshId,
 					username,
 					target.dialogueID,
-					statusSucceeded,
+					[]string{statusSucceeded, "FAILED"},
 				).
 				First(&current).Error; err != nil {
 				return err

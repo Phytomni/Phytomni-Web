@@ -40,6 +40,25 @@ func validContextStageMetadata() *rxBot.ContextStageMetadata {
 	}
 }
 
+func TestInstantChatConversationStreamOmitsExpertEnvelope(t *testing.T) {
+	rxBot.SetConversationContextV1Advertised(true)
+	t.Cleanup(func() { rxBot.SetConversationContextV1Advertised(false) })
+
+	instant := QueryInput{
+		Mode: "instant", ClientTurnID: "turn-instant-1", Surface: QuerySurfaceChat,
+	}
+	if !instantChatConversationStream(instant, "chat") {
+		t.Fatal("instant ChatAgent stream must attach the V1 envelope")
+	}
+	expert := QueryInput{
+		Mode: "expert", Tool: "KnowledgeAgent",
+		ClientTurnID: "turn-expert-1", Surface: QuerySurfaceChat,
+	}
+	if instantChatConversationStream(expert, "knowledge") {
+		t.Fatal("expert KnowledgeAgent stream must omit the V1 chat envelope")
+	}
+}
+
 func TestApplyConversationRebuildEnvelopeRetainsPriorUserHistory(t *testing.T) {
 	// Rebuild history includes a trailing current-user slot for Bot projection.
 	gdb := setupExpertTestDB(t)

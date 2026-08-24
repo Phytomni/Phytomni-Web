@@ -10,6 +10,9 @@ import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
 import { normalizePositiveTaskRowId } from "@/api/task";
+import type { BotCapabilityByTool } from "./useBotCapabilities";
+import { shouldStream } from "../streaming/sendBranch";
+import { useStreamMessage } from "./useStreamMessage";
 import {
   convertToTableData,
   decodeCitationDocuments,
@@ -61,6 +64,22 @@ function refreshToolForMode(
   return tool === "" ? null : tool;
 }
 
+function snapshotAssistant(message: ChatMessage): ChatMessage {
+  return {
+    ...message,
+    blocks: message.blocks?.map((block) => ({ ...block })),
+    followUpQuestions: message.followUpQuestions
+      ? [...message.followUpQuestions]
+      : undefined,
+  };
+}
+
+function advertisedStreamAgents(capabilities: BotCapabilityByTool): string[] {
+  return Object.values(capabilities).flatMap((capability) =>
+    capability?.enabled && capability.stream ? [capability.tool] : []
+  );
+}
+
 function isConversationGoneRefreshError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || Array.isArray(error)) {
     return false;
@@ -92,6 +111,7 @@ export function useRefreshMessage(opts: {
     | undefined;
   getDialogueIdFromChatId: () => string | number | null | undefined;
   timestamp: Ref<number>;
+  botCapabilitiesByTool: Readonly<Ref<BotCapabilityByTool>>;
 }) {
   const {
     currentChat,
@@ -101,6 +121,7 @@ export function useRefreshMessage(opts: {
     getHistoryQuestionData,
     getDialogueIdFromChatId,
     timestamp,
+    botCapabilitiesByTool,
   } = opts;
 
   const refreshMessage = async (messageIndex: number) => {
@@ -191,6 +212,62 @@ export function useRefreshMessage(opts: {
       }
 
       queryData.append("attachments", JSON.stringify(attachmentRefs));
+
+      const streamAgent =
+        capturedMode === "instant" ? "ChatAgent" : refreshTool;
+      const streamAgents = advertisedStreamAgents(botCapabilitiesByTool.value);
+      if (
+        shouldStream(streamAgent, capturedMode, {
+          agents: streamAgents,
+        })
+      ) {
+        const previousAssistant = snapshotAssistant(message);
+        const placeholder: ChatMessage = {
+          role: "assistant",
+          content: "",
+          streaming: true,
+          blocks: [],
+          instantMessage: false,
+          id: refreshId,
+          tool_name: streamAgent,
+          followUpQuestions: [],
+          showFollowUpQuestions: false,
+          showLog: false,
+          streamPresentationKey: clientTurnId,
+        };
+        targetMessages[messageIndex] = placeholder;
+        chatState.activeRequestId = clientTurnId;
+        chatState.activeAgentName = streamAgent;
+        const getStreamChatState = (id: string) =>
+          id === refreshDialogueId ? chatState : getChatState(id);
+        const { streamMessage } = useStreamMessage({
+          getChatState: getStreamChatState,
+          t: (key) => String(i18n.global.t(key)),
+        });
+        const streamResult = await streamMessage({
+          dialogueId: refreshDialogueId,
+          formData: queryData,
+          requestId: clientTurnId,
+          placeholder,
+          clientTurnId,
+        });
+        if (streamResult.completed === true) {
+          delete chatState.refreshTurnIds[messageId];
+          timestamp.value = Date.now();
+          if (isStillActive()) {
+            await scrollToBottom();
+          }
+          return;
+        }
+        if (streamResult.preDispatch4xx) {
+          delete chatState.refreshTurnIds[messageId];
+        }
+        targetMessages[messageIndex] = previousAssistant;
+        if (isStillActive()) {
+          ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
+        }
+        return;
+      }
 
       const response = await getQuery(queryData, {
         suppressErrorToast: true,
@@ -458,6 +535,10 @@ export function useRefreshMessage(opts: {
       }
 
       // reset the overall sending state
+      if (chatState.activeRequestId === clientTurnId) {
+        chatState.activeRequestId = "";
+        chatState.activeAgentName = "";
+      }
       chatState.isSending = false;
       chatState.uploadTransfer = null;
 

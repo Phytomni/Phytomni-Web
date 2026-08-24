@@ -2728,8 +2728,11 @@ func TestConcurrentReplacementCASLossReturnsDuplicateConflict(t *testing.T) {
 	const callbackName = "test:round4-replacement-cas-barrier"
 	if err := gdb.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
 		query := tx.Statement.SQL.String()
-		if !strings.Contains(query, "status = ?") ||
-			!strings.Contains(query, "question_agent_logs") || blocked.Add(1) > 2 {
+		replaceLookup := strings.Contains(query, "question_agent_logs") &&
+			strings.Contains(query, "delete_at IS NULL") &&
+			(strings.Contains(query, "status = ?") ||
+				strings.Contains(query, "status IN"))
+		if !replaceLookup || blocked.Add(1) > 2 {
 			return
 		}
 		ready <- struct{}{}
