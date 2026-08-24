@@ -674,6 +674,8 @@ export default {
       undoDislike: "取消点踩",
       downloadAttachments: "下载附件",
       downloadFormats: "下载为格式",
+      download: "下载",
+      attachments: "附件",
     },
     favorites: "收藏",
     noFavorites: "暂无收藏",

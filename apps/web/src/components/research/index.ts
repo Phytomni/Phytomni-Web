@@ -2,6 +2,7 @@ export { default as DeepGenomeArtifact } from "./DeepGenomeArtifact.vue";
 export { default as ResearchArtifactHeader } from "./ResearchArtifactHeader.vue";
 export {
   copyCloseArtifactMenuItems,
+  copyDownloadCloseArtifactMenuItems,
   resetArtifactMenuItems,
 } from "./artifact-overflow";
 export type { ArtifactOverflowItem } from "./artifact-overflow";

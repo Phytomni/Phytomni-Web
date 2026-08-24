@@ -685,6 +685,8 @@ export default {
       undoDislike: "Undo dislike",
       downloadAttachments: "Download attachments",
       downloadFormats: "Download as format",
+      download: "Download",
+      attachments: "Attachments",
     },
     favorites: "Favorites",
     noFavorites: "No Favorites",

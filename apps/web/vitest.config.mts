@@ -80,6 +80,8 @@ export default defineConfig({
         "src/stores/actionObserver.ts",
         "src/styles/tokens.ts",
         "src/router/webHistory.ts",
+        "src/views/chat/utils/artifact-chrome.ts",
+        "src/components/research/artifact-overflow.ts",
       ],
       thresholds: {
         autoUpdate: false,

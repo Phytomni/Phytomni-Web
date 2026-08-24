@@ -15,6 +15,15 @@ const GENERATED_DOWNLOAD_TOOLS = new Set([
   "DeepGenomeAgent",
 ]);
 
+export function generatedFormatsForTool(
+  tool: string | null | undefined
+): string[] {
+  if (!tool || !GENERATED_DOWNLOAD_TOOLS.has(tool)) return [];
+  return tool === "DataAgent"
+    ? ["PDF", "Markdown", "Xlsx"]
+    : ["PDF", "Markdown", "Word"];
+}
+
 export function messageActionCapabilities(
   message: Pick<ChatMessage, "role" | "id" | "streaming" | "tool_name">
 ): MessageActionCapabilities {
@@ -29,20 +38,9 @@ export function messageActionCapabilities(
     };
   }
 
-  if (!message.tool_name || !GENERATED_DOWNLOAD_TOOLS.has(message.tool_name)) {
-    return {
-      canRefresh: true,
-      canReact: true,
-      generatedFormats: [],
-    };
-  }
-
   return {
     canRefresh: true,
     canReact: true,
-    generatedFormats:
-      message.tool_name === "DataAgent"
-        ? ["PDF", "Markdown", "Xlsx"]
-        : ["PDF", "Markdown", "Word"],
+    generatedFormats: generatedFormatsForTool(message.tool_name),
   };
 }

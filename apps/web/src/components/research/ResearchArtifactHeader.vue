@@ -59,15 +59,43 @@
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item
-              v-for="item in menuItems"
-              :key="item.id"
-              :command="item.id"
-              :divided="item.divided === true"
-              :data-test="`artifact-action-${item.id}`"
-            >
-              {{ item.label }}
-            </el-dropdown-item>
+            <template v-for="item in menuItems" :key="item.id">
+              <el-dropdown-item
+                v-if="item.children?.length"
+                :divided="item.divided === true"
+                :data-test="`artifact-action-${item.id}`"
+              >
+                <el-dropdown
+                  trigger="hover"
+                  placement="right-start"
+                  @command="onOverflowCommand"
+                >
+                  <span class="research-artifact-header__submenu">{{
+                    item.label
+                  }}</span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-for="child in item.children"
+                        :key="child.id"
+                        :command="child.id"
+                        :data-test="`artifact-action-${child.id}`"
+                      >
+                        {{ child.label }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-else
+                :command="item.id"
+                :divided="item.divided === true"
+                :data-test="`artifact-action-${item.id}`"
+              >
+                {{ item.label }}
+              </el-dropdown-item>
+            </template>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -202,6 +230,12 @@ const metadataItems = computed(() => {
 .research-artifact-header__overflow {
   display: inline-flex;
   flex: 0 0 auto;
+}
+
+.research-artifact-header__submenu {
+  display: inline-flex;
+  width: 100%;
+  cursor: pointer;
 }
 
 .research-artifact-header__overflow :deep(.el-tooltip__trigger),

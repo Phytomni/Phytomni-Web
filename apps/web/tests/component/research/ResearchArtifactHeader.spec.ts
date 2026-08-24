@@ -32,17 +32,25 @@ const dropdownStubs = {
   ElDropdownItem: defineComponent({
     name: "ElDropdownItem",
     props: {
-      command: { type: [String, Number], required: true },
+      command: { type: [String, Number], default: "" },
+      disabled: { type: Boolean, default: false },
     },
-    setup(props, { slots }) {
+    setup(props, { slots, attrs }) {
       const emitCommand = inject<(id: string) => void>("emitOverflowCommand");
       return () =>
         h(
           "button",
           {
             type: "button",
-            "data-test": `artifact-action-${props.command}`,
-            onClick: () => emitCommand?.(String(props.command)),
+            ...attrs,
+            disabled: props.disabled || undefined,
+            "data-test":
+              (attrs["data-test"] as string | undefined) ??
+              `artifact-action-${props.command}`,
+            onClick: () => {
+              if (props.disabled || props.command === "") return;
+              emitCommand?.(String(props.command));
+            },
           },
           slots.default?.()
         );
@@ -148,6 +156,35 @@ describe("ResearchArtifactHeader", () => {
     await wrapper.get("[data-test=artifact-action-close]").trigger("click");
 
     expect(wrapper.emitted("action")).toEqual([["copy"], ["close"]]);
+  });
+
+  it("emits nested Download format commands from the overflow menu", async () => {
+    const wrapper = mountHeader({
+      menuItems: [
+        { id: "copy", label: "Copy" },
+        {
+          id: "download",
+          label: "Download",
+          children: [
+            { id: "download:PDF", label: "PDF" },
+            { id: "download:Word", label: "Word" },
+          ],
+        },
+        { id: "close", label: "Close", divided: true },
+      ],
+    });
+
+    await wrapper
+      .get('[data-test="artifact-action-download:PDF"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-test="artifact-action-download:Word"]')
+      .trigger("click");
+
+    expect(wrapper.emitted("action")).toEqual([
+      ["download:PDF"],
+      ["download:Word"],
+    ]);
   });
 
   it("formats only explicitly identified scientific agent metadata", () => {
