@@ -60,7 +60,7 @@ request_too_large = "上传元数据过大"
 unavailable = "文件上传暂时不可用"
 state_conflict = "上传状态已变更，请重试上传"
 session_expired = "上传会话已过期，请重新开始上传"
-limit_exceeded = "已超出上传限制"
+limit_exceeded = "同时上传已达上限，请取消失败的上传后重试"
 
 [gene]
 file_name_required = "参数file_name不能为空"

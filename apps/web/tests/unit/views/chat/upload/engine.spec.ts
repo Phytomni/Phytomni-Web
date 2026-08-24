@@ -408,6 +408,117 @@ describe("resumable upload engine", () => {
     });
   });
 
+  it("aborts the created asset after a permanent part failure and retries with a new session", async () => {
+    const store = new MemoryStore();
+    const createdSession = {
+      ...sessionBase,
+      part_size_bytes: 6,
+      part_count: 1,
+      max_parallel_parts: 1,
+    };
+    const failedData = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6, lengthBytes: 6 }),
+      async () => {
+        throw new UploadTransportError("", {
+          status: 400,
+          code: "invalid_upload_metadata",
+        });
+      }
+    );
+    const retriedSession = {
+      ...sessionBase,
+      asset_id: "file_retry123",
+      upload_url: "https://upload.example/v1/files/file_retry123",
+      part_size_bytes: 6,
+      part_count: 1,
+      max_parallel_parts: 1,
+    };
+    const retriedData = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6, lengthBytes: 6 }),
+      async () => undefined,
+      async () => ({
+        asset_id: "file_retry123",
+        status: "completed",
+        filename: "sample.bin",
+        size_bytes: 6,
+        completed_at: "2099-08-01T05:00:00+08:00",
+      })
+    );
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({ session: createdSession, data: failedData })
+      .mockResolvedValueOnce({ session: retriedSession, data: retriedData });
+    const initialInput = input(file);
+    const engine = createResumableUploadEngine(
+      initialInput,
+      makeDeps(store, failedData, { create }, createdSession)
+    );
+
+    await engine.start();
+
+    expect(engine.snapshot).toMatchObject({
+      status: "failed",
+      errorCode: "invalid_upload_metadata",
+      assetId: null,
+    });
+    expect(failedData.abort).toHaveBeenCalledTimes(1);
+    const persisted = await store.load(accountScope, "local-1");
+    expect(persisted).toMatchObject({
+      status: "failed",
+      assetId: null,
+    });
+    expect(persisted?.idempotencyKey).not.toBe(initialInput.idempotencyKey);
+
+    await engine.retry();
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1]?.[1]).toBe(persisted?.idempotencyKey);
+    expect(engine.snapshot).toMatchObject({
+      status: "completed",
+      assetId: "file_retry123",
+    });
+    expect(retriedData.abort).not.toHaveBeenCalled();
+  });
+
+  it("keeps the created asset when abort after failure fails so retry can resume", async () => {
+    const store = new MemoryStore();
+    const session = {
+      ...sessionBase,
+      part_size_bytes: 6,
+      part_count: 1,
+      max_parallel_parts: 1,
+    };
+    const data = makeData(
+      async () => headState({ partCount: 1, partSizeBytes: 6, lengthBytes: 6 }),
+      async () => {
+        throw new UploadTransportError("", {
+          status: 400,
+          code: "invalid_upload_metadata",
+        });
+      }
+    );
+    data.abort = vi.fn(async () => {
+      throw new UploadTransportError("", { status: 401 });
+    });
+    const engine = createResumableUploadEngine(
+      input(file),
+      makeDeps(store, data, {}, session)
+    );
+
+    await engine.start();
+
+    expect(engine.snapshot).toMatchObject({
+      status: "failed",
+      assetId: session.asset_id,
+    });
+    expect(data.abort).toHaveBeenCalledTimes(1);
+    await expect(store.load(accountScope, "local-1")).resolves.toMatchObject({
+      status: "failed",
+      assetId: session.asset_id,
+      idempotencyKey: "1c2d3e4f-5061-4789-8abc-def012345678",
+    });
+  });
+
   it("limits simultaneous part transfers to the server maximum", async () => {
     const store = new MemoryStore();
     let active = 0;

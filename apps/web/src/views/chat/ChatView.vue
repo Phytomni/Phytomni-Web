@@ -12,6 +12,14 @@ export function removeDeletedChat(options: {
   options.removeChatState(dialogueId);
   return options.chatList.filter((chat) => chat.dialogue_id !== dialogueId);
 }
+
+export function releaseDialogueUploads(
+  dialogueId: string | undefined,
+  cancelDialogue: (dialogueId: string) => void | Promise<void>
+): void {
+  if (typeof dialogueId !== "string" || dialogueId.length === 0) return;
+  void cancelDialogue(dialogueId);
+}
 </script>
 <template>
   <div
@@ -1698,6 +1706,7 @@ const {
 
 // Start a new chat
 const startNewChat = () => {
+  releaseDialogueUploads(currentChatId.value, uploadQueue.cancelDialogue);
   // Create the state for a new chat
   const newDialogueId = "new_" + Date.now();
   const newChatState = getChatState(newDialogueId);

@@ -415,14 +415,7 @@ export class ResumableUploadEngine {
     return this.start();
   }
 
-  private async recreateFromLocalState(): Promise<void> {
-    if (this.item.assetId !== null) {
-      try {
-        await this.data.abort();
-      } catch {
-        // The old asset is still bounded by Bot expiry if best-effort abort fails.
-      }
-    }
+  private dropCreatedAssetIdentity(): void {
     this.data.clearCapability?.();
     this.item.assetId = null;
     this.item.partSize = 0;
@@ -433,6 +426,29 @@ export class ResumableUploadEngine {
     for (const key of Object.keys(this.partDigests))
       delete this.partDigests[key];
     this.idempotency = idempotencyKey();
+    this.emit();
+  }
+
+  private async recreateFromLocalState(): Promise<void> {
+    if (this.item.assetId !== null) {
+      try {
+        await this.data.abort();
+      } catch {
+        // The old asset is still bounded by Bot expiry if best-effort abort fails.
+      }
+    }
+    this.dropCreatedAssetIdentity();
+  }
+
+  private async abortCreatedAssetAfterFailure(): Promise<void> {
+    if (this.item.assetId === null) return;
+    try {
+      await this.data.abort();
+    } catch {
+      // Keep the asset id so Retry can resume if abort did not land.
+      return;
+    }
+    this.dropCreatedAssetIdentity();
   }
 
   async retry(): Promise<void> {
@@ -504,6 +520,11 @@ export class ResumableUploadEngine {
         this.setStatus("expired", stable.code);
       } else {
         this.setStatus("failed", stable.code);
+      }
+      try {
+        await this.abortCreatedAssetAfterFailure();
+      } catch {
+        // Visible failure already stands; slot release is best-effort.
       }
       try {
         await this.persist();

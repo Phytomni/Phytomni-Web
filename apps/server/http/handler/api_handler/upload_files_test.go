@@ -374,8 +374,8 @@ func TestUploadServiceErrorExactPairsAreLocalizedForCreateAndRenew(t *testing.T)
 			status:    http.StatusRequestEntityTooLarge,
 			errorCode: "upload_limit_exceeded",
 			messages: map[string]string{
-				"en-US": "upload limit exceeded",
-				"zh-CN": "已超出上传限制",
+				"en-US": "too many uploads in progress; cancel a failed upload and retry",
+				"zh-CN": "同时上传已达上限，请取消失败的上传后重试",
 			},
 		},
 	}

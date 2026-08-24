@@ -60,7 +60,10 @@ vi.mock("vue-router", async (importOriginal) => {
   };
 });
 
-import ChatView, { removeDeletedChat } from "@/views/chat/ChatView.vue";
+import ChatView, {
+  releaseDialogueUploads,
+  removeDeletedChat,
+} from "@/views/chat/ChatView.vue";
 import { buildChat } from "../../../helpers/chatBuilders";
 import { createTestAppContext } from "../../../helpers/test-app-context";
 
@@ -81,6 +84,16 @@ describe("ChatView lifecycle cleanup", () => {
     expect(disposeDialogue).toHaveBeenCalledWith("deleted-dialogue");
     expect(removeChatState).toHaveBeenCalledWith("deleted-dialogue");
     expect(remaining).toEqual([retained]);
+  });
+
+  it("releases incomplete uploads when leaving a dialogue", () => {
+    const cancelDialogue = vi.fn();
+    releaseDialogueUploads("leaving-dialogue", cancelDialogue);
+    expect(cancelDialogue).toHaveBeenCalledWith("leaving-dialogue");
+    cancelDialogue.mockClear();
+    releaseDialogueUploads("", cancelDialogue);
+    releaseDialogueUploads(undefined, cancelDialogue);
+    expect(cancelDialogue).not.toHaveBeenCalled();
   });
 
   it("renders report-backed Research previews regardless of lifecycle status", async () => {

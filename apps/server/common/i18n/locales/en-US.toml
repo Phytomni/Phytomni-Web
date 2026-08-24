@@ -60,7 +60,7 @@ request_too_large = "upload metadata is too large"
 unavailable = "file upload is temporarily unavailable"
 state_conflict = "upload state changed; retry the upload"
 session_expired = "upload session expired; start the upload again"
-limit_exceeded = "upload limit exceeded"
+limit_exceeded = "too many uploads in progress; cancel a failed upload and retry"
 
 [gene]
 file_name_required = "parameter file_name cannot be empty"
