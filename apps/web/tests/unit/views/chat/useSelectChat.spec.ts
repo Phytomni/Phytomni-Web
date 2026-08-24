@@ -1317,6 +1317,65 @@ describe("useSelectChat", () => {
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
   });
 
+  it("restores expert selectedAgent from the last assistant tool", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "181",
+          query: "Why do leaves fall in autumn?",
+          answer: JSON.stringify({ content: "Seasonal abscission." }),
+          tool_name: "KnowledgeAgent",
+          mode: "expert",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(stateFor("d1").mode).toBe("expert");
+    expect(stateFor("d1").selectedAgent).toBe("KnowledgeAgent");
+  });
+
+  it("does not overwrite a user-selected expert agent during hydration", async () => {
+    getChatState("d1").selectedAgent = "DataAgent";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "181",
+          query: "Why do leaves fall in autumn?",
+          answer: JSON.stringify({ content: "Seasonal abscission." }),
+          tool_name: "KnowledgeAgent",
+          mode: "expert",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(stateFor("d1").mode).toBe("expert");
+    expect(stateFor("d1").selectedAgent).toBe("DataAgent");
+  });
+
+  it("clears selectedAgent when hydrating instant history", async () => {
+    getChatState("d1").selectedAgent = "KnowledgeAgent";
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "194",
+          query: "Reply with only the word OK.",
+          answer: "OK",
+          tool_name: "ChatAgent",
+          mode: "instant",
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(stateFor("d1").mode).toBe("instant");
+    expect(stateFor("d1").selectedAgent).toBe("");
+  });
+
   it("reloads a background dialogue without changing foreground navigation or composer state", async () => {
     const pendingA = deferred<ApiEnvelope<ChatHistoryRecord[]>>();
     const stateA = getChatState("d1");

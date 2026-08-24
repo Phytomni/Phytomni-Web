@@ -690,6 +690,7 @@ export default {
     downloadFile: "下载文件",
     testParallel: "测试并行对话",
     refreshReply: "刷新回复",
+    refreshConversationGone: "这条对话已经不存在，请从侧边栏重新打开",
     abortTooltip: "中止回答",
     loadingAgentPerms: "加载智能体权限中……",
     agentPicker: {

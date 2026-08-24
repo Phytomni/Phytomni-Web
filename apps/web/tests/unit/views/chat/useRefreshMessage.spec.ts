@@ -67,7 +67,7 @@ describe("useRefreshMessage", () => {
       buildChatMessage({
         role: "assistant",
         content: "Old answer",
-        id: "msg-1",
+        id: "181",
         tool_name: "ChatAgent",
       }),
     ];
@@ -165,9 +165,13 @@ describe("useRefreshMessage", () => {
     expect(rebuilt.instantMessage).toBe(true);
 
     const refreshCall = mustGet(mockGetQuery.mock.calls[0], "refresh call");
+    expect((refreshCall[0] as FormData).get("id")).toBe("7");
+    expect((refreshCall[0] as FormData).get("refresh_id")).toBe("181");
+    expect((refreshCall[0] as FormData).get("tool")).toBe("");
     expect((refreshCall[0] as FormData).get("client_turn_id")).toMatch(
       /^turn-[A-Za-z0-9-]{16,64}$/
     );
+    expect(refreshCall[1]).toEqual({ suppressErrorToast: true });
     expect(stateFor("A").refreshTurnIds).toEqual({});
 
     // The reaction is hydrated into A's chatState (string "1" → number 1)
@@ -177,7 +181,7 @@ describe("useRefreshMessage", () => {
     expect(stateFor("A").isSending).toBe(false);
 
     // The old refreshKey is cleaned up (1_msg-1)
-    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").refreshingMessages["1_181"]).toBeUndefined();
     expect(stateFor("A").agentRunLifecycles).toEqual({});
 
     // getHistoryQuestionData is called in finally
@@ -278,7 +282,7 @@ describe("useRefreshMessage", () => {
 
     // At this point the refresh is in-flight on A: isSending=true, refreshKey truthy
     expect(stateFor("A").isSending).toBe(true);
-    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBe(true);
+    expect(stateFor("A").refreshingMessages["1_181"]).toBe(true);
 
     // User switches to dialogue B
     currentChatId.value = "B";
@@ -296,7 +300,7 @@ describe("useRefreshMessage", () => {
 
     // Cleanup lands on the captured dialogue A: isSending reset, refreshKey cleared
     expect(stateFor("A").isSending).toBe(false);
-    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").refreshingMessages["1_181"]).toBeUndefined();
 
     // A's captured array was updated; B's messages/DOM side effects untouched
     expect(messagesFor("A", "A after refresh")).toBe(messagesA);
@@ -344,7 +348,7 @@ describe("useRefreshMessage", () => {
     expect(stateFor("A").isSending).toBe(false);
 
     // The old refreshKey is cleaned up in finally
-    expect(stateFor("A").refreshingMessages["1_msg-1"]).toBeUndefined();
+    expect(stateFor("A").refreshingMessages["1_181"]).toBeUndefined();
 
     // The finally history fetch still runs
     expect(getHistoryQuestionData).toHaveBeenCalledTimes(1);
@@ -355,7 +359,7 @@ describe("useRefreshMessage", () => {
     await makeComposable().refreshMessage(1);
 
     const firstTurnId = mustGet(
-      stateFor("A").refreshTurnIds["msg-1"],
+      stateFor("A").refreshTurnIds["181"],
       "pending refresh turn ID"
     );
     expect(firstTurnId).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
@@ -392,26 +396,31 @@ describe("useRefreshMessage", () => {
       name: "instant",
       mode: "instant" as const,
       selectedAgent: "DataAgent",
+      messageTool: "ChatAgent",
       expectedTool: "",
     },
     {
-      name: "expert autonomous",
+      name: "expert empty picker",
       mode: "expert" as const,
       selectedAgent: "",
-      expectedTool: "",
+      messageTool: "KnowledgeAgent",
+      expectedTool: "KnowledgeAgent",
     },
     {
-      name: "expert forced",
+      name: "expert picker differs from the assistant",
       mode: "expert" as const,
       selectedAgent: "DataAgent",
-      expectedTool: "DataAgent",
+      messageTool: "KnowledgeAgent",
+      expectedTool: "KnowledgeAgent",
     },
   ])(
-    "refresh derives the exact $name routing payload from state instead of the previous response tool",
-    async ({ mode, selectedAgent, expectedTool }) => {
+    "refresh derives the $name tool from the assistant message, not the composer picker",
+    async ({ mode, selectedAgent, messageTool, expectedTool }) => {
       const state = stateFor("A");
       state.mode = mode;
       state.selectedAgent = selectedAgent;
+      const assistant = messageAt("A", 1, `${mode} assistant`);
+      assistant.tool_name = messageTool;
       mockGetQuery.mockResolvedValueOnce(queryResponse());
 
       const { refreshMessage } = makeComposable();
@@ -421,9 +430,72 @@ describe("useRefreshMessage", () => {
       const formData = call[0] as FormData;
       expect(formData.get("mode")).toBe(mode);
       expect(formData.get("tool")).toBe(expectedTool);
+      expect(formData.get("id")).toBe("7");
+      expect(formData.get("refresh_id")).toBe("181");
       expect(formData.get("query")).toBe("Original question");
     }
   );
+
+  it("does not POST when the parent row mapping is missing", async () => {
+    getDialogueIdFromChatId.mockReturnValueOnce(null);
+
+    await makeComposable().refreshMessage(1);
+
+    expect(mockGetQuery).not.toHaveBeenCalled();
+    expect(elMessageErrorSpy).toHaveBeenCalledWith(
+      "This conversation is no longer available. Open it again from the sidebar."
+    );
+    expect(stateFor("A").isSending).toBe(false);
+    expect(stateFor("A").refreshTurnIds).toEqual({});
+  });
+
+  it("does not POST when the assistant id is not a durable row id", async () => {
+    messageAt("A", 1, "non-durable assistant").id = "msg-1";
+
+    await makeComposable().refreshMessage(1);
+
+    expect(mockGetQuery).not.toHaveBeenCalled();
+    expect(elMessageErrorSpy).toHaveBeenCalledWith(
+      "Refresh failed, please try again"
+    );
+    expect(stateFor("A").isSending).toBe(false);
+  });
+
+  it("does not POST an expert refresh without the assistant tool name", async () => {
+    const state = stateFor("A");
+    state.mode = "expert";
+    state.selectedAgent = "KnowledgeAgent";
+    messageAt("A", 1, "tool-less expert assistant").tool_name = "";
+
+    await makeComposable().refreshMessage(1);
+
+    expect(mockGetQuery).not.toHaveBeenCalled();
+    expect(elMessageErrorSpy).toHaveBeenCalledWith(
+      "Refresh failed, please try again"
+    );
+    expect(stateFor("A").isSending).toBe(false);
+  });
+
+  it("surfaces a conversation-gone toast once on pre-dispatch 404", async () => {
+    mockGetQuery.mockRejectedValueOnce({
+      response: {
+        status: 404,
+        data: {
+          code: 404,
+          message: "conversation not found",
+          pre_dispatch: true,
+        },
+      },
+    });
+
+    await makeComposable().refreshMessage(1);
+
+    expect(elMessageErrorSpy).toHaveBeenCalledTimes(1);
+    expect(elMessageErrorSpy).toHaveBeenCalledWith(
+      "This conversation is no longer available. Open it again from the sidebar."
+    );
+    expect(stateFor("A").refreshTurnIds).toEqual({});
+  });
 
   it("reuses accepted structured attachments without sending a File or upload progress", async () => {
     stateFor("A").renderedChat = {
@@ -443,7 +515,7 @@ describe("useRefreshMessage", () => {
         buildChatMessage({
           role: "assistant",
           content: "Old answer",
-          id: "msg-structured",
+          id: "182",
           tool_name: "ChatAgent",
         }),
       ],
@@ -459,7 +531,7 @@ describe("useRefreshMessage", () => {
       JSON.stringify([{ asset_id: "file_reads" }])
     );
     expect(formData.getAll("files")).toEqual([]);
-    expect(call).toHaveLength(1);
+    expect(call[1]).toEqual({ suppressErrorToast: true });
   });
 
   it("blocks refresh when an explicitly selected replacement upload is incomplete", async () => {

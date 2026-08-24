@@ -701,6 +701,8 @@ export default {
     downloadFile: "Download File",
     testParallel: "Test parallel chats",
     refreshReply: "Refresh reply",
+    refreshConversationGone:
+      "This conversation is no longer available. Open it again from the sidebar.",
     abortTooltip: "Abort answer",
     loadingAgentPerms: "Loading agent permissions...",
     agentPicker: {

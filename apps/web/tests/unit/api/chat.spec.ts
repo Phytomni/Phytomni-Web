@@ -136,6 +136,22 @@ describe("query routing intent transport", () => {
     }
   );
 
+  it("forwards suppressErrorToast on blocking query posts", async () => {
+    mockRequest.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
+    const data = new FormData();
+    data.set("id", "181");
+    data.set("query", "refresh");
+
+    await getQuery(data, { suppressErrorToast: true });
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/v1/conversations/181/messages",
+        suppressErrorToast: true,
+      })
+    );
+  });
+
   it("does not derive the pre-body signal from a JSON-shaped request", async () => {
     mockRequest.mockResolvedValueOnce({ code: 200, data: { id: 1 } });
 

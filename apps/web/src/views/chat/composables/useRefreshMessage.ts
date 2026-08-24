@@ -9,6 +9,7 @@ import type {
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getQuery } from "@/api/chat";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import {
   convertToTableData,
   decodeCitationDocuments,
@@ -31,6 +32,54 @@ import {
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
 import { projectHistoryForTransport } from "../utils/chat-history-normalization";
+
+function refreshParentRowId(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  try {
+    return Number(normalizePositiveTaskRowId(value));
+  } catch {
+    return null;
+  }
+}
+
+function durableRefreshRowId(value: unknown): string | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  try {
+    return normalizePositiveTaskRowId(value);
+  } catch {
+    return null;
+  }
+}
+
+function refreshToolForMode(
+  mode: ChatUIState["mode"],
+  toolName: unknown
+): string | null {
+  if (mode !== "expert") return "";
+  if (typeof toolName !== "string") return null;
+  const tool = toolName.trim();
+  return tool === "" ? null : tool;
+}
+
+function isConversationGoneRefreshError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || Array.isArray(error)) {
+    return false;
+  }
+  const response = (error as { response?: unknown }).response;
+  if (
+    typeof response !== "object" ||
+    response === null ||
+    Array.isArray(response)
+  ) {
+    return false;
+  }
+  if ((response as { status?: unknown }).status !== 404) return false;
+  const data = (response as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return false;
+  }
+  return (data as { message?: unknown }).message === "conversation not found";
+}
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -86,8 +135,22 @@ export function useRefreshMessage(opts: {
     const chatState = getChatState(refreshDialogueId);
     const targetMessages = currentChat.value.messages;
     const capturedMode = chatState.mode;
-    const capturedSelectedAgent =
-      capturedMode === "expert" ? chatState.selectedAgent : "";
+    const isStillActive = () => currentChatId.value === refreshDialogueId;
+    const parentRowId = refreshParentRowId(getDialogueIdFromChatId());
+    const refreshId = durableRefreshRowId(messageId);
+    const refreshTool = refreshToolForMode(capturedMode, message.tool_name);
+    if (parentRowId === null || refreshId === null || refreshTool === null) {
+      if (isStillActive()) {
+        ElMessage.error(
+          i18n.global.t(
+            parentRowId === null
+              ? "chat.refreshConversationGone"
+              : "common.refreshFailedRetry"
+          )
+        );
+      }
+      return;
+    }
     const replacementAttachments =
       chatState.fileList.length > 0
         ? completedUploadDisplays(chatState.fileList)
@@ -110,19 +173,13 @@ export function useRefreshMessage(opts: {
     // set the overall sending state to true to show a loading state
     chatState.isSending = true;
 
-    const isStillActive = () => currentChatId.value === refreshDialogueId;
-
     try {
-      const urlChatId = getDialogueIdFromChatId();
       const queryData = new FormData();
       queryData.append("query", chatContentToText(userMessage.content));
-      queryData.append("id", (urlChatId ? Number(urlChatId) : 0).toString());
-      queryData.append("refresh_id", messageId);
+      queryData.append("id", parentRowId.toString());
+      queryData.append("refresh_id", refreshId);
       queryData.append("mode", capturedMode);
-      queryData.append(
-        "tool",
-        capturedMode === "expert" ? capturedSelectedAgent : ""
-      );
+      queryData.append("tool", refreshTool);
       queryData.append("client_turn_id", clientTurnId);
 
       // add the history (if any)
@@ -135,7 +192,9 @@ export function useRefreshMessage(opts: {
 
       queryData.append("attachments", JSON.stringify(attachmentRefs));
 
-      const response = await getQuery(queryData);
+      const response = await getQuery(queryData, {
+        suppressErrorToast: true,
+      });
 
       if (response.data) {
         let newAssistantMessage: ChatMessage | undefined;
@@ -378,7 +437,13 @@ export function useRefreshMessage(opts: {
         delete chatState.refreshTurnIds[messageId];
       }
       if (isStillActive()) {
-        ElMessage.error(i18n.global.t("common.refreshFailedRetry"));
+        ElMessage.error(
+          i18n.global.t(
+            isConversationGoneRefreshError(error)
+              ? "chat.refreshConversationGone"
+              : "common.refreshFailedRetry"
+          )
+        );
       }
     } finally {
       if (isStillActive()) {

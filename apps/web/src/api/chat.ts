@@ -37,6 +37,7 @@ export { decodeQueryData } from "@/api/types";
 
 export type QueryProgressOpts = {
   onUploadProgress?: (e: AxiosProgressEvent) => void;
+  suppressErrorToast?: boolean;
 };
 
 export type DownloadProgressOpts = {
@@ -119,6 +120,7 @@ export const getQuery = (
       method: "post",
       data,
       onUploadProgress: opts?.onUploadProgress,
+      ...(opts?.suppressErrorToast ? { suppressErrorToast: true } : {}),
       ...(headers ? { headers } : {}),
     },
     decodeQueryData
@@ -141,6 +143,7 @@ export const getQueryAbortable = (
       data,
       requestId,
       onUploadProgress: opts?.onUploadProgress,
+      ...(opts?.suppressErrorToast ? { suppressErrorToast: true } : {}),
       ...(headers ? { headers } : {}),
     },
     decodeQueryData

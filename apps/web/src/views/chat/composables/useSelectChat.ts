@@ -53,6 +53,33 @@ function isStreamFamilyTool(tool: unknown): boolean {
   return typeof tool === "string" && STREAM_FAMILY_TOOLS.has(tool);
 }
 
+function applyHydratedRouting(
+  chatState: ChatUIState,
+  mode: "instant" | "expert",
+  messages: readonly ChatMessage[]
+): void {
+  chatState.mode = mode;
+  if (mode === "instant") {
+    chatState.selectedAgent = "";
+    return;
+  }
+  if (chatState.selectedAgent.trim()) return;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (
+      message?.role !== "assistant" ||
+      typeof message.tool_name !== "string"
+    ) {
+      continue;
+    }
+    const tool = message.tool_name.trim();
+    if (tool) {
+      chatState.selectedAgent = tool;
+      return;
+    }
+  }
+}
+
 function isNonTerminalStreamStatus(status: unknown): boolean {
   const normalized = String(status ?? "")
     .trim()
@@ -357,6 +384,9 @@ export function useSelectChat(opts: {
         })) as ChatMessage[];
         if (pending.mode === "expert" || pending.mode === "instant") {
           chatState.mode = pending.mode;
+          if (pending.mode === "instant") {
+            chatState.selectedAgent = "";
+          }
         }
         const pendingTitle =
           typeof pending.title === "string" ? pending.title.trim() : "";
@@ -935,7 +965,6 @@ export function useSelectChat(opts: {
         ElMessage.warning(i18n.global.t("chat.contextDegraded"));
       }
 
-      chatState.mode = nextMode;
       chatState.reactions = nextReactions;
       chatState.historyQuestion = historyMessages;
       const historyMessagesWithLockedA2ui = lockUnverifiedHistoryA2ui(messages);
@@ -965,6 +994,7 @@ export function useSelectChat(opts: {
         }
       }
       chatState.handledArtifactIdentities = [...handledIdentities];
+      applyHydratedRouting(chatState, nextMode, mergedMessages);
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,
