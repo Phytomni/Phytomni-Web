@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Design wait card no longer Failed on packing errors
+
+- When science succeeded and the result ZIP failed because a producer
+  manifest was invalid, the wait card stays completed and the ledger
+  row becomes SUCCEEDED. The archive strip explains that packaging is
+  incomplete. Retry is not offered.
+
 ### 🐛 Stream and wait-card resume
 
 - Chat, Knowledge, and Brief Gene keep generating after refresh; the reply continues in the same stream.
