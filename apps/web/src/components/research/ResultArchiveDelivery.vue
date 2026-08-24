@@ -59,6 +59,17 @@
       }}</span>
     </template>
 
+    <template
+      v-else-if="
+        delivery?.status === 'failed' &&
+        delivery.error_code === 'artifact_manifest_invalid'
+      "
+    >
+      <span data-test="result-archive-manifest-invalid">{{
+        t("chat.resultArchive.manifestInvalid")
+      }}</span>
+    </template>
+
     <template v-else>
       <span>{{ t("chat.resultArchive.unavailable") }}</span>
     </template>

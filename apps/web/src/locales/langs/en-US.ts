@@ -794,6 +794,7 @@ export default {
       download: "Download {name}",
       generationFailed: "Result archive generation failed",
       none: "Completed with no downloadable attachments",
+      manifestInvalid: "Completed, but attachment packaging is incomplete",
       unavailable: "Result archive is not available",
       retry: "Retry archive generation",
       retrying: "Retrying archive generation",

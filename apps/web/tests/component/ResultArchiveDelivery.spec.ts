@@ -41,6 +41,17 @@ const nonretryableFailure = {
   retryable: false,
 };
 
+const manifestInvalidFailure = {
+  schema_version: 1 as const,
+  required: true as const,
+  status: "failed" as const,
+  revision: 1,
+  name: null,
+  size_bytes: null,
+  error_code: "artifact_manifest_invalid" as const,
+  retryable: false,
+};
+
 function mount(props: Record<string, unknown> = {}, slots = {}) {
   return createTestAppContext().mount(ResultArchiveDelivery, {
     props: { activeV1: true, ...props },
@@ -134,6 +145,17 @@ describe("ResultArchiveDelivery", () => {
       false
     );
     expect(wrapper.find('[data-test="result-archive-download"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("shows incomplete packaging copy for an invalid producer manifest", () => {
+    const wrapper = mount({ delivery: manifestInvalidFailure });
+
+    expect(
+      wrapper.get('[data-test="result-archive-manifest-invalid"]').text()
+    ).toContain("packaging is incomplete");
+    expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
       false
     );
   });
