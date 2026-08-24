@@ -275,6 +275,14 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 			},
 			wantPhase: "SUCCEEDED", wantTerminal: true,
 		},
+		{
+			name: "invalid producer manifest keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "artifact_manifest_invalid", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
 	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -714,6 +722,13 @@ func TestProjectionHasFailedRequiredDeliveryOmitsEmptyArchive(t *testing.T) {
 	}
 	if projectionHasFailedRequiredDelivery(empty) {
 		t.Fatal("empty result treated as failed required delivery")
+	}
+	invalid := empty
+	invalid.Delivery = &ProjectionDelivery{
+		Required: true, Status: "failed", ErrorCode: "artifact_manifest_invalid",
+	}
+	if projectionHasFailedRequiredDelivery(invalid) {
+		t.Fatal("invalid producer manifest treated as failed required delivery")
 	}
 	pack := empty
 	pack.Delivery = &ProjectionDelivery{

@@ -3544,7 +3544,7 @@ func privateActiveReplacementProjection(
 func projectionHasFailedRequiredDelivery(projection BotRunProjection) bool {
 	return projection.ResultArchiveV1 && projection.Delivery != nil &&
 		projection.Delivery.Required && projection.Delivery.Status == "failed" &&
-		projection.Delivery.ErrorCode != "no_user_deliverables"
+		!deliveryFailureKeepsScientificSuccess(projection.Delivery.ErrorCode)
 }
 
 func replacementTerminalResultFromProjection(

@@ -172,6 +172,10 @@ func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunPro
 	return row.Status
 }
 
+func deliveryFailureKeepsScientificSuccess(errorCode string) bool {
+	return errorCode == "no_user_deliverables" || errorCode == "artifact_manifest_invalid"
+}
+
 func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {
 	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required ||
 		phase == "FAILED" || phase == "TIMED_OUT" || phase == "CANCELLED" {
@@ -184,7 +188,7 @@ func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjec
 		}
 		return "RUNNING", false
 	case "failed":
-		if projection.Delivery.ErrorCode == "no_user_deliverables" && phase == "SUCCEEDED" {
+		if deliveryFailureKeepsScientificSuccess(projection.Delivery.ErrorCode) && phase == "SUCCEEDED" {
 			return "SUCCEEDED", true
 		}
 		return "FAILED", true
