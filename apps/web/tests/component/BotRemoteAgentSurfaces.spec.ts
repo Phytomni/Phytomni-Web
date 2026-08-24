@@ -519,7 +519,7 @@ describe("Bot remote-agent surface matrix", () => {
         true
       );
       expect(wrapper.find('[data-test="bot-report-evidence"]').exists()).toBe(
-        true
+        false
       );
       expect(wrapper.find('[data-test="bot-report-activity"]').exists()).toBe(
         true
@@ -649,7 +649,10 @@ describe("Bot remote-agent surface matrix", () => {
         true
       );
       expect(wrapper.find('[data-test="bot-artifact-warning"]').exists()).toBe(
-        true
+        false
+      );
+      expect(wrapper.find('[data-test="bot-report-downloads"]').exists()).toBe(
+        false
       );
       expect(wrapper.text()).toContain("Failed");
       expect(wrapper.find("a[href]").exists()).toBe(false);

@@ -942,8 +942,8 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       wrapper
         .findAll('[role="tab"]')
         .map((tab) => tab.attributes("data-tab-id"))
-    ).toEqual(["content", "evidence", "activity", "downloads"]);
-    expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(4);
+    ).toEqual(["content", "activity", "downloads"]);
+    expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(3);
     expect(
       wrapper
         .get(".bot-report-state")
@@ -986,7 +986,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       expect(report.find('[data-test="bot-report-content"]').exists()).toBe(
         successful
       );
-      expect(wrapper.find(".bot-artifact-list").exists()).toBe(true);
+      expect(wrapper.find(".bot-artifact-list").exists()).toBe(successful);
       expect(
         wrapper.findAll('button[data-test="bot-artifact-download"]')
       ).toHaveLength(successful ? 1 : 0);
@@ -1033,7 +1033,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       wrapper
         .findAll('[role="tab"]')
         .map((tab) => tab.attributes("data-tab-id"))
-    ).toEqual(["content", "evidence", "activity", "downloads"]);
+    ).toEqual(["content", "activity", "downloads"]);
     await wrapper.get('[data-tab-id="activity"]').trigger("click");
     expect(wrapper.get('[data-test="analyst-progress"]').text()).toBe(
       "Analysis run in progress"

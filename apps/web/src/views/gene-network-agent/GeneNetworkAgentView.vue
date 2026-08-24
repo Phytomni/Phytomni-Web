@@ -220,6 +220,7 @@
           :status="reportStatusLabel"
           :report-status="reportStatus"
           :tab-labels="tabLabels"
+          :tabs="artifactTabs"
           artifact-id="gene-network-artifact"
           :back-label="t('common.back')"
           :close-label="t('common.close')"
@@ -316,6 +317,10 @@ import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
+import {
+  artifactChrome,
+  artifactHasDownloadableFiles,
+} from "@/views/chat/utils/artifact-chrome";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
 import { useBotCapabilities } from "@/views/chat/composables/useBotCapabilities";
@@ -482,6 +487,21 @@ const tabLabels = computed(() => ({
   activity: t("agents.geneNetwork.activity"),
   downloads: t("agents.geneNetwork.downloads"),
 }));
+const artifactTabs = computed(
+  () =>
+    artifactChrome({
+      tool: "GeneNetworkAgent",
+      referenceCount: 0,
+      hasAttachments: artifactHasDownloadableFiles({
+        conversationArtifacts: displayedState.value.artifactLinks,
+        botArtifacts: displayedState.value.artifacts,
+        resultArchiveV1: isResultArchiveV1.value,
+        delivery: displayedState.value.delivery ?? null,
+      }),
+      runComplete: !isRunActive.value,
+      surface: "standalone",
+    }).tabs
+);
 
 function normalizedTraitId(value: unknown): string | null {
   const normalized =

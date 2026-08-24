@@ -25,12 +25,14 @@
         :references="DEEP_GENOME_CASE_REFERENCES"
         ns="deep-genome-demo"
         :tab-labels="artifactTabLabels"
+        :tabs="artifactTabs"
         :tablist-label="t('common.operation')"
         artifact-id="deep-genome-demo-artifact"
         :back-label="t('common.back')"
         :close-label="t('common.close')"
         :action-label="t('common.operation')"
         :menu-items="artifactMenuItems"
+        ref="artifactRef"
         @back="goBack"
         @close="goBack"
         @action="onArtifactMenu"
@@ -42,15 +44,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { AgentDemoShell } from "@/components/demo";
 import {
   DeepGenomeArtifact,
-  copyCloseArtifactMenuItems,
+  copyDownloadCloseArtifactMenuItems,
 } from "@/components/research";
+import {
+  artifactChrome,
+  artifactDownloadFormat,
+} from "@/views/chat/utils/artifact-chrome";
 import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
@@ -63,11 +69,36 @@ const goBack = () => {
   router.back();
 };
 
-const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
+const artifactChromeState = computed(() =>
+  artifactChrome({
+    tool: "DeepGenomeAgent",
+    referenceCount: DEEP_GENOME_CASE_REFERENCES.length,
+    hasAttachments: false,
+    runComplete: true,
+    surface: "client",
+  })
+);
+const artifactTabs = computed(() => artifactChromeState.value.tabs);
+const artifactMenuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(t, artifactChromeState.value.exportFormats)
+);
+const artifactRef = ref<{
+  download: (format: "pdf" | "markdown") => Promise<void>;
+} | null>(null);
 
 const onArtifactMenu = (command: string) => {
   if (command === "close") {
     goBack();
+    return;
+  }
+  const format = artifactDownloadFormat(command);
+  const artifact = artifactRef.value;
+  if (format === "PDF") {
+    if (artifact) void artifact.download("pdf").catch(() => undefined);
+    return;
+  }
+  if (format === "Markdown") {
+    if (artifact) void artifact.download("markdown").catch(() => undefined);
     return;
   }
   if (command !== "copy") return;
@@ -90,6 +121,6 @@ const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.downloadAttachments"),
+  downloads: t("chat.actions.attachments"),
 }));
 </script>

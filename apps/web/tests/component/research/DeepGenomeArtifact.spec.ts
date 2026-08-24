@@ -129,16 +129,29 @@ describe("DeepGenomeArtifact", () => {
     ).toContain("research-artifact-shell__narrative-content--wide");
   });
 
-  it("delegates header download actions to the typed embedded viewer handle", async () => {
+  it("keeps export off the header and exposes download through the viewer handle", async () => {
     download.mockClear();
     const wrapper = mountArtifact();
 
-    await wrapper
-      .get('[data-test="deep-genome-download-pdf"]')
-      .trigger("click");
-    await wrapper
-      .get('[data-test="deep-genome-download-markdown"]')
-      .trigger("click");
+    expect(
+      wrapper.find('[data-test="deep-genome-download-pdf"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.find('[data-test="deep-genome-download-markdown"]').exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
+
+    await (
+      wrapper.vm as unknown as {
+        download: (format: "pdf" | "markdown") => Promise<void>;
+      }
+    ).download("pdf");
+    await (
+      wrapper.vm as unknown as {
+        download: (format: "pdf" | "markdown") => Promise<void>;
+      }
+    ).download("markdown");
     await nextTick();
 
     expect(download).toHaveBeenNthCalledWith(1, "pdf");
@@ -183,7 +196,11 @@ describe("DeepGenomeArtifact", () => {
     const wrapper = mountArtifact();
 
     await expect(
-      wrapper.get('[data-test="deep-genome-download-pdf"]').trigger("click")
+      (
+        wrapper.vm as unknown as {
+          download: (format: "pdf" | "markdown") => Promise<void>;
+        }
+      ).download("pdf")
     ).resolves.toBeUndefined();
     expect(download).toHaveBeenCalledWith("pdf");
   });

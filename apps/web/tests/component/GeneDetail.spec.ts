@@ -60,6 +60,7 @@ const DeepGenomeArtifactStub = defineComponent({
     title: { type: String, default: "" },
     metadata: { type: [String, Array], default: undefined },
     tabLabels: { type: Object, default: () => ({}) },
+    tabs: { type: Array, default: () => [] },
     tablistLabel: { type: String, default: "" },
     artifactId: { type: String, default: "" },
     backLabel: { type: String, default: "" },
@@ -162,7 +163,7 @@ describe("Gene Detail research artifact", () => {
     expect(artifact.attributes("data-back-label")).toBe("Back");
     expect(artifact.attributes("data-close-label")).toBe("Close");
     expect(artifact.attributes("data-action-label")).toBe("Operation");
-    expect(artifact.attributes("data-menu-ids")).toBe("copy,close");
+    expect(artifact.attributes("data-menu-ids")).toBe("copy,download,close");
     expect(artifact.attributes("data-tablist-label")).toBe("Operation");
     expect(artifact.attributes("data-artifact-id")).toBe(
       "gene-detail-artifact"
@@ -171,7 +172,7 @@ describe("Gene Detail research artifact", () => {
       content: "View",
       evidence: "References",
       activity: "Execution log",
-      downloads: "Download attachments",
+      downloads: "Attachments",
     });
     expect(wrapper.find('[data-scroll-root="gene-detail"]').exists()).toBe(
       true

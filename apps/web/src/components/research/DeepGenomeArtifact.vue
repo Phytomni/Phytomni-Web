@@ -5,6 +5,7 @@
       :metadata="metadata"
       :status="status"
       :tab="selectedTab"
+      :tabs="visibleTabs"
       :tab-labels="tabLabels"
       content-layout="wide"
       :tablist-label="tablistLabel"
@@ -18,42 +19,6 @@
       @action="emit('action', $event)"
       @tab="handleTab"
     >
-      <template #header>
-        <ResearchArtifactHeader
-          :title="title"
-          :metadata="metadata"
-          :status="status"
-          :back-label="backLabel"
-          :close-label="closeLabel"
-          :action-label="actionLabel"
-          :menu-items="menuItems"
-          @back="emit('back')"
-          @close="emit('close')"
-          @action="emit('action', $event)"
-        >
-          <template #actions>
-            <button
-              type="button"
-              class="research-artifact-header__control"
-              data-test="deep-genome-download-pdf"
-              :aria-label="$t('agents.deepGenome.downloadPDF')"
-              @click="delegateDownload('pdf')"
-            >
-              {{ $t("agents.deepGenome.downloadPDF") }}
-            </button>
-            <button
-              type="button"
-              class="research-artifact-header__control"
-              data-test="deep-genome-download-markdown"
-              :aria-label="$t('agents.deepGenome.downloadMD')"
-              @click="delegateDownload('markdown')"
-            >
-              {{ $t("agents.deepGenome.downloadMD") }}
-            </button>
-          </template>
-        </ResearchArtifactHeader>
-      </template>
-
       <template #content>
         <DeepGenomeResultViewer
           ref="viewerRef"
@@ -84,15 +49,15 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import type {
   DeepGenomeDownloadFormat,
   DeepGenomeViewerHandle,
 } from "./deep-genome-types";
 import type { ArtifactOverflowItem } from "./artifact-overflow";
-import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
+import { artifactChrome } from "@/views/chat/utils/artifact-chrome";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
 import type {
   AuthorizedScientificResource,
@@ -114,6 +79,7 @@ const props = withDefaults(
     metadata?: string | string[];
     status?: string;
     tab?: ArtifactTab;
+    tabs?: readonly ArtifactTab[];
     tabLabels?: ArtifactTabLabels;
     tablistLabel?: string;
     artifactId?: string;
@@ -145,6 +111,16 @@ const viewerRef = ref<DeepGenomeViewerHandle | null>(null);
 const evidencePanelRef = ref<{
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);
+const visibleTabs = computed<readonly ArtifactTab[]>(() => {
+  if (props.tabs && props.tabs.length > 0) return props.tabs;
+  return artifactChrome({
+    tool: "DeepGenomeAgent",
+    referenceCount: props.references?.length ?? 0,
+    hasAttachments: false,
+    runComplete: true,
+    surface: "client",
+  }).tabs;
+});
 const selectedTab = ref<ArtifactTab>(props.tab);
 
 watch(
@@ -163,6 +139,7 @@ async function activateEvidence(
   activation: ScientificCitationActivation
 ): Promise<void> {
   if (activation.namespace !== props.ns) return;
+  if (!visibleTabs.value.includes("evidence")) return;
   handleTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
@@ -179,6 +156,8 @@ async function delegateDownload(
     // The embedded viewer owns its download error surface.
   }
 }
+
+defineExpose({ download: delegateDownload });
 </script>
 
 <style scoped>

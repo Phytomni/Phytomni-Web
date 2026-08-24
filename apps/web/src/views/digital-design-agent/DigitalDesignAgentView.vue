@@ -247,6 +247,7 @@
           :status="reportStatusLabel"
           :report-status="reportStatus"
           :tab-labels="tabLabels"
+          :tabs="artifactTabs"
           artifact-id="digital-design-artifact"
           :back-label="t('common.back')"
           :close-label="t('common.close')"
@@ -336,6 +337,10 @@ import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
+import {
+  artifactChrome,
+  artifactHasDownloadableFiles,
+} from "@/views/chat/utils/artifact-chrome";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import AttachmentChipStrip from "@/views/chat/components/AttachmentChipStrip.vue";
 import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
@@ -604,6 +609,21 @@ const tabLabels = computed(() => ({
   activity: t("agents.digitalDesign.activity"),
   downloads: t("agents.digitalDesign.downloads"),
 }));
+const artifactTabs = computed(
+  () =>
+    artifactChrome({
+      tool: "DigitalDesignAgent",
+      referenceCount: 0,
+      hasAttachments: artifactHasDownloadableFiles({
+        conversationArtifacts: displayedState.value.artifactLinks,
+        botArtifacts: displayedState.value.artifacts,
+        resultArchiveV1: isResultArchiveV1.value,
+        delivery: displayedState.value.delivery ?? null,
+      }),
+      runComplete: !isRunActive.value,
+      surface: "standalone",
+    }).tabs
+);
 
 function handleFiles(event: Event): void {
   const input = event.target as HTMLInputElement;

@@ -321,6 +321,10 @@ import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
 import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
+import {
+  artifactChrome,
+  artifactHasDownloadableFiles,
+} from "@/views/chat/utils/artifact-chrome";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
@@ -625,8 +629,21 @@ const isActiveResearch = computed(
 const artifactTab = computed(() =>
   isActiveResearch.value ? "activity" : "content"
 );
-const artifactTabs = computed(() =>
-  isActiveResearch.value ? (["activity"] as const) : undefined
+const artifactTabs = computed(
+  () =>
+    artifactChrome({
+      tool: props.tool,
+      referenceCount: 0,
+      hasAttachments: artifactHasDownloadableFiles({
+        conversationArtifacts: displayedState.value.artifactLinks,
+        botArtifacts: reportArtifacts.value,
+        resultArchiveV1: isResultArchiveV1.value,
+        delivery: displayedState.value.delivery ?? null,
+      }),
+      runComplete: researchTerminalPhase.value != null,
+      activityOnly: isActiveResearch.value,
+      surface: "standalone",
+    }).tabs
 );
 const reportComponentState = computed<BotRemoteAgentRunState>(() => {
   const state = displayedState.value;

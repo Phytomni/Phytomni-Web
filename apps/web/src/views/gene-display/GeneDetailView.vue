@@ -33,12 +33,14 @@
           :title="pageTitle"
           :metadata="artifactMetadata"
           :tab-labels="artifactTabLabels"
+          :tabs="artifactTabs"
           :tablist-label="t('common.operation')"
           artifact-id="gene-detail-artifact"
           :back-label="t('common.back')"
           :close-label="t('common.close')"
           :action-label="t('common.operation')"
           :menu-items="artifactMenuItems"
+          ref="artifactRef"
           @back="handleArtifactNavigation"
           @close="handleArtifactNavigation"
           @action="onArtifactMenu"
@@ -55,7 +57,11 @@ import { ElMessage } from "element-plus";
 import { getGeneDetails } from "@/api/gene-display";
 import { isRecord } from "@/api/contracts";
 import { DeepGenomeArtifact } from "@/components/research";
-import { copyCloseArtifactMenuItems } from "@/components/research/artifact-overflow";
+import { copyDownloadCloseArtifactMenuItems } from "@/components/research/artifact-overflow";
+import {
+  artifactChrome,
+  artifactDownloadFormat,
+} from "@/views/chat/utils/artifact-chrome";
 import { useI18n } from "vue-i18n";
 import { buildDisplayContent } from "./gene-markdown";
 import { PhyEmptyState } from "@/components/shell";
@@ -89,9 +95,24 @@ const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.downloadAttachments"),
+  downloads: t("chat.actions.attachments"),
 }));
-const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
+const artifactChromeState = computed(() =>
+  artifactChrome({
+    tool: "DeepGenomeAgent",
+    referenceCount: references.value.length,
+    hasAttachments: false,
+    runComplete: true,
+    surface: "client",
+  })
+);
+const artifactTabs = computed(() => artifactChromeState.value.tabs);
+const artifactMenuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(t, artifactChromeState.value.exportFormats)
+);
+const artifactRef = ref<{
+  download: (format: "pdf" | "markdown") => Promise<void>;
+} | null>(null);
 
 const asyncState = computed<AsyncState>(() => {
   if (loading.value) return "loading";
@@ -201,6 +222,16 @@ const handleArtifactNavigation = () => {
 const onArtifactMenu = (command: string) => {
   if (command === "close") {
     handleArtifactNavigation();
+    return;
+  }
+  const format = artifactDownloadFormat(command);
+  const artifact = artifactRef.value;
+  if (format === "PDF") {
+    if (artifact) void artifact.download("pdf").catch(() => undefined);
+    return;
+  }
+  if (format === "Markdown") {
+    if (artifact) void artifact.download("markdown").catch(() => undefined);
     return;
   }
   if (command !== "copy") return;

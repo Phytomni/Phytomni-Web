@@ -14,6 +14,7 @@ const testState = vi.hoisted(() => ({
   > | null,
   copiedText: vi.fn(),
   downloadFile: vi.fn(),
+  getFileDownUrl: vi.fn(),
   getAnswerCheck: vi.fn(),
   getAnalystAgentLog: vi.fn(),
 }));
@@ -43,7 +44,7 @@ vi.mock("@/views/chat/composables/useCopyDownload", () => ({
   useCopyDownload: () => ({
     fallbackCopyText: (text: string) => testState.copiedText(text),
     downloadFile: testState.downloadFile,
-    getFileDownUrl: vi.fn(),
+    getFileDownUrl: testState.getFileDownUrl,
   }),
 }));
 
@@ -1512,10 +1513,9 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.html()).not.toContain(knowledgeZeroReferenceRaw);
     expect(wrapper.text()).not.toContain("doc_list");
 
-    await wrapper.get('[data-tab-id="evidence"]').trigger("click");
-    expect(wrapper.get(".research-evidence-panel__empty").text()).toContain(
-      enUS.common.noData
-    );
+    expect(wrapper.find('[data-tab-id="evidence"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
   });
 
   it.each([
@@ -1634,6 +1634,28 @@ describe("Chat artifact shell integration", () => {
     }
   );
 
+  it("exports a cited report from the overflow Download menu", async () => {
+    const { wrapper } = await mountProductionChat(1440, {
+      messagesA: [
+        {
+          ...citedMessage,
+          id: "cited-download-1",
+          tool_name: "ReviewAgent",
+        },
+      ],
+    });
+    await wrapper.get("[data-test=artifact-open]").trigger("click");
+    testState.getFileDownUrl.mockClear();
+
+    await chooseArtifactOverflow(wrapper, "download:PDF");
+    expect(testState.getFileDownUrl).toHaveBeenCalledWith(
+      "cited-download-1",
+      "PDF"
+    );
+    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
+  });
+
   it("closes the artifact panel from the overflow menu", async () => {
     const { wrapper, state } = await mountProductionChat(1440, {
       messagesA: [citedMessage],
@@ -1690,6 +1712,8 @@ describe("Chat artifact shell integration", () => {
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
+    expect(CHAT_SOURCE).toContain(':tabs="artifactTabs"');
+    expect(CHAT_SOURCE).toContain("copyDownloadCloseArtifactMenuItems");
     expect(CHAT_SOURCE).toContain(':menu-items="artifactMenuItems"');
     expect(CHAT_SOURCE).toContain('@action="onArtifactMenu"');
     expect(CHAT_SOURCE).toContain('surface="artifact"');

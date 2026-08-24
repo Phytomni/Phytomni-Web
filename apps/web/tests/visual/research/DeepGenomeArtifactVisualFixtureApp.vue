@@ -13,6 +13,7 @@
       ns="deep-genome-visual"
       artifact-id="deep-genome-visual-artifact"
       :tab-labels="tabLabels"
+      :tabs="chrome.tabs"
       :tablist-label="t('common.operation')"
       :back-label="t('common.back')"
       :close-label="t('common.close')"
@@ -33,8 +34,9 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   DeepGenomeArtifact,
-  copyCloseArtifactMenuItems,
+  copyDownloadCloseArtifactMenuItems,
 } from "@/components/research";
+import { artifactChrome } from "@/views/chat/utils/artifact-chrome";
 import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
@@ -59,9 +61,20 @@ const tabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.downloadAttachments"),
+  downloads: t("chat.actions.attachments"),
 }));
-const menuItems = computed(() => copyCloseArtifactMenuItems(t));
+const chrome = computed(() =>
+  artifactChrome({
+    tool: "DeepGenomeAgent",
+    referenceCount: DEEP_GENOME_CASE_REFERENCES.length,
+    hasAttachments: false,
+    runComplete: true,
+    surface: "client",
+  })
+);
+const menuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(t, chrome.value.exportFormats)
+);
 
 function recordAction(nextAction: string): void {
   action.value = nextAction;

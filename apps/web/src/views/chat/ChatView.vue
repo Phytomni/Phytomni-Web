@@ -519,6 +519,7 @@ export function releaseDialogueUploads(
           :rendering-file-id="currentArtifactMessage.id"
           :ns="artifactNamespace"
           :tab="artifactTab"
+          :tabs="artifactTabs"
           :tab-labels="artifactTabLabels"
           :tablist-label="t('common.operation')"
           :artifact-id="artifactId"
@@ -542,6 +543,7 @@ export function releaseDialogueUploads(
           "
           :report-status="currentArtifactReportStatus || undefined"
           :tab="artifactTab"
+          :tabs="artifactTabs"
           :tab-labels="artifactTabLabels"
           :tablist-label="t('common.operation')"
           :artifact-id="artifactId"
@@ -697,7 +699,7 @@ import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
   ResearchEvidencePanel,
-  copyCloseArtifactMenuItems,
+  copyDownloadCloseArtifactMenuItems,
 } from "@/components/research";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -778,6 +780,11 @@ import {
   artifactPreviewTitleKey,
   researchRowLifecycleStatus,
 } from "./utils/artifact-policy";
+import {
+  artifactChromeFromMessage,
+  artifactDownloadFormat,
+  type ArtifactChrome,
+} from "./utils/artifact-chrome";
 import type {
   ArtifactTab,
   Chat,
@@ -1259,14 +1266,27 @@ const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.downloadAttachments"),
+  downloads: t("chat.actions.attachments"),
 }));
-const artifactMenuItems = computed(() => copyCloseArtifactMenuItems(t));
+const currentArtifactChrome = computed<ArtifactChrome>(() => {
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactChromeFromMessage(message)
+    : { tabs: ["content"], exportFormats: [] };
+});
+const artifactTabs = computed(() => currentArtifactChrome.value.tabs);
+const artifactMenuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(
+    t,
+    currentArtifactChrome.value.exportFormats
+  )
+);
 
 async function activateEvidence(
   activation: ScientificCitationActivation
 ): Promise<void> {
   if (activation.namespace !== artifactNamespace.value) return;
+  if (!artifactTabs.value.includes("evidence")) return;
   await selectArtifactPanelTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
@@ -2357,6 +2377,12 @@ const handleMessageCopy = (message: ChatMessage, index: number) => {
 const onArtifactMenu = (command: string) => {
   if (command === "close") {
     closeArtifact();
+    return;
+  }
+  const format = artifactDownloadFormat(command);
+  if (format) {
+    const message = currentArtifactMessage.value;
+    if (message?.id) getFileDownUrl(message.id, format);
     return;
   }
   if (command !== "copy") return;
