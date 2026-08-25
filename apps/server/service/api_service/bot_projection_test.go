@@ -144,6 +144,45 @@ func TestDecodeRunProjectionPrefersCanonicalArchiveDelivery(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionAcceptsReadyArchiveUnderSiblingChildParts(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	record := rxBot.RunRecord{
+		RunID:  "run-design-two-parts",
+		Agent:  "design",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"# Design report"},
+			"execution":{
+				"output_dirs":[
+					"/obs/bucket/owner/run/children/part-002",
+					"/obs/bucket/owner/run/children/part-001"
+				],
+				"delivery":{
+					"schema_version":1,"required":true,"status":"ready","revision":1,
+					"inventory_digest":"` + digest + `",
+					"archive":{"role":"result_archive","name":"design-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+					"error_code":null,"retryable":false
+				}
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "SUCCEEDED" || !got.ResultArchiveV1 || got.Delivery == nil || got.Delivery.Status != "ready" {
+		t.Fatalf("delivery projection = %#v", got)
+	}
+	expectedArchiveRef := "/obs/bucket/owner/run/children/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/design-results.zip"
+	if got.Delivery.ArchiveRef != expectedArchiveRef {
+		t.Fatalf("archive ref = %q, want %q", got.Delivery.ArchiveRef, expectedArchiveRef)
+	}
+	if got.VisibleReport() != "# Design report" {
+		t.Fatalf("report = %q", got.VisibleReport())
+	}
+}
+
 func TestDecodeRunProjectionRetainsLegacyArtifactsWithoutDeliveryMarker(t *testing.T) {
 	record := rxBot.RunRecord{
 		RunID:  "run-legacy-artifacts",

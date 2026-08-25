@@ -13,6 +13,14 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Ready ZIP with sibling child parts no longer stays RUNNING
+
+- Design and multi-goal Research no longer freeze on RUNNING after Bot
+  marks the result archive ready, when `execution.output_dirs` lists
+  several `children/part-NNN` directories under one run. The wait card
+  can complete; the ZIP still resolves under the shared
+  `children/delivery` root.
+
 ### 🐛 Design wait card no longer Failed on packing errors
 
 - When science succeeded and the result ZIP failed because a producer

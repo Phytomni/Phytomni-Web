@@ -82,7 +82,13 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 		}
 		rec, meta, err := client.GetRunWithMeta(ctx, runID)
 		if err != nil {
-			rxLog.Sugar().Error(err)
+			rxLog.Sugar().Errorw(
+				"bot run poll failed",
+				"row_id", row.Id,
+				"bot_run_id", runID,
+				"agent", row.ToolName,
+				"err", err,
+			)
 			continue
 		}
 		// A blank upstream status is malformed for polling. Keep the legacy
@@ -98,7 +104,13 @@ func SyncBotRuns(rows []model.QuestionAgentLog) {
 			err = ps.applyBotRunProjection(ctx, &row, rec, meta)
 		}
 		if err != nil {
-			rxLog.Sugar().Error(err)
+			rxLog.Sugar().Errorw(
+				"bot run projection apply failed",
+				"row_id", row.Id,
+				"bot_run_id", runID,
+				"agent", row.ToolName,
+				"err", err,
+			)
 		}
 	}
 }

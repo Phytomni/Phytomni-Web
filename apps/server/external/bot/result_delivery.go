@@ -346,8 +346,10 @@ func validateRunDeliveryState(delivery RunDelivery, agent string) error {
 }
 
 // deriveRunArchiveObjectRef resolves Bot's opaque archive reference inside the
-// one output root that defines the Web service's storage scope. The resulting
-// path remains server-only and is never sent back to the browser.
+// one publish root that defines the Web service's storage scope. Sibling
+// children/part-NNN directories collapse to that shared root; unrelated run
+// roots still fail. The resulting path remains server-only and is never sent
+// back to the browser.
 func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (string, error) {
 	if delivery.Status != "ready" || delivery.Archive == nil {
 		return "", nil
@@ -356,11 +358,26 @@ func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (strin
 	if err != nil {
 		return "", err
 	}
-	if len(roots) != 1 {
-		return "", fmt.Errorf("execution.output_dirs: ready delivery requires exactly one root")
+	publishRoots := uniqueResultArchivePublishRoots(roots)
+	if len(publishRoots) != 1 {
+		return "", fmt.Errorf("execution.output_dirs: ready delivery requires exactly one publish root")
 	}
 	digestHex := strings.TrimPrefix(delivery.InventoryDigest, "sha256:")
-	return resultArchivePublishRoot(roots[0]) + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
+	return publishRoots[0] + "/delivery/" + digestHex + "/" + delivery.Archive.Name, nil
+}
+
+func uniqueResultArchivePublishRoots(outputDirs []string) []string {
+	seen := make(map[string]struct{}, len(outputDirs))
+	roots := make([]string, 0, 1)
+	for _, outputDir := range outputDirs {
+		root := resultArchivePublishRoot(outputDir)
+		if _, exists := seen[root]; exists {
+			continue
+		}
+		seen[root] = struct{}{}
+		roots = append(roots, root)
+	}
+	return roots
 }
 
 var resultChildPart = regexp.MustCompile(`^part-(?:00[1-9]|0[1-9][0-9]|1[0-9]{2})$`)

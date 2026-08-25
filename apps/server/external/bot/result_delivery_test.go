@@ -78,6 +78,48 @@ func TestDecodeRunDeliveryResolvesArchiveUnderResultChildRoot(t *testing.T) {
 	}
 }
 
+func TestDecodeRunDeliveryResolvesArchiveUnderSiblingChildParts(t *testing.T) {
+	digestHex := strings.TrimPrefix(testArchiveDigest, "sha256:")
+	cases := []struct {
+		agent string
+		roots []string
+		want  string
+	}{
+		{
+			agent: "design",
+			roots: []string{
+				"/obs/bucket/owner/run/children/part-002",
+				"/obs/bucket/owner/run/children/part-001",
+			},
+			want: "/obs/bucket/owner/run/children/delivery/" + digestHex + "/design-results.zip",
+		},
+		{
+			agent: "research",
+			roots: []string{
+				"/obs/bucket/owner/run/children/part-001",
+				"/obs/bucket/owner/run/children/part-002",
+				"/obs/bucket/owner/run/children/part-003",
+			},
+			want: "/obs/bucket/owner/run/children/delivery/" + digestHex + "/research-results.zip",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.agent, func(t *testing.T) {
+			got, err := DecodeRunDelivery(
+				encodeDeliveryPayload(t, readyDeliveryPayload(tc.agent)),
+				tc.agent,
+				tc.roots,
+			)
+			if err != nil {
+				t.Fatalf("sibling parts rejected: %v", err)
+			}
+			if got.Archive == nil || got.Archive.ObjectRef != tc.want {
+				t.Fatalf("object ref = %#v, want %q", got.Archive, tc.want)
+			}
+		})
+	}
+}
+
 func TestCanonicalResultArchiveRefCollapsesChildDeliveryPath(t *testing.T) {
 	digest := strings.TrimPrefix(testArchiveDigest, "sha256:")
 	child := "/obs/bucket/owner/run/children/part-001/delivery/" + digest + "/analyst-results.zip"
@@ -189,6 +231,10 @@ func TestDecodeRunDeliveryRejectsMalformedContracts(t *testing.T) {
 		}},
 		{name: "missing root", mutate: func(map[string]interface{}) {}, roots: []string{}},
 		{name: "multiple roots", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/run", "obs://bucket/owner/second-run"}},
+		{name: "multiple publish roots", mutate: func(map[string]interface{}) {}, roots: []string{
+			"/obs/bucket/owner/run/children/part-001",
+			"/obs/bucket/owner/second-run/children/part-001",
+		}},
 		{name: "url root", mutate: func(map[string]interface{}) {}, roots: []string{"https://example.invalid/run"}},
 		{name: "traversal root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/../run"}},
 		{name: "control character root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/\nrun"}},
