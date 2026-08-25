@@ -20,10 +20,19 @@ The gateway is dormant until `bot.proxy_enabled=true`.
 
 ## 1. Bot service token (ops-only)
 
-The Bot **service token** mints and revokes user keys. It is ops-only:
-it never enters `app.yml`, source, or git. It lives only in the ops
-secrets channel and on the Bot side. Web Go holds a **user key**, not the
-service token, and contains no key-mint/revoke code.
+The Bot **service token** mints/revokes user keys and authenticates Web's V2
+execution dispatcher/projector. It is ops-only: it never enters `app.yml`, the
+browser, source, or git. Deliver the same secret to both the Bot and Web Go
+processes as `PHYTOMNI_API_SERVICE_TOKEN`. Web also holds the separately scoped
+`bot.user_api_key` used by legacy/user-principal relay calls; the two
+credentials are not interchangeable.
+
+Web now fails startup before opening the HTTP listener if the execution service
+token is absent. This is intentional: accepting messages while the dispatcher
+cannot authenticate would create outbox dead letters and misleading execution
+state. After rotating the token, restart Bot first and verify health, then
+restart Web with the matching value. A mismatch is detected by cross-service
+smoke/capability checks and must be treated as a failed deployment.
 
 ## 2. First deploy — mint the `ptm_<web>` user key
 
@@ -162,7 +171,8 @@ Two windows, matching the staged §6:
 
 - Startup: with `proxy_enabled=true`, Web Go fails fast if Bot `/v1/agents`
   is unreachable or missing a required slug. With `proxy_enabled=false`,
-  Web Go boots without contacting Bot.
+  Web Go does not perform the legacy catalog preflight. The canonical execution
+  workers still require `PHYTOMNI_API_SERVICE_TOKEN` in either mode.
 - Runtime: `/query` returns a 5xx with an operator-actionable log when Bot
   is down; `/v1/answer/check` degrades to MySQL legacy fields rather than
   failing. Web Go itself never crashes on Bot trouble.
@@ -332,3 +342,12 @@ Deploy and smoke in this order:
 On rollback, revert Web before Bot so the active Web never depends on a missing
 protocol. Keep both widened columns and the larger safe proxy allowance; do not
 delete uploads, Research runs, or user history.
+
+## 13. Unified execution runtime V2
+
+Architecture, API, flags, metrics, safe recovery actions, alert thresholds,
+retention, and rollback are documented in
+[`../reference/execution-runtime-v2.md`](../reference/execution-runtime-v2.md).
+Production activation is Bot-first and requires a recorded canary plus explicit
+human business-parity approval. Repository tests do not substitute for that
+approval.

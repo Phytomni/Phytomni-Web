@@ -1,5 +1,37 @@
 <script lang="ts">
 import type { Chat as ChatRecord } from "./types";
+import type {
+  ExecutionRunState as ExecutionRunRecord,
+  ExecutionTargetResolution,
+} from "./streaming/executionEvents";
+
+export type ExecutionTargetOpenPlan =
+  | { kind: "authenticated-v2"; url: string }
+  | { kind: "legacy-artifact"; messageId: number; artifactId: string }
+  | { kind: "unavailable" };
+
+export function planExecutionTargetOpen(
+  detail: ExecutionTargetResolution | undefined
+): ExecutionTargetOpenPlan {
+  if (detail?.deliveryUrl) {
+    return { kind: "authenticated-v2", url: detail.deliveryUrl };
+  }
+  if (detail?.messageId && detail.artifactId) {
+    return {
+      kind: "legacy-artifact",
+      messageId: detail.messageId,
+      artifactId: detail.artifactId,
+    };
+  }
+  return { kind: "unavailable" };
+}
+
+export function executionRunNeedsLiveSubscription(
+  executionId: string | null | undefined,
+  run: ExecutionRunRecord | undefined
+): boolean {
+  return Boolean(executionId) && run?.terminal == null;
+}
 
 export function removeDeletedChat(options: {
   chatList: ChatRecord[];
@@ -11,14 +43,6 @@ export function removeDeletedChat(options: {
   options.disposeDialogue(dialogueId);
   options.removeChatState(dialogueId);
   return options.chatList.filter((chat) => chat.dialogue_id !== dialogueId);
-}
-
-export function releaseDialogueUploads(
-  dialogueId: string | undefined,
-  cancelDialogue: (dialogueId: string) => void | Promise<void>
-): void {
-  if (typeof dialogueId !== "string" || dialogueId.length === 0) return;
-  void cancelDialogue(dialogueId);
 }
 </script>
 <template>
@@ -32,8 +56,11 @@ export function releaseDialogueUploads(
   >
     <PhyAdaptiveShell
       :sidebar-collapsed="effectiveSidebarCollapsed"
-      :artifact-open="artifactOpen"
-      :artifact-fullscreen="artifactOpen && isMobileViewport"
+      :artifact-open="false"
+      :artifact-fullscreen="false"
+      :workspace-open="executionWorkspaceOpen"
+      :workspace-fullscreen="executionWorkspaceOpen && isMobileViewport"
+      :rail-open="executionRailOpen"
       :main-inert="isMobileViewport && leftSidebarDrawerOpen"
     >
       <template #sidebar>
@@ -56,6 +83,41 @@ export function releaseDialogueUploads(
             @chatFavorited="handleChatFavorited"
           />
         </div>
+      </template>
+
+      <template #header>
+        <header class="chat-header">
+          <div class="chat-header-inner">
+            <div class="header-leading">
+              <el-button
+                ref="sidebarTriggerRef"
+                class="mobile-sidebar-toggle"
+                data-testid="chat-sidebar-trigger"
+                :class="{ 'is-visible': leftSidebarCollapsed }"
+                text
+                circle
+                :aria-label="$t('chat.openNavigation')"
+                @click="toggleSidebarFromHeader"
+              >
+                <el-icon><Menu /></el-icon>
+              </el-button>
+              <h2 class="chat-header-title" :title="chatHeaderTitle">
+                {{ chatHeaderTitle }}
+              </h2>
+              <span
+                v-if="chatMode === 'expert'"
+                class="chat-expert-indicator"
+                data-test="chat-expert-indicator"
+              >
+                {{ $t("chat.mode.expert") }}
+              </span>
+            </div>
+            <div class="header-controls" data-testid="chat-header-preferences">
+              <LangSwitch />
+              <ThemeSwitch />
+            </div>
+          </div>
+        </header>
       </template>
 
       <template #main>
@@ -89,42 +151,6 @@ export function releaseDialogueUploads(
         <div class="chat-main-layout">
           <!-- Center chat area -->
           <div class="chat-main">
-            <header class="chat-header">
-              <div class="chat-header-inner">
-                <div class="header-leading">
-                  <el-button
-                    ref="sidebarTriggerRef"
-                    class="mobile-sidebar-toggle"
-                    data-testid="chat-sidebar-trigger"
-                    :class="{ 'is-visible': leftSidebarCollapsed }"
-                    text
-                    circle
-                    :aria-label="$t('chat.openNavigation')"
-                    @click="toggleSidebarFromHeader"
-                  >
-                    <el-icon><Menu /></el-icon>
-                  </el-button>
-                  <h2 class="chat-header-title" :title="chatHeaderTitle">
-                    {{ chatHeaderTitle }}
-                  </h2>
-                  <span
-                    v-if="chatMode === 'expert'"
-                    class="chat-expert-indicator"
-                    data-test="chat-expert-indicator"
-                  >
-                    {{ $t("chat.mode.expert") }}
-                  </span>
-                </div>
-                <div
-                  class="header-controls"
-                  data-testid="chat-header-preferences"
-                >
-                  <LangSwitch />
-                  <ThemeSwitch />
-                </div>
-              </div>
-            </header>
-
             <div
               class="chat-content-stack"
               data-testid="chat-content-stack"
@@ -140,6 +166,7 @@ export function releaseDialogueUploads(
                 data-test="chat-transcript-scroll-root"
                 ref="messageContainer"
                 :key="timestamp"
+                @scroll="rememberTranscriptScroll"
               >
                 <div
                   v-if="currentHistoryHydration === 'loading'"
@@ -178,11 +205,7 @@ export function releaseDialogueUploads(
                     class="empty-chat-welcome"
                   >
                     <template #mark>
-                      <img
-                        src="../../assets/images/chat/logo.png"
-                        class="empty-chat-mark"
-                        alt=""
-                      />
+                      <img :src="chatLogo" class="empty-chat-mark" alt="" />
                     </template>
                   </PhyEmptyState>
                 </div>
@@ -220,7 +243,6 @@ export function releaseDialogueUploads(
                           digitalDesignImagesLoading
                         "
                         :lifecycle="agentRunLifecycleForMessage(message)"
-                        :progress-started-at="progressHintForMessage(message)"
                         @finish="() => handleMarkdownFinish(index)"
                         @open-artifact="openArtifactForMessage(message)"
                         @update:activity-expanded="
@@ -236,12 +258,39 @@ export function releaseDialogueUploads(
                       />
 
                       <template #activity>
+                        <ExecutionActivityPanel
+                          v-if="
+                            message.role === 'assistant' &&
+                            executionRunForMessage(message)
+                          "
+                          :run="executionRunForMessage(message)!"
+                          :expanded="isExecutionActivityExpanded(message)"
+                          :lifecycle="agentRunLifecycleForMessage(message)"
+                          :message-status="message.status"
+                          @update:expanded="
+                            (open) =>
+                              setExecutionActivityExpanded(message, open)
+                          "
+                          @open-target="
+                            (target, title) =>
+                              openExecutionTarget(
+                                target,
+                                title,
+                                executionRunForMessage(message)?.runId
+                              )
+                          "
+                          @open-diagnostics="
+                            openExecutionDiagnostics(
+                              executionRunForMessage(message)
+                            )
+                          "
+                        />
                         <!-- Only mount when rowId is a valid positive-decimal id;
                    missing/invalid ids never GET/PATCH and hide the log disclosure. -->
                         <ChatActivity
-                          v-if="
+                          v-else-if="
                             message.role === 'assistant' &&
-                            message.tool_name === 'AnalystAgent' &&
+                            showsInlineLegacyTaskLog(message) &&
                             !!deriveAnalystLogRowId(message)
                           "
                           :state-key="analystLogStateKey(message)"
@@ -255,12 +304,9 @@ export function releaseDialogueUploads(
                         >
                           <ChatAnalystLog
                             :row-id="deriveAnalystLogRowId(message)"
-                            :task-id="deriveAnalystLogTaskId(message)"
                             :log-data="analystLogData(message)"
                             :loading="analystLogLoading(message)"
-                            :updating="analystLogUpdating(message)"
                             :error-kind="analystLogErrorKind(message)"
-                            @update="updateLog(message)"
                             @retry="retryLog(message)"
                           />
                         </ChatActivity>
@@ -359,16 +405,11 @@ export function releaseDialogueUploads(
                     </ChatMessageRow>
                   </template>
 
-                  <!-- Loading message: real TransferProgress XOR simulated SendProgress,
-           suppressed while an AG-UI stream is in flight — the placeholder shows
-           StreamMessage, or SendProgress for long-wait Knowledge/BriefGene
-           until the first answer body arrives. -->
+                  <!-- Loading message: real upload progress XOR truthful request activity,
+           suppressed while an AG-UI stream is in flight — the placeholder already
+           shows streaming content, so both would double the "is responding" cue. -->
                   <ChatMessageRow
-                    v-if="
-                      isSending &&
-                      !getChatState(currentChatId).isStreaming &&
-                      !hasActivePollableAssistantWait
-                    "
+                    v-if="isSending && !getChatState(currentChatId).isStreaming"
                     role="assistant"
                     loading
                   >
@@ -376,32 +417,28 @@ export function releaseDialogueUploads(
                       <el-avatar :size="36" :src="botAvatar" />
                     </template>
                     <div
-                      v-if="waitAgentLabel"
-                      class="wait-agent-label"
-                      data-testid="wait-agent-label"
-                    >
-                      {{ waitAgentLabel }}
-                    </div>
-                    <div
                       class="message-text loading-message phy-bubble-assistant"
                     >
-                      <span class="sr-only">{{ $t("chat.ladingInner") }}</span>
+                      <div class="loading-message__summary">
+                        <span>{{ $t("chat.ladingInner") }}</span>
+                        <span class="loading-dots" aria-hidden="true">
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                        </span>
+                      </div>
                       <TransferProgress
                         v-if="uploadTransfer"
                         :snapshot="uploadTransfer"
                         @cancel="(id) => abortTransfer(id)"
                       />
-                      <SendProgress
+                      <ExecutionActivityPanel
                         v-else
-                        :started-at="getChatState(currentChatId).sendStartedAt"
-                        :agent-name="
-                          getChatState(currentChatId).activeAgentName
-                        "
-                        :completing="getChatState(currentChatId).completing"
-                        :stage-label="
-                          progressLabelKey === 'chat.progress.selectingAgent'
-                            ? t(progressLabelKey)
-                            : undefined
+                        :run="currentExecutionRun ?? emptyExecutionRun"
+                        :expanded="true"
+                        @open-target="openExecutionTarget"
+                        @open-diagnostics="
+                          openExecutionDiagnostics(currentExecutionRun)
                         "
                       />
                     </div>
@@ -420,7 +457,7 @@ export function releaseDialogueUploads(
                 <ChatComposer
                   ref="composerRef"
                   v-model="displayMessageInput"
-                  :is-sending="isSending || hasActivePollableAssistantWait"
+                  :is-sending="isSending"
                   v-model:chat-mode="chatMode"
                   :instant-mode-enabled="instantModeEnabled"
                   :expert-mode-enabled="expertModeEnabled"
@@ -500,172 +537,186 @@ export function releaseDialogueUploads(
         </el-dialog>
       </template>
 
-      <template #artifact>
-        <DeepGenomeArtifact
-          v-if="
-            currentArtifactMessage &&
-            currentArtifactMessage.tool_name === 'DeepGenomeAgent'
-          "
-          :title="chatHeaderTitle"
-          :metadata="artifactAgentLabel(currentArtifactMessage)"
-          :status="currentArtifactStatusLabel"
-          :markdown="
-            currentArtifactPresentation?.kind === 'deep-genome'
-              ? currentArtifactPresentation.report
-              : ''
-          "
-          :references="currentArtifactMessage.doc_list"
-          :resources="currentArtifactResources"
-          :rendering-file-id="currentArtifactMessage.id"
-          :ns="artifactNamespace"
-          :tab="artifactTab"
-          :tabs="artifactTabs"
-          :tab-labels="artifactTabLabels"
-          :tablist-label="t('common.operation')"
-          :artifact-id="artifactId"
-          :back-label="t('common.back')"
-          :close-label="t('common.close')"
-          :action-label="t('common.operation')"
-          :menu-items="artifactMenuItems"
-          @back="closeArtifact"
-          @close="closeArtifact"
-          @action="onArtifactMenu"
-          @tab="selectArtifactTab"
-          @resource-activate="activateArtifactResource"
-        />
-        <ResearchArtifactShell
-          v-else-if="currentArtifactMessage"
-          :title="chatHeaderTitle"
-          :metadata="artifactAgentLabel(currentArtifactMessage)"
-          :status="currentArtifactStatusLabel"
-          :format-scientific-agent-name="
-            currentArtifactMessage.tool_name === 'InSilicoResearchAgent'
-          "
-          :report-status="currentArtifactReportStatus || undefined"
-          :tab="artifactTab"
-          :tabs="artifactTabs"
-          :tab-labels="artifactTabLabels"
-          :tablist-label="t('common.operation')"
-          :artifact-id="artifactId"
-          :back-label="t('common.back')"
-          :close-label="t('common.close')"
-          :action-label="t('common.operation')"
-          :menu-items="artifactMenuItems"
-          @back="closeArtifact"
-          @close="closeArtifact"
-          @action="onArtifactMenu"
-          @tab="selectArtifactPanelTab"
+      <template #workspace>
+        <ExecutionWorkspace
+          v-if="executionWorkspaceTabs.length > 0"
+          :tabs="executionWorkspaceTabs"
+          :active-key="activeExecutionWorkspaceTab"
+          :run="currentExecutionRun"
+          :detail="activeExecutionTargetDetail"
+          :loading="activeExecutionTargetLoading"
+          :error="activeExecutionTargetError"
+          :scroll-top="currentExecutionWorkspaceScrollTop"
+          @select-tab="selectExecutionWorkspaceTab"
+          @close-tab="closeExecutionWorkspaceTab"
+          @close-workspace="closeExecutionWorkspace"
+          @authorize-target="authorizeExecutionTarget"
+          @open-target="openExecutionTarget"
+          @update-scroll="rememberExecutionWorkspaceScroll"
         >
-          <template #content>
-            <BotReportState
-              v-if="currentArtifactLifecycle"
-              :state="currentArtifactLifecycle"
-              :agent-name="currentArtifactMessage?.tool_name || ''"
-              :report="
-                currentArtifactPresentation?.kind === 'research'
-                  ? currentArtifactPresentation.report
-                  : null
+          <template #report>
+            <DeepGenomeArtifact
+              v-if="
+                currentArtifactMessage &&
+                currentArtifactMessage.tool_name === 'DeepGenomeAgent'
               "
-              :progress="currentArtifactProjection?.progress"
-              :updated-at="currentArtifactProjection?.reportUpdatedAt"
-              :labels="currentArtifactBotReportLabels"
-              :empty-report-label="currentArtifactEmptyReportLabel"
-              :ns="artifactNamespace"
-              :reference-count="currentArtifactMessage.doc_list?.length ?? 0"
-              :resources="currentArtifactResources"
-              @citation-activate="activateEvidence"
-              @resource-activate="activateArtifactResource"
-            />
-            <CitedAnswer
-              v-else
-              :content="
+              :title="chatHeaderTitle"
+              :metadata="artifactAgentLabel(currentArtifactMessage)"
+              :status="currentArtifactStatusLabel"
+              :markdown="
                 currentArtifactPresentation?.report ??
                 String(currentArtifactMessage.content)
               "
               :references="currentArtifactMessage.doc_list"
               :resources="currentArtifactResources"
               :ns="artifactNamespace"
-              surface="artifact"
-              reference-presentation="external"
-              @citation-activate="activateEvidence"
+              :tab="artifactTab"
+              :tab-labels="artifactTabLabels"
+              :tablist-label="t('common.operation')"
+              :artifact-id="artifactId"
+              :back-label="t('common.back')"
+              :close-label="t('common.close')"
+              :action-label="t('common.operation')"
+              @back="closeExecutionWorkspace"
+              @close="closeActiveExecutionWorkspaceTab"
+              @tab="selectArtifactTab"
               @resource-activate="activateArtifactResource"
             />
-          </template>
-          <template #evidence>
-            <ResearchEvidencePanel
-              ref="evidencePanelRef"
-              :references="currentArtifactMessage.doc_list"
-              :ns="artifactNamespace"
-            />
-          </template>
-          <template #activity>
-            <ChatAnalystLog
-              v-if="
-                currentArtifactMessage.tool_name === 'InSilicoResearchAgent' &&
-                !!deriveAnalystLogRowId(currentArtifactMessage)
+            <ResearchArtifactShell
+              v-else-if="currentArtifactMessage"
+              :title="chatHeaderTitle"
+              :metadata="artifactAgentLabel(currentArtifactMessage)"
+              :status="currentArtifactStatusLabel"
+              :format-scientific-agent-name="
+                currentArtifactMessage.tool_name === 'InSilicoResearchAgent'
               "
-              :row-id="deriveAnalystLogRowId(currentArtifactMessage)"
-              :task-id="deriveAnalystLogTaskId(currentArtifactMessage)"
-              :log-data="analystLogData(currentArtifactMessage)"
-              :loading="analystLogLoading(currentArtifactMessage)"
-              :updating="analystLogUpdating(currentArtifactMessage)"
-              :error-kind="analystLogErrorKind(currentArtifactMessage)"
-              @update="updateLog(currentArtifactMessage)"
-              @retry="retryLog(currentArtifactMessage)"
-            />
-            <span v-else>{{ t("chat.log.noData") }}</span>
-          </template>
-          <template #downloads>
-            <ResultArchiveDelivery
-              v-if="
-                currentArtifactProjection?.resultArchiveV1 === true ||
-                currentArtifactDelivery != null
-              "
-              :delivery="currentArtifactDelivery"
-              :artifacts="currentArtifactLinks"
-              :retrying="currentArtifactRetrying"
-              @download="downloadResultArchive"
-              @retry="retryCurrentResultArchive"
-            />
-            <template v-else>
-              <ul
-                v-if="currentArtifactLinks.length"
-                class="authorized-artifact-list"
-              >
-                <li
-                  v-for="artifact in currentArtifactLinks"
-                  :key="artifact.id"
-                  class="authorized-artifact-list__item"
-                >
-                  <span class="authorized-artifact-list__name">
-                    {{ artifact.name }}
-                  </span>
-                  <el-tooltip
-                    :content="`${t('chat.downloadFile')}: ${artifact.name}`"
-                    placement="top"
+              :report-status="currentArtifactReportStatus || undefined"
+              :tab="artifactTab"
+              :tab-labels="artifactTabLabels"
+              :tablist-label="t('common.operation')"
+              :artifact-id="artifactId"
+              :back-label="t('common.back')"
+              :close-label="t('common.close')"
+              :action-label="t('common.operation')"
+              @back="closeExecutionWorkspace"
+              @close="closeActiveExecutionWorkspaceTab"
+              @tab="selectArtifactPanelTab"
+            >
+              <template #content>
+                <BotReportState
+                  v-if="currentArtifactLifecycle"
+                  :state="currentArtifactLifecycle"
+                  :report="currentArtifactPresentation?.report ?? null"
+                  :progress="currentArtifactProjection?.progress"
+                  :updated-at="currentArtifactProjection?.reportUpdatedAt"
+                  :labels="currentArtifactBotReportLabels"
+                  :empty-report-label="currentArtifactEmptyReportLabel"
+                  :ns="artifactNamespace"
+                  :reference-count="
+                    currentArtifactMessage.doc_list?.length ?? 0
+                  "
+                  :resources="currentArtifactResources"
+                  @citation-activate="activateEvidence"
+                  @resource-activate="activateArtifactResource"
+                />
+                <CitedAnswer
+                  v-else
+                  :content="
+                    currentArtifactPresentation?.report ??
+                    String(currentArtifactMessage.content)
+                  "
+                  :references="currentArtifactMessage.doc_list"
+                  :resources="currentArtifactResources"
+                  :ns="artifactNamespace"
+                  surface="artifact"
+                  reference-presentation="external"
+                  @citation-activate="activateEvidence"
+                  @resource-activate="activateArtifactResource"
+                />
+              </template>
+              <template #evidence>
+                <ResearchEvidencePanel
+                  ref="evidencePanelRef"
+                  :references="currentArtifactMessage.doc_list"
+                  :ns="artifactNamespace"
+                />
+              </template>
+              <template #activity>
+                <ChatAnalystLog
+                  v-if="
+                    currentArtifactMessage.tool_name ===
+                      'InSilicoResearchAgent' &&
+                    !!deriveAnalystLogRowId(currentArtifactMessage)
+                  "
+                  :row-id="deriveAnalystLogRowId(currentArtifactMessage)"
+                  :log-data="analystLogData(currentArtifactMessage)"
+                  :loading="analystLogLoading(currentArtifactMessage)"
+                  :error-kind="analystLogErrorKind(currentArtifactMessage)"
+                  @retry="retryLog(currentArtifactMessage)"
+                />
+                <span v-else>{{ t("chat.log.noData") }}</span>
+              </template>
+              <template #downloads>
+                <ResultArchiveDelivery
+                  v-if="
+                    currentArtifactProjection?.resultArchiveV1 === true ||
+                    currentArtifactDelivery != null
+                  "
+                  :delivery="currentArtifactDelivery"
+                  :artifacts="currentArtifactLinks"
+                  :retrying="currentArtifactRetrying"
+                  @download="downloadResultArchive"
+                  @retry="retryCurrentResultArchive"
+                />
+                <template v-else>
+                  <ul
+                    v-if="currentArtifactLinks.length"
+                    class="authorized-artifact-list"
                   >
-                    <el-button
-                      text
-                      circle
-                      :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
-                      data-test="authorized-artifact-download"
-                      @click="downloadArtifact(artifact)"
+                    <li
+                      v-for="artifact in currentArtifactLinks"
+                      :key="artifact.id"
+                      class="authorized-artifact-list__item"
                     >
-                      <el-icon><Download /></el-icon>
-                    </el-button>
-                  </el-tooltip>
-                </li>
-              </ul>
-              <BotArtifactList
-                v-else-if="currentArtifactLifecycle"
-                :artifacts="currentArtifactLifecycle.artifacts"
-                :empty-label="t('chat.botReport.emptyArtifacts')"
-                :download="downloadFile"
-              />
-              <span v-else>{{ t("common.noData") }}</span>
-            </template>
+                      <span class="authorized-artifact-list__name">
+                        {{ artifact.name }}
+                      </span>
+                      <el-tooltip
+                        :content="`${t('chat.downloadFile')}: ${artifact.name}`"
+                        placement="top"
+                      >
+                        <el-button
+                          text
+                          circle
+                          :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
+                          data-test="authorized-artifact-download"
+                          @click="downloadArtifact(artifact)"
+                        >
+                          <el-icon><Download /></el-icon>
+                        </el-button>
+                      </el-tooltip>
+                    </li>
+                  </ul>
+                  <BotArtifactList
+                    v-else-if="currentArtifactLifecycle"
+                    :artifacts="currentArtifactLifecycle.artifacts"
+                    :empty-label="t('chat.botReport.emptyArtifacts')"
+                    :download="downloadFile"
+                  />
+                  <span v-else>{{ t("common.noData") }}</span>
+                </template>
+              </template>
+            </ResearchArtifactShell>
           </template>
-        </ResearchArtifactShell>
+        </ExecutionWorkspace>
+      </template>
+
+      <template #rail>
+        <ExecutionRail
+          :run="currentExecutionRun ?? emptyExecutionRun"
+          @open-target="openExecutionTarget"
+          @cancel="cancelCurrentExecution"
+        />
       </template>
     </PhyAdaptiveShell>
   </div>
@@ -684,7 +735,7 @@ import Sidebar from "./ChatSidebar.vue";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import TransferProgress from "@/components/TransferProgress.vue";
-import SendProgress from "./components/SendProgress.vue";
+import ExecutionActivityPanel from "./components/ExecutionActivityPanel.vue";
 import ChatComposer from "./components/ChatComposer.vue";
 import ChatCases from "./components/ChatCases.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
@@ -692,6 +743,8 @@ import ChatMessageContent from "./components/ChatMessageContent.vue";
 import ChatMessageActions from "./components/ChatMessageActions.vue";
 import ChatActivity from "./components/ChatActivity.vue";
 import ChatAnalystLog from "./components/ChatAnalystLog.vue";
+import ExecutionWorkspace from "./components/ExecutionWorkspace.vue";
+import ExecutionRail from "./components/ExecutionRail.vue";
 import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
 import { PhyAdaptiveShell, PhyEmptyState } from "@/components/shell";
 import { PhyErrorState, PhySkeleton } from "@/components/state";
@@ -699,21 +752,37 @@ import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
   ResearchEvidencePanel,
-  copyDownloadCloseArtifactMenuItems,
 } from "@/components/research";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import { Download, Menu } from "@element-plus/icons-vue";
-import { getAnswerCheck, getHistoryQuestionList } from "@/api/chat";
+import {
+  getConversationArtifactDownloadURL,
+  getHistoryQuestionList,
+} from "@/api/chat";
+import {
+  downloadExecutionArtifact,
+  executionArtifactDownloadName,
+} from "./executionArtifactDownload";
+import {
+  cancelExecution,
+  getExecutionTarget,
+  getExecutionTargetById,
+  postExecutionAction,
+} from "@/api/execution-events";
 import { userStore } from "@/stores";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useTutorial } from "./composables/useTutorial";
 import { useImageZoomPan } from "./composables/useImageZoomPan";
 import { useChatStates } from "./composables/useChatStates";
-import { useBotCapabilities } from "./composables/useBotCapabilities";
+import {
+  supportsAgentWorkTrace,
+  useBotCapabilities,
+} from "./composables/useBotCapabilities";
+import { useExecutionEvents } from "./composables/useExecutionEvents";
 import { useResumableUploads } from "./composables/useResumableUploads";
 import { useArtifactPanel } from "./composables/useArtifactPanel";
 import { useAgentImages } from "./composables/useAgentImages";
@@ -727,7 +796,6 @@ import type { UploadValidationLimits } from "./upload/validation";
 import {
   hasAttachmentChannel,
   resolveAttachmentTarget,
-  resolveUploadTargetTool,
 } from "./utils/attachment-target";
 import { useComposer } from "./composables/useComposer";
 import {
@@ -739,29 +807,23 @@ import {
 import type { CanonicalAgentTool } from "@/constants/agents";
 import { useSelectChat } from "./composables/useSelectChat";
 import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
-import { isActivePollableAssistantWait } from "./utils/async-agent-policy";
-import { progressHintForWait } from "./utils/agentProgress";
 import { useSendMessage } from "./composables/useSendMessage";
-import { useA2uiInteraction } from "./composables/useA2uiInteraction";
+import {
+  useA2uiInteraction,
+  type A2uiSurfaceActionEvent,
+} from "./composables/useA2uiInteraction";
 import { useRefreshMessage } from "./composables/useRefreshMessage";
 import {
   useLogView,
   deriveAnalystLogRowId,
-  deriveAnalystLogTaskId,
   analystLogActivityKey,
 } from "./composables/useLogView";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { abortRequest } from "@/utils/request";
-import { cancelTask, normalizePositiveTaskRowId } from "@/api/task";
-import {
-  applyCancelledTaskDraft,
-  resolveCancellableTaskRowId,
-} from "./composables/applyCancelledTaskDraft";
 import FollowUpQuestions from "./FollowUpQuestions.vue";
 import { FilesCard } from "vue-element-plus-x";
 import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
-import chatLogo from "@/assets/images/chat/logo.png";
 import {
   clearPendingChat,
   isLocalStorageChat,
@@ -771,7 +833,7 @@ import {
   upsertPendingChatListEntry,
 } from "@/utils/pending-chat";
 import { formatDetailedCitation } from "@/utils/citation";
-import { messagePlainText } from "./messageTypes";
+import { chatContentToText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import {
@@ -780,11 +842,6 @@ import {
   artifactPreviewTitleKey,
   researchRowLifecycleStatus,
 } from "./utils/artifact-policy";
-import {
-  artifactChromeFromMessage,
-  artifactDownloadFormat,
-  type ArtifactChrome,
-} from "./utils/artifact-chrome";
 import type {
   ArtifactTab,
   Chat,
@@ -802,6 +859,20 @@ import {
   cloneBotInterop,
   type BotLifecycleState,
 } from "./streaming/botLifecycleReducer";
+import {
+  createExecutionRunState,
+  mergeExecutionTracePage,
+  type ExecutionRunState,
+  type ExecutionTarget,
+  type ExecutionWorkspaceTab,
+} from "./streaming/executionEvents";
+import { executionWorkbenchPresentationEnabled } from "./executionFeature";
+import {
+  primaryExecutionActivitySurface,
+  usesLegacyTaskLog,
+} from "./executionLogPolicy";
+
+const chatLogo = "/logo.png";
 
 function messageAttachments(
   message: ChatMessage
@@ -923,41 +994,6 @@ const activeModeEnabled = computed(() =>
 );
 
 const rolesLoading = computed(() => userStore().rolesLoading);
-const progressLabelKey = computed(() =>
-  chatMode.value === "expert" &&
-  getChatState(currentChatId.value).activeAgentName === ""
-    ? "chat.progress.selectingAgent"
-    : "chat.progress.processing"
-);
-
-const waitAgentLabel = computed(() => {
-  if (progressLabelKey.value === "chat.progress.selectingAgent") return "";
-  const tool = canonicalAgentTool(
-    getChatState(currentChatId.value).activeAgentName
-  );
-  if (!tool) return "";
-  const agent =
-    locale.value === "zh-CN"
-      ? CANONICAL_AGENT_ZH_NAMES[tool]
-      : CANONICAL_AGENT_DISPLAY_NAMES[tool];
-  return t("chat.routingSelectedAgent", { agent });
-});
-
-const hasActivePollableAssistantWait = computed(() => {
-  const messages = currentChat.value?.messages ?? [];
-  const last = messages[messages.length - 1];
-  return isActivePollableAssistantWait(last);
-});
-
-function progressHintForMessage(message: ChatMessage): number | null {
-  const state = getChatState(currentChatId.value);
-  const messages = currentChat.value?.messages ?? [];
-  const isLast = messages[messages.length - 1] === message;
-  return progressHintForWait({
-    sendStartedAt: isLast ? state.sendStartedAt : null,
-    createdAt: message.created_at,
-  });
-}
 
 const chatHeaderTitle = computed(() => {
   const currentTitle =
@@ -1010,20 +1046,23 @@ onMounted(async () => {
 
     // If chatId is absent, default to a new chat
     if (urlChatId) {
-      // Look up whether a corresponding chat exists. Local `new_*` rows are
-      // reopened from pending storage inside selectChat — they are never
-      // server parents, so a list miss must not fall through to another chat.
+      // First check whether it is an incomplete session
+      if (loadPendingChat(urlChatId)) {
+        return;
+      }
+
+      // Look up whether a corresponding chat exists
       const chatExists = chatList.value.find(
         (chat) => chat.dialogue_id === urlChatId
       );
-      if (isLocalStorageChat(urlChatId) || chatExists) {
+      if (chatExists) {
         // If it exists, select that chat
-        void selectChat(urlChatId);
+        selectChat(urlChatId);
       } else if (chatList.value.length > 0) {
         // If it does not exist but there are chat records, update the URL to the first record's ID
         const firstChatId = chatList.value[0].dialogue_id;
         updateUrlWithChatId(firstChatId);
-        void selectChat(firstChatId);
+        selectChat(firstChatId);
       } else {
         // If there are no chat records, create a new chat state
         startNewChat();
@@ -1041,7 +1080,29 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener("resize", updateMobileViewport);
   chatAgentRunLifecycle.dispose();
+  executionEvents.dispose();
 });
+
+// Load a specific incomplete session from localStorage (used by onMounted keyed on the url chatId)
+const loadPendingChat = (dialogueId: string) => {
+  const key = `pending_chat_${dialogueId}`;
+  const pendingChatData = safeParse(localStorage.getItem(key));
+
+  if (!isValidPendingRecord(pendingChatData)) {
+    if (pendingChatData !== null) {
+      localStorage.removeItem(key); // corrupt / contract violation → clean
+    }
+    return false;
+  }
+
+  currentChatId.value = dialogueId;
+  getChatState(dialogueId).renderedChat = {
+    messages: pendingChatData.messages,
+  };
+  getChatState(dialogueId).mode =
+    pendingChatData.mode === "expert" ? "expert" : "instant";
+  return true;
+};
 
 // Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
 const {
@@ -1064,6 +1125,376 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+const executionEvents = useExecutionEvents({ getChatState });
+
+function executionRunIdForMessage(message: ChatMessage): string | null {
+  return (
+    message.executionId ??
+    message.executionRun?.runId ??
+    message.botRunId ??
+    message.botProjection?.runId ??
+    null
+  );
+}
+
+function executionRunForMessage(
+  message: ChatMessage
+): ExecutionRunState | null {
+  if (!executionEventsEnabledForMessage(message)) return null;
+  const runId = executionRunIdForMessage(message);
+  if (!runId) return null;
+  return (
+    getChatState(currentChatId.value).executionRuns[runId] ??
+    message.executionRun ??
+    null
+  );
+}
+
+function executionActivityKey(message: ChatMessage): string {
+  return `execution:${executionRunIdForMessage(message) ?? "unknown"}`;
+}
+
+function isExecutionActivityExpanded(message: ChatMessage): boolean {
+  return (
+    getChatState(currentChatId.value).activityExpandedByMessage[
+      executionActivityKey(message)
+    ] ?? !executionRunForMessage(message)?.terminal
+  );
+}
+
+function setExecutionActivityExpanded(
+  message: ChatMessage,
+  open: boolean
+): void {
+  getChatState(currentChatId.value).activityExpandedByMessage[
+    executionActivityKey(message)
+  ] = open;
+}
+
+const currentExecutionRun = computed<ExecutionRunState | null>(() => {
+  if (!executionWorkbenchEnabled || !currentChatId.value) return null;
+  const state = getChatState(currentChatId.value);
+  const selected = state.selectedExecutionRunId;
+  return selected ? (state.executionRuns[selected] ?? null) : null;
+});
+const emptyExecutionRun = createExecutionRunState("empty");
+
+const executionWorkspaceOpen = computed({
+  get: () =>
+    executionWorkbenchEnabled && currentChatId.value
+      ? getChatState(currentChatId.value).executionWorkspaceOpen
+      : false,
+  set: (value: boolean) => {
+    if (currentChatId.value)
+      getChatState(currentChatId.value).executionWorkspaceOpen = value;
+  },
+});
+
+const executionRailOpen = computed({
+  get: () =>
+    executionWorkbenchEnabled && currentChatId.value
+      ? getChatState(currentChatId.value).executionRailOpen
+      : false,
+  set: (value: boolean) => {
+    if (currentChatId.value)
+      getChatState(currentChatId.value).executionRailOpen = value;
+  },
+});
+
+const executionWorkspaceTabs = computed<ExecutionWorkspaceTab[]>(() =>
+  currentChatId.value
+    ? getChatState(currentChatId.value).executionWorkspaceTabs
+    : []
+);
+
+const activeExecutionWorkspaceTab = computed({
+  get: () =>
+    currentChatId.value
+      ? getChatState(currentChatId.value).activeExecutionWorkspaceTab
+      : null,
+  set: (value: string | null) => {
+    if (currentChatId.value)
+      getChatState(currentChatId.value).activeExecutionWorkspaceTab = value;
+  },
+});
+
+const activeExecutionTargetDetail = computed(() => {
+  if (!currentChatId.value || !activeExecutionWorkspaceTab.value)
+    return undefined;
+  return getChatState(currentChatId.value).executionTargetDetails[
+    activeExecutionWorkspaceTab.value
+  ];
+});
+const activeExecutionTargetLoading = computed(() =>
+  currentChatId.value && activeExecutionWorkspaceTab.value
+    ? getChatState(currentChatId.value).executionTargetLoading[
+        activeExecutionWorkspaceTab.value
+      ] === true
+    : false
+);
+const activeExecutionTargetError = computed(() =>
+  currentChatId.value && activeExecutionWorkspaceTab.value
+    ? !!getChatState(currentChatId.value).executionTargetErrors[
+        activeExecutionWorkspaceTab.value
+      ]
+    : false
+);
+const currentExecutionWorkspaceScrollTop = computed(() =>
+  currentChatId.value ? getChatState(currentChatId.value).workspaceScrollTop : 0
+);
+
+function rememberExecutionWorkspaceScroll(scrollTop: number): void {
+  if (currentChatId.value) {
+    getChatState(currentChatId.value).workspaceScrollTop = scrollTop;
+  }
+}
+
+function selectExecutionWorkspaceTab(key: string): void {
+  if (!currentChatId.value) return;
+  const state = getChatState(currentChatId.value);
+  const tab = state.executionWorkspaceTabs.find((item) => item.key === key);
+  if (!tab) return;
+  state.activeExecutionWorkspaceTab = key;
+  if (tab.target.kind === "report") openArtifact(tab.target.id);
+  else if (artifactOpen.value) closeArtifact();
+}
+
+function syncActiveWorkspaceReport(): void {
+  if (!currentChatId.value) return;
+  const state = getChatState(currentChatId.value);
+  const tab = state.executionWorkspaceTabs.find(
+    (item) => item.key === state.activeExecutionWorkspaceTab
+  );
+  if (tab?.target.kind === "report") openArtifact(tab.target.id);
+  else if (artifactOpen.value) closeArtifact();
+}
+
+function closeExecutionWorkspaceTab(key: string): void {
+  if (!currentChatId.value) return;
+  executionEvents.closeTarget(currentChatId.value, key);
+  syncActiveWorkspaceReport();
+}
+
+function closeActiveExecutionWorkspaceTab(): void {
+  if (activeExecutionWorkspaceTab.value) {
+    closeExecutionWorkspaceTab(activeExecutionWorkspaceTab.value);
+  }
+}
+
+function closeExecutionWorkspace(): void {
+  executionWorkspaceOpen.value = false;
+  if (artifactOpen.value) closeArtifact();
+}
+
+function openExecutionTarget(
+  target: ExecutionTarget,
+  title: string,
+  runId?: string
+): void {
+  if (!currentChatId.value) return;
+  const state = getChatState(currentChatId.value);
+  if (runId && state.executionRuns[runId]) state.selectedExecutionRunId = runId;
+  const selectedId = state.selectedExecutionRunId ?? runId ?? "";
+  const selectedRun = state.executionRuns[selectedId];
+  if (
+    target.kind === "trace" &&
+    !supportsAgentWorkTrace(
+      selectedRun?.agentSlug
+        ? botCapabilities.bySlug.value[selectedRun.agentSlug]
+        : undefined
+    )
+  ) {
+    ElMessage.info(t("chat.execution.targetUnavailable"));
+    return;
+  }
+  if (artifactOpen.value) closeArtifact();
+  executionEvents.openTarget(currentChatId.value, target, title);
+  const key = `${target.kind}:${target.id}`;
+  state.executionTargetLoading[key] = true;
+  state.executionTargetErrors[key] = undefined;
+  void loadExecutionTargetDetail(
+    currentChatId.value,
+    selectedId,
+    selectedRun,
+    target
+  )
+    .then((detail) => {
+      state.executionTargetDetails[key] = detail;
+    })
+    .catch(() => {
+      state.executionTargetErrors[key] = "unavailable";
+    })
+    .finally(() => {
+      state.executionTargetLoading[key] = false;
+    });
+}
+
+function openExecutionDiagnostics(run: ExecutionRunState | null): void {
+  if (!currentChatId.value || !run || run.executionId === "empty") return;
+  const state = getChatState(currentChatId.value);
+  if (state.executionRuns[run.runId]) state.selectedExecutionRunId = run.runId;
+  if (artifactOpen.value) closeArtifact();
+  executionEvents.openDiagnostics(
+    currentChatId.value,
+    run.executionId,
+    t("chat.execution.technicalDetails")
+  );
+}
+
+async function loadExecutionTargetDetail(
+  dialogueId: string,
+  runId: string,
+  run: ExecutionRunState | undefined,
+  target: ExecutionTarget
+): Promise<ExecutionTargetResolution> {
+  if (run?.schemaVersion !== 2 || target.kind !== "trace") {
+    const response =
+      run?.schemaVersion === 2
+        ? await getExecutionTargetById({ executionId: run.executionId, target })
+        : await getExecutionTarget({ dialogueId, runId, target });
+    if (response.code !== 200) throw new Error("target unavailable");
+    return response.data;
+  }
+
+  let afterSeq = 0;
+  let aggregate: ExecutionTargetResolution["trace"];
+  let latest: ExecutionTargetResolution | undefined;
+  for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+    const response = await getExecutionTargetById({
+      executionId: run.executionId,
+      target,
+      afterSeq,
+      limit: 100,
+    });
+    if (response.code !== 200 || !response.data.trace) {
+      throw new Error("target unavailable");
+    }
+    latest = response.data;
+    if (!aggregate) {
+      aggregate = response.data.trace;
+    } else {
+      const merged = mergeExecutionTracePage(aggregate, response.data.trace);
+      if (!merged.ok) throw new Error("target replay conflict");
+      aggregate = merged.value;
+    }
+    if (!response.data.trace.hasMore) return { ...latest, trace: aggregate };
+    if (response.data.trace.nextAfterSeq <= afterSeq) {
+      throw new Error("target cursor did not advance");
+    }
+    afterSeq = response.data.trace.nextAfterSeq;
+  }
+  throw new Error("target history exceeds the browser bound");
+}
+
+const activeTraceRefreshSignature = computed(() => {
+  if (!currentChatId.value || !activeExecutionWorkspaceTab.value) return "";
+  const state = getChatState(currentChatId.value);
+  const tab = state.executionWorkspaceTabs.find(
+    (candidate) => candidate.key === activeExecutionWorkspaceTab.value
+  );
+  const run = currentExecutionRun.value;
+  if (tab?.target.kind !== "trace" || !run) return "";
+  return [
+    currentChatId.value,
+    tab.key,
+    run.latestSeq,
+    run.operationRevision,
+    run.status,
+    run.trackingHealth,
+    run.delivery,
+  ].join(":");
+});
+
+watch(activeTraceRefreshSignature, (signature, previous) => {
+  if (!signature || !previous || signature === previous || !currentChatId.value)
+    return;
+  const state = getChatState(currentChatId.value);
+  const tab = state.executionWorkspaceTabs.find(
+    (candidate) => candidate.key === state.activeExecutionWorkspaceTab
+  );
+  const run = currentExecutionRun.value;
+  if (!tab || tab.target.kind !== "trace" || !run) return;
+  openExecutionTarget(tab.target, tab.title, run.runId);
+});
+
+async function authorizeExecutionTarget(
+  target: ExecutionTarget
+): Promise<void> {
+  if (!currentChatId.value) return;
+  const key = `${target.kind}:${target.id}`;
+  const detail = getChatState(currentChatId.value).executionTargetDetails[key];
+  const plan = planExecutionTargetOpen(detail);
+  if (plan.kind === "unavailable") {
+    ElMessage.info(t("chat.execution.previewUnavailable"));
+    return;
+  }
+  if (plan.kind === "authenticated-v2") {
+    try {
+      await downloadExecutionArtifact({
+        deliveryUrl: plan.url,
+        name: executionArtifactDownloadName(
+          target,
+          detail?.name,
+          currentExecutionRun.value?.results ?? []
+        ),
+        requestId: `execution-download-${target.kind}-${target.id}`,
+      });
+    } catch {
+      getChatState(currentChatId.value).executionTargetErrors[key] =
+        "unavailable";
+    }
+    return;
+  }
+  try {
+    const response = await getConversationArtifactDownloadURL({
+      dialogue_id: currentChatId.value,
+      message_id: String(plan.messageId),
+      artifact_id: plan.artifactId,
+    });
+    if (response.code !== 200) throw new Error("download unavailable");
+    window.location.assign(response.data);
+  } catch {
+    getChatState(currentChatId.value).executionTargetErrors[key] =
+      "unavailable";
+  }
+}
+
+async function ensureExecutionRun(
+  dialogueId: string,
+  message: ChatMessage
+): Promise<void> {
+  const runId = executionRunIdForMessage(message);
+  if (!runId) return;
+  const state = getChatState(dialogueId);
+  if (message.executionId) {
+    if (!state.executionRuns[message.executionId]) {
+      state.executionRuns[message.executionId] = createExecutionRunState(
+        message.executionId,
+        2
+      );
+    }
+    if (
+      !executionRunNeedsLiveSubscription(
+        message.executionId,
+        state.executionRuns[message.executionId]
+      )
+    ) {
+      return;
+    }
+    await executionEvents.attachExecution(dialogueId, message.executionId);
+    return;
+  }
+  if (!state.executionRuns[runId]) {
+    await executionEvents.hydrateRun(dialogueId, runId);
+  }
+  const legacyRun = state.executionRuns[runId];
+  if (legacyRun && !legacyRun.terminal) {
+    // Historical V1 rows are a bounded, read-only compatibility view. Live
+    // progress is exclusively addressed by execution_id through the V2 SSE.
+    state.executionRuns[runId] = { ...legacyRun, delivery: "stale" };
+  }
+}
 
 function announceAttachment(message: string): void {
   const ownerDialogueId = currentChatId.value;
@@ -1123,6 +1554,71 @@ async function onAttachmentDuplicate(
 }
 
 const botCapabilities = useBotCapabilities("chat");
+const executionWorkbenchEnabled = executionWorkbenchPresentationEnabled();
+
+function executionEventsEnabledForMessage(message: ChatMessage): boolean {
+  if (!executionWorkbenchEnabled) return false;
+  if (message.executionId) return true;
+  const tool = canonicalAgentTool(message.tool_name);
+  return tool
+    ? botCapabilities.byTool.value[tool]?.executionEvents?.enabled === true
+    : false;
+}
+
+function workTraceSupportedForMessage(message: ChatMessage): boolean {
+  const tool = canonicalAgentTool(message.tool_name);
+  return tool
+    ? supportsAgentWorkTrace(botCapabilities.byTool.value[tool])
+    : false;
+}
+
+function showsInlineLegacyTaskLog(message: ChatMessage): boolean {
+  return (
+    message.tool_name === "AnalystAgent" &&
+    primaryExecutionActivitySurface({
+      tool: message.tool_name,
+      hasExecutionRun: Boolean(executionRunForMessage(message)),
+      workTraceSupported: workTraceSupportedForMessage(message),
+    }) === "legacy_log"
+  );
+}
+
+const executionCapabilitySignature = computed(() =>
+  Object.entries(botCapabilities.byTool.value)
+    .filter(([, capability]) => capability?.executionEvents?.enabled)
+    .map(([tool]) => tool)
+    .sort()
+    .join("|")
+);
+
+watch(
+  () => ({
+    dialogueId: currentChatId.value,
+    runIds: (currentChat.value?.messages ?? [])
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          executionEventsEnabledForMessage(message)
+      )
+      .map((message) => executionRunIdForMessage(message) ?? "")
+      .join("|"),
+    capabilities: executionCapabilitySignature.value,
+  }),
+  ({ dialogueId }) => {
+    if (!dialogueId) return;
+    for (const message of currentChat.value?.messages ?? []) {
+      if (
+        message.role !== "assistant" ||
+        !executionRunIdForMessage(message) ||
+        !executionEventsEnabledForMessage(message)
+      ) {
+        continue;
+      }
+      void ensureExecutionRun(dialogueId, message).catch(() => undefined);
+    }
+  },
+  { immediate: true }
+);
 const uploadValidationLimits = computed<Readonly<UploadValidationLimits>>(() =>
   Object.freeze({
     maxFileBytes: botCapabilities.upload.value.max_file_bytes,
@@ -1149,11 +1645,6 @@ const uploadQueue = useResumableUploads({
   getChatState,
   uploadCapability: botCapabilities.upload,
   username: uploadUsername,
-  targetTool: () =>
-    resolveUploadTargetTool({
-      chatMode: chatMode.value,
-      selectedAgent: selectedAgent.value,
-    }),
   onValidationError: onAttachmentValidationError,
   onDuplicate: (localId, fileName) => {
     onAttachmentDuplicate(localId, fileName).catch(() => undefined);
@@ -1251,7 +1742,14 @@ function artifactPreviewForMessage(message: ChatMessage) {
 
 function openArtifactForMessage(message: ChatMessage): void {
   const identity = artifactIdentityForMessage(message);
-  if (identity) openArtifact(identity);
+  if (!identity || !currentChatId.value) return;
+  openArtifact(identity);
+  const preview = artifactPreviewForMessage(message);
+  executionEvents.openTarget(
+    currentChatId.value,
+    { kind: "report", id: identity },
+    preview?.title ?? artifactAgentLabel(message)
+  );
 }
 
 const artifactId = computed(() => {
@@ -1266,27 +1764,13 @@ const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.attachments"),
+  downloads: t("chat.actions.downloadAttachments"),
 }));
-const currentArtifactChrome = computed<ArtifactChrome>(() => {
-  const message = currentArtifactMessage.value;
-  return message
-    ? artifactChromeFromMessage(message)
-    : { tabs: ["content"], exportFormats: [] };
-});
-const artifactTabs = computed(() => currentArtifactChrome.value.tabs);
-const artifactMenuItems = computed(() =>
-  copyDownloadCloseArtifactMenuItems(
-    t,
-    currentArtifactChrome.value.exportFormats
-  )
-);
 
 async function activateEvidence(
   activation: ScientificCitationActivation
 ): Promise<void> {
   if (activation.namespace !== artifactNamespace.value) return;
-  if (!artifactTabs.value.includes("evidence")) return;
   await selectArtifactPanelTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
@@ -1429,16 +1913,18 @@ function retryCurrentResultArchive(): void {
     if (matches.length !== 1) return;
     const [message] = matches;
     message.delivery = { ...delivery };
-    message.status = "FINALIZING";
+    message.status = "RUNNING";
     if (message.botProjection) {
       message.botProjection = {
         ...message.botProjection,
+        status: "RUNNING",
         delivery: { ...delivery },
       };
     }
     if (message.botLifecycle) {
       message.botLifecycle = {
         ...message.botLifecycle,
+        status: "RUNNING",
         delivery: { ...delivery },
       };
     }
@@ -1471,19 +1957,16 @@ function reportStatusForArtifact(
 }
 
 const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
-  () => {
-    const state = currentArtifactLifecycle.value;
-    if (state) return reportStatusForArtifact(state);
-    const message = currentArtifactMessage.value;
-    return message ? reportStatusForRow(message) : null;
-  }
+  () =>
+    currentArtifactLifecycle.value
+      ? reportStatusForArtifact(currentArtifactLifecycle.value)
+      : null
 );
 
 function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
   const stage = state.reportStage;
   if (state.status === "TIMED_OUT") return t("chat.lifecycle.timed_out");
   if (state.status === "FAILED") return t("chat.botReport.failed");
-  if (state.status === "CANCELLED") return t("chat.lifecycle.cancelled");
   if (state.status === "INPUT_REQUIRED") {
     return t("chat.botReport.inputRequired");
   }
@@ -1494,32 +1977,6 @@ function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
   if (stage === "intermediate") return t("chat.botReport.partial");
   if (state.status === "RUNNING") return t("chat.botReport.waiting");
   return t("chat.botReport.complete");
-}
-
-function reportStatusForRow(message: ChatMessage): ChatArtifactReportStatus {
-  if (message.streaming === true) return "loading";
-  const status = researchRowLifecycleStatus(String(message.status ?? ""));
-  if (status === "FAILED" || status === "TIMED_OUT" || status === "CANCELLED") {
-    return "failed";
-  }
-  if (status === "SUCCEEDED") return "complete";
-  return "loading";
-}
-
-function artifactStatusLabelForMessage(message: ChatMessage): string {
-  if (message.streaming === true) return t("chat.botReport.waiting");
-  const status = researchRowLifecycleStatus(String(message.status ?? ""));
-  return botReportLabelForLifecycle({
-    runId: null,
-    status,
-    reportRevision: 0,
-    visibleReport: "",
-    intermediateReport: "",
-    finalReport: "",
-    degraded: false,
-    failures: [],
-    artifacts: [],
-  });
 }
 
 const currentArtifactBotReportLabels = computed(() => {
@@ -1552,10 +2009,8 @@ const currentArtifactEmptyReportLabel = computed(() => {
 
 const currentArtifactStatusLabel = computed(() => {
   const state = currentArtifactLifecycle.value;
-  if (state) return botReportLabelForLifecycle(state);
-  const message = currentArtifactMessage.value;
-  return message
-    ? artifactStatusLabelForMessage(message)
+  return state
+    ? botReportLabelForLifecycle(state)
     : t("chat.botReport.waiting");
 });
 
@@ -1726,7 +2181,6 @@ const {
 
 // Start a new chat
 const startNewChat = () => {
-  releaseDialogueUploads(currentChatId.value, uploadQueue.cancelDialogue);
   // Create the state for a new chat
   const newDialogueId = "new_" + Date.now();
   const newChatState = getChatState(newDialogueId);
@@ -1751,6 +2205,30 @@ const startNewChat = () => {
 // Message container ref, used for auto-scrolling
 const messageContainer = ref<HTMLElement | null>(null);
 const artifactScrollPositions = new Map<string, number>();
+
+function rememberTranscriptScroll(): void {
+  if (currentChatId.value && messageContainer.value) {
+    getChatState(currentChatId.value).transcriptScrollTop =
+      messageContainer.value.scrollTop;
+  }
+}
+
+watch(
+  currentChatId,
+  (dialogueId, previousDialogueId) => {
+    if (previousDialogueId && messageContainer.value) {
+      getChatState(previousDialogueId).transcriptScrollTop =
+        messageContainer.value.scrollTop;
+    }
+    if (dialogueId) {
+      void restoreTranscriptScroll(
+        dialogueId,
+        getChatState(dialogueId).transcriptScrollTop
+      );
+    }
+  },
+  { flush: "sync" }
+);
 
 const restoreTranscriptScroll = async (
   dialogueId: string,
@@ -1819,7 +2297,10 @@ const observeReportArtifacts = () => {
     // Mark before opening so the same reactive update, close/reopen cycle, or
     // history refresh cannot take focus from the user a second time.
     markHandled(foregroundCandidate);
-    openArtifact(foregroundCandidate);
+    const message = (currentChat.value?.messages ?? []).find(
+      (item) => artifactIdentityForMessage(item) === foregroundCandidate
+    );
+    if (message) openArtifactForMessage(message);
   }
 };
 
@@ -1872,11 +2353,10 @@ const {
   scrollToBottom,
   authorizedAgentTools,
 });
-const { setLogExpanded, updateLog, retryLog, refreshModernLog } = useLogView({
+const { setLogExpanded, retryLog, refreshModernLog } = useLogView({
   currentChat,
   currentChatId,
   getChatState,
-  scrollToBottom,
 });
 
 async function selectArtifactPanelTab(tab: ArtifactTab): Promise<void> {
@@ -1935,7 +2415,6 @@ watch(
           lifecycle.artifact_summary.image_count,
           lifecycle.artifact_summary.output_directory_count,
           lifecycle.artifact_summary.has_report,
-          lifecycle.terminal ? "1" : "0",
         ].join(":")
       )
       .join("|");
@@ -1951,7 +2430,10 @@ watch(
       return;
     }
     for (const message of currentChat.value?.messages ?? []) {
-      if (agentRunLifecycleForMessage(message)) {
+      if (
+        usesLegacyTaskLog(message.tool_name) &&
+        agentRunLifecycleForMessage(message)
+      ) {
         void refreshModernLog(message);
       }
     }
@@ -1962,12 +2444,6 @@ function analystLogLoading(message: ChatMessage): boolean {
   const rowId = deriveAnalystLogRowId(message);
   const state = analystLogState(message);
   return rowId && state ? state.loadingLog[rowId] === true : false;
-}
-
-function analystLogUpdating(message: ChatMessage): boolean {
-  const rowId = deriveAnalystLogRowId(message);
-  const state = analystLogState(message);
-  return rowId && state ? state.updatingLog[rowId] === true : false;
 }
 
 function analystLogErrorKind(
@@ -2036,92 +2512,22 @@ const abortCurrentRequest = async () => {
   await abortDialogueRequest(dialogueId, chatState);
 };
 
-const UUID_DIALOGUE_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function canonicalDialogueIdForCancel(
-  dialogueId: string,
-  chatState: ChatUIState
-): string | null {
-  const candidates = [chatState.renderedChat?.dialogue_id, dialogueId];
-  for (const value of candidates) {
-    if (typeof value === "string" && UUID_DIALOGUE_PATTERN.test(value.trim())) {
-      return value.trim();
-    }
-  }
-  return null;
-}
-
-async function resolveRowIdAfterStop(
-  dialogueId: string,
-  chatState: ChatUIState
-): Promise<string | null> {
-  const immediate = resolveCancellableTaskRowId(chatState);
-  if (immediate) return immediate;
-  let serverDialogue = canonicalDialogueIdForCancel(dialogueId, chatState);
-  if (!serverDialogue) {
-    try {
-      const list = await getHistoryQuestionList();
-      const newest = list.data?.[0]?.dialogue_id;
-      if (typeof newest === "string" && UUID_DIALOGUE_PATTERN.test(newest)) {
-        serverDialogue = newest;
-      }
-    } catch {
-      return null;
-    }
-  }
-  if (!serverDialogue) return null;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-    const local = resolveCancellableTaskRowId(chatState);
-    if (local) return local;
-    try {
-      const history = await getAnswerCheck({ dialogue_id: serverDialogue });
-      const records = history.data ?? [];
-      for (let index = records.length - 1; index >= 0; index -= 1) {
-        try {
-          return normalizePositiveTaskRowId(records[index]?.id ?? "");
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      // The row may still be committing; keep polling.
-    }
-  }
-  return resolveCancellableTaskRowId(chatState);
-}
-
 const abortDialogueRequest = async (
   dialogueId: string,
   chatState: ChatUIState
 ) => {
   const requestId = chatState.activeRequestId;
-  const rowId = resolveCancellableTaskRowId(chatState);
-  if (chatState.generationStopped) return;
-  if (!requestId && !rowId) return;
+  if (!requestId || chatState.generationStopped) return;
 
   // Claim the stop before aborting so a double click cannot race two abort
   // attempts or append duplicate local stopped rows.
   chatState.generationStopped = true;
 
   try {
-    // Owner cancel must reach Bot before the local stream is disconnected.
-    // Aborting first settles the remote run as failed, then cancel is 409.
-    const resolvedRowId =
-      rowId ?? (await resolveRowIdAfterStop(dialogueId, chatState));
-    if (resolvedRowId) {
-      try {
-        await cancelTask(resolvedRowId);
-      } catch {
-        // Keep the local cancelled draft even if the gateway is already gone.
-      }
-      applyCancelledTaskDraft(
-        chatState,
-        resolvedRowId,
-        t("chat.generationStopped")
-      );
-    } else {
+    const success = abortRequest(requestId);
+    if (success) {
+      // Local stopped row: no server message id — copy may remain; the shared
+      // capability helper keeps every server-backed action unavailable.
       const messages = chatState.renderedChat?.messages;
       if (messages) {
         const abortMessage: ChatMessage = {
@@ -2131,18 +2537,16 @@ const abortDialogueRequest = async (
         };
         messages.push(abortMessage);
       }
-      // No owner row yet: disconnect so a later submit cannot keep running.
-      if (requestId) {
-        abortRequest(requestId);
+
+      chatState.uploadTransfer = null;
+      // Leave isSending + activeRequestId for the owning send finally. This
+      // serializes a same-dialogue resend until authoritative reconciliation.
+
+      if (currentChatId.value === dialogueId) {
+        await scrollToBottom();
       }
-    }
-
-    chatState.uploadTransfer = null;
-    // Leave isSending + activeRequestId for the owning send finally. This
-    // serializes a same-dialogue resend until authoritative reconciliation.
-
-    if (currentChatId.value === dialogueId) {
-      await scrollToBottom();
+    } else {
+      chatState.generationStopped = false;
     }
   } catch (error) {
     chatState.generationStopped = false;
@@ -2170,7 +2574,10 @@ const handleChatDeleted = (deletedChat: Chat) => {
   chatList.value = removeDeletedChat({
     chatList: chatList.value,
     deletedChat,
-    disposeDialogue: chatAgentRunLifecycle.disposeDialogue,
+    disposeDialogue: (dialogueId) => {
+      chatAgentRunLifecycle.disposeDialogue(dialogueId);
+      executionEvents.disposeDialogue(dialogueId);
+    },
     removeChatState,
   });
 };
@@ -2236,17 +2643,72 @@ const { sendMessage } = useSendMessage({
   t,
   userStore,
   getHistoryQuestionData,
-  reconcileDialogueIdentity: reconcileMatchedDialogue,
   chatList,
   timestamp,
   selectChat,
   scrollToBottom,
   attachmentTargetBlocked,
   researchInputCapability: botCapabilities.researchInput,
-  botCapabilitiesByTool: botCapabilities.byTool,
+  attachExecution: (dialogueId, executionId) =>
+    executionEvents.attachExecution(dialogueId, executionId),
 });
 
-const { submitAction, retryAction } = useA2uiInteraction();
+function executionOperationId(prefix: string): string {
+  const value =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return `${prefix}-${value}`;
+}
+
+async function submitV2ExecutionAction(
+  message: ChatMessage,
+  event: A2uiSurfaceActionEvent,
+  actionId: string
+): Promise<boolean> {
+  if (!message.executionId || !currentChatId.value) return false;
+  const run = getChatState(currentChatId.value).executionRuns[
+    message.executionId
+  ];
+  if (!run || run.schemaVersion !== 2 || !run.inputRequired) return false;
+  if (
+    run.inputRequired.surfaceId !== event.surfaceId ||
+    run.inputRequired.widget !== event.intent.widget
+  ) {
+    return false;
+  }
+  try {
+    await postExecutionAction({
+      executionId: run.executionId,
+      actionId,
+      expectedRevision: run.operationRevision,
+      surfaceId: event.surfaceId,
+      widget: event.intent.widget,
+      payload: event.intent.payload,
+    });
+    return true;
+  } catch {
+    ElMessage.error(t("chat.execution.actionFailed"));
+    return true;
+  }
+}
+
+async function cancelCurrentExecution(): Promise<void> {
+  const run = currentExecutionRun.value;
+  if (!run || run.terminal || run.schemaVersion !== 2) return;
+  try {
+    await cancelExecution({
+      executionId: run.executionId,
+      requestId: executionOperationId("cancel"),
+      expectedRevision: run.operationRevision,
+      reason: "user_requested",
+    });
+  } catch {
+    ElMessage.error(t("chat.execution.cancelFailed"));
+  }
+}
+
+const { submitAction, retryAction } = useA2uiInteraction({
+  submitExecutionAction: submitV2ExecutionAction,
+});
 
 // Handle the Markdown typing-effect completion event
 const handleMarkdownFinish = (messageIndex: number) => {
@@ -2294,7 +2756,6 @@ const { refreshMessage } = useRefreshMessage({
   getHistoryQuestionData,
   getDialogueIdFromChatId,
   timestamp,
-  botCapabilitiesByTool: botCapabilities.byTool,
 });
 
 // Tutorial guide feature — state and logic extracted into the useTutorial composable
@@ -2356,7 +2817,7 @@ const copyMessageWithDocs = (message: ChatMessage, index: number) => {
           .join("\n")
       : "";
   const text =
-    messagePlainText(message) +
+    chatContentToText(message.content) +
     (docs && docs !== "" ? "\nReferences:\n" : "") +
     docs;
   fallbackCopyText(text, index + 1);
@@ -2364,7 +2825,7 @@ const copyMessageWithDocs = (message: ChatMessage, index: number) => {
 
 const handleMessageCopy = (message: ChatMessage, index: number) => {
   if (message.role === "user") {
-    fallbackCopyText(messagePlainText(message), index + 1);
+    fallbackCopyText(chatContentToText(message.content), index + 1);
     return;
   }
   if (message.tableHeaders) {
@@ -2372,26 +2833,6 @@ const handleMessageCopy = (message: ChatMessage, index: number) => {
     return;
   }
   copyMessageWithDocs(message, index);
-};
-
-const onArtifactMenu = (command: string) => {
-  if (command === "close") {
-    closeArtifact();
-    return;
-  }
-  const format = artifactDownloadFormat(command);
-  if (format) {
-    const message = currentArtifactMessage.value;
-    if (message?.id) getFileDownUrl(message.id, format);
-    return;
-  }
-  if (command !== "copy") return;
-  const message = currentArtifactMessage.value;
-  if (!message) return;
-  const index = (currentChat.value?.messages ?? []).findIndex(
-    (entry) => entry.id === message.id && entry.role === message.role
-  );
-  handleMessageCopy(message, index >= 0 ? index : 0);
 };
 
 const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
@@ -2575,6 +3016,15 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   margin: 0 auto;
 }
 
+/* Native display locking keeps long histories cheap without rekeying rows,
+ * losing measured heights, or hiding the active streaming announcement. */
+@supports (content-visibility: auto) {
+  .transcript-content > .message:not(.streaming) {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 280px;
+  }
+}
+
 .message {
   // Row owns bubble alignment/surface; Content owns overflow + gene image chrome.
   :deep(.message-content) {
@@ -2734,42 +3184,29 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
 }
 
 // Loading animation
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.wait-agent-label {
-  margin: 0 0 var(--phy-space-8);
-  color: var(--phy-color-text-muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
 .loading-message {
-  display: block;
-  width: min(28rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   min-height: 40px;
   background-color: var(--phy-bubble-assistant-bg);
-  padding: 0;
-  border-radius: var(--phy-radius-lg);
+  padding: 12px;
+  border-radius: 8px;
+  width: min(100%, 600px);
+  box-sizing: border-box;
 
-  :deep(.send-progress) {
-    width: 100%;
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
+  .loading-message__summary {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: var(--phy-space-8);
+    color: var(--phy-color-text-primary);
+    line-height: 1.5;
   }
 
   .loading-dots {
-    display: flex;
+    display: inline-flex;
+    flex: none;
     align-items: center;
     justify-content: center;
     gap: 8px;
@@ -2777,8 +3214,8 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
 
     .dot {
       display: inline-block;
-      width: 10px;
-      height: 10px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background-color: var(--el-color-primary);
       animation: dot-pulse 1.4s infinite ease-in-out;

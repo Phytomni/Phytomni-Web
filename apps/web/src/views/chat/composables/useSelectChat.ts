@@ -2,6 +2,7 @@ import { nextTick, toRaw } from "vue";
 import type { Ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { AssetAttachmentRef } from "@/api/types";
+import type { ConversationHistoryV2 } from "@/api/types";
 import type {
   Chat,
   ChatMessage,
@@ -14,18 +15,14 @@ import { parseMessageWithFiles } from "../utils/message-parse";
 import {
   convertToTableData,
   decodeCitationDocuments,
+  decodeTableMessagePresentation,
   decodeTableDataInput,
   optionalStringValue,
   parseAgentAnswer,
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
-import { getAnswerCheck } from "@/api/chat";
+import { getAnswerCheck, getConversationHistoryV2 } from "@/api/chat";
 import { normalizePositiveTaskRowId } from "@/api/task";
-import {
-  isLocalStorageChat,
-  isValidPendingRecord,
-  safeParse,
-} from "@/utils/pending-chat";
 import i18n from "@/locales";
 import { lockUnverifiedHistoryA2ui } from "../streaming/a2uiReducer";
 import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
@@ -41,100 +38,36 @@ import {
   isSafeAssetId,
   type AttachmentMetadata,
 } from "../utils/asset-attachments";
-import { isPollableWaitTool } from "../utils/async-agent-policy";
+import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 import { artifactPresentationForMessage } from "../utils/artifact-policy";
-import { STREAM_CAPABLE_AGENTS } from "../streaming/sendBranch";
-import { useStreamMessage } from "./useStreamMessage";
-
-const STREAM_FAMILY_TOOLS: ReadonlySet<string> = new Set(STREAM_CAPABLE_AGENTS);
-const kickedStreamResumes = new WeakMap<ChatUIState, Set<string>>();
-
-function isStreamFamilyTool(tool: unknown): boolean {
-  return typeof tool === "string" && STREAM_FAMILY_TOOLS.has(tool);
-}
-
-function applyHydratedRouting(
-  chatState: ChatUIState,
-  mode: "instant" | "expert",
-  messages: readonly ChatMessage[]
-): void {
-  chatState.mode = mode;
-  if (mode === "instant") {
-    chatState.selectedAgent = "";
-    return;
-  }
-  if (chatState.selectedAgent.trim()) return;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (
-      message?.role !== "assistant" ||
-      typeof message.tool_name !== "string"
-    ) {
-      continue;
-    }
-    const tool = message.tool_name.trim();
-    if (tool) {
-      chatState.selectedAgent = tool;
-      return;
-    }
-  }
-}
-
-function isNonTerminalStreamStatus(status: unknown): boolean {
-  const normalized = String(status ?? "")
-    .trim()
-    .toUpperCase();
-  return (
-    normalized === "RUNNING" ||
-    normalized === "SUBMITTING" ||
-    normalized === "PENDING"
-  );
-}
-
-function shouldHydrateStreamResume(item: Partial<ChatResponse>): boolean {
-  return (
-    isStreamFamilyTool(item.tool_name) && isNonTerminalStreamStatus(item.status)
-  );
-}
-
-function takeStreamResumeSlot(
-  chatState: ChatUIState,
-  messageId: string
-): boolean {
-  let ids = kickedStreamResumes.get(chatState);
-  if (!ids) {
-    ids = new Set();
-    kickedStreamResumes.set(chatState, ids);
-  }
-  if (ids.has(messageId)) return false;
-  ids.add(messageId);
-  return true;
-}
-
-function releaseStreamResumeSlot(
-  chatState: ChatUIState,
-  messageId: string
-): void {
-  const ids = kickedStreamResumes.get(chatState);
-  if (!ids) return;
-  ids.delete(messageId);
-  if (ids.size === 0) kickedStreamResumes.delete(chatState);
-}
+import {
+  applyExecutionEvent,
+  createExecutionRunState,
+  decodeExecutionEvent,
+  decodeExecutionProjection,
+  hydrateExecutionProjection,
+} from "../streaming/executionEvents";
+import { canonicalAgentToolFromIdentity } from "@/constants/agents";
 
 export type ChatReloadResult = "applied" | "failed" | "superseded";
 
 export function historyAssistantMetadata(
   item: Pick<
     ChatResponse,
-    "artifacts" | "delivery" | "context_rebuilt" | "context_degraded"
-  > & { created_at?: string }
+    | "artifacts"
+    | "delivery"
+    | "context_rebuilt"
+    | "context_degraded"
+    | "bot_run_id"
+    | "execution_id"
+  >
 ): Pick<
   ChatMessage,
-  "artifacts" | "delivery" | "contextNotice" | "created_at"
+  "artifacts" | "delivery" | "contextNotice" | "botRunId" | "executionId"
 > {
   const metadata: Pick<
     ChatMessage,
-    "artifacts" | "delivery" | "contextNotice" | "created_at"
+    "artifacts" | "delivery" | "contextNotice" | "botRunId" | "executionId"
   > = {};
   if (Array.isArray(item.artifacts)) {
     metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
@@ -142,8 +75,11 @@ export function historyAssistantMetadata(
   if (item.delivery) metadata.delivery = { ...item.delivery };
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
-  if (typeof item.created_at === "string" && item.created_at.trim()) {
-    metadata.created_at = item.created_at;
+  if (typeof item.bot_run_id === "string" && item.bot_run_id) {
+    metadata.botRunId = item.bot_run_id;
+  }
+  if (typeof item.execution_id === "string" && item.execution_id) {
+    metadata.executionId = item.execution_id;
   }
   return metadata;
 }
@@ -194,8 +130,11 @@ function isSuccessfulHistoryStatus(status: unknown): boolean {
 
 function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.answer !== "string" || item.answer.trim()) return false;
+  if (typeof item.execution_id === "string" && item.execution_id.trim()) {
+    return true;
+  }
+  if (!isPollableChatAgentTool(item.tool_name)) return false;
   if (isSuccessfulHistoryStatus(item.status)) return false;
-  if (!isPollableWaitTool(item.tool_name)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");
     return true;
@@ -240,15 +179,7 @@ function mergeLiveA2uiMessages(
 
   const liveByMessageId = new Map<string, ChatMessage>();
   for (const message of liveMessages) {
-    if (
-      message.role !== "assistant" ||
-      !message.a2uiRuntime ||
-      message.a2uiRuntime.dialogueId !== dialogueId ||
-      String(message.a2uiRuntime.messageId) !== String(message.id ?? "") ||
-      !message.blocks?.some(isOpenA2uiBlock)
-    ) {
-      continue;
-    }
+    if (message.role !== "assistant" || message.id === undefined) continue;
     liveByMessageId.set(String(message.id), message);
   }
   if (!liveByMessageId.size) return messages;
@@ -259,12 +190,47 @@ function mergeLiveA2uiMessages(
     const liveMessage = messageId ? liveByMessageId.get(messageId) : undefined;
     if (!liveMessage) return message;
     mergedIds.add(messageId);
+    const liveRevision = liveMessage.contentRevision ?? 0;
+    const historyRevision = message.contentRevision ?? 0;
+    const liveOffset = liveMessage.contentOffset ?? 0;
+    const historyOffset = message.contentOffset ?? 0;
+    const liveContentIsNewer =
+      liveRevision > historyRevision ||
+      (liveRevision === historyRevision && liveOffset > historyOffset);
+    const liveTableIsAtLeastAsNew =
+      liveMessage.tableHeaders !== undefined &&
+      message.tableHeaders === undefined &&
+      (liveRevision > historyRevision ||
+        (liveRevision === historyRevision && liveOffset >= historyOffset));
+    const liveA2uiIsOpen =
+      liveMessage.a2uiRuntime?.dialogueId === dialogueId &&
+      String(liveMessage.a2uiRuntime.messageId) === messageId &&
+      liveMessage.blocks?.some(isOpenA2uiBlock);
     return {
       ...message,
-      blocks: liveMessage.blocks,
-      a2uiRuntime: liveMessage.a2uiRuntime,
-      streaming: liveMessage.streaming,
-      streamPresentationKey: liveMessage.streamPresentationKey,
+      ...(liveContentIsNewer || liveTableIsAtLeastAsNew
+        ? {
+            content: liveMessage.content,
+            contentRevision: liveMessage.contentRevision,
+            contentOffset: liveMessage.contentOffset,
+            contentLength: liveMessage.contentLength,
+            status: liveMessage.status,
+            executionRun: liveMessage.executionRun,
+            tableHeaders: liveMessage.tableHeaders,
+            original: liveMessage.original,
+          }
+        : {}),
+      ...(liveMessage.doc_list?.length
+        ? { doc_list: liveMessage.doc_list }
+        : {}),
+      ...(liveA2uiIsOpen
+        ? {
+            blocks: liveMessage.blocks,
+            a2uiRuntime: liveMessage.a2uiRuntime,
+            streaming: liveMessage.streaming,
+            streamPresentationKey: liveMessage.streamPresentationKey,
+          }
+        : {}),
     };
   });
 
@@ -284,6 +250,8 @@ export function useSelectChat(opts: {
   timestamp: Ref<number>;
   username?: Ref<string> | (() => string);
   attachmentStore?: UploadRecoveryStore;
+  /** Test/compatibility seam; undefined uses V2, null deliberately skips it. */
+  historyV2Client?: typeof getConversationHistoryV2 | null;
 }) {
   const {
     getChatState,
@@ -298,10 +266,6 @@ export function useSelectChat(opts: {
     typeof opts.username === "function"
       ? opts.username()
       : (opts.username?.value ?? "");
-  const { resumeStreamMessage } = useStreamMessage({
-    getChatState,
-    t: (key) => String(i18n.global.t(key)),
-  });
   const loadAttachmentMetadata = async (): Promise<
     ReadonlyMap<string, AttachmentMetadata>
   > => {
@@ -371,64 +335,6 @@ export function useSelectChat(opts: {
       return "applied";
     }
 
-    // `new_*` rows are local-only. The messages API looks up a server parent by
-    // dialogue_id and returns [] for that prefix, which would paint
-    // history-empty over a conversation the sidebar still lists after refresh.
-    if (isLocalStorageChat(capturedDialogueId)) {
-      const pending = safeParse(
-        localStorage.getItem(`pending_chat_${capturedDialogueId}`)
-      );
-      if (isValidPendingRecord(pending)) {
-        const messages = pending.messages.map((message) => ({
-          ...message,
-        })) as ChatMessage[];
-        if (pending.mode === "expert" || pending.mode === "instant") {
-          chatState.mode = pending.mode;
-          if (pending.mode === "instant") {
-            chatState.selectedAgent = "";
-          }
-        }
-        const pendingTitle =
-          typeof pending.title === "string" ? pending.title.trim() : "";
-        chatState.historyErrorKind = null;
-        chatState.historyQuestion = messages.map((message) => ({
-          role: message.role,
-          content: typeof message.content === "string" ? message.content : "",
-        }));
-        chatState.renderedChat = {
-          ...chat,
-          dialogue_id: capturedDialogueId,
-          ...(chat?.title || pendingTitle
-            ? { title: chat?.title || pendingTitle }
-            : {}),
-          messages,
-        };
-        chatState.historyHydration =
-          messages.length > 0 ? "ready" : "history-empty";
-        if (mode.foreground && currentChatId.value === capturedDialogueId) {
-          if (messages.length > 0) await scrollToBottom();
-          updateUrlWithChatId(capturedDialogueId);
-        }
-        return "applied";
-      }
-
-      if (mode.force) {
-        return "applied";
-      }
-      chatState.historyErrorKind = null;
-      chatState.historyQuestion = [];
-      chatState.renderedChat = {
-        ...chat,
-        dialogue_id: capturedDialogueId,
-        messages: [],
-      };
-      chatState.historyHydration = "history-empty";
-      if (mode.foreground && currentChatId.value === capturedDialogueId) {
-        updateUrlWithChatId(capturedDialogueId);
-      }
-      return "applied";
-    }
-
     // Only a hydration that issues a history request supersedes an older one.
     const hydrationGeneration = beginHydration(capturedDialogueId);
     const isCurrentHydration = () =>
@@ -448,6 +354,152 @@ export function useSelectChat(opts: {
       if (!mode.force) return;
       chatState.historyHydration = previousHistoryHydration;
     };
+
+    let orderedHistory: ConversationHistoryV2 | null = null;
+    const historyV2Client =
+      opts.historyV2Client === undefined
+        ? getConversationHistoryV2
+        : opts.historyV2Client;
+    if (historyV2Client) {
+      try {
+        const response = await historyV2Client({
+          dialogue_id: capturedDialogueId,
+        });
+        if (response.code === 200 && response.data.messages.length > 0) {
+          orderedHistory = response.data;
+        }
+      } catch {
+        // Explicit compatibility fallback: legacy conversations predate the V2
+        // ordered timeline and continue through the unchanged legacy decoder.
+      }
+    }
+
+    if (!isCurrentHydration()) return "superseded";
+    if (orderedHistory) {
+      const messages: ChatMessage[] = orderedHistory.messages
+        .filter(
+          (item) =>
+            (item.type === "user" || item.type === "assistant") &&
+            (item.role === "user" || item.role === "assistant")
+        )
+        .map((item) => {
+          const table =
+            item.role === "assistant"
+              ? decodeTableMessagePresentation(item.content)
+              : undefined;
+          return {
+            role: item.role,
+            content: table?.content ?? item.content,
+            id: item.message_id,
+            status: item.status,
+            executionId: item.execution_id,
+            messageIndex: item.message_index,
+            sourceMessageId: item.source_message_id,
+            parentMessageId: item.parent_message_id,
+            messageType: item.type,
+            visibility: item.visibility,
+            contentRevision: item.content_revision,
+            contentOffset: item.content_offset,
+            contentLength: item.content_length,
+            doc_list: decodeCitationDocuments(item.references),
+            ...(table ?? {}),
+            instantMessage: false,
+            showLog: false,
+          };
+        });
+      const assistantByExecution = new Map(
+        messages
+          .filter(
+            (message) => message.role === "assistant" && message.executionId
+          )
+          .map((message) => [message.executionId as string, message])
+      );
+      const executionRuns = { ...chatState.executionRuns };
+      for (const execution of orderedHistory.executions) {
+        let run = createExecutionRunState(execution.execution_id, 2);
+        for (const rawEvent of execution.events) {
+          const decoded = decodeExecutionEvent(rawEvent);
+          if (decoded.ok) run = applyExecutionEvent(run, decoded.value);
+        }
+        if (execution.projection) {
+          const decoded = decodeExecutionProjection(execution.projection);
+          if (decoded.ok) run = hydrateExecutionProjection(run, decoded.value);
+        }
+        const assistant = assistantByExecution.get(execution.execution_id);
+        run = {
+          ...run,
+          latestSeq: Math.max(run.latestSeq, execution.event_cursor),
+          outputRevision: Math.max(
+            run.outputRevision,
+            execution.content_revision,
+            assistant?.contentRevision ?? 0
+          ),
+          outputOffset: Math.max(
+            run.outputOffset,
+            execution.content_offset,
+            assistant?.contentOffset ?? 0
+          ),
+          outputText:
+            typeof assistant?.original === "string"
+              ? assistant.original
+              : typeof assistant?.content === "string"
+                ? assistant.content
+                : run.outputText,
+          trackingHealth: execution.tracking_health,
+          delivery: execution.stale ? "stale" : run.delivery,
+        };
+        if (assistant) {
+          const toolName = canonicalAgentToolFromIdentity(
+            run.selectedAgentId,
+            run.agentSlug
+          );
+          assistant.executionRun = run;
+          if (toolName) assistant.tool_name = toolName;
+          if (run.routeReasonCode) {
+            assistant.route_reason_code = run.routeReasonCode;
+          }
+        }
+        executionRuns[execution.execution_id] = run;
+      }
+      chatState.executionRuns = executionRuns;
+      const latestExecutionId = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === "assistant" &&
+            message.executionId &&
+            executionRuns[message.executionId]
+        )?.executionId;
+      if (latestExecutionId) {
+        chatState.selectedExecutionRunId = latestExecutionId;
+      }
+      chatState.historyQuestion = messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+      const mergedMessages = mergeLiveA2uiMessages(
+        messages,
+        chatState.renderedChat?.messages,
+        capturedDialogueId
+      );
+      chatState.renderedChat = { ...chat, messages: mergedMessages };
+      chatState.historyHydration = "ready";
+      chatState.historyErrorKind = null;
+      if (
+        mode.foreground &&
+        isCurrentHydration() &&
+        currentChatId.value === capturedDialogueId
+      ) {
+        await scrollToBottom();
+        if (
+          isCurrentHydration() &&
+          currentChatId.value === capturedDialogueId
+        ) {
+          updateUrlWithChatId(capturedDialogueId);
+        }
+      }
+      return "applied";
+    }
 
     let res;
     try {
@@ -571,28 +623,7 @@ export function useSelectChat(opts: {
             }
           }
 
-          const emptyAnswer =
-            typeof item.answer !== "string" || item.answer.trim() === "";
-          const hydrateStreamResume = shouldHydrateStreamResume(item);
           const isBlankBackground = blankBackgroundAssistantRow(item);
-          if (hydrateStreamResume && emptyAnswer && item.id !== undefined) {
-            messages.push({
-              role: "assistant",
-              ...assistantMetadata,
-              content: "",
-              status: item.status || "",
-              id: String(item.id),
-              tool_name: item.tool_name,
-              streaming: true,
-              blocks: [],
-              followUpQuestions: decodeFollowUpQuestions(
-                item.follow_up_questions
-              ),
-              showFollowUpQuestions: false,
-              showLog: false,
-              instantMessage: false,
-            });
-          }
           if (isBlankBackground) {
             messages.push({
               role: "assistant",
@@ -617,8 +648,7 @@ export function useSelectChat(opts: {
           if (
             a2uiBlocks &&
             !isBlankBackground &&
-            !(hydrateStreamResume && emptyAnswer) &&
-            emptyAnswer
+            (typeof item.answer !== "string" || item.answer.trim() === "")
           ) {
             messages.push({
               role: "assistant",
@@ -929,18 +959,6 @@ export function useSelectChat(opts: {
                 .forEach(stripActiveArchiveLegacyFields);
             }
           }
-
-          if (hydrateStreamResume && item.id !== undefined) {
-            const rowAssistant = messages
-              .slice(rowMessageStart)
-              .reverse()
-              .find((message) => message.role === "assistant");
-            if (rowAssistant) {
-              rowAssistant.streaming = true;
-              rowAssistant.id = String(item.id);
-              if (!rowAssistant.blocks) rowAssistant.blocks = [];
-            }
-          }
         });
       }
 
@@ -965,6 +983,7 @@ export function useSelectChat(opts: {
         ElMessage.warning(i18n.global.t("chat.contextDegraded"));
       }
 
+      chatState.mode = nextMode;
       chatState.reactions = nextReactions;
       chatState.historyQuestion = historyMessages;
       const historyMessagesWithLockedA2ui = lockUnverifiedHistoryA2ui(messages);
@@ -994,7 +1013,6 @@ export function useSelectChat(opts: {
         }
       }
       chatState.handledArtifactIdentities = [...handledIdentities];
-      applyHydratedRouting(chatState, nextMode, mergedMessages);
       // Populate only this dialogue's rendered owner — never the live current ref
       chatState.renderedChat = {
         ...chat,
@@ -1002,34 +1020,6 @@ export function useSelectChat(opts: {
       };
       chatState.historyHydration =
         messages.length > 0 ? "ready" : "history-empty";
-
-      const hydratedMessages = chatState.renderedChat.messages;
-      for (const message of hydratedMessages) {
-        if (message.role !== "assistant" || !message.streaming) continue;
-        if (!isStreamFamilyTool(message.tool_name)) continue;
-        const messageId = String(message.id ?? "").trim();
-        if (!messageId || !takeStreamResumeSlot(chatState, messageId)) {
-          continue;
-        }
-        void resumeStreamMessage({
-          dialogueId: capturedDialogueId,
-          messageId,
-          placeholder: message,
-          lastEventId: message.streamSeq,
-          requestId: `resume:${messageId}`,
-        }).then(
-          (result) => {
-            // RunError is an attached terminal outcome, not a retryable transport failure.
-            if (
-              result.completed !== true &&
-              message.streamTerminalFailure !== "run-error"
-            ) {
-              releaseStreamResumeSlot(chatState, messageId);
-            }
-          },
-          () => releaseStreamResumeSlot(chatState, messageId)
-        );
-      }
 
       // Foreground shell effects only while this dialogue is still selected
       if (

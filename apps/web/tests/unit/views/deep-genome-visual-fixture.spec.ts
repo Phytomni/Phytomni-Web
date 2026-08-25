@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -88,32 +90,57 @@ type CaptureHarnessOracleMode =
 
 const captureHarnessRoots: string[] = [];
 
+function gitBashPath(path: string): string {
+  if (process.platform !== "win32") return path;
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.replace(
+    /^([A-Za-z]):/,
+    (_, drive: string) => `/${drive.toLowerCase()}`
+  );
+}
+
 function runCaptureHarness(oracleMode: CaptureHarnessOracleMode) {
+  const harnessParent =
+    process.platform === "win32"
+      ? resolve(WEB_ROOT, ".codex-test-cache")
+      : tmpdir();
+  mkdirSync(harnessParent, { recursive: true });
   const harnessRoot = mkdtempSync(
-    resolve(tmpdir(), "phytomni-research-capture-")
+    resolve(harnessParent, "phytomni-research-capture-")
   );
   captureHarnessRoots.push(harnessRoot);
 
   const binDir = resolve(harnessRoot, "bin");
   const outputDir = resolve(harnessRoot, "output");
   mkdirSync(binDir);
-  symlinkSync(
-    CAPTURE_AGENT_BROWSER_HARNESS_PATH,
-    resolve(binDir, "agent-browser")
-  );
+  const harnessPath = resolve(binDir, "agent-browser");
+  try {
+    symlinkSync(CAPTURE_AGENT_BROWSER_HARNESS_PATH, harnessPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform !== "win32" || code !== "EPERM") throw error;
+    copyFileSync(CAPTURE_AGENT_BROWSER_HARNESS_PATH, harnessPath);
+    chmodSync(harnessPath, 0o755);
+  }
 
   const stdoutPath = resolve(harnessRoot, "runner.stdout");
   const stderrPath = resolve(harnessRoot, "runner.stderr");
   const stdoutFd = openSync(stdoutPath, "w");
   const stderrFd = openSync(stderrPath, "w");
-  const result = spawnSync("bash", [CAPTURE_RUNNER_PATH], {
+  const gitBash = resolve(
+    process.env.ProgramFiles ?? "C:\\Program Files",
+    "Git/bin/bash.exe"
+  );
+  const bashExecutable =
+    process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+  const result = spawnSync(bashExecutable, [CAPTURE_RUNNER_PATH], {
     cwd: WEB_ROOT,
     env: {
       ...process.env,
       PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
       PHYTOMNI_CAPTURE_HARNESS_ORACLE: oracleMode,
       PHYTOMNI_VISUAL_BASE_URL: "http://fixture.invalid/",
-      PHYTOMNI_VISUAL_OUTPUT_DIR: outputDir,
+      PHYTOMNI_VISUAL_OUTPUT_DIR: gitBashPath(outputDir),
     },
     stdio: ["ignore", stdoutFd, stderrFd],
   });

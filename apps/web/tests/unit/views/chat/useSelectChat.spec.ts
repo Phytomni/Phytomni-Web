@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
-import { nextTick, reactive, ref, type Ref } from "vue";
+import { nextTick, ref, type Ref } from "vue";
 import { useSelectChat } from "@/views/chat/composables/useSelectChat";
 import type {
   Chat,
@@ -8,7 +8,11 @@ import type {
   ChatUIState,
   ChatView,
 } from "@/views/chat/types";
-import type { ApiEnvelope, ChatHistoryRecord } from "@/api/types";
+import type {
+  ApiEnvelope,
+  ChatHistoryRecord,
+  ConversationHistoryV2,
+} from "@/api/types";
 import type { UploadRecoveryStore } from "@/views/chat/upload/store";
 import { accountScopeForUsername } from "@/views/chat/upload/hash";
 import { buildChat, buildChatState } from "../../../helpers/chatBuilders";
@@ -23,35 +27,25 @@ import {
   reduceAGUIEvent,
 } from "@/views/chat/streaming/eventReducer";
 
-const { mockResumeStreamMessage } = vi.hoisted(() => ({
-  mockResumeStreamMessage: vi.fn(async () => ({})),
-}));
-
 vi.mock("element-plus", () => ({
   ElMessage: { warning: vi.fn() },
 }));
 
-// Mock getAnswerCheck API (the only API selectChat calls)
 vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
-}));
-
-vi.mock("@/views/chat/composables/useStreamMessage", () => ({
-  useStreamMessage: () => ({
-    streamMessage: vi.fn(),
-    resumeStreamMessage: mockResumeStreamMessage,
-  }),
+  getConversationHistoryV2: vi.fn(),
 }));
 
 vi.mock("@/views/chat/utils/agent-log", () => ({
   readServerFile: vi.fn(),
 }));
 
-import { getAnswerCheck } from "@/api/chat";
+import { getAnswerCheck, getConversationHistoryV2 } from "@/api/chat";
 import { readServerFile } from "@/views/chat/utils/agent-log";
 import { ElMessage } from "element-plus";
 
 const mockGetAnswerCheck = vi.mocked(getAnswerCheck);
+const mockGetConversationHistoryV2 = vi.mocked(getConversationHistoryV2);
 const mockReadServerFile = vi.mocked(readServerFile);
 
 describe("useSelectChat", () => {
@@ -67,8 +61,6 @@ describe("useSelectChat", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockResumeStreamMessage.mockReset();
-    mockResumeStreamMessage.mockResolvedValue({ completed: true });
     states = new Map();
     getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) {
@@ -85,6 +77,14 @@ describe("useSelectChat", () => {
     updateUrlWithChatId = vi.fn();
     timestamp = ref(0);
     username = ref("researcher@example.com");
+    mockGetConversationHistoryV2.mockResolvedValue(
+      buildApiEnvelope<ConversationHistoryV2>({
+        schema_version: 2,
+        conversation_id: "d1",
+        messages: [],
+        executions: [],
+      })
+    );
   });
 
   function historyResponse(
@@ -129,6 +129,7 @@ describe("useSelectChat", () => {
     options: Partial<{
       username: Ref<string>;
       attachmentStore: UploadRecoveryStore;
+      orderedHistory: boolean;
     }> = {}
   ) {
     return useSelectChat({
@@ -139,7 +140,13 @@ describe("useSelectChat", () => {
       updateUrlWithChatId,
       chatList,
       timestamp,
-      ...options,
+      ...(options.username ? { username: options.username } : {}),
+      ...(options.attachmentStore
+        ? { attachmentStore: options.attachmentStore }
+        : {}),
+      historyV2Client: options.orderedHistory
+        ? mockGetConversationHistoryV2
+        : null,
     });
   }
 
@@ -160,6 +167,324 @@ describe("useSelectChat", () => {
       close: vi.fn(),
     } as unknown as UploadRecoveryStore;
   }
+
+  it("hydrates ordered v2 user and assistant items without aggregate query/answer synthesis", async () => {
+    mockGetConversationHistoryV2.mockResolvedValueOnce(
+      buildApiEnvelope<ConversationHistoryV2>({
+        schema_version: 2,
+        conversation_id: "d1",
+        messages: [
+          {
+            message_id: "msg-user",
+            conversation_id: "d1",
+            message_index: 1,
+            execution_id: "turn-history",
+            source_message_id: "msg-user",
+            type: "user",
+            role: "user",
+            visibility: "user",
+            content_revision: 0,
+            content_offset: 8,
+            content_length: 8,
+            content: "question",
+            status: "completed",
+            occurred_at: "2026-08-21T00:00:00Z",
+          },
+          {
+            message_id: "msg-assistant",
+            conversation_id: "d1",
+            message_index: 2,
+            execution_id: "turn-history",
+            source_message_id: "msg-assistant",
+            parent_message_id: "msg-user",
+            type: "assistant",
+            role: "assistant",
+            visibility: "user",
+            content_revision: 1,
+            content_offset: 60,
+            content_length: 60,
+            content_sha256: "a".repeat(64),
+            content:
+              '{"headers":["transcript_id_1"],"rows":[["Os01t0177400-01"]]}',
+            references: [
+              {
+                title: "Drought epigenetics",
+                di: "10.1000/safe-doi",
+              },
+            ],
+            status: "running",
+            occurred_at: "2026-08-21T00:00:01Z",
+          },
+        ],
+        executions: [
+          {
+            execution_id: "turn-history",
+            user_message_id: "msg-user",
+            assistant_message_id: "msg-assistant",
+            status: "running",
+            event_cursor: 7,
+            projection_revision: 7,
+            content_revision: 1,
+            content_offset: 60,
+            tracking_health: "healthy",
+            stale: false,
+            projection: {
+              schema_version: 2,
+              execution_id: "turn-history",
+              agent_slug: "network",
+              status: "running",
+              latest_seq: 1,
+              output_revision: 1,
+              output_offset: 60,
+              operation_revision: 0,
+              tracking_health: "healthy",
+              active_span_ids: [],
+              todo_declared: false,
+              todos: [],
+              results: [
+                {
+                  event_id: "event-network-archive",
+                  name: "network-results.zip",
+                  media_type: "application/zip",
+                  size_bytes: 224100000,
+                  target: {
+                    kind: "download",
+                    id: "download-33333333333333333333333333333333",
+                  },
+                },
+              ],
+              targets: [
+                {
+                  kind: "download",
+                  id: "download-33333333333333333333333333333333",
+                },
+              ],
+              failed_work_unit_ids: [],
+              warnings: [],
+              input_required: null,
+              context_stage: {
+                schema_version: 1,
+                turn_id: "turn-history",
+                selected_agent_id: "GeneNetworkAgent",
+                route_source: "router",
+                route_reason_code: "DOMAIN_RESOLVER_SELECTED",
+                base_business_context_version: 0,
+                proposed_business_context_version: 1,
+                last_applied_ledger_cursor: 0,
+                context_truncated: false,
+                context_rebuilt: false,
+              },
+              terminal: null,
+            },
+            events: [
+              {
+                schema_version: 2,
+                event_id: "event-history-started",
+                execution_id: "turn-history",
+                seq: 1,
+                type: "execution.started",
+                status: "running",
+                occurred_at: "2026-08-21T00:00:01Z",
+                source: "runtime",
+                span_id: "root",
+                parent_span_id: null,
+                work_unit_id: null,
+                attempt: 1,
+                summary: {
+                  key: "activity.execution.started",
+                  text: "Execution started",
+                },
+                public_payload: {},
+                target: null,
+                idempotency_key: null,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    const { selectChat } = makeComposable({ orderedHistory: true });
+    await selectChat("d1");
+
+    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
+    expect(renderedFor("d1", "v2").messages).toMatchObject([
+      { id: "msg-user", role: "user", content: "question" },
+      {
+        id: "msg-assistant",
+        role: "assistant",
+        executionId: "turn-history",
+        contentRevision: 1,
+        contentOffset: 60,
+        doc_list: [
+          {
+            title: "Drought epigenetics",
+            di: "10.1000/safe-doi",
+          },
+        ],
+        content: [{ transcript_id_1: "Os01t0177400-01" }],
+        tableHeaders: [{ prop: "transcript_id_1", label: "transcript_id_1" }],
+        original:
+          '{"headers":["transcript_id_1"],"rows":[["Os01t0177400-01"]]}',
+        tool_name: "GeneNetworkAgent",
+        route_reason_code: "DOMAIN_RESOLVER_SELECTED",
+        executionRun: {
+          agentSlug: "network",
+          selectedAgentId: "GeneNetworkAgent",
+          routeReasonCode: "DOMAIN_RESOLVER_SELECTED",
+          results: [
+            {
+              name: "network-results.zip",
+              mediaType: "application/zip",
+              sizeBytes: 224100000,
+              target: {
+                kind: "download",
+                id: "download-33333333333333333333333333333333",
+              },
+            },
+          ],
+          targets: [
+            {
+              kind: "download",
+              id: "download-33333333333333333333333333333333",
+            },
+          ],
+        },
+      },
+    ]);
+    expect(stateFor("d1").executionRuns["turn-history"].events).toMatchObject([
+      { eventId: "event-history-started", kind: "execution.started" },
+    ]);
+  });
+
+  it("does not regress newer live assistant content during a forced v2 history refresh", async () => {
+    mockGetConversationHistoryV2.mockResolvedValueOnce(
+      buildApiEnvelope<ConversationHistoryV2>({
+        schema_version: 2,
+        conversation_id: "d1",
+        messages: [
+          {
+            message_id: "msg-assistant",
+            conversation_id: "d1",
+            message_index: 2,
+            execution_id: "turn-history",
+            source_message_id: "msg-assistant",
+            type: "assistant",
+            role: "assistant",
+            visibility: "user",
+            content_revision: 1,
+            content_offset: 6,
+            content_length: 11,
+            content: "hello ",
+            status: "running",
+            occurred_at: "2026-08-21T00:00:01Z",
+          },
+        ],
+        executions: [],
+      })
+    );
+    const state = getChatState("d1");
+    state.renderedChat = {
+      messages: [
+        {
+          id: "msg-assistant",
+          role: "assistant",
+          executionId: "turn-history",
+          content: "hello world",
+          contentRevision: 1,
+          contentOffset: 11,
+          contentLength: 11,
+          status: "running",
+          doc_list: [{ title: "Live citation" }],
+        },
+      ],
+    };
+    const { reloadChat } = makeComposable({ orderedHistory: true });
+
+    await reloadChat("d1");
+
+    expect(messageAt("d1", 0, "live v2 merge")).toMatchObject({
+      id: "msg-assistant",
+      content: "hello world",
+      contentRevision: 1,
+      contentOffset: 11,
+      contentLength: 11,
+      doc_list: [{ title: "Live citation" }],
+    });
+  });
+
+  it("selects the latest terminal execution after refresh so persisted activity remains visible", async () => {
+    mockGetConversationHistoryV2.mockResolvedValueOnce(
+      buildApiEnvelope<ConversationHistoryV2>({
+        schema_version: 2,
+        conversation_id: "d1",
+        messages: [
+          {
+            message_id: "msg-assistant-terminal",
+            conversation_id: "d1",
+            message_index: 2,
+            execution_id: "turn-terminal",
+            source_message_id: "msg-assistant-terminal",
+            type: "assistant",
+            role: "assistant",
+            visibility: "user",
+            content_revision: 1,
+            content_offset: 4,
+            content_length: 4,
+            content: "done",
+            status: "succeeded",
+            occurred_at: "2026-08-21T00:00:01Z",
+          },
+        ],
+        executions: [
+          {
+            execution_id: "turn-terminal",
+            user_message_id: "msg-user-terminal",
+            assistant_message_id: "msg-assistant-terminal",
+            status: "succeeded",
+            event_cursor: 1,
+            projection_revision: 1,
+            content_revision: 1,
+            content_offset: 4,
+            tracking_health: "healthy",
+            stale: false,
+            projection: null,
+            events: [
+              {
+                schema_version: 2,
+                event_id: "event-terminal",
+                execution_id: "turn-terminal",
+                seq: 1,
+                type: "execution.succeeded",
+                status: "succeeded",
+                occurred_at: "2026-08-21T00:00:02Z",
+                source: "runtime",
+                span_id: "root",
+                parent_span_id: null,
+                work_unit_id: null,
+                attempt: 1,
+                summary: {
+                  key: "execution.succeeded",
+                  text: "Execution succeeded",
+                },
+                public_payload: {},
+                target: null,
+                idempotency_key: null,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    await makeComposable({ orderedHistory: true }).selectChat("d1");
+
+    expect(stateFor("d1").selectedExecutionRunId).toBe("turn-terminal");
+    expect(stateFor("d1").executionRuns["turn-terminal"].terminal).toEqual({
+      status: "succeeded",
+      eventId: "event-terminal",
+    });
+  });
 
   it.each(["instant", "expert"] as const)(
     "restores persisted %s mode instead of retaining the new-chat default",
@@ -1036,84 +1361,6 @@ describe("useSelectChat", () => {
     expect(stateFor("d1").historyQuestion).toEqual([]);
   });
 
-  it("reopens a pending new_ history row from localStorage instead of an empty messages API", async () => {
-    const tempId = "new_1735819200000";
-    chatList.value = [
-      buildChat({
-        id: 0,
-        dialogue_id: tempId,
-        title: "Provide a scientifically rigorous a...",
-        isPending: true,
-      }),
-      buildChat({
-        id: 88,
-        dialogue_id: "srv-review-uuid",
-        title: "Provide a scientifically rigorou...",
-      }),
-    ];
-    localStorage.setItem(
-      `pending_chat_${tempId}`,
-      JSON.stringify({
-        id: tempId,
-        title: "Provide a scientifically rigorous a...",
-        isPending: true,
-        mode: "expert",
-        messages: [
-          {
-            role: "user",
-            content:
-              "Provide a scientifically rigorous and integrated analysis",
-          },
-          {
-            role: "assistant",
-            content: "Persisted review answer",
-            tool_name: "ReviewAgent",
-          },
-        ],
-      })
-    );
-
-    const { selectChat } = makeComposable();
-    await selectChat(tempId);
-
-    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
-    expect(stateFor(tempId).historyHydration).toBe("ready");
-    expect(stateFor(tempId).historyErrorKind).toBeNull();
-    expect(stateFor(tempId).mode).toBe("expert");
-    expect(renderedFor(tempId, "pending history").messages).toEqual([
-      expect.objectContaining({
-        role: "user",
-        content: "Provide a scientifically rigorous and integrated analysis",
-      }),
-      expect.objectContaining({
-        role: "assistant",
-        content: "Persisted review answer",
-        tool_name: "ReviewAgent",
-      }),
-    ]);
-    expect(updateUrlWithChatId).toHaveBeenCalledWith(tempId);
-    localStorage.removeItem(`pending_chat_${tempId}`);
-  });
-
-  it("does not ask the server for a new_ dialogue that has no pending record", async () => {
-    const tempId = "new_no_pending";
-    chatList.value = [
-      buildChat({
-        id: 0,
-        dialogue_id: tempId,
-        title: "Orphan pending title",
-        isPending: true,
-      }),
-    ];
-
-    const { selectChat } = makeComposable();
-    await selectChat(tempId);
-
-    expect(mockGetAnswerCheck).not.toHaveBeenCalled();
-    expect(stateFor(tempId).historyHydration).toBe("history-empty");
-    expect(renderedFor(tempId, "orphan new_").messages).toEqual([]);
-  });
-
   it("records a decode error for a malformed successful payload", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       invalidInput<ApiEnvelope<ChatHistoryRecord[]>>({ code: 200, data: null })
@@ -1315,65 +1562,6 @@ describe("useSelectChat", () => {
     expect(stateFor("d1").historyHydration).toBe("error");
     expect(stateFor("d1").historyErrorKind).toBe("request");
     expect(updateUrlWithChatId).toHaveBeenCalledTimes(1);
-  });
-
-  it("restores expert selectedAgent from the last assistant tool", async () => {
-    mockGetAnswerCheck.mockResolvedValueOnce(
-      historyResponse([
-        buildChatHistoryRecord({
-          id: "181",
-          query: "Why do leaves fall in autumn?",
-          answer: JSON.stringify({ content: "Seasonal abscission." }),
-          tool_name: "KnowledgeAgent",
-          mode: "expert",
-        }),
-      ])
-    );
-
-    await makeComposable().selectChat("d1");
-
-    expect(stateFor("d1").mode).toBe("expert");
-    expect(stateFor("d1").selectedAgent).toBe("KnowledgeAgent");
-  });
-
-  it("does not overwrite a user-selected expert agent during hydration", async () => {
-    getChatState("d1").selectedAgent = "DataAgent";
-    mockGetAnswerCheck.mockResolvedValueOnce(
-      historyResponse([
-        buildChatHistoryRecord({
-          id: "181",
-          query: "Why do leaves fall in autumn?",
-          answer: JSON.stringify({ content: "Seasonal abscission." }),
-          tool_name: "KnowledgeAgent",
-          mode: "expert",
-        }),
-      ])
-    );
-
-    await makeComposable().selectChat("d1");
-
-    expect(stateFor("d1").mode).toBe("expert");
-    expect(stateFor("d1").selectedAgent).toBe("DataAgent");
-  });
-
-  it("clears selectedAgent when hydrating instant history", async () => {
-    getChatState("d1").selectedAgent = "KnowledgeAgent";
-    mockGetAnswerCheck.mockResolvedValueOnce(
-      historyResponse([
-        buildChatHistoryRecord({
-          id: "194",
-          query: "Reply with only the word OK.",
-          answer: "OK",
-          tool_name: "ChatAgent",
-          mode: "instant",
-        }),
-      ])
-    );
-
-    await makeComposable().selectChat("d1");
-
-    expect(stateFor("d1").mode).toBe("instant");
-    expect(stateFor("d1").selectedAgent).toBe("");
   });
 
   it("reloads a background dialogue without changing foreground navigation or composer state", async () => {
@@ -1685,7 +1873,6 @@ describe("useSelectChat", () => {
           tool_name: "AnalystAgent",
           task_id: "ei-task-abc",
           compute_resource: "analyst-agents-small",
-          created_at: "2026-08-19T13:52:46Z",
         }),
       ])
     );
@@ -1697,7 +1884,36 @@ describe("useSelectChat", () => {
     expect(assistant.tool_name).toBe("AnalystAgent");
     expect(assistant.id).toBe("1001");
     expect(assistant.task_id).toBe("ei-task-abc");
-    expect(assistant.created_at).toBe("2026-08-19T13:52:46Z");
+  });
+
+  it("restores a blank V2 assistant shell so a running execution can reconnect after refresh", async () => {
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "31",
+          query:
+            "How do epigenetic modifications regulate drought stress in crops?",
+          answer: "",
+          status: "RUNNING",
+          tool_name: "ReviewAgent",
+          schema_version: 2,
+          execution_id: "turn-55a70f29-3f01-4c4e-bd02-1bfd41a9404f",
+          event_cursor: 130,
+        }),
+      ])
+    );
+
+    await makeComposable().selectChat("d1");
+
+    expect(renderedFor("d1", "running V2 history").messages).toHaveLength(2);
+    expect(messageAt("d1", 1, "running V2 assistant shell")).toMatchObject({
+      role: "assistant",
+      id: "31",
+      content: "",
+      status: "RUNNING",
+      tool_name: "ReviewAgent",
+      executionId: "turn-55a70f29-3f01-4c4e-bd02-1bfd41a9404f",
+    });
   });
 
   it("hydrates blank nonterminal background agents as discoverable assistant placeholders", async () => {
@@ -1707,10 +1923,8 @@ describe("useSelectChat", () => {
           "AnalystAgent",
           "DeepGenomeAgent",
           "InSilicoResearchAgent",
-          "DigitalDesignAgent",
           "GeneNetworkAgent",
-          "DataAgent",
-          "ReviewAgent",
+          "DigitalDesignAgent",
         ].map((tool_name, index) =>
           buildChatHistoryRecord({
             id: String(201 + index),
@@ -1720,7 +1934,7 @@ describe("useSelectChat", () => {
           })
         ),
         buildChatHistoryRecord({
-          id: "208",
+          id: "206",
           answer: "",
           status: "RUNNING",
           tool_name: "ChatAgent",
@@ -1732,19 +1946,19 @@ describe("useSelectChat", () => {
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "209",
+          id: "207",
           answer: "",
           status: "SUCCEEDED",
           tool_name: "AnalystAgent",
         }),
         buildChatHistoryRecord({
-          id: "210",
+          id: "208",
           answer: "",
           status: "FAILED",
           tool_name: "GeneNetworkAgent",
         }),
         buildChatHistoryRecord({
-          id: "211",
+          id: "209",
           answer: "",
           status: "CANCELLED",
           tool_name: "DigitalDesignAgent",
@@ -1780,41 +1994,27 @@ describe("useSelectChat", () => {
         expect.objectContaining({
           role: "assistant",
           id: "204",
-          tool_name: "DigitalDesignAgent",
+          tool_name: "GeneNetworkAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
           id: "205",
-          tool_name: "GeneNetworkAgent",
+          tool_name: "DigitalDesignAgent",
           status: "RUNNING",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "206",
-          tool_name: "DataAgent",
-          status: "RUNNING",
-          content: "",
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          id: "207",
-          tool_name: "ReviewAgent",
-          status: "RUNNING",
-          content: "",
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          id: "210",
+          id: "208",
           tool_name: "GeneNetworkAgent",
           status: "FAILED",
           content: "",
         }),
         expect.objectContaining({
           role: "assistant",
-          id: "211",
+          id: "209",
           tool_name: "DigitalDesignAgent",
           status: "CANCELLED",
           content: "",
@@ -1825,221 +2025,6 @@ describe("useSelectChat", () => {
       renderedFor("d1", "blank background rows").messages.map((message) =>
         String(message.id ?? "")
       )
-    ).not.toEqual(expect.arrayContaining(["209", "malformed"]));
-  });
-
-  it("hydrates a DataAgent RUNNING empty answer as an assistant wait row", async () => {
-    mockGetAnswerCheck.mockResolvedValueOnce(
-      historyResponse([
-        buildChatHistoryRecord({
-          id: "99",
-          answer: "",
-          status: "RUNNING",
-          tool_name: "DataAgent",
-        }),
-      ])
-    );
-
-    await makeComposable().selectChat("d1");
-
-    const assistant = messageAt("d1", 1, "DataAgent wait hydrate");
-    expect(assistant).toMatchObject({
-      role: "assistant",
-      id: "99",
-      tool_name: "DataAgent",
-      status: "RUNNING",
-      content: "",
-    });
-    expect(mockResumeStreamMessage).not.toHaveBeenCalled();
-  });
-
-  it("hydrates an Expert Auto empty-tool RUNNING row as a selecting wait assistant", async () => {
-    mockGetAnswerCheck.mockResolvedValueOnce(
-      historyResponse([
-        buildChatHistoryRecord({
-          id: "5",
-          answer: "",
-          status: "RUNNING",
-          tool_name: "",
-        }),
-      ])
-    );
-
-    await makeComposable().selectChat("d1");
-
-    const assistant = messageAt("d1", 1, "Expert Auto selecting hydrate");
-    expect(assistant).toMatchObject({
-      role: "assistant",
-      id: "5",
-      tool_name: "",
-      status: "RUNNING",
-      content: "",
-    });
-    expect(mockResumeStreamMessage).not.toHaveBeenCalled();
-  });
-
-  describe("stream resume hydrate", () => {
-    it.each(["ChatAgent", "KnowledgeAgent", "BriefGeneAgent"] as const)(
-      "hydrates a %s RUNNING empty answer as a streaming assistant and kicks resume",
-      async (tool_name) => {
-        mockGetAnswerCheck.mockResolvedValueOnce(
-          historyResponse([
-            buildChatHistoryRecord({
-              id: "42",
-              query: "continue",
-              answer: "",
-              status: "RUNNING",
-              tool_name,
-            }),
-          ])
-        );
-
-        await makeComposable().selectChat("d1");
-
-        const assistant = messageAt("d1", 1, `${tool_name} running hydrate`);
-        expect(assistant).toMatchObject({
-          role: "assistant",
-          id: "42",
-          tool_name,
-          streaming: true,
-          content: "",
-        });
-        expect(mockResumeStreamMessage).toHaveBeenCalledTimes(1);
-        expect(mockResumeStreamMessage).toHaveBeenCalledWith(
-          expect.objectContaining({
-            dialogueId: "d1",
-            messageId: "42",
-            placeholder: expect.objectContaining({
-              id: "42",
-              streaming: true,
-              tool_name,
-            }),
-          })
-        );
-      }
-    );
-
-    it("kicks resume once per message id across hydrate and reload", async () => {
-      mockGetAnswerCheck.mockResolvedValue(
-        historyResponse([
-          buildChatHistoryRecord({
-            id: "88",
-            query: "resume me",
-            answer: "",
-            status: "RUNNING",
-            tool_name: "ChatAgent",
-          }),
-        ])
-      );
-
-      const { selectChat, reloadChat } = makeComposable();
-      await selectChat("d1");
-      await reloadChat("d1");
-
-      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(1);
-      expect(mockResumeStreamMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ messageId: "88" })
-      );
-    });
-
-    it("releases a failed resume slot so reload can retry", async () => {
-      mockGetAnswerCheck.mockResolvedValue(
-        historyResponse([
-          buildChatHistoryRecord({
-            id: "89",
-            query: "retry failed resume",
-            answer: "",
-            status: "RUNNING",
-            tool_name: "KnowledgeAgent",
-          }),
-        ])
-      );
-      mockResumeStreamMessage
-        .mockRejectedValueOnce(new Error("resume unavailable"))
-        .mockResolvedValueOnce({ completed: true });
-
-      const { selectChat, reloadChat } = makeComposable();
-      await selectChat("d1");
-      await Promise.resolve();
-      await reloadChat("d1");
-
-      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(2);
-      expect(mockResumeStreamMessage.mock.calls[1]?.[0]).toEqual(
-        expect.objectContaining({ dialogueId: "d1", messageId: "89" })
-      );
-    });
-
-    it("releases an aborted resume slot so reload can retry", async () => {
-      mockGetAnswerCheck.mockResolvedValue(
-        historyResponse([
-          buildChatHistoryRecord({
-            id: "90",
-            query: "retry aborted resume",
-            answer: "",
-            status: "RUNNING",
-            tool_name: "BriefGeneAgent",
-          }),
-        ])
-      );
-      mockResumeStreamMessage
-        // useStreamMessage resolves without `completed` when leave aborts resume.
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ completed: true });
-
-      const { selectChat, reloadChat } = makeComposable();
-      await selectChat("d1");
-      await Promise.resolve();
-      await reloadChat("d1");
-
-      expect(mockResumeStreamMessage).toHaveBeenCalledTimes(2);
-      expect(mockResumeStreamMessage.mock.calls[1]?.[0]).toEqual(
-        expect.objectContaining({ dialogueId: "d1", messageId: "90" })
-      );
-    });
-
-    it("passes the rendered reactive streaming row to resume", async () => {
-      states.set("d1", reactive(buildChatState()) as ChatUIState);
-      mockGetAnswerCheck.mockResolvedValueOnce(
-        historyResponse([
-          buildChatHistoryRecord({
-            id: "91",
-            query: "resume reactive row",
-            answer: "",
-            status: "RUNNING",
-            tool_name: "ChatAgent",
-          }),
-        ])
-      );
-
-      await makeComposable().selectChat("d1");
-
-      const assistant = messageAt("d1", 1, "reactive stream resume row");
-      const [resumeCall] = mustGet(
-        mockResumeStreamMessage.mock.calls[0],
-        "stream resume call"
-      );
-      expect(resumeCall.placeholder).toBe(assistant);
-    });
-
-    it("does not resume a completed ChatAgent answer", async () => {
-      mockGetAnswerCheck.mockResolvedValueOnce(
-        historyResponse([
-          buildChatHistoryRecord({
-            id: "7",
-            query: "done",
-            answer: "final",
-            status: "SUCCEEDED",
-            tool_name: "ChatAgent",
-          }),
-        ])
-      );
-
-      await makeComposable().selectChat("d1");
-
-      expect(messageAt("d1", 1, "completed ChatAgent").streaming).not.toBe(
-        true
-      );
-      expect(mockResumeStreamMessage).not.toHaveBeenCalled();
-    });
+    ).not.toEqual(expect.arrayContaining(["206", "207", "malformed"]));
   });
 });

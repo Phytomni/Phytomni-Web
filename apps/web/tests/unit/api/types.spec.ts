@@ -4,8 +4,121 @@ import {
   decodeAgentTaskLifecycle,
   decodeAnalystAgentLog,
   decodeChatHistory,
+  decodeConversationHistoryV2,
   decodeQueryData,
 } from "@/api/types";
+
+describe("ordered conversation history v2 decoding", () => {
+  it("preserves stable message identities, order, content revisions and execution projections", () => {
+    const decoded = decodeConversationHistoryV2({
+      schema_version: 2,
+      conversation_id: "dialogue-1",
+      messages: [
+        {
+          message_id: "msg-user-1",
+          conversation_id: "dialogue-1",
+          message_index: 1,
+          execution_id: "turn-1",
+          source_message_id: "msg-user-1",
+          type: "user",
+          role: "user",
+          visibility: "user",
+          content_revision: 0,
+          content_offset: 5,
+          content_length: 5,
+          content: "hello",
+          status: "completed",
+          occurred_at: "2026-08-21T00:00:00Z",
+        },
+        {
+          message_id: "msg-assistant-1",
+          conversation_id: "dialogue-1",
+          message_index: 2,
+          execution_id: "turn-1",
+          source_message_id: "msg-assistant-1",
+          parent_message_id: "msg-user-1",
+          type: "assistant",
+          role: "assistant",
+          visibility: "user",
+          content_revision: 1,
+          content_offset: 6,
+          content_length: 6,
+          content_sha256: "a".repeat(64),
+          content: "answer",
+          references: [
+            {
+              title: "Drought epigenetics",
+              di: "10.1000/safe-doi",
+              pm: "12345",
+            },
+          ],
+          status: "succeeded",
+          occurred_at: "2026-08-21T00:00:01Z",
+        },
+      ],
+      executions: [
+        {
+          execution_id: "turn-1",
+          user_message_id: "msg-user-1",
+          assistant_message_id: "msg-assistant-1",
+          status: "succeeded",
+          event_cursor: 12,
+          projection_revision: 12,
+          content_revision: 1,
+          content_offset: 6,
+          tracking_health: "healthy",
+          stale: false,
+          projection: {
+            schema_version: 2,
+            execution_id: "turn-1",
+            status: "succeeded",
+          },
+          events: [
+            {
+              schema_version: 2,
+              event_id: "event-1",
+              execution_id: "turn-1",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(decoded.messages.map((message) => message.message_id)).toEqual([
+      "msg-user-1",
+      "msg-assistant-1",
+    ]);
+    expect(decoded.messages[1]).toMatchObject({
+      content: "answer",
+      content_revision: 1,
+      content_offset: 6,
+      references: [
+        {
+          title: "Drought epigenetics",
+          di: "10.1000/safe-doi",
+          pm: "12345",
+        },
+      ],
+    });
+    expect(decoded.executions[0]).toMatchObject({
+      execution_id: "turn-1",
+      assistant_message_id: "msg-assistant-1",
+      event_cursor: 12,
+      events: [{ event_id: "event-1" }],
+    });
+  });
+
+  it("rejects aggregate rows masquerading as v2 timeline items", () => {
+    expect(() =>
+      decodeConversationHistoryV2({
+        schema_version: 2,
+        conversation_id: "dialogue-1",
+        messages: [{ id: 1, query: "hello", answer: "answer" }],
+        executions: [],
+      })
+    ).toThrow("Invalid conversation history v2");
+  });
+});
 
 describe("chat attachment reference decoding", () => {
   it("accepts ordered asset references on query data and history rows", () => {

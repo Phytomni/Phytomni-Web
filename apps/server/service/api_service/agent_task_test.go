@@ -101,6 +101,49 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err := gdb.Exec(ddl).Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	stateDDL := `CREATE TABLE question_agent_execution_states (
+		message_id INTEGER PRIMARY KEY,
+		user_name TEXT NOT NULL,
+		dialogue_id TEXT NOT NULL,
+		bot_run_id TEXT NOT NULL,
+		latest_cursor INTEGER NOT NULL DEFAULT 0,
+		projection_json TEXT,
+		updated_at DATETIME
+	)`
+	if err := gdb.Exec(stateDDL).Error; err != nil {
+		t.Fatalf("create execution state table: %v", err)
+	}
+	admissionDDL := `CREATE TABLE question_agent_execution_admissions (
+		user_name TEXT NOT NULL,
+		execution_id TEXT NOT NULL,
+		request_fingerprint TEXT NOT NULL,
+		fingerprint_version INTEGER NOT NULL DEFAULT 1,
+		dialogue_id TEXT,
+		message_id INTEGER,
+		bot_run_id TEXT,
+		status TEXT NOT NULL,
+		latest_cursor INTEGER NOT NULL DEFAULT 0,
+		dispatch_revision INTEGER NOT NULL DEFAULT 0,
+		projection_revision INTEGER NOT NULL DEFAULT 0,
+		content_revision INTEGER NOT NULL DEFAULT 0,
+		content_offset INTEGER NOT NULL DEFAULT 0,
+		context_revision INTEGER NOT NULL DEFAULT 0,
+		terminal_status TEXT,
+		terminal_at DATETIME,
+		last_bot_contact_at DATETIME,
+		tracking_health TEXT NOT NULL DEFAULT 'pending',
+		projection_lease_owner TEXT,
+		projection_lease_until DATETIME,
+		projection_attempts INTEGER NOT NULL DEFAULT 0,
+		next_projection_at DATETIME,
+		projection_json TEXT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (user_name, execution_id)
+	)`
+	if err := gdb.Exec(admissionDDL).Error; err != nil {
+		t.Fatalf("create execution admissions table: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -172,7 +215,6 @@ func TestApiAnswerCheck_HappyPath(t *testing.T) {
 		(12, 'dlg-1', 10, 'alice', 'q3', 'a3', '2026-01-01 00:02:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-
 	ps := NewService()
 	got, err := ps.AnswerCheck(context.Background(), "alice", "dlg-1")
 
@@ -844,268 +886,6 @@ func TestApiAnswerCheck_OverlayDegradesOnBot500(t *testing.T) {
 	}
 }
 
-// runRecordServer returns an httptest server answering GET /v1/runs/{id} with a
-// single RunRecord JSON body, and points BotConfig at it for the test.
-func runRecordServer(t *testing.T, body string) {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
-}
-
-// TestSyncBotRuns_WritesReportAndStatusOnChange: a RUNNING deep_genome row whose
-// Bot run has finished gets its status flipped and the assembled final_report
-// reshaped into the {content, doc_list} JSON the Web app parses.
-func TestSyncBotRuns_WritesReportAndStatusOnChange(t *testing.T) {
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(50, 'dlg-d', 'alice', 'q', 'Server task created: t1', 'DeepGenomeAgent', 'run-d', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	runRecordServer(t, `{"run_id":"run-d","agent":"deep_genome","status":"succeeded","result":{"final_report":"# Gene Report"}}`)
-
-	SyncBotRuns([]model.QuestionAgentLog{{Id: 50, BotRunId: "run-d", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
-
-	status, answer := readStatusAnswer(t, gdb, 50)
-	if status != "SUCCEEDED" {
-		t.Errorf("status = %q, want SUCCEEDED", status)
-	}
-	if !strings.Contains(answer, "Gene Report") || !strings.Contains(answer, "content") {
-		t.Errorf("answer not reshaped final_report JSON: %q", answer)
-	}
-	if dp, ip := readGalleryCols(t, gdb, 50); dp != "" || ip != "" {
-		t.Errorf("deep_genome must not write gallery cols, got dp=%q ip=%q", dp, ip)
-	}
-}
-
-// TestSyncBotRuns_SkipsBlankStatus pins the blank-status guard: a Bot run that
-// comes back with an empty status must NOT be written (an empty status would be
-// persisted verbatim by GORM's map Updates and strand the row out of the cron's
-// WHERE status='RUNNING' poll set). The whole row stays untouched.
-func TestSyncBotRuns_SkipsBlankStatus(t *testing.T) {
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(51, 'dlg-e', 'alice', 'q', 'prior', 'DeepGenomeAgent', 'run-e', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	runRecordServer(t, `{"run_id":"run-e","agent":"deep_genome","status":"","result":{"final_report":"# X"}}`)
-
-	SyncBotRuns([]model.QuestionAgentLog{{Id: 51, BotRunId: "run-e", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
-
-	status, answer := readStatusAnswer(t, gdb, 51)
-	if status != "RUNNING" || answer != "prior" {
-		t.Errorf("blank status should skip all writes, got status=%q answer=%q", status, answer)
-	}
-}
-
-// TestSyncBotRuns_DisabledIsNoOp: with the gateway off, the cron reconciler is
-// a no-op and never touches the row (or panics on a nil client).
-func TestSyncBotRuns_DisabledIsNoOp(t *testing.T) {
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
-		(52, 'dlg-f', 'alice', 'q', 'DeepGenomeAgent', 'run-f', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	rxBot.BotConfig = nil // gateway disabled
-
-	SyncBotRuns([]model.QuestionAgentLog{{Id: 52, BotRunId: "run-f", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
-
-	if status, _ := readStatusAnswer(t, gdb, 52); status != "RUNNING" {
-		t.Errorf("disabled gateway should not touch the row, status = %q", status)
-	}
-}
-
-// TestSyncBotRuns_SkipsEmptyRunID pins the empty-run-id guard. Asserting only on
-// the row's final status is vacuous: a removed guard would call GetRun("") and,
-// whether that fails or succeeds, could land on the same status. So this asserts
-// the discriminator directly — Bot is never hit (a reachable counting server
-// stays at 0). The server also returns a finished run, so a removed guard would
-// additionally flip the row to SUCCEEDED, giving a second red signal.
-func TestSyncBotRuns_SkipsEmptyRunID(t *testing.T) {
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, user_name, query, tool_name, bot_run_id, status, created_at) VALUES
-		(53, 'dlg-g', 'alice', 'q', 'DeepGenomeAgent', '', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	var hits atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"run_id":"","agent":"deep_genome","status":"succeeded","result":{"final_report":"# leaked"}}`))
-	}))
-	defer srv.Close()
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
-
-	SyncBotRuns([]model.QuestionAgentLog{{Id: 53, BotRunId: "", Status: "RUNNING", ToolName: "DeepGenomeAgent"}})
-
-	if n := hits.Load(); n != 0 {
-		t.Errorf("empty run id must never call Bot, got %d request(s)", n)
-	}
-	if status, _ := readStatusAnswer(t, gdb, 53); status != "RUNNING" {
-		t.Errorf("empty run id row must stay RUNNING, got %q", status)
-	}
-}
-
-// TestSyncBotRuns_AnalystWritesAnswerAndGallery: a RUNNING analyst-class row
-// whose Bot run finished gets its status flipped, its formatted answer written
-// (passed through ShapeAnswer's default as plain markdown), and its gallery
-// columns populated from result.artifacts.
-func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
-	gdb := setupTestDB(t)
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(54, 'dlg-a', 'alice', 'q', 'Task created: t1', 'AnalystAgent', 'run-a', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	runRecordServer(t, `{"run_id":"run-a","agent":"network","status":"succeeded","result":{"formatted":{"answer":"analysis done"},"artifacts":[{"task_id":"t1","output_dir":"/obs/p/r1","paths":["/obs/p/r1/a.png"]}]}}`)
-
-	SyncBotRuns([]model.QuestionAgentLog{{Id: 54, BotRunId: "run-a", Status: "RUNNING", ToolName: "AnalystAgent"}})
-
-	status, answer := readStatusAnswer(t, gdb, 54)
-	if status != "SUCCEEDED" || answer != "analysis done" {
-		t.Errorf("status=%q answer=%q, want SUCCEEDED / analysis done", status, answer)
-	}
-	dp, ip := readGalleryCols(t, gdb, 54)
-	if dp != "/obs/p/r1" {
-		t.Errorf("download_path = %q, want /obs/p/r1", dp)
-	}
-	var paths []string
-	if err := json.Unmarshal([]byte(ip), &paths); err != nil || len(paths) != 1 || paths[0] != "/obs/p/r1/a.png" {
-		t.Errorf("image_paths = %q (%v)", ip, err)
-	}
-}
-
-// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope follows the supported
-// Expert route for a Bot-resolved DeepGenome run: the Web submits one umbrella
-// run, reconciles two intermediate revisions and a final report, then reads
-// history through AnswerCheck. A foreign row carrying the same run id must not
-// appear in the owner's history response.
-func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
-	gdb := setupExpertTestDB(t)
-	const runID = "run-deep-genome-e2e"
-	var submittedDialogue string
-	var poll atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents/deep_genome/runs":
-			var req rxBot.AgentRunRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				t.Errorf("decode submit request: %v", err)
-			}
-			if req.DialogueID == "" {
-				t.Error("submit dialogue_id must be non-empty")
-			}
-			submittedDialogue = req.DialogueID
-			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
-			var body string
-			switch poll.Add(1) {
-			case 1:
-				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":1,"intermediate_report":"# Revision 1"}}`
-			case 2:
-				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"running","result":{"report_stage":"intermediate","report_completeness":"partial","report_revision":2,"intermediate_report":"# Revision 2"}}`
-			default:
-				body = `{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_completeness":"complete","report_revision":3,"intermediate_report":"# Revision 2","final_report":"# Final DeepGenome report"}}`
-			}
-			_, _ = w.Write([]byte(body))
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs":
-			if got := r.URL.Query().Get("dialogue_id"); got != submittedDialogue {
-				t.Errorf("history dialogue_id=%q, want %q", got, submittedDialogue)
-			}
-			_, _ = w.Write([]byte(`{"object":"list","data":[{"run_id":"run-deep-genome-e2e","agent":"deep_genome","status":"succeeded","result":{"report_stage":"final","report_revision":3,"final_report":"# Final DeepGenome report"}}]}`))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
-	}
-	t.Cleanup(func() { rxBot.BotConfig = nil })
-
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "inspect the gene", Tool: "DeepGenomeAgent", Mode: "expert", Id: 0,
-	})
-	if err != nil {
-		t.Fatalf("submit DeepGenome query: %v", err)
-	}
-	if out.Status != "RUNNING" || out.BotRunID != runID || out.BotRunID == "child-deep-genome-e2e" {
-		t.Fatalf("submission identity/status=%#v", out)
-	}
-	if out.DialogueId == "" || out.DialogueId != submittedDialogue {
-		t.Fatalf("generated dialogue id=%q, submitted=%q", out.DialogueId, submittedDialogue)
-	}
-	dialogueID := out.DialogueId
-
-	row := model.QuestionAgentLog{
-		Id: out.Id, UserName: "alice", BotRunId: out.BotRunID,
-		Status: out.Status, ToolName: out.ToolName,
-	}
-	SyncBotRuns([]model.QuestionAgentLog{row})
-	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil || projection.ReportRevision != 1 || projection.VisibleReport() != "# Revision 1" {
-		t.Fatalf("revision 1 projection=%#v err=%v", projection, err)
-	}
-	SyncBotRuns([]model.QuestionAgentLog{row})
-	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil || projection.ReportRevision != 2 || projection.VisibleReport() != "# Revision 2" {
-		t.Fatalf("revision 2 projection=%#v err=%v", projection, err)
-	}
-	SyncBotRuns([]model.QuestionAgentLog{row})
-	if got := poll.Load(); got != 3 {
-		t.Fatalf("poll count=%d, want revision 1, revision 2, and final report", got)
-	}
-
-	projection, err = LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil {
-		t.Fatalf("load final projection: %v", err)
-	}
-	if projection.RunID != runID || projection.ReportRevision != 3 || projection.VisibleReport() != "# Final DeepGenome report" {
-		t.Fatalf("final projection=%#v", projection)
-	}
-
-	if err := gdb.Exec(`INSERT INTO question_agent_logs
-		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
-		(900, ?, ?, 'bob', 'foreign', 'foreign', 'DeepGenomeAgent', ?, 'SUCCEEDED', '2026-01-01 00:01:00')`, dialogueID, out.Id, runID).Error; err != nil {
-		t.Fatalf("seed foreign row: %v", err)
-	}
-	got, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
-	if err != nil {
-		t.Fatalf("AnswerCheck: %v", err)
-	}
-	if len(got) != 1 || got[0].Id != out.Id || got[0].UserName != "alice" || got[0].Status != "SUCCEEDED" {
-		t.Fatalf("owner-scoped history=%+v", got)
-	}
-	var answer struct {
-		Content string        `json:"content"`
-		DocList []interface{} `json:"doc_list"`
-	}
-	if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
-		t.Fatalf("final history answer is not shaped JSON: %q (%v)", got[0].Answer, err)
-	}
-	if answer.Content != "# Final DeepGenome report" || answer.DocList == nil || len(answer.DocList) != 0 {
-		t.Fatalf("history final report=%+v", answer)
-	}
-	var distinctRunIDs int64
-	if err := gdb.Raw(`SELECT COUNT(DISTINCT bot_run_id) FROM question_agent_logs WHERE dialogue_id = ?`, dialogueID).Scan(&distinctRunIDs).Error; err != nil {
-		t.Fatalf("count umbrella run ids: %v", err)
-	}
-	if distinctRunIDs != 1 {
-		t.Fatalf("distinct bot_run_id=%d, want one umbrella run id", distinctRunIDs)
-	}
-}
-
 // TestAsyncTaskList_ZeroPageSizeNoPanic: the handler reads pagination query
 // params via strconv.Atoi, defaulting to 0 when absent. size=0 used to make the
 // totalPages (total+size-1)/size expression integer-divide-by-zero panic (gin
@@ -1197,6 +977,11 @@ func TestQueryListDelete_HidesOwnerConversationBeforeBotTombstone(t *testing.T) 
 		dialogueID, dialogueID).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	if err := gdb.Exec(`INSERT INTO question_agent_execution_admissions
+		(user_name, execution_id, request_fingerprint, dialogue_id, message_id, status, latest_cursor, created_at, updated_at)
+		VALUES ('alice', 'turn-delete', 'fingerprint', ?, 100, 'succeeded', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, dialogueID).Error; err != nil {
+		t.Fatalf("seed admission: %v", err)
+	}
 
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1236,6 +1021,10 @@ func TestQueryListDelete_HidesOwnerConversationBeforeBotTombstone(t *testing.T) 
 	}
 	if logStatus != conversationDeleteAcked {
 		t.Fatalf("log_status=%q, want %q", logStatus, conversationDeleteAcked)
+	}
+	var admissionCount int64
+	if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_execution_admissions WHERE user_name = 'alice' AND dialogue_id = ?`, dialogueID).Scan(&admissionCount).Error; err != nil || admissionCount != 0 {
+		t.Fatalf("admission count=%d err=%v, want cleanup with conversation", admissionCount, err)
 	}
 	var firstDeleteAt time.Time
 	if err := gdb.Raw(`SELECT delete_at FROM question_agent_logs WHERE id = 100`).

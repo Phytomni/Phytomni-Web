@@ -3,7 +3,7 @@ import { normalizePositiveTaskRowId, getTaskLifecycle } from "@/api/task";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage, ChatUIState } from "../types";
 import type { ChatReloadResult } from "./useSelectChat";
-import { isPollableWaitTool } from "../utils/async-agent-policy";
+import { isPollableChatAgentTool } from "../utils/async-agent-policy";
 import {
   type LifecycleScheduler,
   useAgentRunLifecycle,
@@ -59,7 +59,11 @@ function lifecycleReloadSignature(next: AgentTaskLifecycle): string {
 }
 
 function isWatchableMessage(message: ChatMessage): string | null {
-  if (!isPollableWaitTool(message.tool_name)) return null;
+  // Every newly admitted turn with an execution_id is owned by the canonical
+  // execution SSE. Row lifecycle polling is a bounded historical fallback
+  // only and must never become a second live-progress owner.
+  if (message.executionId) return null;
+  if (!isPollableChatAgentTool(message.tool_name)) return null;
   const deliveryPending = message.delivery?.status === "pending";
   if (
     TERMINAL_HISTORY_STATUSES.has((message.status ?? "").toUpperCase()) &&

@@ -130,10 +130,7 @@ describe("useChatStates parallel chat state", () => {
       refreshingMessages: {},
       agentRunLifecycles: {},
       reactions: {},
-      updatingLog: {},
       logErrorKinds: {},
-      sendStartedAt: null,
-      activeAgentName: "",
       completing: false,
       mode: "expert",
       isStreaming: false,
@@ -152,6 +149,17 @@ describe("useChatStates parallel chat state", () => {
       artifactTab: "content",
       handledArtifactIdentities: [],
       archiveRetryingByMessageId: {},
+      executionRuns: {},
+      selectedExecutionRunId: null,
+      executionWorkspaceTabs: [],
+      activeExecutionWorkspaceTab: null,
+      executionWorkspaceOpen: false,
+      executionRailOpen: true,
+      transcriptScrollTop: 0,
+      workspaceScrollTop: 0,
+      executionTargetDetails: {},
+      executionTargetLoading: {},
+      executionTargetErrors: {},
     });
     expect(state).not.toHaveProperty("uploadPurpose");
     expect(s).not.toHaveProperty("uploadPurpose");
@@ -292,7 +300,6 @@ describe("useChatStates parallel chat state", () => {
     expect(s.loadingLog.value).toEqual({});
     expect(s.refreshingMessages.value).toEqual({});
     expect(s.historyQuestion.value).toBeNull();
-    expect(s.updatingLog.value).toEqual({});
 
     // setters are no-ops when there is no currentChatId: reading back after writing still yields defaults
     s.messageInput.value = "ignored";

@@ -12,6 +12,10 @@ const SIDEBAR_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
+const TIMELINE_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ExecutionTimeline.vue"),
+  "utf8"
+);
 
 describe("Chat right surface ownership", () => {
   it("does not mount the legacy right-sidebar detail surface", () => {
@@ -24,12 +28,16 @@ describe("Chat right surface ownership", () => {
     expect(CHAT_SOURCE).not.toContain("chat.relatedLinks");
   });
 
-  it("uses PhyAdaptiveShell as the sole artifact right-column owner", () => {
+  it("uses the middle execution workspace as the sole artifact owner", () => {
     expect(CHAT_SOURCE).toContain("<PhyAdaptiveShell");
-    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
-    expect(CHAT_SOURCE).toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain(':workspace-open="executionWorkspaceOpen"');
+    expect(CHAT_SOURCE).toContain("<template #workspace>");
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
-    expect(CHAT_SOURCE.match(/:artifact-open=/g)?.length).toBe(1);
+    expect(CHAT_SOURCE.match(/:workspace-open=/g)?.length).toBe(1);
+    expect(CHAT_SOURCE).toContain("<template #rail>");
+    expect(TIMELINE_SOURCE).not.toContain("<ExecutionWorkspace");
+    expect(TIMELINE_SOURCE).not.toContain("<ExecutionRail");
+    expect(TIMELINE_SOURCE).toContain("emit('open-target'");
   });
 
   it("keeps architecture dialog mounted separately from the right column", () => {

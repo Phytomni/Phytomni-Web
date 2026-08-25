@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import { expectLifecyclePhase } from "../../../helpers/lifecycle-phase";
 
 const testState = vi.hoisted(() => ({
   chatStates: null as ReturnType<
@@ -61,13 +60,56 @@ vi.mock("vue-router", async (importOriginal) => {
 });
 
 import ChatView, {
-  releaseDialogueUploads,
+  executionRunNeedsLiveSubscription,
+  planExecutionTargetOpen,
   removeDeletedChat,
 } from "@/views/chat/ChatView.vue";
+import {
+  applyExecutionEvent,
+  createExecutionRunState,
+  decodeExecutionEvent,
+} from "@/views/chat/streaming/executionEvents";
 import { buildChat } from "../../../helpers/chatBuilders";
 import { createTestAppContext } from "../../../helpers/test-app-context";
 
 describe("ChatView lifecycle cleanup", () => {
+  it("opens an authenticated V2 delivery without requiring a legacy message attachment", () => {
+    expect(
+      planExecutionTargetOpen({
+        schemaVersion: 2,
+        executionId: "turn-target",
+        kind: "artifact",
+        id: "artifact-1",
+        eventId: "artifact-1",
+        previewAvailable: true,
+        deliveryUrl:
+          "/api/v1/executions/turn-target/targets/artifact/artifact-1/content",
+        todos: [],
+      })
+    ).toEqual({
+      kind: "authenticated-v2",
+      url: "/api/v1/executions/turn-target/targets/artifact/artifact-1/content",
+    });
+  });
+
+  it("does not reconnect a terminal execution restored from history", () => {
+    const terminal = {
+      ...createExecutionRunState("turn-terminal"),
+      status: "succeeded" as const,
+      terminal: {
+        status: "succeeded" as const,
+        eventId: "event-terminal",
+      },
+    };
+
+    expect(executionRunNeedsLiveSubscription("turn-terminal", terminal)).toBe(
+      false
+    );
+    expect(executionRunNeedsLiveSubscription("turn-running", undefined)).toBe(
+      true
+    );
+  });
+
   it("removes the deleted dialogue state and poller ownership through the ChatView deletion path", () => {
     const deleted = buildChat({ id: 1, dialogue_id: "deleted-dialogue" });
     const retained = buildChat({ id: 2, dialogue_id: "retained-dialogue" });
@@ -86,14 +128,114 @@ describe("ChatView lifecycle cleanup", () => {
     expect(remaining).toEqual([retained]);
   });
 
-  it("releases incomplete uploads when leaving a dialogue", () => {
-    const cancelDialogue = vi.fn();
-    releaseDialogueUploads("leaving-dialogue", cancelDialogue);
-    expect(cancelDialogue).toHaveBeenCalledWith("leaving-dialogue");
-    cancelDialogue.mockClear();
-    releaseDialogueUploads("", cancelDialogue);
-    releaseDialogueUploads(undefined, cancelDialogue);
-    expect(cancelDialogue).not.toHaveBeenCalled();
+  it("renders streamed execution activity before Expert routing resolves the tool name", async () => {
+    const context = createTestAppContext({ locale: "en-US" });
+    const wrapper = context.mount(ChatView, {
+      global: {
+        stubs: {
+          RouterLink: {
+            name: "RouterLink",
+            props: ["to"],
+            template: '<a :href="to"><slot /></a>',
+          },
+          ChatComposer: {
+            name: "ChatComposer",
+            props: ["modelValue"],
+            emits: ["update:modelValue"],
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({
+                openHeader: vi.fn(),
+                closeHeader: vi.fn(),
+                popoverVisible: false,
+              });
+              return {};
+            },
+            template: "<div />",
+          },
+          ChatMessageActions: true,
+          ScientificMarkdown: {
+            props: ["source"],
+            template:
+              '<div class="scientific-markdown-stub">{{ source }}</div>',
+          },
+          ChatSidebarNav: true,
+          ChatHistoryList: true,
+          FollowUpQuestions: true,
+          ChatActivity: true,
+          ChatAnalystLog: true,
+          StreamMessage: true,
+          TransferProgress: true,
+          ExecutionActivityPanel: true,
+          ElTour: true,
+          ElTourStep: true,
+          ElBacktop: true,
+          ElDialog: true,
+          ElAvatar: true,
+          ElIcon: true,
+          ElTable: true,
+          ElTableColumn: true,
+          ElButton: {
+            template: '<button type="button"><slot /></button>',
+          },
+        },
+      },
+    });
+
+    const state = testState.chatStates;
+    if (!state) throw new Error("Chat state capture was not initialized");
+    const dialogueId = "routing-dialogue";
+    const executionId = "turn-routing-pending";
+    state.getChatState(dialogueId).renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        {
+          role: "assistant",
+          id: "101",
+          tool_name: "",
+          status: "ADMITTED",
+          content: "",
+          executionId,
+        },
+      ],
+    };
+    const decoded = decodeExecutionEvent({
+      schema_version: 2,
+      event_id: "evt-started",
+      execution_id: executionId,
+      seq: 1,
+      type: "execution.started",
+      status: "running",
+      occurred_at: "2026-08-21T02:23:52.081366+00:00",
+      source: "runtime",
+      span_id: "span-expert-router",
+      parent_span_id: null,
+      work_unit_id: null,
+      attempt: 1,
+      summary: { key: "execution.started", text: "Execution started" },
+      public_payload: {},
+      target: null,
+      idempotency_key: "execution:start",
+    });
+    if (!decoded.ok) throw new Error(decoded.reason);
+    state.getChatState(dialogueId).executionRuns[executionId] =
+      applyExecutionEvent(
+        createExecutionRunState(executionId, 2),
+        decoded.value
+      );
+    state.getChatState(dialogueId).selectedExecutionRunId = executionId;
+    state.currentChatId.value = dialogueId;
+    await nextTick();
+    await nextTick();
+
+    const row = wrapper.get('[data-message-id="101"]');
+    expect(row.findComponent({ name: "ExecutionActivityPanel" }).exists()).toBe(
+      true
+    );
+
+    wrapper.unmount();
   });
 
   it("renders report-backed Research previews regardless of lifecycle status", async () => {
@@ -124,7 +266,11 @@ describe("ChatView lifecycle cleanup", () => {
             template: "<div />",
           },
           ChatMessageActions: true,
-          ScientificMarkdown: true,
+          ScientificMarkdown: {
+            props: ["source"],
+            template:
+              '<div class="scientific-markdown-stub">{{ source }}</div>',
+          },
           DeepGenomeResultViewer: true,
           ChatSidebarNav: true,
           ChatHistoryList: true,
@@ -133,6 +279,7 @@ describe("ChatView lifecycle cleanup", () => {
           ChatAnalystLog: true,
           StreamMessage: true,
           TransferProgress: true,
+          ExecutionActivityPanel: true,
           ElTour: true,
           ElTourStep: true,
           ElBacktop: true,
@@ -175,9 +322,26 @@ describe("ChatView lifecycle cleanup", () => {
 
     const row = wrapper.get('[data-message-id="research-running-1"]');
     expect(row.find(".research-artifact-preview").exists()).toBe(true);
-    expectLifecyclePhase(row, "Validating the research request");
+    expect(row.get(".agent-lifecycle").text()).toBe("Running");
     expect(row.get(".research-artifact-preview__title").text()).toBe("Running");
     expect(row.text()).not.toContain("Finished");
+
+    await row.get(".research-artifact-preview__open").trigger("click");
+    await nextTick();
+
+    const shell = wrapper.get(".phy-adaptive-shell");
+    expect(shell.classes()).toContain("phy-adaptive-shell--execution");
+    expect(shell.classes()).toContain("has-execution-rail");
+    expect(shell.classes()).not.toContain("phy-adaptive-shell--artifact-split");
+    expect(wrapper.find(".phy-adaptive-shell__artifact").exists()).toBe(false);
+    expect(wrapper.find(".phy-adaptive-shell__rail").exists()).toBe(true);
+
+    const workspace = wrapper.get(".phy-adaptive-shell__workspace");
+    expect(workspace.get('[role="tab"]').text()).toContain("Running");
+    expect(workspace.find(".execution-workspace__tab-close").exists()).toBe(
+      true
+    );
+    expect(workspace.text()).toContain("Partial Research report");
 
     state.getChatState("research-dialogue").renderedChat = {
       dialogue_id: "research-dialogue",
@@ -196,7 +360,7 @@ describe("ChatView lifecycle cleanup", () => {
     await nextTick();
 
     const historyTimeout = wrapper.get('[data-message-id="82"]');
-    expectLifecyclePhase(historyTimeout, "Timed out");
+    expect(historyTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
     expect(historyTimeout.find(".research-artifact-preview").exists()).toBe(
       false
     );
@@ -237,126 +401,13 @@ describe("ChatView lifecycle cleanup", () => {
     await nextTick();
 
     const polledTimeout = wrapper.get('[data-message-id="83"]');
-    expectLifecyclePhase(polledTimeout, "Timed out");
+    expect(polledTimeout.get(".agent-lifecycle").text()).toBe("Timed out");
     expect(polledTimeout.find(".research-artifact-preview").exists()).toBe(
       false
     );
     expect(polledTimeout.text()).not.toContain("No references available.");
     expect(polledTimeout.text()).not.toContain("Finished");
     expect(polledTimeout.text()).not.toContain("Failed");
-
-    wrapper.unmount();
-  });
-
-  it("does not lock the composer on sendFailed or first-turn Stop drafts without a row id", async () => {
-    const context = createTestAppContext({ locale: "en-US" });
-    const wrapper = context.mount(ChatView, {
-      global: {
-        stubs: {
-          RouterLink: {
-            name: "RouterLink",
-            props: ["to"],
-            template: '<a :href="to"><slot /></a>',
-          },
-          ChatComposer: {
-            name: "ChatComposer",
-            props: ["isSending"],
-            setup(
-              _props: unknown,
-              { expose }: { expose: (value: Record<string, unknown>) => void }
-            ) {
-              expose({
-                openHeader: vi.fn(),
-                closeHeader: vi.fn(),
-                popoverVisible: false,
-              });
-              return {};
-            },
-            template:
-              '<div data-testid="composer-sending">{{ isSending }}</div>',
-          },
-          ChatMessageActions: true,
-          ScientificMarkdown: true,
-          DeepGenomeResultViewer: true,
-          ChatSidebarNav: true,
-          ChatHistoryList: true,
-          FollowUpQuestions: true,
-          ChatActivity: true,
-          ChatAnalystLog: true,
-          StreamMessage: true,
-          TransferProgress: true,
-          ElTour: true,
-          ElTourStep: true,
-          ElBacktop: true,
-          ElDialog: true,
-          ElAvatar: true,
-          ElIcon: true,
-          ElTable: true,
-          ElTableColumn: true,
-          ElButton: {
-            template: '<button type="button"><slot /></button>',
-          },
-        },
-      },
-    });
-
-    const state = testState.chatStates;
-    if (!state) throw new Error("Chat state capture was not initialized");
-    const dialogueId = "draft-unlock-dialogue";
-    state.currentChatId.value = dialogueId;
-    const chatState = state.getChatState(dialogueId);
-    chatState.isSending = false;
-    chatState.generationStopped = false;
-
-    chatState.renderedChat = {
-      dialogue_id: dialogueId,
-      messages: [
-        { role: "user", content: "q" },
-        {
-          role: "assistant",
-          content: "chat.sendFailed",
-          tool_name: "",
-          status: "",
-          instantMessage: true,
-        },
-      ],
-    };
-    await nextTick();
-    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe(
-      "false"
-    );
-
-    chatState.renderedChat = {
-      dialogue_id: dialogueId,
-      messages: [
-        { role: "user", content: "q" },
-        {
-          role: "assistant",
-          content: "chat.generationStopped",
-          instantMessage: true,
-        },
-      ],
-    };
-    await nextTick();
-    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe(
-      "false"
-    );
-
-    chatState.renderedChat = {
-      dialogue_id: dialogueId,
-      messages: [
-        { role: "user", content: "q" },
-        {
-          role: "assistant",
-          content: "",
-          tool_name: "",
-          status: "RUNNING",
-          id: "5",
-        },
-      ],
-    };
-    await nextTick();
-    expect(wrapper.get('[data-testid="composer-sending"]').text()).toBe("true");
 
     wrapper.unmount();
   });

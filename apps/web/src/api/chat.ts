@@ -16,6 +16,7 @@ import type {
 } from "@/api/types";
 import {
   decodeChatHistory,
+  decodeConversationHistoryV2,
   decodeConversationList,
   decodeImageData,
   decodeMutationData,
@@ -28,6 +29,7 @@ import {
   requestAbortableApi,
   requestApi,
   type ChatHistoryRecord,
+  type ConversationHistoryV2,
   type MutationData,
   type UserToolResponse,
 } from "@/api/types";
@@ -208,6 +210,20 @@ export const getAnswerCheck = (data: {
     decodeChatHistory
   );
 
+export const getConversationHistoryV2 = (data: {
+  dialogue_id: string;
+}): Promise<ApiEnvelope<ConversationHistoryV2>> =>
+  requestApi(
+    {
+      url: `/api/v1/conversations/${encodeURIComponent(
+        data.dialogue_id
+      )}/messages`,
+      method: "get",
+      params: { schema_version: 2 },
+    },
+    decodeConversationHistoryV2
+  );
+
 // Sign one conversation artifact only after an explicit authenticated click.
 // The returned relay URL is consumed immediately and never enters chat or
 // history state.
@@ -264,6 +280,64 @@ export const getConversationArtifactFile = (
   }
   return createAbortableRequest<BinaryResponse>({
     url: downloadURL,
+    method: "get",
+    responseType: "blob",
+    requestId: opts?.requestId,
+    onDownloadProgress: opts?.onDownloadProgress,
+  });
+};
+
+const EXECUTION_CONTENT_TARGET_KINDS = new Set([
+  "artifact",
+  "download",
+  "preview",
+  "report",
+]);
+
+function isExecutionTargetDeliveryURL(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length > 2_048 ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    /[\\\u0000-\u001f\u007f?#]/u.test(value)
+  ) {
+    return false;
+  }
+  const segments = value.split("/");
+  if (
+    segments.length !== 9 ||
+    segments[1] !== "api" ||
+    segments[2] !== "v1" ||
+    segments[3] !== "executions" ||
+    segments[5] !== "targets" ||
+    segments[8] !== "content"
+  ) {
+    return false;
+  }
+  try {
+    const decoded = [segments[4], segments[6], segments[7]].map((segment) =>
+      decodeURIComponent(segment)
+    );
+    return (
+      decoded.every(
+        (segment) => segment.length > 0 && segment !== "." && segment !== ".."
+      ) && EXECUTION_CONTENT_TARGET_KINDS.has(decoded[1])
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const getExecutionTargetFile = (
+  deliveryURL: string,
+  opts?: DownloadProgressOpts
+): Promise<Blob | BinaryResponse> => {
+  if (!isExecutionTargetDeliveryURL(deliveryURL)) {
+    throw new TypeError("Invalid execution target delivery URL");
+  }
+  return createAbortableRequest<Blob | BinaryResponse>({
+    url: deliveryURL,
     method: "get",
     responseType: "blob",
     requestId: opts?.requestId,
@@ -369,19 +443,6 @@ export const getCollectHistory = (): Promise<
       params: { favorite: true },
     },
     decodeConversationList
-  );
-
-// Update analyst log (RESTful: async-task subresource write-back)
-export const updateAnalystAgentLog = (
-  data: { task_id: string; compute_resource: string } | FormData
-): Promise<ApiEnvelope<MutationData>> =>
-  requestApi(
-    {
-      url: "/api/v1/async-tasks/analyst-log",
-      method: "patch",
-      data,
-    },
-    decodeMutationData
   );
 
 // Get AnalystAgent OBS image download URLs (GeneNetworkAgent / DigitalDesignAgent rendering dependency)

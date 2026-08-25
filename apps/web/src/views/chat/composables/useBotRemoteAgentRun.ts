@@ -67,12 +67,12 @@ export interface RemoteAgentChatState {
   uploadTransfer?: TransferSnapshot | null;
   activeRequestId?: string;
   generationStopped?: boolean;
-  activeAgentName?: string;
   botProjection?: BotRunProjection;
   botLifecycle?: BotLifecycleState;
   artifactLinks?: ConversationArtifactLink[];
   dialogueId?: string;
   messageId?: string;
+  executionId?: string;
 }
 
 type RefLike<T> = { readonly value: T };
@@ -118,6 +118,7 @@ export interface BotRemoteAgentRunState extends BotLifecycleState {
   artifactLinks: ConversationArtifactLink[];
   dialogueId: string | null;
   messageId: string | null;
+  executionId: string | null;
   error:
     BotRemoteAgentRunErrorCode | "request_failed" | "projection_invalid" | null;
 }
@@ -132,6 +133,7 @@ export type UseBotRemoteAgentRunOptions = {
 export type RemoteAgentRunIdentity = {
   dialogueId: string | null;
   messageId: string | null;
+  executionId: string | null;
   artifactLinks?: readonly ConversationArtifactLink[];
 };
 
@@ -251,6 +253,7 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
     artifactLinks: cloneArtifactLinks(owned.artifactLinks),
     dialogueId: owned.dialogueId ?? null,
     messageId: owned.messageId ?? null,
+    executionId: owned.executionId ?? null,
     error: null,
   };
 }
@@ -372,15 +375,13 @@ function buildFormData(
   input: RemoteAgentSubmitInput,
   dialogueId: string,
   tool: RemoteAgentTool,
-  clientTurnId?: string
+  clientTurnId: string
 ): FormData {
   const formData = new FormData();
   formData.append("id", dialogueId);
   formData.append("query", input.query);
   formData.append("attachments", JSON.stringify(input.attachments ?? []));
-  if (clientTurnId) {
-    formData.append("client_turn_id", clientTurnId);
-  }
+  formData.append("client_turn_id", clientTurnId);
 
   const resolver = input.resolver;
   if (resolver && tool !== "InSilicoResearchAgent") {
@@ -432,12 +433,16 @@ function safeIdentity(value: unknown, pattern: RegExp): string | null {
 function responseIdentity(response: unknown): RemoteAgentRunIdentity {
   const payload = responsePayload(response);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return { dialogueId: null, messageId: null };
+    return { dialogueId: null, messageId: null, executionId: null };
   }
   const record = payload as Record<string, unknown>;
   return {
     dialogueId: safeIdentity(record.dialogue_id, SAFE_DIALOGUE_ID_PATTERN),
     messageId: safeIdentity(record.id, /^[1-9]\d{0,18}$/u),
+    executionId: safeIdentity(
+      record.execution_id,
+      /^turn-[A-Za-z0-9_-]{1,128}$/u
+    ),
   };
 }
 
@@ -512,19 +517,17 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   const state = ref<BotRemoteAgentRunState>(initialState(owned));
   let activeToken: RemoteRequestToken | null = null;
   let capabilityLoadPromise: Promise<void> | null = null;
-  let pendingResearchTurn: { id: string; fingerprint: string } | null = null;
+  let pendingTurn: { id: string; fingerprint: string } | null = null;
 
-  const clearPendingResearchTurn = (
-    clientTurnId: string | undefined,
-    fingerprint: string | undefined
+  const clearPendingTurn = (
+    clientTurnId: string,
+    fingerprint: string
   ): void => {
     if (
-      clientTurnId &&
-      fingerprint &&
-      pendingResearchTurn?.id === clientTurnId &&
-      pendingResearchTurn.fingerprint === fingerprint
+      pendingTurn?.id === clientTurnId &&
+      pendingTurn.fingerprint === fingerprint
     ) {
-      pendingResearchTurn = null;
+      pendingTurn = null;
     }
   };
 
@@ -550,6 +553,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       ...(delivery ? { delivery } : {}),
     };
     owned.artifactLinks = cloneArtifactLinks(state.value.artifactLinks);
+    owned.executionId = state.value.executionId ?? undefined;
   };
 
   const hydrate = (
@@ -570,6 +574,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       identity.messageId === undefined
         ? state.value.messageId
         : safeIdentity(identity.messageId, /^[1-9]\d{0,18}$/u);
+    const executionId =
+      identity.executionId === undefined
+        ? state.value.executionId
+        : safeIdentity(identity.executionId, /^turn-[A-Za-z0-9_-]{1,128}$/u);
     state.value = {
       ...state.value,
       ...lifecycle,
@@ -583,10 +591,12 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
           : cloneArtifactLinks(identity.artifactLinks),
       dialogueId,
       messageId,
+      executionId,
       error: null,
     };
     owned.dialogueId = dialogueId ?? undefined;
     owned.messageId = messageId ?? undefined;
+    owned.executionId = executionId ?? undefined;
     syncOwnedState();
   };
 
@@ -708,28 +718,23 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
-    let researchFingerprint: string | undefined;
-    let clientTurnId: string | undefined;
-    if (tool === "InSilicoResearchAgent") {
-      researchFingerprint = clientTurnDraftFingerprint({
-        parentRowId: 0,
-        operation: "append",
-        mode: "instant",
-        selectedAgent: tool,
-        query: input.query,
-        attachments: attachments.map(({ asset_id }) => asset_id),
-        interopMode: input.interopMode,
-        interopTargets: input.interopTargets,
-      });
-      clientTurnId =
-        pendingResearchTurn?.fingerprint === researchFingerprint
-          ? pendingResearchTurn.id
-          : createClientTurnId();
-      pendingResearchTurn = {
-        id: clientTurnId,
-        fingerprint: researchFingerprint,
-      };
-    }
+    const turnFingerprint = `${clientTurnDraftFingerprint({
+      parentRowId: 0,
+      operation: "append",
+      mode: "instant",
+      selectedAgent: tool,
+      query: input.query,
+      attachments: attachments.map(({ asset_id }) => asset_id),
+      interopMode: input.interopMode,
+      interopTargets: input.interopTargets,
+    })}|${resolver?.geneId ?? resolver?.gene_id ?? ""}|${
+      resolver?.toId ?? resolver?.to_id ?? ""
+    }|${resolver?.speciesCode ?? resolver?.species_code ?? ""}`;
+    const clientTurnId =
+      pendingTurn?.fingerprint === turnFingerprint
+        ? pendingTurn.id
+        : createClientTurnId();
+    pendingTurn = { id: clientTurnId, fingerprint: turnFingerprint };
     const formData = buildFormData(
       { ...input, attachments },
       normalizedDialogueId,
@@ -743,7 +748,6 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     owned.activeRequestId = requestId;
     owned.isSending = true;
     owned.generationStopped = false;
-    owned.activeAgentName = tool;
     state.value = {
       ...freshLifecycle,
       phase: "submitting",
@@ -753,6 +757,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       artifactLinks: [],
       dialogueId: null,
       messageId: null,
+      executionId: clientTurnId,
       error: null,
     };
     syncOwnedState();
@@ -772,6 +777,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       const projection = parseBotProjection(response.data);
       const lifecycle = reduceBotProjection(state.value, projection);
       const identity = responseIdentity(response);
+      if (identity.executionId && identity.executionId !== clientTurnId) {
+        throw new Error("execution identity mismatch");
+      }
+      const executionId = identity.executionId ?? clientTurnId;
       state.value = {
         ...state.value,
         ...lifecycle,
@@ -780,12 +789,14 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         projection,
         dialogueId: identity.dialogueId,
         messageId: identity.messageId,
+        executionId,
         error: null,
       };
       owned.dialogueId = identity.dialogueId ?? undefined;
       owned.messageId = identity.messageId ?? undefined;
+      owned.executionId = executionId;
       syncOwnedState();
-      clearPendingResearchTurn(clientTurnId, researchFingerprint);
+      clearPendingTurn(clientTurnId, turnFingerprint);
       return projection;
     } catch (error) {
       if (
@@ -814,7 +825,6 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         owned.activeRequestId = "";
         owned.isSending = false;
         owned.uploadTransfer = null;
-        owned.activeAgentName = "";
       }
       if (ownsRequest && state.value.requestId === requestId) {
         state.value = { ...state.value, requestId: null, uploadTransfer: null };
@@ -842,7 +852,6 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       return false;
     }
     owned.generationStopped = true;
-    owned.activeAgentName = "";
     syncCancelledOwner();
     if (messageId) {
       void Promise.resolve(cancelTask(messageId))
@@ -863,7 +872,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   };
 
   const reset = (): void => {
-    pendingResearchTurn = null;
+    pendingTurn = null;
     const token = activeToken;
     if (token) {
       token.cancelled = true;
@@ -874,9 +883,9 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     owned.isSending = false;
     owned.uploadTransfer = null;
     owned.generationStopped = false;
-    owned.activeAgentName = "";
     owned.dialogueId = undefined;
     owned.messageId = undefined;
+    owned.executionId = undefined;
     delete owned.botProjection;
     delete owned.botLifecycle;
     delete owned.artifactLinks;
@@ -889,6 +898,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       artifactLinks: [],
       dialogueId: null,
       messageId: null,
+      executionId: null,
       error: null,
     };
   };

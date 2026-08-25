@@ -241,12 +241,6 @@ No Token required to access.
 - **Errors**:
   - HTTP 404: missing task and cross-owner task requests intentionally use the same response body.
 
-#### Update Analyst Log (Bot Write-back Endpoint)
-
-- **URL**: `/api/v1/async-tasks/analyst-log`
-- **Method**: `PATCH`
-- **Description**: Bot-run write-back endpoint. Task-only historical log responses are not refreshable through this route and return `can_request_legacy_refresh: false`. **Note: The legacy path `POST /query/analyst/update_log` continues to be served as a temporary alias until the Bot side completes migration.**
-
 #### Query Operation Logs
 
 - **URL**: `/api/v1/operation-logs`

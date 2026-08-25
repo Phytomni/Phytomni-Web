@@ -46,6 +46,82 @@ export interface TableDataInput {
   rows: readonly unknown[][];
 }
 
+export interface TableMessagePresentation {
+  content: Array<Record<string, unknown>>;
+  tableHeaders: Array<{ prop: string; label: string }>;
+  original: string;
+}
+
+const MAX_VISIBLE_TABLE_JSON_CHARS = 16 * 1024 * 1024;
+const MAX_VISIBLE_TABLE_HEADERS = 256;
+const MAX_VISIBLE_TABLE_ROWS = 100_000;
+const MAX_VISIBLE_TABLE_HEADER_CHARS = 512;
+const MAX_VISIBLE_TABLE_CELL_CHARS = 8192;
+
+function isVisibleTableCell(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "boolean" ||
+    (typeof value === "number" &&
+      Number.isFinite(value) &&
+      (!Number.isInteger(value) || Number.isSafeInteger(value))) ||
+    (typeof value === "string" &&
+      [...value].length <= MAX_VISIBLE_TABLE_CELL_CHARS)
+  );
+}
+
+/** Decode the complete DataAgent display document from V2 message content. */
+export function decodeTableMessagePresentation(
+  value: unknown
+): TableMessagePresentation | undefined {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_VISIBLE_TABLE_JSON_CHARS
+  ) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed)) return undefined;
+  const headers = parsed.headers;
+  const rows = parsed.rows;
+  if (
+    !Array.isArray(headers) ||
+    headers.length === 0 ||
+    headers.length > MAX_VISIBLE_TABLE_HEADERS ||
+    !headers.every(
+      (header): header is string =>
+        typeof header === "string" &&
+        header.length > 0 &&
+        [...header].length <= MAX_VISIBLE_TABLE_HEADER_CHARS
+    ) ||
+    !Array.isArray(rows) ||
+    rows.length > MAX_VISIBLE_TABLE_ROWS ||
+    !rows.every(
+      (row): row is unknown[] =>
+        Array.isArray(row) &&
+        row.length === headers.length &&
+        row.every(isVisibleTableCell)
+    )
+  ) {
+    return undefined;
+  }
+  const table = { headers, rows } satisfies TableDataInput;
+  return {
+    content: convertToTableData(table),
+    tableHeaders: headers.map((header) => ({
+      prop: header.replace(/\s+/g, "_").toLowerCase(),
+      label: header,
+    })),
+    original: value,
+  };
+}
+
 /** Decode the table shape before it reaches Element Plus table rendering. */
 export function decodeTableDataInput(value: unknown): TableDataInput {
   if (!isRecord(value)) return { headers: [], rows: [] };

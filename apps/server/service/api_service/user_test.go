@@ -80,6 +80,53 @@ func TestGetUserProfile_PropagatesUserQueryError(t *testing.T) {
 	}
 }
 
+func TestGetUserProfileCountsDistinctLegacyAndV2Conversations(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'alice@x.com', 'user')`).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_logs (
+		id INTEGER PRIMARY KEY,
+		user_name TEXT NOT NULL,
+		dialogue_id TEXT NOT NULL,
+		f_id INTEGER NOT NULL DEFAULT 0,
+		delete_at DATETIME NULL
+	)`).Error; err != nil {
+		t.Fatalf("create legacy conversations: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE conversation_turns_v2 (
+		id INTEGER PRIMARY KEY,
+		user_name TEXT NOT NULL,
+		dialogue_id TEXT NOT NULL,
+		parent_id INTEGER NOT NULL DEFAULT 0,
+		delete_at DATETIME NULL
+	)`).Error; err != nil {
+		t.Fatalf("create V2 conversations: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs (id, user_name, dialogue_id, f_id) VALUES
+		(10, 'alice@x.com', 'legacy-only', 0),
+		(11, 'alice@x.com', 'shared', 0),
+		(12, 'alice@x.com', 'legacy-only', 10),
+		(13, 'bob@x.com', 'foreign', 0)`).Error; err != nil {
+		t.Fatalf("seed legacy conversations: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO conversation_turns_v2 (id, user_name, dialogue_id, parent_id) VALUES
+		(20, 'alice@x.com', 'v2-only', 0),
+		(21, 'alice@x.com', 'shared', 0),
+		(22, 'alice@x.com', 'v2-only', 20),
+		(23, 'bob@x.com', 'foreign-v2', 0)`).Error; err != nil {
+		t.Fatalf("seed V2 conversations: %v", err)
+	}
+
+	profile, err := NewService().GetUserProfile(context.Background(), "alice@x.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.DialogueCount != 3 {
+		t.Fatalf("dialogue count=%d, want 3 distinct owned roots", profile.DialogueCount)
+	}
+}
+
 // TestGetUserInfo_LockoutOnFifthFailure pins the lockout threshold: the 5th
 // wrong password must lock the account for 15 minutes. Without this guard, a
 // threshold or window change goes undetected by any test.

@@ -20,7 +20,9 @@ export interface CitationDocument {
   vl?: string | number | null;
   bp?: string | number | null;
   ep?: string | number | null;
+  ar?: string | number | null;
   py?: string | number | null;
+  di?: string | number | null;
   dl?: string | number | null;
   pm?: string | number | null;
   title?: string | number | null;

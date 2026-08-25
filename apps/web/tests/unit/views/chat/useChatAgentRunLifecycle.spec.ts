@@ -58,6 +58,38 @@ async function flush(): Promise<void> {
 describe("useChatAgentRunLifecycle", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("never polls row lifecycle for a V2 execution-owned message", async () => {
+    vi.useFakeTimers();
+    const state = buildChatState({
+      historyHydration: "ready",
+      renderedChat: {
+        dialogue_id: "v2-dialogue",
+        messages: [
+          buildChatMessage({
+            id: "901",
+            tool_name: "GeneNetworkAgent",
+            status: "RUNNING",
+            executionId: "turn-v2-network",
+          }),
+        ],
+      },
+    });
+    const chatStates = ref({ "v2-dialogue": state });
+    const fetchLifecycle = vi.fn();
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (dialogueId) => chatStates.value[dialogueId],
+      reloadChat: vi.fn().mockResolvedValue("applied"),
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+
+    await flush();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchLifecycle).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
   it("keeps the live Research stage sequence owner-scoped until one terminal hydration", async () => {
     vi.useFakeTimers();
     const rawQuery = [
@@ -1082,34 +1114,6 @@ describe("useChatAgentRunLifecycle", () => {
       "52",
       "54",
     ]);
-    coordinator.dispose();
-  });
-
-  it("watches Expert Auto empty-tool RUNNING rows until a tool is written", async () => {
-    const state = buildChatState({
-      historyHydration: "ready",
-      renderedChat: {
-        messages: [
-          buildChatMessage({
-            id: "5",
-            tool_name: "",
-            status: "RUNNING",
-            content: "",
-          }),
-        ],
-      },
-    });
-    const chatStates = ref({ a: state });
-    const fetchLifecycle = vi.fn().mockResolvedValue(response(lifecycle(5)));
-    const coordinator = useChatAgentRunLifecycle({
-      chatStates,
-      getChatState: (dialogueId) => chatStates.value[dialogueId],
-      reloadChat: vi.fn().mockResolvedValue("applied"),
-      fetchLifecycle,
-    });
-
-    await flush();
-    expect(fetchLifecycle.mock.calls.map(([rowId]) => rowId)).toEqual(["5"]);
     coordinator.dispose();
   });
 

@@ -70,6 +70,33 @@ describe("buildDisplayReferences — XSS invariant", () => {
     );
   });
 
+  it("derives the canonical DOI resolver link from the safe DOI field", () => {
+    const [ref] = buildReferences([
+      {
+        au: "Smith J",
+        ti: "Gene study",
+        so: "Nature",
+        py: 2020,
+        di: "10.1000/safe-doi",
+      },
+    ]);
+    expect(ref.html).toContain(
+      '<a href="https://doi.org/10.1000/safe-doi" target="_blank" class="doi-link">https://doi.org/10.1000/safe-doi</a>'
+    );
+  });
+
+  it("does not derive a resolver link from malformed DOI metadata", () => {
+    const [ref] = buildReferences([
+      {
+        au: "Smith J",
+        ti: "Gene study",
+        di: '10.1000/bad\" onclick=\"alert(1)',
+      },
+    ]);
+    expect(ref.html).not.toContain("doi-link");
+    expect(ref.html).not.toContain("onclick");
+  });
+
   it("neutralizes a malicious DOI href (javascript:) while escaping its text", () => {
     const [ref] = buildReferences([
       {

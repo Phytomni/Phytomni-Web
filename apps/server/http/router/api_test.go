@@ -246,16 +246,29 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 			"GET /api/v1/async-tasks",
 			"GET /api/v1/async-tasks/:id",
 			"GET /api/v1/async-tasks/:id/lifecycle",
-			"POST /api/v1/async-tasks/:id/cancel",
 			"GET /api/v1/async-tasks/:id/analyst-log",
 		},
 		[]string{
 			"GET /api/v1/auth/async-tasks/:id/lifecycle",
-			"POST /api/v1/auth/async-tasks/:id/cancel",
 			"GET /v1/async_task/list",
 			"GET /v1/async_task/info",
 			"GET /v1/analyst/get_log",
 		},
+	)
+}
+
+func TestApiV1ExecutionRoutesIncludeOwnerScopedTargetContent(t *testing.T) {
+	routes := routeSet(t)
+	assertRoutes(t, routes,
+		[]string{
+			"GET /api/v1/executions/:execution_id",
+			"GET /api/v1/executions/:execution_id/events",
+			"GET /api/v1/executions/:execution_id/events/stream",
+			"GET /api/v1/executions/:execution_id/targets/:kind/:target_id",
+			"GET /api/v1/executions/:execution_id/operations/:operation_id",
+			"GET /api/v1/executions/:execution_id/targets/:kind/:target_id/content",
+		},
+		nil,
 	)
 }
 
@@ -269,19 +282,6 @@ func TestAgentTaskLifecycleRouteRequiresAuthentication(t *testing.T) {
 	engine.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated lifecycle request status = %d, want %d", response.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestAgentTaskCancelRouteRequiresAuthentication(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	Api(engine.Group("/"))
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/async-tasks/1/cancel", nil)
-	engine.ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated cancel request status = %d, want %d", response.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -367,8 +367,7 @@ func TestApiV1AuthLifecycleRoutes(t *testing.T) {
 	)
 }
 
-// TestApiV1CrossBoundaryAliases pins the surviving Bot-writeback cross-boundary
-// endpoints (new RESTful path + retained old alias, kept until the Bot backport).
+// TestApiV1CrossBoundaryAliases pins removal of request-owned Bot writeback.
 // The external server-task surface (POST /api/v1/server/tasks + the /v1/nky/server
 // aliases) was removed once it was confirmed to have no real external caller —
 // the four routes below MUST stay gone (negative assertion guards against a
@@ -376,17 +375,16 @@ func TestApiV1AuthLifecycleRoutes(t *testing.T) {
 func TestApiV1CrossBoundaryAliases(t *testing.T) {
 	routes := routeSet(t)
 	assertRoutes(t, routes,
+		nil,
 		[]string{
 			"PATCH /api/v1/async-tasks/analyst-log",
-		},
-		[]string{
 			"POST /api/v1/server/tasks",
 			"PATCH /api/v1/server/tasks/:id",
 			"POST /v1/nky/server/create_task",
 			"POST /v1/nky/server/update_task",
 		},
 	)
-	if !routes["POST /query/analyst/update_log"] {
-		t.Errorf("Bot-writeback alias %q should still be registered", "POST /query/analyst/update_log")
+	if routes["POST /query/analyst/update_log"] {
+		t.Errorf("obsolete Bot-writeback alias %q must stay removed", "POST /query/analyst/update_log")
 	}
 }

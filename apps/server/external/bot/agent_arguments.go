@@ -89,6 +89,8 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 
 	args := map[string]interface{}{"user_query": input.UserQuery}
 	switch slug {
+	case "chat", "knowledge", "review":
+		args["obs_file_list"] = []string{}
 	case "research":
 		args["data_list"] = map[string]string{}
 		args["obs_file_list"] = []string{}
@@ -136,7 +138,7 @@ func BuildAgentArguments(slug string, input AgentArgumentInput) (map[string]inte
 			args["species_code"] = input.SpeciesCode
 		}
 	default:
-		if input.InteropMode != "" || len(input.InteropTargets) > 0 {
+		if (input.InteropMode != "" && interopMode != "off") || len(input.InteropTargets) > 0 {
 			return nil, fmt.Errorf("interop controls are not supported for %s", slug)
 		}
 	}

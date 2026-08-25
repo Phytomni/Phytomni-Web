@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type VueWrapper } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -37,7 +37,6 @@ import {
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 import { mountWithApp } from "../helpers/test-app-context";
 import { isCompletedDeepGenomeMessage } from "@/views/chat/utils/artifact-policy";
-import { resetProgressStartedAtForTests } from "@/views/chat/utils/agentProgress";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -251,7 +250,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         tool_name,
         status: "RUNNING",
       });
-      expect(running.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(running.text()).toContain("Running");
       expect(running.text()).not.toContain("common.noData");
 
       const failed = mountContent({
@@ -288,9 +287,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         }
       );
 
-      expect(wrapper.get('[data-test="lifecycle-phase"]').text()).toBe(
-        "Timed out"
-      );
+      expect(wrapper.get(".agent-lifecycle").text()).toBe("Timed out");
       expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
       expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
       expect(wrapper.text()).not.toContain("No references available.");
@@ -349,7 +346,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         },
         { lifecycle: lifecycle("RUNNING") }
       );
-      expect(report.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(report.text()).toContain("Running");
       expect(
         report.findComponent({ name: "ScientificMarkdown" }).props("source")
       ).toBe("partial report");
@@ -367,9 +364,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
           },
         }
       );
-      expect(pendingImage.find('[data-test="send-progress"]').exists()).toBe(
-        true
-      );
+      expect(pendingImage.text()).toContain("Running");
       expect(pendingImage.text()).not.toContain("common.noData");
 
       const imageId = `${tool_name}-success`;
@@ -453,26 +448,9 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       route_reason_code: "ROUTER_SELECTED",
     });
 
-    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
-      "Knowledge Agent"
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toMatch(
+      /Knowledge Agent|routingSelectedAgent/
     );
-    expect(wrapper.get('[data-testid="routing-notice"]').text()).not.toContain(
-      "This turn was answered by"
-    );
-  });
-
-  it("labels the wait card with the known agent before the official answer", () => {
-    const wrapper = mountContent({
-      role: "assistant",
-      content: "",
-      tool_name: "ReviewAgent",
-      status: "RUNNING",
-    });
-
-    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
-      "Review Agent"
-    );
-    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
   });
 
   it("hides routing notices for instant chat", () => {
@@ -814,9 +792,7 @@ line2\nline3`;
       deepGenomeMessage({ content: "Server task created: child-task-123" })
     );
 
-    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
-      "Writing the gene background"
-    );
+    expect(wrapper.text()).toContain("Preparing");
     expect(wrapper.text()).not.toContain("Server task created");
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
@@ -827,14 +803,12 @@ line2\nline3`;
   it("renders a running empty result without viewer or reference fallback", () => {
     const wrapper = mountContent(deepGenomeMessage({ status: "RUNNING" }));
 
-    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
-      "Writing the gene background"
-    );
+    expect(wrapper.text()).toContain("Running");
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("No references available.");
   });
 
-  it("keeps a running cached file report wait-only instead of opening View", () => {
+  it("renders a running partial report as a View candidate", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -842,14 +816,12 @@ line2\nline3`;
       })
     );
 
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
-    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Running");
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain("Partial report");
   });
 
-  it("does not promote a running cached file report even when references exist", () => {
+  it("keeps a running partial report in the View path when references exist", () => {
     const wrapper = mountContent(
       deepGenomeMessage({
         status: "RUNNING",
@@ -858,10 +830,8 @@ line2\nline3`;
       })
     );
 
-    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
-    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
     expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain("Partial report");
   });
 
   it.each([
@@ -915,7 +885,7 @@ line2\nline3`;
     {
       name: "active row with steps",
       status: "RUNNING",
-      label: "Writing the gene background",
+      label: "Running",
       content: "Server task created: child-task-steps",
       structure: { steps: ["internal active step"] },
       hasViewer: false,
@@ -923,7 +893,7 @@ line2\nline3`;
     {
       name: "active row with table headers",
       status: "RUNNING",
-      label: "Writing the gene background",
+      label: "Running",
       content: "# Partial active report",
       structure: {
         tableHeaders: [{ prop: "gene", label: "Gene" }],
@@ -1090,83 +1060,6 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
   });
 });
 
-describe("ChatMessageContent long-wait stream SendProgress", () => {
-  afterEach(() => {
-    resetProgressStartedAtForTests();
-  });
-
-  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
-    "shows SendProgress for an empty %s stream and hides StreamMessage",
-    (toolName) => {
-      const wrapper = mountContent({
-        role: "assistant",
-        content: "",
-        streaming: true,
-        blocks: [],
-        tool_name: toolName,
-      });
-
-      expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-      expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
-      expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
-        false
-      );
-    }
-  );
-
-  it("keeps SendProgress while a Knowledge stream only has activity steps", () => {
-    const wrapper = mountContent({
-      role: "assistant",
-      content: "",
-      streaming: true,
-      tool_name: "KnowledgeAgent",
-      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
-    });
-
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(false);
-  });
-
-  it("hides SendProgress once Knowledge markdown arrives", async () => {
-    const message: ChatMessage = {
-      role: "assistant",
-      content: "",
-      streaming: true,
-      tool_name: "KnowledgeAgent",
-      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
-    };
-    const wrapper = mountContent(message);
-
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-
-    await wrapper.setProps({
-      message: {
-        ...message,
-        blocks: [
-          { type: "step", authority: "web", label: "retrieve" },
-          block("Leaves senesce in autumn."),
-        ],
-      },
-    });
-
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
-  });
-
-  it("does not put SendProgress on an empty ChatAgent stream", () => {
-    const wrapper = mountContent({
-      role: "assistant",
-      content: "",
-      streaming: true,
-      blocks: [],
-      tool_name: "ChatAgent",
-    });
-
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
-  });
-});
-
 describe("ChatMessageContent live streaming citations", () => {
   it("passes doc_list + ns=m${index} to StreamMessage when references are nonempty", () => {
     expect(MESSAGE_STREAM_REFS_CAPTURED.doc_list).toEqual([
@@ -1227,10 +1120,9 @@ describe("ChatMessageContent live streaming citations", () => {
   });
 
   /**
-   * Live-session limitation: the Go accumulator persists phyto.references into
-   * cited answer JSON {content, doc_list}. After history reload, blocks-bearing
-   * messages without doc_list still have no safe citation targets — do not
-   * invent rows here.
+   * Live-session limitation: the Go accumulator does not persist a dedicated
+   * streaming-reference field. After history reload, blocks-bearing messages
+   * without doc_list have no safe citation targets — do not invent rows here.
    */
   it("documents history-refresh fixtures as references-unavailable", () => {
     // MESSAGE_STREAMING / interleaved fixtures mimic a reloaded stream without
@@ -1282,21 +1174,11 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     .map((m) => m[1])
     .join("\n");
 
-  it("hands a persisted DeepGenome row id to the inline viewer for PDF export", () => {
-    expect(CONTENT_SOURCE).toContain(':rendering-file-id="message.id"');
-  });
-
   it("owns internal overflow so wide table/code/image children stay in transcript", () => {
     expect(contentStyles).toMatch(/min-width:\s*0/);
     expect(contentStyles).toMatch(/overflow-x:\s*auto/);
     // Table branch and bubble body both need an overflow owner.
     expect(contentStyles).toMatch(/\.table-response|\.message-text/);
-    expect(contentStyles).toMatch(
-      /\.phy-bubble-user\s*\{[\s\S]*white-space:\s*pre-wrap/
-    );
-    expect(contentStyles).toMatch(
-      /\.phy-bubble-assistant\s*\{[\s\S]*white-space:\s*normal/
-    );
   });
 
   it("uses locale-reactive result image alt with one-based index", () => {

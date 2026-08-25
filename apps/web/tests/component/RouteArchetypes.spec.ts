@@ -619,16 +619,14 @@ describe("routed visual archetypes", () => {
     }
 
     const chatSource = readSource("views/chat/ChatView.vue");
-    const progressSource = readSource("views/chat/utils/agentProgress.ts");
     const appSource = readFileSync(
       resolve(__dirname, "../../src/App.vue"),
       "utf8"
     );
     expect(chatSource).toContain("uploadTransfer");
     expect(chatSource).toContain("<TransferProgress");
-    expect(chatSource).toContain("<SendProgress");
-    expect(progressSource).toContain("Math.min(98");
-    expect(DESIGN_SYSTEM_SOURCE).toContain("reaches `100%` only");
+    expect(chatSource).not.toContain("<SendProgress");
+    expect(chatSource).toContain("<ExecutionActivityPanel");
     expect(DESIGN_SYSTEM_SOURCE).toContain(
       "upload byte progress lives in `chatStates[dialogueId].uploadTransfer`"
     );

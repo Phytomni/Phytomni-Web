@@ -53,6 +53,45 @@ function record(tool: string, enabled = true) {
     resolver: false,
     attachments: enabled,
     artifacts: false,
+    execution_events: {
+      enabled: true,
+      major_version: 1,
+      resumable_history: true,
+      custom_event: "phyto.run_event",
+      target_kinds: [
+        "event",
+        "artifact",
+        "report",
+        "todo",
+        "preview",
+        "download",
+        "trace",
+      ],
+    },
+    work_trace:
+      tool === "GeneNetworkAgent"
+        ? {
+            enabled: true,
+            major_version: 1,
+            state: "supported",
+            lifecycle: "supported",
+            semantic_phases: "supported",
+            semantic_tools: "supported",
+            public_reasoning: "supported",
+            trace_target: "supported",
+            target_kind: "trace",
+            target_major_version: 1,
+          }
+        : {
+            enabled: false,
+            major_version: 1,
+            state: "unsupported",
+            lifecycle: "unsupported",
+            semantic_phases: "unsupported",
+            semantic_tools: "unsupported",
+            public_reasoning: "unsupported",
+            trace_target: "unsupported",
+          },
     enabled,
     upstream_private_field: "must-not-be-copied",
   };
@@ -119,11 +158,50 @@ describe("useBotCapabilities", () => {
       "upstream_private_field"
     );
     expect(state.byTool.value.AnalystAgent?.enabled).toBe(false);
+    expect(state.byTool.value.ChatAgent?.executionEvents).toEqual({
+      enabled: true,
+      majorVersion: 1,
+      resumableHistory: true,
+      customEvent: "phyto.run_event",
+      targetKinds: [
+        "event",
+        "artifact",
+        "report",
+        "todo",
+        "preview",
+        "download",
+        "trace",
+      ],
+    });
     expect(state.upload.value).toEqual(uploadRecord());
     expect(mockRequest).toHaveBeenCalledWith({
       url: BOT_CAPABILITIES_URL,
       method: "get",
     });
+  });
+
+  it("enables only the exact versioned Gene Network trace declaration", () => {
+    const network = record("GeneNetworkAgent");
+    const parsed = parseCapabilityResponse(manifestPayload([network]));
+    expect(
+      parsed.agents.find((item) => item.slug === "network")?.workTrace
+    ).toMatchObject({
+      enabled: true,
+      state: "supported",
+      traceTarget: "supported",
+      targetKind: "trace",
+      targetMajorVersion: 1,
+    });
+
+    const future = record("GeneNetworkAgent") as Record<string, unknown>;
+    future.work_trace = {
+      ...(future.work_trace as Record<string, unknown>),
+      major_version: 2,
+    };
+    const disabled = parseCapabilityResponse(manifestPayload([future]));
+    expect(
+      disabled.agents.find((item) => item.slug === "network")?.workTrace.enabled
+    ).toBe(false);
   });
 
   it("decodes finite attachment channels", async () => {

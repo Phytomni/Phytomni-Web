@@ -2,7 +2,7 @@
   <div
     v-if="routingNotice"
     class="routing-notice"
-    :role="isRoutingFallbackNotice ? 'status' : undefined"
+    role="status"
     data-testid="routing-notice"
   >
     {{ routingNotice }}
@@ -14,31 +14,14 @@
   >
     {{ $t("chat.contextDegraded") }}
   </div>
-  <div
-    v-if="showStandaloneCot"
-    class="message-text phy-bubble-assistant agent-wait"
-    :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
-  >
-    <div class="agent-lifecycle" role="status" aria-live="polite">
-      <SendProgress
-        :started-at="resolvedProgressStartedAt"
-        :agent-name="progressAgentName"
-        :completing="isFlushingOfficialResult"
-        :wait-children="props.lifecycle?.children ?? []"
-        @flushed="onCotFlushed"
-      />
-    </div>
-  </div>
   <!-- User message, lifecycle-owned DeepGenome, or an answer without reasoning steps -->
   <div
     v-if="
       message.role === 'user' ||
-      (!isWaitOnlyBody &&
-        !isFlushingOfficialResult &&
-        (hasArtifactPresentation ||
-          isDeepGenomeMessage ||
-          isResearchNonterminal ||
-          (!message.steps && !message.tableHeaders)))
+      hasArtifactPresentation ||
+      isDeepGenomeMessage ||
+      isResearchNonterminal ||
+      (!message.steps && !message.tableHeaders)
     "
     :class="[
       'message-text',
@@ -54,27 +37,12 @@
          #m<index>-ref-N links. Live-session only — history reload does not
          invent persisted streaming references. -->
     <div
-      v-if="showInlineCot"
-      class="agent-wait-inline"
-      :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
-    >
-      <div class="agent-lifecycle" role="status" aria-live="polite">
-        <SendProgress
-          :started-at="resolvedProgressStartedAt"
-          :agent-name="progressAgentName"
-          :completing="!showWaitProgress"
-          :force-last-stage="cotFlushed && !showWaitProgress"
-          :wait-children="props.lifecycle?.children ?? []"
-        />
-      </div>
-    </div>
-    <div
-      v-if="showLeadingLifecycleStatus && !showWaitProgress"
+      v-if="showLeadingLifecycleStatus"
       class="agent-lifecycle"
       role="status"
       aria-live="polite"
     >
-      <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+      {{ $t(lifecycleLabel) }}
     </div>
     <template v-if="isResearchNonterminal && !hasArtifactPresentation" />
     <StreamMessage
@@ -104,12 +72,12 @@
       class="gene-network-images"
     >
       <div
-        v-if="lifecycleLabel && !showWaitProgress"
+        v-if="lifecycleLabel"
         class="agent-lifecycle"
         role="status"
         aria-live="polite"
       >
-        <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+        {{ $t(lifecycleLabel) }}
       </div>
       <ScientificMarkdownTypewriter
         v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
@@ -127,7 +95,6 @@
       <div
         v-if="
           !isTerminalLifecycle &&
-          !showWaitProgress &&
           (geneNetworkImagesLoading[message.id || ''] ||
             awaitingSpecializedImages)
         "
@@ -165,12 +132,12 @@
       class="gene-network-images"
     >
       <div
-        v-if="lifecycleLabel && !showWaitProgress"
+        v-if="lifecycleLabel"
         class="agent-lifecycle"
         role="status"
         aria-live="polite"
       >
-        <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+        {{ $t(lifecycleLabel) }}
       </div>
       <ScientificMarkdownTypewriter
         v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
@@ -188,7 +155,6 @@
       <div
         v-if="
           !isTerminalLifecycle &&
-          !showWaitProgress &&
           (digitalDesignImagesLoading[message.id || ''] ||
             awaitingSpecializedImages)
         "
@@ -235,7 +201,6 @@
         "
         :references="message.doc_list || []"
         :ns="'m' + index"
-        :rendering-file-id="message.id"
         :show-actions="showDeepGenomeFinalActions"
         :show-references="hasDeepGenomeReferences"
         embedded
@@ -261,28 +226,21 @@
       @finish="emit('finish')"
     />
     <ScientificMarkdownTypewriter
-      v-else-if="
-        message?.instantMessage && isLastMessage && !hideWaitPlaceholderBody
-      "
+      v-else-if="message?.instantMessage && isLastMessage"
       :source="chatContentToText(message.content)"
       :citation-namespace="'m' + index"
       surface="chat"
       @finish="emit('finish')"
     />
     <ScientificMarkdown
-      v-else-if="!hideWaitPlaceholderBody"
+      v-else
       :source="chatContentToText(message.content)"
       :citation-namespace="'m' + index"
       surface="chat"
     />
   </div>
   <!-- Table data display -->
-  <div
-    v-else-if="
-      !isWaitOnlyBody && !isFlushingOfficialResult && message.tableHeaders
-    "
-    class="table-response"
-  >
+  <div v-else-if="message.tableHeaders" class="table-response">
     <el-table
       :data="chatContentToRows(message.content)"
       border
@@ -298,10 +256,7 @@
     </el-table>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
-  <div
-    v-else-if="!isWaitOnlyBody && !isFlushingOfficialResult"
-    class="ai-response"
-  >
+  <div v-else class="ai-response">
     <!-- Reasoning steps -->
     <div v-if="message.steps && message.steps.length > 0">
       <div class="steps-title">{{ $t("chat.stepResult") }}:</div>
@@ -346,17 +301,10 @@ import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import StreamMessage from "./StreamMessage.vue";
-import SendProgress from "./SendProgress.vue";
-import { computed, ref, watch } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "../types";
-import {
-  isAgentWaitPhase,
-  isStreamWaitProgressMessage,
-  parseProgressStartedAt,
-  progressStartedAtFor,
-} from "../utils/agentProgress";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
   CANONICAL_AGENT_ZH_NAMES,
@@ -371,7 +319,6 @@ import {
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
 } from "../utils/artifact-policy";
-import { isApprovedReportText } from "../utils/valid-report-ledger";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -389,7 +336,6 @@ const props = defineProps<{
   digitalDesignImages: Record<string, string[]>;
   digitalDesignImagesLoading: Record<string, boolean>;
   lifecycle?: AgentTaskLifecycle;
-  progressStartedAt?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -407,7 +353,15 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
 
-function routedAgentLabel(): string {
+const routingNotice = computed(() => {
+  if (props.message.role !== "assistant") return "";
+  const reason = props.message.route_reason_code;
+  if (reason === "CHAT_FALLBACK") {
+    return t("chat.routingFallbackChat");
+  }
+  if (reason !== "ROUTER_SELECTED" && reason !== "EXPLICIT_SELECTION") {
+    return "";
+  }
   const tool = props.message.tool_name;
   if (!tool || !(tool in CANONICAL_AGENT_ZH_NAMES)) return "";
   const agent =
@@ -415,25 +369,6 @@ function routedAgentLabel(): string {
       ? CANONICAL_AGENT_ZH_NAMES[tool as CanonicalAgentTool]
       : CANONICAL_AGENT_DISPLAY_NAMES[tool as CanonicalAgentTool];
   return t("chat.routingSelectedAgent", { agent });
-}
-
-const isRoutingFallbackNotice = computed(
-  () => props.message.route_reason_code === "CHAT_FALLBACK"
-);
-
-const routingNotice = computed(() => {
-  if (props.message.role !== "assistant") return "";
-  const reason = props.message.route_reason_code;
-  if (reason === "CHAT_FALLBACK") {
-    return t("chat.routingFallbackChat");
-  }
-  if (reason === "ROUTER_SELECTED" || reason === "EXPLICIT_SELECTION") {
-    return routedAgentLabel();
-  }
-  if (showWaitProgress.value || isFlushingOfficialResult.value) {
-    return routedAgentLabel();
-  }
-  return "";
 });
 
 // Canonical tool_name spelling: 'DeepGenomeAgent'.
@@ -465,7 +400,15 @@ const hasDeepGenomeReferences = computed(
 
 function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   const status = props.message.status?.trim().toUpperCase();
-  if (status === "PENDING" || status === "SUBMITTED") return "PREPARING";
+  if (
+    status === "ADMITTED" ||
+    status === "QUEUED" ||
+    status === "DISPATCHING" ||
+    status === "PENDING" ||
+    status === "SUBMITTED"
+  ) {
+    return "PREPARING";
+  }
   if (status === "TIMEOUT" || status === "TIMED_OUT") return "TIMED_OUT";
   if (status === "CANCELED") return "CANCELLED";
   if (
@@ -479,7 +422,6 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   if (
     status === "PREPARING" ||
     status === "RUNNING" ||
-    status === "FINALIZING" ||
     status === "SUCCEEDED" ||
     status === "FAILED" ||
     status === "TIMED_OUT" ||
@@ -505,6 +447,13 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
 const effectiveLifecyclePhase = computed(
   () => props.lifecycle?.phase ?? messageLifecyclePhase()
 );
+const isBlankExecutionShell = computed(
+  () =>
+    props.message.role === "assistant" &&
+    Boolean(props.message.executionId) &&
+    chatContentToText(props.message.content).trim() === "" &&
+    !(props.message.blocks && props.message.blocks.length)
+);
 const isResearchNonterminal = computed(
   () =>
     isResearchMessage.value &&
@@ -514,11 +463,19 @@ const isResearchNonterminal = computed(
       effectiveLifecyclePhase.value === "RUNNING" ||
       effectiveLifecyclePhase.value === "FINALIZING")
 );
-const lifecycleLabel = computed(() =>
-  effectiveLifecyclePhase.value
+const lifecycleLabel = computed(() => {
+  if (isBlankExecutionShell.value) {
+    if (effectiveLifecyclePhase.value === "PREPARING") {
+      return "chat.lifecycle.assistantPreparing";
+    }
+    if (effectiveLifecyclePhase.value === "RUNNING") {
+      return "chat.lifecycle.assistantWorking";
+    }
+  }
+  return effectiveLifecyclePhase.value
     ? `chat.lifecycle.${effectiveLifecyclePhase.value.toLowerCase()}`
-    : ""
-);
+    : "";
+});
 const showDeepGenomeFinalActions = computed(
   () =>
     effectiveLifecyclePhase.value === null ||
@@ -544,92 +501,21 @@ const showLeadingLifecycleStatus = computed(
         !(props.message.blocks && props.message.blocks.length))) &&
     !isSpecializedImageAgent.value
 );
-const streamWaitProgress = computed(() =>
-  isStreamWaitProgressMessage(props.message)
-);
-const showWaitProgress = computed(
-  () =>
-    props.message.role === "assistant" &&
-    (isAgentWaitPhase(effectiveLifecyclePhase.value) ||
-      streamWaitProgress.value)
-);
-const sawActiveWait = ref(false);
-const cotFlushed = ref(false);
-watch(
-  showWaitProgress,
-  (active) => {
-    if (active) {
-      sawActiveWait.value = true;
-      cotFlushed.value = false;
-    }
-  },
-  { immediate: true }
-);
-const progressAgentName = computed(() =>
-  typeof props.message.tool_name === "string" ? props.message.tool_name : ""
-);
-const resolvedProgressStartedAt = computed(() =>
-  progressStartedAtFor(
-    props.message.id || `row-${props.index}`,
-    props.progressStartedAt ?? parseProgressStartedAt(props.message.created_at)
-  )
-);
-const isWaitOnlyBodyContent = computed(() => {
-  if (isDeepGenomeMessage.value && !hasArtifactPresentation.value) return true;
-  if (hasArtifactPresentation.value) return false;
-  if (hasMeaningfulDeepGenomeReport.value) return false;
-  if (hasSpecializedReport.value && !isDeepGenomeMessage.value) return false;
-  if (streamWaitProgress.value) return true;
-  if (props.message.streaming) return false;
-  if (props.message.blocks && props.message.blocks.length) return false;
-  if (props.message.doc_list && props.message.doc_list.length > 0) return false;
-  return true;
-});
-const isWaitOnlyBody = computed(
-  () => showWaitProgress.value && isWaitOnlyBodyContent.value
-);
-const isFlushingOfficialResult = computed(
-  () =>
-    sawActiveWait.value &&
-    !showWaitProgress.value &&
-    !cotFlushed.value &&
-    effectiveLifecyclePhase.value === "SUCCEEDED" &&
-    !isWaitOnlyBodyContent.value
-);
-const hideWaitPlaceholderBody = computed(
-  () =>
-    props.message.role === "assistant" &&
-    sawActiveWait.value &&
-    !showWaitProgress.value &&
-    isWaitOnlyBodyContent.value
-);
-const showStandaloneCot = computed(
-  () =>
-    (showWaitProgress.value && isWaitOnlyBody.value) ||
-    isFlushingOfficialResult.value
-);
-const showInlineCot = computed(
-  () =>
-    (showWaitProgress.value && !isWaitOnlyBody.value) ||
-    (sawActiveWait.value && cotFlushed.value && !showStandaloneCot.value)
-);
-function onCotFlushed() {
-  cotFlushed.value = true;
-}
 const isTerminalLifecycle = computed(
   () =>
     effectiveLifecyclePhase.value === "FAILED" ||
     effectiveLifecyclePhase.value === "TIMED_OUT" ||
     effectiveLifecyclePhase.value === "CANCELLED"
 );
-const hasSpecializedReport = computed(() =>
-  isApprovedReportText(props.message.tool_name ?? "", props.message.content)
+const hasSpecializedReport = computed(
+  () =>
+    typeof props.message.content === "string" &&
+    props.message.content.trim() !== ""
 );
 const activeSpecializedLifecycle = computed(
   () =>
     effectiveLifecyclePhase.value === "PREPARING" ||
-    effectiveLifecyclePhase.value === "RUNNING" ||
-    effectiveLifecyclePhase.value === "FINALIZING"
+    effectiveLifecyclePhase.value === "RUNNING"
 );
 const awaitingSpecializedImages = computed(
   () =>
@@ -669,24 +555,10 @@ const shouldShowSpecializedNoData = computed(() => {
   line-height: 1.4;
 }
 
-.agent-wait {
-  width: fit-content;
-  max-width: 100%;
-}
-
-.agent-wait-inline {
-  margin-bottom: var(--phy-space-8);
-}
-
 .agent-lifecycle {
   margin-bottom: var(--phy-space-8);
   color: var(--phy-color-text-muted);
   font-size: 13px;
-}
-
-.agent-wait .agent-lifecycle,
-.agent-wait-inline .agent-lifecycle {
-  margin-bottom: 0;
 }
 
 .deep-genome-result-unavailable {
@@ -703,15 +575,8 @@ const shouldShowSpecializedNoData = computed(() => {
   max-width: 100%;
   overflow-x: auto;
   word-break: break-word;
+  white-space: pre-wrap;
   box-sizing: border-box;
-
-  &.phy-bubble-user {
-    white-space: pre-wrap;
-  }
-
-  &.phy-bubble-assistant {
-    white-space: normal;
-  }
 
   :deep(pre),
   :deep(table),

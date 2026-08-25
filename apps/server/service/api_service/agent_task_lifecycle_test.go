@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -71,6 +72,24 @@ type lifecycleSeed struct {
 	imagePaths     string
 	projection     string
 	reportRevision int64
+}
+
+func TestAgentTaskLifecycleRepeatedReadsArePure(t *testing.T) {
+	gdb := setupAgentTaskLifecycleDB(t)
+	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{id: 101, username: "pure-owner", runID: "run-pure", status: "RUNNING", reportRevision: -1})
+	fake := &lifecycleFakeRunReader{err: errors.New("GET must not contact Bot")}
+	service := &Service{runReader: fake}
+	first, err := service.AgentTaskLifecycle(context.Background(), 101, "pure-owner")
+	if err != nil {
+		t.Fatalf("first lifecycle read: %v", err)
+	}
+	second, err := service.AgentTaskLifecycle(context.Background(), 101, "pure-owner")
+	if err != nil {
+		t.Fatalf("second lifecycle read: %v", err)
+	}
+	if !reflect.DeepEqual(first, second) || fake.calls != 0 {
+		t.Fatalf("repeated lifecycle reads mutated/contacted Bot: first=%+v second=%+v calls=%d", first, second, fake.calls)
+	}
 }
 
 func seedAgentTaskLifecycleRow(t *testing.T, gdb *gorm.DB, row lifecycleSeed) {
@@ -149,37 +168,9 @@ func lifecycleDeliveryRunRecord(t *testing.T, runID, scientificStatus, deliveryS
 	}
 }
 
-func lifecycleFailedManifestRunRecord(t *testing.T, runID string) *rxBot.RunRecord {
-	t.Helper()
-	delivery := map[string]interface{}{
-		"schema_version":   1,
-		"required":         true,
-		"status":           "failed",
-		"revision":         int64(1),
-		"inventory_digest": "",
-		"archive":          nil,
-		"error_code":       "artifact_manifest_invalid",
-		"retryable":        false,
-	}
-	result, err := json.Marshal(map[string]interface{}{
-		"report_revision": 3,
-		"final_report":    "# Scientific result",
-		"formatted":       map[string]interface{}{"answer": "# Scientific result"},
-		"execution": map[string]interface{}{
-			"output_dirs": []string{"obs://bucket/owner/run"},
-			"tracking":    map[string]interface{}{"degraded": true},
-			"delivery":    delivery,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal lifecycle run: %v", err)
-	}
-	return &rxBot.RunRecord{RunID: runID, Agent: "design", Status: "succeeded", Result: result}
-}
-
 // Mutation coverage: mapping a legacy zero-child running umbrella run to a
 // terminal or preparing phase would hide its truthful generic running state.
-func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
+func TestAgentTaskLifecycleMapsPersistedRunStates(t *testing.T) {
 	tests := []struct {
 		name              string
 		botStatus         string
@@ -189,7 +180,7 @@ func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
 		wantChildAccepted bool
 	}{
 		{name: "running without stage stays generic", botStatus: "running", wantPhase: "RUNNING"},
-		{name: "running with children accepts work", botStatus: "running", childIDs: []string{"child-1", "child-2"}, wantPhase: "RUNNING", wantChildAccepted: true},
+		{name: "unprojected remote children do not alter the read", botStatus: "running", childIDs: []string{"child-1", "child-2"}, wantPhase: "RUNNING"},
 		{name: "succeeded is terminal", botStatus: "succeeded", wantPhase: "SUCCEEDED", wantTerminal: true},
 		{name: "failed is terminal", botStatus: "failed", wantPhase: "FAILED", wantTerminal: true},
 		{name: "cancelled is terminal", botStatus: "cancelled", wantPhase: "CANCELLED", wantTerminal: true},
@@ -198,7 +189,7 @@ func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gdb := setupAgentTaskLifecycleDB(t)
-			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{id: 1, username: "alice", runID: "run-1", status: "RUNNING", reportRevision: -1})
+			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{id: 1, username: "alice", runID: "run-1", status: strings.ToUpper(tt.botStatus), reportRevision: -1})
 			fake := &lifecycleFakeRunReader{record: lifecycleRunRecord("run-1", tt.botStatus, tt.childIDs...)}
 
 			got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 1, "alice")
@@ -208,8 +199,8 @@ func TestAgentTaskLifecycleMapsFreshRunStates(t *testing.T) {
 			if got.Phase != tt.wantPhase || got.Terminal != tt.wantTerminal || got.ChildWorkAccepted != tt.wantChildAccepted {
 				t.Fatalf("lifecycle=%+v, want phase=%q terminal=%v child_work_accepted=%v", got, tt.wantPhase, tt.wantTerminal, tt.wantChildAccepted)
 			}
-			if got.Reconciliation != "FRESH" || fake.calls != 1 || len(fake.runIDs) != 1 || fake.runIDs[0] != "run-1" {
-				t.Fatalf("reconciliation/calls = %q/%d/%v, want FRESH/1/[run-1]", got.Reconciliation, fake.calls, fake.runIDs)
+			if got.Reconciliation != "CACHED" || fake.calls != 0 || len(fake.runIDs) != 0 {
+				t.Fatalf("reconciliation/calls = %q/%d/%v, want CACHED/0/[]", got.Reconciliation, fake.calls, fake.runIDs)
 			}
 		})
 	}
@@ -240,40 +231,7 @@ func TestAgentTaskLifecycleReadsBackProjectionWinner(t *testing.T) {
 	}
 }
 
-func TestAgentTaskLifecycleSyncsRunningRowAfterInvalidManifest(t *testing.T) {
-	gdb := setupAgentTaskLifecycleDB(t)
-	stored, err := marshalPersistedProjection(BotRunProjection{
-		RunID: "run-manifest-invalid", Agent: "design", Status: "SUCCEEDED", ReportRevision: 3,
-		ResultArchiveV1: true,
-		Delivery: &ProjectionDelivery{
-			SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
-			ErrorCode: "artifact_manifest_invalid", Retryable: false,
-		},
-		TrackingDegraded: true,
-	})
-	if err != nil {
-		t.Fatalf("marshal stored projection: %v", err)
-	}
-	seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
-		id: 40, username: "alice", runID: "run-manifest-invalid", status: "RUNNING",
-		projection: stored, reportRevision: 3,
-	})
-	fake := &lifecycleFakeRunReader{record: lifecycleFailedManifestRunRecord(t, "run-manifest-invalid")}
-
-	got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 40, "alice")
-	if err != nil {
-		t.Fatalf("AgentTaskLifecycle: %v", err)
-	}
-	if got.Phase != "SUCCEEDED" || !got.Terminal {
-		t.Fatalf("lifecycle=%+v, want SUCCEEDED terminal", got)
-	}
-	status, _ := readStatusAnswer(t, gdb, 40)
-	if status != "SUCCEEDED" {
-		t.Fatalf("business row status=%q, want SUCCEEDED", status)
-	}
-}
-
-func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryPollable(t *testing.T) {
+func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryAsCachedProjection(t *testing.T) {
 	gdb := setupAgentTaskLifecycleDB(t)
 	stored, err := marshalPersistedProjection(BotRunProjection{
 		RunID: "run-pending-delivery", Agent: "analyst", Status: "SUCCEEDED", ReportRevision: 3,
@@ -291,15 +249,15 @@ func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryPollable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AgentTaskLifecycle: %v", err)
 	}
-	if got.Phase != "FINALIZING" || got.Terminal || got.Reconciliation != "FRESH" || fake.calls != 1 {
-		t.Fatalf("lifecycle=%+v calls=%d, want fresh nonterminal pending delivery", got, fake.calls)
+	if got.Phase != "RUNNING" || got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
+		t.Fatalf("lifecycle=%+v calls=%d, want cached nonterminal pending delivery", got, fake.calls)
 	}
 	if got.Delivery == nil || got.Delivery.Status != "pending" || got.Delivery.Revision != 1 {
 		t.Fatalf("delivery=%+v, want pending revision 1", got.Delivery)
 	}
 	status, _ := readStatusAnswer(t, gdb, 20)
-	if status != "FINALIZING" {
-		t.Fatalf("business row status=%q, want FINALIZING", status)
+	if status != "SUCCEEDED" {
+		t.Fatalf("business row status=%q, want unchanged SUCCEEDED", status)
 	}
 	assertDeliveryDTOIsBounded(t, got.Delivery)
 }
@@ -327,22 +285,6 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 		{
 			name: "delivery failure is terminal but incomplete", scientificStatus: "SUCCEEDED",
 			delivery: testFailedDelivery(1, testProjectionDigestA, true), wantPhase: "FAILED", wantTerminal: true,
-		},
-		{
-			name: "empty archive keeps scientific success", scientificStatus: "SUCCEEDED",
-			delivery: &ProjectionDelivery{
-				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
-				ErrorCode: "no_user_deliverables", Retryable: false,
-			},
-			wantPhase: "SUCCEEDED", wantTerminal: true,
-		},
-		{
-			name: "invalid producer manifest keeps scientific success", scientificStatus: "SUCCEEDED",
-			delivery: &ProjectionDelivery{
-				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
-				ErrorCode: "artifact_manifest_invalid", Retryable: false,
-			},
-			wantPhase: "SUCCEEDED", wantTerminal: true,
 		},
 	}
 	for index, tt := range tests {
@@ -406,7 +348,7 @@ func TestAnswerCheckIncludesBoundedDeliveryForOwnerHistory(t *testing.T) {
 		}
 		rowStatus := "SUCCEEDED"
 		if delivery.Status == "pending" {
-			rowStatus = "FINALIZING"
+			rowStatus = "RUNNING"
 		}
 		if err := gdb.Exec(`INSERT INTO question_agent_logs
 			(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, status, bot_projection_json, bot_report_revision, created_at)
@@ -428,8 +370,8 @@ func TestAnswerCheckIncludesBoundedDeliveryForOwnerHistory(t *testing.T) {
 		if history[index].Delivery == nil || history[index].Delivery.Status != wantStatus {
 			t.Fatalf("history[%d].delivery=%+v, want %q", index, history[index].Delivery, wantStatus)
 		}
-		if wantStatus == "pending" && history[index].Status != "FINALIZING" {
-			t.Fatalf("pending history status=%q, want FINALIZING", history[index].Status)
+		if wantStatus == "pending" && history[index].Status != "RUNNING" {
+			t.Fatalf("pending history status=%q, want RUNNING", history[index].Status)
 		}
 		assertDeliveryDTOIsBounded(t, history[index].Delivery)
 	}
@@ -465,9 +407,8 @@ func assertDeliveryDTOIsBounded(t *testing.T, dto *AgentTaskDeliveryDTO) {
 	}
 }
 
-// Mutation coverage: skipping Bot apply because the stored projection is
-// already terminal leaves question_agent_logs RUNNING. Reconcile until the
-// MySQL row itself is terminal so the ledger matches the scientific snapshot.
+// Mutation coverage: checking only row.Status polls Bot for a row whose durable
+// projection is already terminal. The projection winner must be cached instead.
 func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing.T) {
 	tests := []struct {
 		status    string
@@ -491,21 +432,14 @@ func TestAgentTaskLifecycleCachesTerminalProjectionWithStaleRowStatus(t *testing
 			seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
 				id: 9, username: "alice", runID: "run-terminal-projection", status: "RUNNING", projection: stored, reportRevision: 4,
 			})
-			fake := &lifecycleFakeRunReader{record: lifecycleRunRecord("run-terminal-projection", strings.ToLower(tt.status))}
+			fake := &lifecycleFakeRunReader{err: errors.New("terminal projection must not poll")}
 
 			got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 9, "alice")
 			if err != nil {
 				t.Fatalf("AgentTaskLifecycle: %v", err)
 			}
-			if got.Phase != tt.wantPhase || !got.Terminal {
-				t.Fatalf("lifecycle=%+v, want %s terminal", got, tt.wantPhase)
-			}
-			if fake.calls != 1 {
-				t.Fatalf("calls=%d, want 1 poll to sync the running row", fake.calls)
-			}
-			status, _ := readStatusAnswer(t, gdb, 9)
-			if status != tt.status {
-				t.Fatalf("business row status=%q, want %q", status, tt.status)
+			if got.Phase != tt.wantPhase || !got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
+				t.Fatalf("lifecycle=%+v calls=%d, want cached terminal projection without polling", got, fake.calls)
 			}
 		})
 	}
@@ -546,7 +480,7 @@ func TestAgentTaskLifecycleUsesCachedStateWithoutPolling(t *testing.T) {
 	}
 }
 
-func TestAgentTaskLifecycleDegradesToCachedStateForUnsafeRunResponses(t *testing.T) {
+func TestAgentTaskLifecycleIgnoresUnsafeRunResponsesOnPureRead(t *testing.T) {
 	tests := []struct {
 		name string
 		fake *lifecycleFakeRunReader
@@ -565,14 +499,8 @@ func TestAgentTaskLifecycleDegradesToCachedStateForUnsafeRunResponses(t *testing
 			if err != nil {
 				t.Fatalf("AgentTaskLifecycle: %v", err)
 			}
-			if got.Phase != "RUNNING" || got.Reconciliation != "DEGRADED" || got.ErrorCode == nil || got.TrackingDegraded || tt.fake.calls != 1 {
-				t.Fatalf("lifecycle=%+v calls=%d, want safe degraded cached state", got, tt.fake.calls)
-			}
-			if tt.name == "transport failure" && *got.ErrorCode != "bot_transport_failed" {
-				t.Fatalf("transport error code=%q", *got.ErrorCode)
-			}
-			if tt.name != "transport failure" && *got.ErrorCode != "run_contract_invalid" {
-				t.Fatalf("contract error code=%q", *got.ErrorCode)
+			if got.Phase != "RUNNING" || got.Reconciliation != "CACHED" || got.ErrorCode != nil || got.TrackingDegraded || tt.fake.calls != 0 {
+				t.Fatalf("lifecycle=%+v calls=%d, want pure cached state", got, tt.fake.calls)
 			}
 		})
 	}
@@ -672,72 +600,6 @@ func TestAgentTaskLifecycleHidesAbsentAndForeignRows(t *testing.T) {
 	}
 }
 
-func TestAgentTaskLifecycleProjectsChildrenWithoutIdentities(t *testing.T) {
-	t.Run("projects children without identities", func(t *testing.T) {
-		gdb := setupAgentTaskLifecycleDB(t)
-		seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
-			id: 11, username: "alice", runID: "run-children", status: "RUNNING", reportRevision: -1,
-		})
-		rec := &rxBot.RunRecord{
-			RunID:   "run-children",
-			Agent:   "design",
-			Status:  "running",
-			TaskIDs: []string{"child-secret-1", "child-secret-2"},
-			Result:  json.RawMessage(`{"execution":{"tasks":[{"id":"child-secret-1","accepted":true,"status":"succeeded","kind":"protein_structure_analysis","error_code":null},{"id":"child-secret-2","accepted":false,"status":"failed","kind":"promoter_analysis","error_code":"input_rejected"}]}}`),
-		}
-		fake := &lifecycleFakeRunReader{record: rec}
-
-		got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 11, "alice")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(got.Children) != 2 {
-			t.Fatalf("children=%v", got.Children)
-		}
-		if got.Children[0].Ordinal != 1 || got.Children[0].Phase != "SUCCEEDED" {
-			t.Fatalf("child0=%v", got.Children[0])
-		}
-		if got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
-			t.Fatalf("child1=%v", got.Children[1])
-		}
-		assertLifecycleJSONIsMinimized(t, got, []string{"child-secret-1", "child-secret-2", "run-children"})
-	})
-
-	t.Run("cached projection keeps children when Bot is unreachable", func(t *testing.T) {
-		gdb := setupAgentTaskLifecycleDB(t)
-		errorCode := "input_rejected"
-		stored, err := marshalPersistedProjection(BotRunProjection{
-			RunID: "run-cached-children", Agent: "design", Status: "SUCCEEDED", ChildTaskCount: 2, ReportRevision: 4,
-			Children: []BotRunChild{
-				{Ordinal: 1, Phase: "SUCCEEDED", Kind: "protein_structure_analysis"},
-				{Ordinal: 2, Phase: "FAILED", Kind: "promoter_analysis", ErrorCode: &errorCode},
-			},
-		})
-		if err != nil {
-			t.Fatalf("marshal stored projection: %v", err)
-		}
-		seedAgentTaskLifecycleRow(t, gdb, lifecycleSeed{
-			id: 12, username: "alice", runID: "run-cached-children", status: "SUCCEEDED", projection: stored, reportRevision: 4,
-		})
-		fake := &lifecycleFakeRunReader{err: errors.New("cached children must not poll")}
-
-		got, err := (&Service{runReader: fake}).AgentTaskLifecycle(context.Background(), 12, "alice")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Reconciliation != "CACHED" || fake.calls != 0 {
-			t.Fatalf("lifecycle=%+v calls=%d, want cached without polling", got, fake.calls)
-		}
-		if len(got.Children) != 2 || got.Children[0].Phase != "SUCCEEDED" {
-			t.Fatalf("cached children=%v", got.Children)
-		}
-		if got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
-			t.Fatalf("cached child1=%v", got.Children[1])
-		}
-		assertLifecycleJSONIsMinimized(t, got, []string{"child-secret-1", "run-cached-children"})
-	})
-}
-
 func TestAgentTaskLifecycleMarshalsOnlyBoundedArtifactSummary(t *testing.T) {
 	t.Run("projection artifacts", func(t *testing.T) {
 		gdb := setupAgentTaskLifecycleDB(t)
@@ -780,32 +642,6 @@ func TestAgentTaskLifecycleMarshalsOnlyBoundedArtifactSummary(t *testing.T) {
 		}
 		assertLifecycleJSONIsMinimized(t, got, []string{"legacy private report", "/obs/legacy/output", "alice-legacy"})
 	})
-}
-
-func TestProjectionHasFailedRequiredDeliveryOmitsEmptyArchive(t *testing.T) {
-	empty := BotRunProjection{
-		ResultArchiveV1: true,
-		Delivery: &ProjectionDelivery{
-			Required: true, Status: "failed", ErrorCode: "no_user_deliverables",
-		},
-	}
-	if projectionHasFailedRequiredDelivery(empty) {
-		t.Fatal("empty result treated as failed required delivery")
-	}
-	invalid := empty
-	invalid.Delivery = &ProjectionDelivery{
-		Required: true, Status: "failed", ErrorCode: "artifact_manifest_invalid",
-	}
-	if projectionHasFailedRequiredDelivery(invalid) {
-		t.Fatal("invalid producer manifest treated as failed required delivery")
-	}
-	pack := empty
-	pack.Delivery = &ProjectionDelivery{
-		Required: true, Status: "failed", ErrorCode: "archive_publish_failed",
-	}
-	if !projectionHasFailedRequiredDelivery(pack) {
-		t.Fatal("pack failure ignored")
-	}
 }
 
 func assertLifecycleJSONIsMinimized(t *testing.T, dto AgentTaskLifecycleDTO, privateValues []string) {

@@ -10,6 +10,14 @@ export interface DisplayReference {
   id: string;
 }
 
+function canonicalDoiURL(value: string | undefined): string | undefined {
+  const doi = value?.trim();
+  if (!doi || !/^10\.\d{4,9}\/\S+$/u.test(doi) || /[\s\[\]<>\\]/u.test(doi)) {
+    return undefined;
+  }
+  return `https://doi.org/${doi}`;
+}
+
 // Build the formatted HTML for the reference list (extracted verbatim from
 // DeepGenomeResultViewer's displayReferences computed).
 //
@@ -42,15 +50,14 @@ export const buildDisplayReferences = (
 
       // build the DOI and PMID link parts
       let linkPart = "";
-      const hasLink = normalized.dl || normalized.pm;
+      const doiURL = normalized.dl || canonicalDoiURL(normalized.di);
+      const hasLink = doiURL || normalized.pm;
 
       if (hasLink) {
-        const doiLink = normalized.dl
+        const doiLink = doiURL
           ? `doi: <a href="${sanitizeHref(
-              normalized.dl
-            )}" target="_blank" class="doi-link">${escapeHtml(
-              normalized.dl
-            )}</a>`
+              doiURL
+            )}" target="_blank" class="doi-link">${escapeHtml(doiURL)}</a>`
           : "";
         const pmidLink = normalized.pm
           ? `pmid:<a href="${sanitizeHref(
@@ -60,7 +67,7 @@ export const buildDisplayReferences = (
             )}</a>`
           : "";
 
-        const separator = normalized.dl && normalized.pm ? "; " : "";
+        const separator = doiURL && normalized.pm ? "; " : "";
 
         linkPart = `. <span class="doc-link-inline">${doiLink}</span><span>${separator}</span><span class="doc-link-inline">${pmidLink}</span>`;
       }

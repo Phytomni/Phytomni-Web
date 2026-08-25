@@ -25,13 +25,12 @@ import type { A2uiActionResponse } from "@/views/chat/streaming/a2uiContract";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
-import SendProgress from "@/views/chat/components/SendProgress.vue";
 import TransferProgress from "@/components/TransferProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
 import FollowUpQuestions from "@/views/chat/FollowUpQuestions.vue";
-import chatLogo from "@/assets/images/chat/logo.png";
+const chatLogo = "/logo.png";
 import { userStore } from "@/stores";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
@@ -45,7 +44,6 @@ import {
   FIXTURE_ACTIVITY_STATE_KEY,
   FIXTURE_A2UI_REQUIRED_BLOCK,
   FIXTURE_UPLOAD_TRANSFER,
-  FIXTURE_PROGRESS_STARTED_AT,
   PHASE_3C_FIXTURE_KEYS,
   isPhase3CFixtureKey,
   getPhase3COverlay,
@@ -60,7 +58,6 @@ import {
   getSharedPhase3COverlay,
   SYNTHETIC_IDENTITY,
 } from "../visual/chat/fixture-data";
-import { expectLifecyclePhase } from "../helpers/lifecycle-phase";
 import { mustGet } from "../helpers/mockFactories";
 import {
   createTestAppContext,
@@ -151,6 +148,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
 });
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
+  supportsAgentWorkTrace: () => false,
   useBotCapabilities: () => ({
     byTool: mockBotCapabilities.byTool,
     upload: mockBotCapabilities.upload,
@@ -227,7 +225,7 @@ const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
-const artifactSlotStart = CHAT_SOURCE.indexOf("<template #artifact>");
+const artifactSlotStart = CHAT_SOURCE.indexOf("<template #workspace>");
 const artifactSlotEnd = CHAT_SOURCE.indexOf(
   "</PhyAdaptiveShell>",
   artifactSlotStart
@@ -371,8 +369,6 @@ function populateFullChatState(
   state.fileList = [file];
   state.isSending = true;
   state.completing = label === "A";
-  state.sendStartedAt = FIXTURE_PROGRESS_STARTED_AT;
-  state.activeAgentName = label === "A" ? "ChatAgent" : "KnowledgeAgent";
   state.uploadTransfer = {
     ...FIXTURE_UPLOAD_TRANSFER,
     requestId: `upload-${label}`,
@@ -394,8 +390,7 @@ function populateFullChatState(
     },
   };
   state.loadingLog = { "42": label === "B" };
-  state.updatingLog = { "42": false };
-  state.logErrorKinds = { "42": label === "A" ? "fetch" : "update" };
+  state.logErrorKinds = { "42": "fetch" };
   state.reactions = { "99": label === "A" ? 1 : 2 };
   state.refreshingMessages = { "0_99": label === "A" };
   state.copyVisible = label === "A" ? 1 : 2;
@@ -887,58 +882,61 @@ describe("ChatInteractionV2 — behavior matrix", () => {
   });
 
   it.each([
-    "PREPARING",
-    "RESOLVING_INPUTS",
-    "PLANNING",
-    "RUNNING",
-    "FINALIZING",
-  ] as const)("renders %s Research as lifecycle-only progress", (phase) => {
-    const rendererCases: Array<
-      Partial<ChatMessage> & {
-        artifactPreview?: ArtifactPreview;
+    ["PREPARING", "Preparing"],
+    ["RESOLVING_INPUTS", "Resolving inputs"],
+    ["PLANNING", "Planning tasks"],
+    ["RUNNING", "Running"],
+    ["FINALIZING", "Finalizing"],
+  ] as const)(
+    "renders %s Research as lifecycle-only progress",
+    (phase, label) => {
+      const rendererCases: Array<
+        Partial<ChatMessage> & {
+          artifactPreview?: ArtifactPreview;
+        }
+      > = [
+        {
+          content: "No references available.",
+          artifactPreview: {
+            title: "Research result",
+            kind: "research",
+            summary: "No references available.",
+            openLabel: "Open artifact",
+          },
+        },
+        {
+          content: "No references available.",
+          doc_list: [{ title: "Synthetic reference" }],
+        },
+        { content: "No references available.", doc_list: [] },
+      ];
+
+      for (const { artifactPreview, ...message } of rendererCases) {
+        const wrapper = mountChatMessageContent({
+          message: {
+            tool_name: "InSilicoResearchAgent",
+            ...message,
+          },
+          lifecycle: researchLifecycle(phase),
+          artifactPreview,
+        });
+
+        expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
+        expect(
+          wrapper.find('[data-testid="research-artifact-preview"]').exists()
+        ).toBe(false);
+        expect(
+          wrapper.find('[data-testid="research-reference-viewer"]').exists()
+        ).toBe(false);
+        expect(
+          wrapper.find('[data-testid="research-result-viewer"]').exists()
+        ).toBe(false);
+        expect(wrapper.text()).not.toContain(enUS.common.noData);
+        expect(wrapper.text()).not.toContain("No references available.");
+        wrapper.unmount();
       }
-    > = [
-      {
-        content: "No references available.",
-        artifactPreview: {
-          title: "Research result",
-          kind: "research",
-          summary: "No references available.",
-          openLabel: "Open artifact",
-        },
-      },
-      {
-        content: "No references available.",
-        doc_list: [{ title: "Synthetic reference" }],
-      },
-      { content: "No references available.", doc_list: [] },
-    ];
-
-    for (const { artifactPreview, ...message } of rendererCases) {
-      const wrapper = mountChatMessageContent({
-        message: {
-          tool_name: "InSilicoResearchAgent",
-          ...message,
-        },
-        lifecycle: researchLifecycle(phase),
-        artifactPreview,
-      });
-
-      expectLifecyclePhase(wrapper, "Validating the research request");
-      expect(
-        wrapper.find('[data-testid="research-artifact-preview"]').exists()
-      ).toBe(false);
-      expect(
-        wrapper.find('[data-testid="research-reference-viewer"]').exists()
-      ).toBe(false);
-      expect(
-        wrapper.find('[data-testid="research-result-viewer"]').exists()
-      ).toBe(false);
-      expect(wrapper.text()).not.toContain(enUS.common.noData);
-      expect(wrapper.text()).not.toContain("No references available.");
-      wrapper.unmount();
     }
-  });
+  );
 
   it.each([
     ["streaming", { streaming: true }],
@@ -951,7 +949,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         lifecycle: researchLifecycle("RUNNING"),
       });
 
-      expectLifecyclePhase(wrapper, "Validating the research request");
+      expect(wrapper.get(".agent-lifecycle").text()).toBe("Running");
       expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
         false
       );
@@ -988,7 +986,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         lifecycle: researchLifecycle(phase),
       });
 
-      expectLifecyclePhase(wrapper, "Validating the research request");
+      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
       expect(wrapper.find('[data-testid="table-result"]').exists()).toBe(false);
       expect(wrapper.find(".ai-response").exists()).toBe(false);
       expect(
@@ -998,14 +996,18 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     }
   );
 
-  it.each(["RESOLVING_INPUTS", "PLANNING", "FINALIZING"] as const)(
+  it.each([
+    ["RESOLVING_INPUTS", "Resolving inputs"],
+    ["PLANNING", "Planning tasks"],
+    ["FINALIZING", "Finalizing"],
+  ] as const)(
     "uses Research message status %s as lifecycle fallback",
-    (status) => {
+    (status, label) => {
       const wrapper = mountChatMessageContent({
         message: { tool_name: "InSilicoResearchAgent", status },
       });
 
-      expectLifecyclePhase(wrapper, "Validating the research request");
+      expect(wrapper.get(".agent-lifecycle").text()).toBe(label);
       expect(
         wrapper.find('[data-testid="research-result-viewer"]').exists()
       ).toBe(false);
@@ -1045,27 +1047,17 @@ describe("ChatInteractionV2 — behavior matrix", () => {
         message: { ...message, status },
       });
 
-      if (_name === "DeepGenome") {
-        expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
-          "Writing the gene background"
-        );
-        expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
-        expect(
-          wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()
-        ).toBe(false);
-      } else {
-        expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
-        expect(
-          wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()
-        ).toBe(true);
-      }
+      expect(wrapper.find(".agent-lifecycle").exists()).toBe(false);
+      expect(wrapper.find(`[data-testid="${expectedRenderer}"]`).exists()).toBe(
+        true
+      );
       wrapper.unmount();
     }
   );
 
   it("routes a surface intent through the owning message and resolves it in place", async () => {
     expect(CHAT_SOURCE).toContain(
-      "const { submitAction, retryAction } = useA2uiInteraction();"
+      "const { submitAction, retryAction } = useA2uiInteraction({"
     );
     expect(CHAT_SOURCE).toContain(
       '@a2ui-action="(event) => submitAction(message, event)"'
@@ -1882,7 +1874,7 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     expect(actions.find('[data-testid="action-copy"]').exists()).toBe(true);
   });
 
-  it("mounts Activity, analyst log, A2UI, simulated progress, and real transfer", async () => {
+  it("mounts Activity, analyst log, A2UI, and real transfer", async () => {
     const closed = mount(ChatActivity, {
       props: {
         blocks: FIXTURE_ACTIVITY_BLOCKS,
@@ -1909,7 +1901,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
     const log = mount(ChatAnalystLog, {
       props: {
         rowId: MESSAGE_ANALYST_LOG.id,
-        taskId: MESSAGE_ANALYST_LOG.task_id,
         logData: {
           state: "AVAILABLE",
           source: "BOT_RUN",
@@ -1923,16 +1914,6 @@ describe("ChatInteractionV2 — behavior matrix", () => {
       global: {},
     });
     expect(log.find("[data-testid='chat-analyst-log']").exists()).toBe(true);
-
-    const progress = mount(SendProgress, {
-      props: {
-        startedAt: FIXTURE_PROGRESS_STARTED_AT,
-        agentName: "ChatAgent",
-        completing: false,
-      },
-      global: {},
-    });
-    expect(progress.find('[data-test="send-progress"]').exists()).toBe(true);
 
     const transfer = mount(TransferProgress, {
       props: { snapshot: FIXTURE_UPLOAD_TRANSFER },
@@ -2019,7 +2000,7 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
     expect(stateB.activityExpandedByMessage[FIXTURE_ACTIVITY_STATE_KEY]).toBe(
       true
     );
-    expect(stateB.logErrorKinds["42"]).toBe("update");
+    expect(stateB.logErrorKinds["42"]).toBe("fetch");
     expect(stateB.renderedChat?.messages[1].a2uiRuntime?.runId).toBe("run-B");
     expect(stateB.renderedChat?.messages[1].a2uiRuntime?.transport).toBe(
       transportB
@@ -2066,7 +2047,6 @@ describe("ChatInteractionV2 — per-dialogue isolation", () => {
     const w = context.mount(ChatAnalystLog, {
       props: {
         rowId: "42",
-        taskId: "t",
         errorKind: state.logErrorKinds["42"],
       },
       global: {},
@@ -2142,15 +2122,11 @@ describe("ChatInteractionV2 — temporary ID rekey", () => {
 });
 
 describe("ChatInteractionV2 — progress exclusivity and legacy absences", () => {
-  it("never renders simulated SendProgress and real TransferProgress together", () => {
+  it("renders only real transfer progress in the production loading bubble", () => {
     expect(LOADING_BUBBLE).toContain("<TransferProgress");
-    expect(LOADING_BUBBLE).toContain("<SendProgress");
+    expect(LOADING_BUBBLE).not.toContain("<SendProgress");
     expect(LOADING_BUBBLE).toMatch(
       /<TransferProgress[\s\S]*?v-if="uploadTransfer"/
-    );
-    expect(LOADING_BUBBLE).toMatch(/<SendProgress[\s\S]*?v-else/);
-    expect(LOADING_BUBBLE).not.toMatch(
-      /<TransferProgress[\s\S]*?<SendProgress(?![\s\S]*v-else)/
     );
 
     // Harness mirrors the same exclusivity for Phase 3C progress/transfer keys.
@@ -2178,7 +2154,7 @@ describe("ChatInteractionV2 — progress exclusivity and legacy absences", () =>
     expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<CitedAnswer");
     expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<DeepGenomeResultViewer");
     expect(CHAT_TRANSCRIPT_SOURCE).not.toContain("<StreamMessage");
-    // Artifact presentation owns the single citation surface outside the transcript.
+    // The middle workspace owns the single citation surface outside the transcript.
     expect(countOccurrences(ARTIFACT_SLOT_SOURCE, "<CitedAnswer")).toBe(1);
   });
 });

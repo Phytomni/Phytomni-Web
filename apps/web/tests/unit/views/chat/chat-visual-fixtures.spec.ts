@@ -552,6 +552,10 @@ describe("Chat visual fixture registry", () => {
       "progress-fast",
       "progress-slow",
       "progress-completing",
+      "execution-long-running",
+      "execution-retrying",
+      "execution-cancelled",
+      "execution-succeeded",
       "transfer-real",
       "a2ui-required",
       "a2ui-lifecycle",
@@ -914,17 +918,19 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE.match(wideBinding)).toHaveLength(2);
   });
 
-  it("Phase 3C harness mounts Activity/log/progress/transfer from shared fixtures", () => {
+  it("Phase 3C harness mounts Activity/log/canonical execution/transfer from shared fixtures", () => {
     expect(APP_SOURCE).toContain("isPhase3CFixtureKey");
     expect(APP_SOURCE).toContain("getPhase3COverlay");
     expect(APP_SOURCE).toContain("ChatActivity");
     expect(APP_SOURCE).toContain("ChatAnalystLog");
-    expect(APP_SOURCE).toContain("SendProgress");
+    expect(APP_SOURCE).toContain("ExecutionActivityPanel");
     expect(APP_SOURCE).toContain("TransferProgress");
     expect(APP_SOURCE).toMatch(
       /<TransferProgress[\s\S]*v-if="transferSnapshot"/
     );
-    expect(APP_SOURCE).toMatch(/<SendProgress[\s\S]*v-else-if="progressProps"/);
+    expect(APP_SOURCE).toMatch(
+      /<ExecutionActivityPanel[\s\S]*v-else-if="progressRun"/
+    );
     expect(APP_SOURCE).not.toMatch(/@\/api\b/);
   });
 

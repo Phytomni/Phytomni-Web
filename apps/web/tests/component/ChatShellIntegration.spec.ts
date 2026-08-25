@@ -66,13 +66,13 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain(
       ':sidebar-collapsed="effectiveSidebarCollapsed"'
     );
-    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain(':workspace-open="executionWorkspaceOpen"');
     expect(CHAT_SOURCE).toContain(
-      ':artifact-fullscreen="artifactOpen && isMobileViewport"'
+      ':workspace-fullscreen="executionWorkspaceOpen && isMobileViewport"'
     );
     expect(CHAT_SOURCE).toContain("<template #sidebar>");
     expect(CHAT_SOURCE).toContain("<template #main>");
-    expect(CHAT_SOURCE).toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain("<template #workspace>");
   });
 
   it("keeps the sidebar bridge and tutorial anchors in the Chat root", () => {
@@ -368,9 +368,6 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData");
     expect(CHAT_SOURCE).toContain("skipRestoreTempIds");
     expect(CHAT_SOURCE).toContain("skipTempIds?: ReadonlySet<string>");
-    expect(CHAT_SOURCE).toContain(
-      "isLocalStorageChat(urlChatId) || chatExists"
-    );
     expect(CHAT_SOURCE).toMatch(
       /getHistoryQuestionData\([\s\S]*sendingDialogueId/
     );
@@ -400,13 +397,11 @@ describe("Chat adaptive shell integration", () => {
     );
     expect(sendMessageSource).toContain("blockingDialogueId");
     expect(sendMessageSource).not.toContain(
-      "clearPendingChat(currentChatId.value)"
+      "clearPendingChat(sendingDialogueId)"
     );
-    expect(sendMessageSource).toContain("clearPendingChat(sendingDialogueId)");
     expect(sendMessageSource).not.toMatch(/chatList\.value\[0\]\.dialogue_id/);
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
-    expect(sendMessageSource).toContain("getStreamChatState");
-    expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
+    expect(sendMessageSource).not.toContain("getStreamChatState");
     expect(sendMessageSource).toContain("createChatRequestKey");
     expect(sendMessageSource).toContain("parentRowIdForDialogue");
     expect(sendMessageSource).toContain("sendingMessages.push");
@@ -443,24 +438,15 @@ describe("Chat adaptive shell integration", () => {
     const abortBlock = CHAT_SOURCE.slice(abortStart, abortEnd);
     expect(abortBlock).toContain("chatState.activeRequestId");
     expect(abortBlock).toContain("abortRequest(requestId)");
-    expect(abortBlock).toContain("cancelTask(resolvedRowId)");
-    expect(abortBlock).toContain("applyCancelledTaskDraft");
     expect(abortBlock).not.toContain("abortAllRequests");
     expect(abortBlock).toContain("generationStopped = true");
-    expect(abortBlock).toContain("if (chatState.generationStopped) return");
+    expect(abortBlock).toContain(
+      "if (!requestId || chatState.generationStopped) return"
+    );
     expect(abortBlock).not.toContain("chatState.isSending = false");
     expect(abortBlock).not.toMatch(/\bid:\s/);
 
-    const streamSource = readFileSync(
-      resolve(
-        __dirname,
-        "../../src/views/chat/composables/useStreamMessage.ts"
-      ),
-      "utf8"
-    );
-    expect(streamSource).toContain(
-      "chatState.streamingMessageId === requestId"
-    );
+    expect(CHAT_SOURCE).not.toContain("useStreamMessage");
   });
 
   it("owns live rendered messages on chatStates via renderedChat, not a second top-level cache", () => {
@@ -472,14 +458,7 @@ describe("Chat adaptive shell integration", () => {
     expect(chatStatesSource).toContain(
       "getChatState(currentChatId.value).renderedChat"
     );
-    const selectChatSource = readFileSync(
-      resolve(__dirname, "../../src/views/chat/composables/useSelectChat.ts"),
-      "utf8"
-    );
-    expect(selectChatSource).toContain("chatState.renderedChat =");
-    expect(selectChatSource).toContain(
-      "isLocalStorageChat(capturedDialogueId)"
-    );
+    expect(CHAT_SOURCE).toContain("getChatState(dialogueId).renderedChat");
 
     const selectStart = CHAT_SOURCE.indexOf("useSelectChat({");
     const selectEnd = CHAT_SOURCE.indexOf("});", selectStart);

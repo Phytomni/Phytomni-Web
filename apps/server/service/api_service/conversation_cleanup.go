@@ -159,7 +159,8 @@ func (ps *Service) DrainPendingConversationTombstones(
 }
 
 // FailStaleConversationSubmissions fails only synchronous rows that never left
-// SUBMITTING. Async RUNNING rows remain exclusively owned by SyncBotRuns.
+// SUBMITTING. Runtime-managed rows remain exclusively owned by the canonical
+// execution projector.
 func (ps *Service) FailStaleConversationSubmissions(
 	ctx context.Context,
 	olderThan time.Time,

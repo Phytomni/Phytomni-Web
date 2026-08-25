@@ -155,11 +155,7 @@ describe("artifact policy", () => {
           },
         })
       );
-      if (tool_name === "DeepGenomeAgent") {
-        expect(inputRequired).toBeNull();
-      } else {
-        expect(inputRequired?.report).toBe(intermediate);
-      }
+      expect(inputRequired?.report).toBe(intermediate);
 
       expect(
         artifactPresentationForMessage(
@@ -189,13 +185,6 @@ describe("artifact policy", () => {
                 : "# Retained report\n\nThe run retained evidence.",
           })
         );
-        if (
-          tool_name === "DeepGenomeAgent" &&
-          (status === "RUNNING" || status === "INPUT_REQUIRED")
-        ) {
-          expect(presentation).toBeNull();
-          continue;
-        }
         expect(presentation?.report).toContain("retained");
       }
     }
@@ -506,7 +495,7 @@ describe("artifact policy", () => {
     "RUNNING",
     "FINALIZING",
   ])(
-    "does not promote a cached DeepGenome file report while the run is still %s",
+    "keeps a cached DeepGenome file report visible while the run is still %s",
     (status) => {
       const cachedFile = `# Smoc Analysis
 
@@ -521,9 +510,13 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
         } as ChatMessage["botLifecycle"],
       });
 
-      expect(artifactPresentationForMessage(message)).toBeNull();
-      expect(isCompletedDeepGenomeMessage(message)).toBe(false);
-      expect(artifactKindForMessage(message)).toBeNull();
+      expect(artifactPresentationForMessage(message)).toMatchObject({
+        kind: "deep-genome",
+        report: cachedFile,
+        source: "final",
+      });
+      expect(isCompletedDeepGenomeMessage(message)).toBe(true);
+      expect(artifactKindForMessage(message)).toBe("deep-genome");
     }
   );
 
@@ -765,15 +758,15 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     }
   );
 
-  it("does not create a still-running DeepGenome preview from a cached file", () => {
+  it("creates a running DeepGenome preview from a cached file", () => {
     const message = {
       ...ELIGIBLE_MESSAGE,
       tool_name: "DeepGenomeAgent",
       status: "RUNNING",
       content: "# Intermediate notes\n\nOne section is available.",
     };
-    expect(artifactPresentationForMessage(message)).toBeNull();
-    expect(artifactPreviewTitleKey(message)).toBeNull();
+    expect(artifactPresentationForMessage(message)?.kind).toBe("deep-genome");
+    expect(artifactPreviewTitleKey(message)).toBe("chat.lifecycle.running");
   });
 
   it.each([

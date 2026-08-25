@@ -15,15 +15,12 @@ describe("e2e UX i18n keys", () => {
     "chat.sendAriaLabel",
     "chat.abortAriaLabel",
     "chat.timeoutFailed",
-    "chat.progress.processing",
-    "chat.progress.valueText",
-    "chat.progress.etaSeconds",
-    "chat.progress.etaMinutes",
-    "chat.progress.etaHours",
-    "chat.progress.cotLabel",
-    "chat.progress.cotCount",
     "chat.agentsArchitectureTitle",
     "chat.agentsArchitectureAlt",
+    "chat.execution.workflowPlan",
+    "chat.execution.workflowPlanSteps",
+    "chat.execution.technicalDetails",
+    "chat.execution.technicalEventCount",
   ];
   for (const key of keys) {
     it(`has zh-CN + en-US copy for ${key}`, () => {
@@ -40,33 +37,9 @@ describe("e2e UX i18n keys", () => {
     });
   }
 
-  it("has exact progress copy and no chat.eta.* subtree", () => {
-    expect(getMessage(enUS, "chat.progress.processing")).toBe("Processing");
-    expect(getMessage(zhCN, "chat.progress.processing")).toBe("处理中");
-    expect(getMessage(enUS, "chat.progress.valueText")).toBe(
-      "Processing, {percent}%"
-    );
-    expect(getMessage(zhCN, "chat.progress.valueText")).toBe(
-      "处理中，{percent}%"
-    );
-    expect(getMessage(enUS, "chat.progress.etaSeconds")).toBe(
-      "Usually {min}–{max} seconds"
-    );
-    expect(getMessage(zhCN, "chat.progress.etaSeconds")).toBe(
-      "通常需要 {min}–{max} 秒"
-    );
-    expect(getMessage(enUS, "chat.progress.etaMinutes")).toBe(
-      "Usually {min}–{max} min"
-    );
-    expect(getMessage(zhCN, "chat.progress.etaMinutes")).toBe(
-      "通常需要 {min}–{max} 分钟"
-    );
-    expect(getMessage(enUS, "chat.progress.etaHours")).toBe(
-      "Usually {min}–{max} hours"
-    );
-    expect(getMessage(zhCN, "chat.progress.etaHours")).toBe(
-      "通常需要 {min}–{max} 小时"
-    );
+  it("does not expose elapsed-time progress estimates", () => {
+    expect(getMessage(enUS, "chat.progress")).toBeUndefined();
+    expect(getMessage(zhCN, "chat.progress")).toBeUndefined();
     expect(getMessage(enUS, "chat.eta")).toBeUndefined();
     expect(getMessage(zhCN, "chat.eta")).toBeUndefined();
     for (const leaf of ["fast", "medium", "slow"] as const) {

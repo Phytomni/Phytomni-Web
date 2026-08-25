@@ -162,7 +162,7 @@ const isActive = computed(
   () =>
     props.lifecycle?.phase === "PREPARING" ||
     props.lifecycle?.phase === "RUNNING" ||
-    props.streaming
+    (props.lifecycle?.terminal !== true && props.streaming)
 );
 
 const renderer = (type: string) => resolveBlockRenderer(type);

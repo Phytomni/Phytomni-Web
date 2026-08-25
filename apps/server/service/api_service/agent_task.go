@@ -133,6 +133,37 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 		}
 		QADataList = append(QADataList, QAData)
 	}
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		var turns []model.ConversationTurnV2
+		if err := model.DB(ctx).WithContext(ctx).
+			Where("user_name = ? AND delete_at IS NULL", username).
+			Order("created_at ASC").Find(&turns).Error; err != nil {
+			return nil, err
+		}
+		byDialogue := make(map[string]*common.QueryListRequest, len(QADataList)+len(turns))
+		for _, item := range QADataList {
+			byDialogue[item.DialogueId] = item
+		}
+		for _, turn := range turns {
+			item := byDialogue[turn.DialogueID]
+			if item == nil || turn.ParentID == 0 {
+				if item == nil || turn.ParentID == 0 && turn.ID >= item.Id {
+					item = &common.QueryListRequest{
+						Id: turn.ID, DialogueId: turn.DialogueID,
+						TitleQuery: turn.TitleQuery, CreatedAt: turn.CreatedAt,
+					}
+					byDialogue[turn.DialogueID] = item
+				}
+			}
+			if turn.UpdatedAt.After(item.CreatedAt) {
+				item.CreatedAt = turn.UpdatedAt
+			}
+		}
+		QADataList = QADataList[:0]
+		for _, item := range byDialogue {
+			QADataList = append(QADataList, item)
+		}
+	}
 	sort.Slice(QADataList, func(i, j int) bool {
 		return QADataList[i].CreatedAt.After(QADataList[j].CreatedAt)
 	})
@@ -150,6 +181,9 @@ type ConversationHistoryRow struct {
 	ContextRebuilt  bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded bool                       `json:"context_degraded,omitempty"`
 	RouteReasonCode string                     `json:"route_reason_code,omitempty"`
+	SchemaVersion   int                        `json:"schema_version,omitempty"`
+	ExecutionID     string                     `json:"execution_id,omitempty"`
+	EventCursor     int64                      `json:"event_cursor,omitempty"`
 }
 
 func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId string) ([]*ConversationHistoryRow, error) {
@@ -191,6 +225,17 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			if private.SettlementState == conversationSettlementRebuildRequired {
 				historyRow.ContextDegraded = true
 			}
+		}
+		var admission model.QuestionAgentExecutionAdmission
+		admissionErr := model.DB(ctx).Where(
+			"user_name = ? AND message_id = ?", username, row.Id,
+		).Take(&admission).Error
+		if admissionErr == nil {
+			historyRow.SchemaVersion = executionCommandSchemaVersion
+			historyRow.ExecutionID = admission.ExecutionID
+			historyRow.EventCursor = admission.LatestCursor
+		} else if !errors.Is(admissionErr, gorm.ErrRecordNotFound) {
+			return nil, admissionErr
 		}
 		rows = append(rows, historyRow)
 	}
@@ -549,7 +594,7 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 	if strings.TrimSpace(projection.Status) != "" {
 		row.Status = projection.Status
 		if projectionHasPendingRequiredDelivery(projection) && !isProjectionFailureStatus(projection.Status) {
-			row.Status = businessStatusForPendingDelivery(projection.Status)
+			row.Status = "RUNNING"
 		}
 	}
 	if toolName := slugToToolName[projection.Agent]; toolName != "" {
@@ -559,6 +604,71 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		var dialogueID string
+		now := time.Now().UTC()
+		err := model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var root model.ConversationTurnV2
+			lookup := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("user_name = ? AND id = ? AND parent_id = 0 AND delete_at IS NULL", name, id).
+				Take(&root)
+			if errors.Is(lookup.Error, gorm.ErrRecordNotFound) {
+				return gorm.ErrRecordNotFound
+			}
+			if lookup.Error != nil {
+				return lookup.Error
+			}
+			dialogueID = root.DialogueID
+			if err := tx.Model(&model.ConversationTurnV2{}).
+				Where("user_name = ? AND dialogue_id = ? AND delete_at IS NULL", name, dialogueID).
+				Updates(map[string]any{"delete_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.ConversationMessageV2{}).
+				Where("user_name = ? AND dialogue_id = ? AND delete_at IS NULL", name, dialogueID).
+				Updates(map[string]any{"delete_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
+			var executionIDs []string
+			if tx.Migrator().HasTable(&model.QuestionAgentExecutionAdmission{}) {
+				if err := tx.Model(&model.QuestionAgentExecutionAdmission{}).
+					Where("user_name = ? AND dialogue_id = ?", name, dialogueID).
+					Pluck("execution_id", &executionIDs).Error; err != nil {
+					return err
+				}
+			}
+			if len(executionIDs) > 0 {
+				for _, value := range []any{
+					&model.QuestionAgentExecutionOutbox{}, &model.QuestionAgentExecutionEventV2{},
+				} {
+					if tx.Migrator().HasTable(value) {
+						if err := tx.Where("user_name = ? AND execution_id IN ?", name, executionIDs).Delete(value).Error; err != nil {
+							return err
+						}
+					}
+				}
+			}
+			if tx.Migrator().HasTable(&model.QuestionAgentExecutionAdmission{}) {
+				if err := tx.Where("user_name = ? AND dialogue_id = ?", name, dialogueID).
+					Delete(&model.QuestionAgentExecutionAdmission{}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err == nil {
+			if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
+				_, _ = rxBot.NewClient().TombstoneConversationContext(
+					context.WithoutCancel(ctx),
+					rxBot.ContextTombstoneRequest{SchemaVersion: 1, ConversationKey: dialogueID},
+				)
+			}
+			return id, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("failed to delete conversation")
+		}
+	}
 	var root model.QuestionAgentLog
 	needsTombstone := false
 	err := model.DB(ctx).Transaction(func(tx *gorm.DB) error {
@@ -593,6 +703,18 @@ func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (in
 		if result.RowsAffected == 0 {
 			return ErrConversationDeleteNotFound
 		}
+		// Execution admissions are only an owner/correlation cache. Remove them
+		// with the owning conversation so an old execution UUID cannot continue
+		// resolving after the visible history has been deleted. The table is an
+		// operator-controlled additive migration, so legacy deployments without
+		// it retain their existing delete behavior.
+		if tx.Migrator().HasTable(&executionAdmission{}) {
+			if err := tx.Where(
+				"user_name = ? AND dialogue_id = ?", name, root.DialogueId,
+			).Delete(&executionAdmission{}).Error; err != nil {
+				return err
+			}
+		}
 		needsTombstone = true
 		return nil
 	})
@@ -616,6 +738,17 @@ func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (in
 }
 
 func (ps *Service) QueryListRename(ctx context.Context, name string, id int, rename string) (string, error) {
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		result := model.DB(ctx).WithContext(ctx).Model(&model.ConversationTurnV2{}).
+			Where("user_name = ? AND id = ? AND parent_id = 0 AND delete_at IS NULL", name, id).
+			Updates(map[string]any{"title_query": rename, "updated_at": time.Now().UTC()})
+		if result.Error != nil {
+			return "", errors.New("failed to update title query list")
+		}
+		if result.RowsAffected > 0 {
+			return rename, nil
+		}
+	}
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and f_id = 0 and delete_at IS NULL", name, id).Update("title_query", rename)
@@ -630,6 +763,17 @@ func (ps *Service) QueryListRename(ctx context.Context, name string, id int, ren
 }
 
 func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, name string) (int, error) {
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		result := model.DB(ctx).WithContext(ctx).Model(&model.ConversationTurnV2{}).
+			Where("user_name = ? AND id = ? AND delete_at IS NULL", name, id).
+			Updates(map[string]any{"reaction_type": reactionType, "updated_at": time.Now().UTC()})
+		if result.Error != nil {
+			return 0, errors.New("failed to update reaction record")
+		}
+		if result.RowsAffected > 0 {
+			return id, nil
+		}
+	}
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("reaction_type", reactionType)
@@ -644,6 +788,17 @@ func (ps *Service) QueryReactionType(ctx context.Context, id int, reactionType, 
 }
 
 func (ps *Service) QueryCollect(ctx context.Context, id int, collectType, name string) (int, error) {
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		result := model.DB(ctx).WithContext(ctx).Model(&model.ConversationTurnV2{}).
+			Where("user_name = ? AND id = ? AND delete_at IS NULL", name, id).
+			Updates(map[string]any{"collect_type": collectType, "updated_at": time.Now().UTC()})
+		if result.Error != nil {
+			return 0, errors.New("failed to update favorite record")
+		}
+		if result.RowsAffected > 0 {
+			return id, nil
+		}
+	}
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{}).Debug()
 
 	result := db.Where("user_name = ? and id = ? and delete_at IS NULL", name, id).Update("collect_type", collectType)
@@ -666,6 +821,27 @@ func (ps *Service) QueryCollectList(ctx context.Context, name string) ([]*common
 		Find(&CollectList).Error
 	if err != nil {
 		return nil, errors.New("collect_list query failed")
+	}
+	if model.DB(ctx).Migrator().HasTable(&model.ConversationTurnV2{}) {
+		var turns []model.ConversationTurnV2
+		if err := model.DB(ctx).WithContext(ctx).
+			Where("user_name = ? AND collect_type = ? AND delete_at IS NULL", name, "1").
+			Order("created_at DESC").Find(&turns).Error; err != nil {
+			return nil, errors.New("collect_list query failed")
+		}
+		seen := make(map[int64]struct{}, len(CollectList)+len(turns))
+		for _, item := range CollectList {
+			seen[item.Id] = struct{}{}
+		}
+		for _, turn := range turns {
+			if _, exists := seen[turn.ID]; exists {
+				continue
+			}
+			CollectList = append(CollectList, &common.ApiQueryCollectListResponse{
+				Id: turn.ID, DialogueId: turn.DialogueID, Query: turn.Query, CreatedAt: turn.CreatedAt,
+			})
+		}
+		sort.Slice(CollectList, func(i, j int) bool { return CollectList[i].CreatedAt.After(CollectList[j].CreatedAt) })
 	}
 
 	return CollectList, nil

@@ -324,8 +324,7 @@ func parseAgentProductResolver(ctx *gin.Context, surface api_service.QuerySurfac
 
 func validateQueryClientTurn(in api_service.QueryInput) error {
 	requiresClientTurn := in.Surface == api_service.QuerySurfaceAgentProduct &&
-		api_service.IsDedicatedAgentProductTool(in.Tool) &&
-		api_service.IsResearchAgentProductTool(in.Tool)
+		api_service.IsDedicatedAgentProductTool(in.Tool)
 	if in.Surface == api_service.QuerySurfaceChat &&
 		in.Mode == "expert" && in.Tool == "InSilicoResearchAgent" {
 		requiresClientTurn = true
@@ -381,6 +380,7 @@ func queryInputForSurface(ctx *gin.Context, surface api_service.QuerySurface, ro
 		History:      ctx.DefaultPostForm("history", "[]"),
 		Mode:         ctx.DefaultPostForm("mode", "instant"),
 		ClientTurnID: strings.TrimSpace(ctx.PostForm("client_turn_id")),
+		Locale:       ctx.GetHeader("Accept-Language"),
 		Surface:      surface,
 	}
 	if surface == api_service.QuerySurfaceAgentProduct {
@@ -482,7 +482,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 	if researchAdmission {
 		knownCurrentTurn := false
 		if hasClientTurnID {
-			knownCurrentTurn, err = ph.service.HasCurrentClientTurn(
+			knownCurrentTurn, err = ph.service.HasExecutionAdmission(
 				serviceCtx,
 				email,
 				clientTurnID,
@@ -533,6 +533,12 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 	}
 	in := queryInputForSurface(ctx, surface, routeTool)
+	// A transport header can supply the same identity as the multipart field.
+	// Minting omitted identities belongs to the canonical Service admission
+	// boundary so HTTP, product, MCP, and internal callers cannot drift.
+	if hasClientTurnID && strings.TrimSpace(in.ClientTurnID) == "" {
+		in.ClientTurnID = clientTurnID
+	}
 	attachments, ok := parseAssetAttachments(ctx.PostForm("attachments"))
 	if !ok {
 		status, message := queryErrorStatus(api_service.ErrInvalidQueryAttachments)
@@ -744,101 +750,10 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			}
 		}
 	}
+	if data.Accepted {
+		_, response := errs.SucResp(data)
+		ctx.JSON(http.StatusAccepted, response)
+		return
+	}
 	ctx.JSON(errs.SucResp(data))
-}
-
-// ResumeQuestionStream is the owner-only SSE resume for an in-flight chat
-// message. It replays unseen hub frames then tails until the run finishes.
-func (ph *Handler) ResumeQuestionStream(ctx *gin.Context) {
-	name, _ := ctx.Get("username")
-	dialogueID := ctx.Param("id")
-	messageID, ok := parsePositiveInt64(ctx.Param("message_id"))
-	if !ok {
-		writeQueryError(ctx, http.StatusBadRequest, "invalid message id")
-		return
-	}
-	afterSeq, ok := parseResumeAfterSeq(ctx)
-	if !ok {
-		writeQueryError(ctx, http.StatusBadRequest, "invalid after")
-		return
-	}
-
-	flusher, canFlush := ctx.Writer.(http.Flusher)
-	if !canFlush {
-		writeQueryError(ctx, http.StatusInternalServerError, "request failed")
-		return
-	}
-
-	headerSent := false
-	ensureSSE := func() {
-		if headerSent {
-			return
-		}
-		ctx.Header("Content-Type", "text/event-stream")
-		ctx.Header("Cache-Control", "no-cache")
-		ctx.Header("Connection", "keep-alive")
-		ctx.Header("X-Accel-Buffering", "no")
-		ctx.Status(http.StatusOK)
-		headerSent = true
-	}
-	forward := func(frame api_service.StreamFrame) error {
-		ensureSSE()
-		if _, err := ctx.Writer.Write(frame.Bytes); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	}
-
-	err := ph.service.ResumeQuestionStream(ctx, name.(string), dialogueID, messageID, afterSeq, forward)
-	if err == nil {
-		ensureSSE()
-		return
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, api_service.ErrConversationLedgerNotFound) {
-		writeQueryError(ctx, http.StatusNotFound, "conversation not found")
-		return
-	}
-	if errors.Is(err, api_service.ErrStreamRunMissing) {
-		ensureSSE()
-		_, _ = ctx.Writer.Write([]byte("event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"stream_run_missing\"}\n\n"))
-		flusher.Flush()
-		return
-	}
-	status, msg := queryErrorStatus(err)
-	if headerSent {
-		msgJSON, _ := json.Marshal(msg)
-		_, _ = fmt.Fprintf(ctx.Writer, "event: RunError\ndata: {\"type\":\"RunError\",\"message\":%s}\n\n", msgJSON)
-		flusher.Flush()
-		return
-	}
-	if status >= http.StatusInternalServerError {
-		rxLog.Sugar().Errorw("ResumeQuestionStream failed", "user", name, "err", err)
-	}
-	writeQueryError(ctx, status, msg)
-}
-
-// QueryAnalystUpdateLog syncs a finished remote task result back into the
-// Web row. The Web app posts task_id plus compute_resource.
-func (ph *Handler) QueryAnalystUpdateLog(ctx *gin.Context) {
-	name, _ := ctx.Get("username")
-	taskID := strings.TrimSpace(ctx.PostForm("task_id"))
-	if taskID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "query.task_id_required")})
-		return
-	}
-	computeResource := ctx.PostForm("compute_resource")
-
-	result, err := ph.service.QueryAnalystUpdateLog(ctx, name.(string), taskID, computeResource)
-	if err != nil {
-		status, msg := queryErrorStatus(err)
-		if status >= http.StatusInternalServerError {
-			rxLog.Sugar().Errorw("ApiQueryAnalystUpdateLog failed", "user", name, "err", err)
-		} else {
-			rxLog.Sugar().Warnw("ApiQueryAnalystUpdateLog client error", "user", name, "status", status, "err", err)
-		}
-		writeQueryError(ctx, status, msg)
-		return
-	}
-	ctx.JSON(errs.SucResp(result))
 }

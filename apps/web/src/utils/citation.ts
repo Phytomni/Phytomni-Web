@@ -5,7 +5,9 @@ export interface ReferenceDocument {
   vl?: string;
   bp?: string;
   ep?: string;
+  ar?: string;
   py?: string;
+  di?: string;
   dl?: string;
   pm?: string;
   title?: string;
@@ -36,7 +38,9 @@ export const normalizeReferenceDocument = (
     vl: readStringField(value, "vl"),
     bp: readStringField(value, "bp"),
     ep: readStringField(value, "ep"),
+    ar: readStringField(value, "ar"),
     py: readStringField(value, "py"),
+    di: readStringField(value, "di"),
     dl: readStringField(value, "dl"),
     pm: readStringField(value, "pm"),
     title: readStringField(value, "title"),

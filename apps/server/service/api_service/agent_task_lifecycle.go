@@ -12,10 +12,7 @@ import (
 	"phytomni-server/model"
 )
 
-var (
-	ErrAgentTaskLifecycleNotFound = errors.New("agent task lifecycle not found")
-	ErrAgentTaskCancelConflict    = errors.New("agent task cancellation is no longer available")
-)
+var ErrAgentTaskLifecycleNotFound = errors.New("agent task lifecycle not found")
 
 const (
 	lifecycleReconciliationCached   = "CACHED"
@@ -71,40 +68,83 @@ type AgentTaskArtifactSummaryDTO struct {
 	HasReport            bool `json:"has_report"`
 }
 
-// AgentTaskLifecycle reads an authenticated task row, reconciles its Bot
-// snapshot when the row is pollable, then derives its public state from the
-// persisted winner. Bot failures deliberately preserve the last local state.
+// AgentTaskLifecycle is a pure owner-scoped projection read. Background
+// workers are the sole authority for Bot reconciliation and message writes;
+// repeated browser GETs therefore cannot advance provider or lifecycle state.
 func (ps *Service) AgentTaskLifecycle(ctx context.Context, rowID int64, username string) (AgentTaskLifecycleDTO, error) {
+	_ = ps
+	if dto, found, err := lifecycleFromExecutionV2(ctx, rowID, username); err != nil {
+		return AgentTaskLifecycleDTO{}, err
+	} else if found {
+		return dto, nil
+	}
 	row, err := loadAgentTaskLifecycleRow(ctx, rowID, username)
 	if err != nil {
 		return AgentTaskLifecycleDTO{}, err
 	}
-	storedProjection := lifecycleStoredProjection(row)
-	pendingDelivery := projectionHasPendingRequiredDelivery(storedProjection) &&
-		!isProjectionFailureStatus(lifecycleScientificStatus(row, storedProjection))
-	if (!pendingDelivery && rowIsTerminal(row.Status)) || strings.TrimSpace(row.BotRunId) == "" {
-		return lifecycleFromStored(row, lifecycleReconciliationCached, nil), nil
-	}
+	return lifecycleFromStored(row, lifecycleReconciliationCached, nil), nil
+}
 
-	record, meta, err := ps.agentRunReader().GetRunWithMeta(ctx, row.BotRunId)
-	if err != nil {
-		return lifecycleFromStored(row, lifecycleReconciliationDegraded, lifecycleErrorCode(lifecycleErrorTransport)), nil
+func lifecycleFromExecutionV2(
+	ctx context.Context,
+	turnID int64,
+	username string,
+) (AgentTaskLifecycleDTO, bool, error) {
+	gdb := model.DB(ctx).WithContext(ctx)
+	if !gdb.Migrator().HasTable(&model.ConversationTurnV2{}) ||
+		!gdb.Migrator().HasTable(&model.QuestionAgentExecutionAdmission{}) {
+		return AgentTaskLifecycleDTO{}, false, nil
 	}
-	if !validLifecycleRunRecord(record, row.BotRunId) {
-		return lifecycleFromStored(row, lifecycleReconciliationDegraded, lifecycleErrorCode(lifecycleErrorContract)), nil
+	var turn model.ConversationTurnV2
+	result := gdb.Where("id = ? AND user_name = ? AND delete_at IS NULL", turnID, username).Take(&turn)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return AgentTaskLifecycleDTO{}, false, nil
 	}
-	if _, err := DecodeRunProjection(record); err != nil {
-		return lifecycleFromStored(row, lifecycleReconciliationDegraded, lifecycleErrorCode(lifecycleErrorContract)), nil
+	if result.Error != nil {
+		return AgentTaskLifecycleDTO{}, false, result.Error
 	}
-	if err := ps.applyBotRunProjection(ctx, row, record, meta); err != nil {
-		return AgentTaskLifecycleDTO{}, err
+	var admission model.QuestionAgentExecutionAdmission
+	if err := gdb.Where("user_name = ? AND execution_id = ?", username, turn.ExecutionID).
+		Take(&admission).Error; err != nil {
+		return AgentTaskLifecycleDTO{}, false, err
 	}
-
-	row, err = loadAgentTaskLifecycleRow(ctx, rowID, username)
-	if err != nil {
-		return AgentTaskLifecycleDTO{}, err
+	status := admission.Status
+	if strings.TrimSpace(status) == "" {
+		status = turn.Status
 	}
-	return lifecycleFromStored(row, lifecycleReconciliationFresh, nil), nil
+	phase, terminal := lifecyclePhase(status, "")
+	if admission.TerminalStatus != nil {
+		phase, terminal = lifecyclePhase(*admission.TerminalStatus, "")
+		terminal = true
+	}
+	resultCount := 0
+	hasReport := false
+	if strings.TrimSpace(admission.ProjectionJSON) != "" {
+		var projection rxBot.ExecutionProjectionV2
+		if err := json.Unmarshal([]byte(admission.ProjectionJSON), &projection); err != nil {
+			return AgentTaskLifecycleDTO{}, false, err
+		}
+		resultCount = boundedLifecycleCount(len(projection.Results))
+	}
+	var visibleMessages int64
+	if gdb.Migrator().HasTable(&model.ConversationMessageV2{}) {
+		if err := gdb.Model(&model.ConversationMessageV2{}).
+			Where("user_name = ? AND execution_id = ? AND role = ? AND content <> '' AND delete_at IS NULL", username, turn.ExecutionID, "assistant").
+			Count(&visibleMessages).Error; err != nil {
+			return AgentTaskLifecycleDTO{}, false, err
+		}
+		hasReport = visibleMessages > 0
+	}
+	return AgentTaskLifecycleDTO{
+		ID: turn.ID, Phase: phase, Terminal: terminal,
+		ChildTaskCount: resultCount, ChildWorkAccepted: resultCount > 0,
+		ReportRevision: admission.ProjectionRevision,
+		ArtifactSummary: AgentTaskArtifactSummaryDTO{
+			OutputDirectoryCount: resultCount, HasReport: hasReport,
+		},
+		Reconciliation:   lifecycleReconciliationCached,
+		TrackingDegraded: strings.EqualFold(admission.TrackingHealth, "degraded"),
+	}, true, nil
 }
 
 func loadAgentTaskLifecycleRow(ctx context.Context, rowID int64, username string) (*model.QuestionAgentLog, error) {
@@ -172,10 +212,6 @@ func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunPro
 	return row.Status
 }
 
-func deliveryFailureKeepsScientificSuccess(errorCode string) bool {
-	return errorCode == "no_user_deliverables" || errorCode == "artifact_manifest_invalid"
-}
-
 func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {
 	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required ||
 		phase == "FAILED" || phase == "TIMED_OUT" || phase == "CANCELLED" {
@@ -183,14 +219,8 @@ func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjec
 	}
 	switch projection.Delivery.Status {
 	case "pending":
-		if phase == "SUCCEEDED" || phase == "FINALIZING" {
-			return "FINALIZING", false
-		}
 		return "RUNNING", false
 	case "failed":
-		if deliveryFailureKeepsScientificSuccess(projection.Delivery.ErrorCode) && phase == "SUCCEEDED" {
-			return "SUCCEEDED", true
-		}
 		return "FAILED", true
 	default:
 		return phase, terminal
@@ -244,7 +274,7 @@ func lifecycleStoredProjection(row *model.QuestionAgentLog) BotRunProjection {
 
 func lifecyclePhase(status, workStage string) (string, bool) {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case "QUEUED", "PENDING", "ACCEPTED":
+	case "ADMITTED", "QUEUED", "PENDING", "ACCEPTED":
 		return "PREPARING", false
 	case "RUNNING":
 		switch workStage {

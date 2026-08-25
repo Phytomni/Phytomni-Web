@@ -8,28 +8,8 @@
       {{ t("chat.log.unavailable") }}
     </div>
     <template v-else>
-      <div v-if="canRequestLegacyRefresh" class="log-actions">
-        <el-button
-          text
-          size="small"
-          data-testid="analyst-log-update"
-          :loading="updating"
-          :disabled="updating"
-          @click="emit('update')"
-        >
-          <el-icon>
-            <Refresh />
-          </el-icon>
-          {{ t("chat.log.historicalRefresh") }}
-        </el-button>
-      </div>
-
       <div v-if="errorKind" class="log-error" data-testid="analyst-log-error">
-        <span>{{
-          errorKind === "fetch"
-            ? t("chat.log.fetchError")
-            : t("chat.log.updateError")
-        }}</span>
+        <span>{{ t("chat.log.fetchError") }}</span>
         <el-button
           text
           size="small"
@@ -76,7 +56,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Loading, Refresh } from "@element-plus/icons-vue";
+import { Loading } from "@element-plus/icons-vue";
 import { formatLogContentWithColors } from "../utils/agent-log";
 import type { LogErrorKind } from "../composables/useLogView";
 import type { AnalystAgentLog } from "@/api/types";
@@ -84,25 +64,16 @@ import { computed } from "vue";
 
 const props = defineProps<{
   rowId?: string;
-  taskId?: string;
   logData?: AnalystAgentLog;
   loading?: boolean;
-  updating?: boolean;
   errorKind?: LogErrorKind;
 }>();
 
 const emit = defineEmits<{
-  update: [];
   retry: [];
 }>();
 
 const { t } = useI18n();
-const canRequestLegacyRefresh = computed(
-  () =>
-    props.logData?.source === "LEGACY_TASK" &&
-    props.logData.can_request_legacy_refresh === true &&
-    !!props.taskId
-);
 const emptyLabel = computed(() => {
   if (props.logData?.state === "PENDING") return t("chat.log.pending");
   if (props.logData?.state === "TERMINAL_EMPTY") {
@@ -116,23 +87,6 @@ const emptyLabel = computed(() => {
 <style scoped lang="scss">
 .chat-analyst-log {
   min-width: 0;
-}
-
-.log-actions {
-  margin-bottom: 6px;
-  display: flex;
-  justify-content: flex-start;
-
-  :deep(.el-button) {
-    min-height: 24px;
-    padding: 2px 0;
-    color: var(--phy-color-action-text);
-    font-size: 12px;
-  }
-
-  :deep(.el-button .el-icon) {
-    margin-right: 4px;
-  }
 }
 
 .log-loading {

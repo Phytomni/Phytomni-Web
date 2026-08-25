@@ -43,6 +43,7 @@ func (ph *Handler) GeneList(ctx *gin.Context) {
 		list, total, totalPages, err := ph.service.GeneList(ctx, current, size)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
+			return
 		}
 
 		data := &common.GeneListResponse{

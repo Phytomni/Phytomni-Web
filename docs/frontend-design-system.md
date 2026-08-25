@@ -245,11 +245,12 @@ error shows the retryable error state. These fixture names are visual-state
 contracts, while per-dialogue runtime hydration remains `loading`, `ready`,
 `history-empty`, or `error` in `ChatUIState`.
 
-There is exactly one simulated percentage surface: `SendProgress` for perceived
-agent processing. `progressAt()` is an elapsed-time curve capped at `98%` while
-the agent is active and reaches `100%` only when the real completion state is
-known. It must never be described as measured backend progress or used for file
-transfers.
+Agent processing has no simulated percentage or elapsed-time state machine.
+`ExecutionActivityPanel` renders the durable execution snapshot and journal
+events from the same `execution_id` before and after message admission. Its
+status, elapsed time, Todo, Results, and terminal state must come from that
+canonical execution projection; transport heartbeats may show connectivity but
+must never invent Agent work.
 
 Real transfer progress uses `TransferSnapshot` and `TransferProgress`:
 

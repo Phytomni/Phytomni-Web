@@ -84,6 +84,192 @@ func (m *QuestionAgentLog) TableName() string {
 	return "question_agent_logs"
 }
 
+// QuestionAgentExecutionAdmission is the early owner/correlation anchor for a
+// blocking turn. Canonical message and Bot run identities are nullable until
+// the synchronous dispatch has allocated and returned them.
+type QuestionAgentExecutionAdmission struct {
+	UserName             string     `gorm:"column:user_name;type:varchar(255);primaryKey;index:idx_execution_admission_run,priority:1" json:"-"`
+	ExecutionID          string     `gorm:"column:execution_id;type:varchar(128);primaryKey" json:"execution_id"`
+	RequestFingerprint   string     `gorm:"column:request_fingerprint;type:char(64);not null" json:"-"`
+	FingerprintVersion   int        `gorm:"column:fingerprint_version;type:int;not null;default:1" json:"fingerprint_version"`
+	DialogueID           *string    `gorm:"column:dialogue_id;type:varchar(255)" json:"dialogue_id,omitempty"`
+	TurnID               *int64     `gorm:"column:turn_id;type:bigint;index:idx_execution_admission_turn" json:"turn_id,omitempty"`
+	MessageID            *int64     `gorm:"column:message_id;type:bigint" json:"message_id,omitempty"`
+	UserMessageID        *string    `gorm:"column:user_message_id;type:varchar(128)" json:"user_message_id,omitempty"`
+	AssistantMessageID   *string    `gorm:"column:assistant_message_id;type:varchar(128)" json:"assistant_message_id,omitempty"`
+	BotRunID             *string    `gorm:"column:bot_run_id;type:varchar(128);index:idx_execution_admission_run,priority:2" json:"bot_run_id,omitempty"`
+	Status               string     `gorm:"column:status;type:varchar(32);not null" json:"status"`
+	LatestCursor         int64      `gorm:"column:latest_cursor;type:bigint;not null;default:0" json:"latest_cursor"`
+	DispatchRevision     int64      `gorm:"column:dispatch_revision;type:bigint;not null;default:0" json:"dispatch_revision"`
+	ProjectionRevision   int64      `gorm:"column:projection_revision;type:bigint;not null;default:0" json:"projection_revision"`
+	ContentRevision      int64      `gorm:"column:content_revision;type:bigint;not null;default:0" json:"content_revision"`
+	ContentOffset        int64      `gorm:"column:content_offset;type:bigint;not null;default:0" json:"content_offset"`
+	ContextRevision      int64      `gorm:"column:context_revision;type:bigint;not null;default:0" json:"context_revision"`
+	TerminalStatus       *string    `gorm:"column:terminal_status;type:varchar(32)" json:"terminal_status,omitempty"`
+	TerminalAt           *time.Time `gorm:"column:terminal_at;type:datetime" json:"terminal_at,omitempty"`
+	LastBotContactAt     *time.Time `gorm:"column:last_bot_contact_at;type:datetime" json:"last_bot_contact_at,omitempty"`
+	TrackingHealth       string     `gorm:"column:tracking_health;type:varchar(32);not null;default:'pending'" json:"tracking_health"`
+	ProjectionLeaseOwner *string    `gorm:"column:projection_lease_owner;type:varchar(128)" json:"-"`
+	ProjectionLeaseUntil *time.Time `gorm:"column:projection_lease_until;type:datetime;index:idx_execution_projection_lease" json:"-"`
+	ProjectionAttempts   int        `gorm:"column:projection_attempts;type:int;not null;default:0" json:"projection_attempts"`
+	NextProjectionAt     *time.Time `gorm:"column:next_projection_at;type:datetime;index:idx_execution_projection_due" json:"-"`
+	ProjectionJSON       string     `gorm:"column:projection_json;type:longtext" json:"-"`
+	CreatedAt            time.Time  `gorm:"column:created_at;type:datetime;not null" json:"created_at"`
+	UpdatedAt            time.Time  `gorm:"column:updated_at;type:datetime;not null;index:idx_execution_admission_updated" json:"updated_at"`
+}
+
+func (QuestionAgentExecutionAdmission) TableName() string {
+	return "question_agent_execution_admissions"
+}
+
+// ConversationTurnV2 is the canonical owner-scoped conversation turn
+// metadata for V2 admissions. Visible content belongs to
+// ConversationMessageV2 and execution facts belong to the Bot journal and
+// QuestionAgentExecutionAdmission; this row exists only for stable numeric
+// threading ids and Web-owned conversation metadata. New V2 executions must
+// not synthesize a QuestionAgentLog compatibility row.
+type ConversationTurnV2 struct {
+	ID           int64      `gorm:"column:id;type:bigint;primaryKey" json:"id"`
+	UserName     string     `gorm:"column:user_name;type:varchar(255);not null;uniqueIndex:uniq_conversation_turn_owner_execution,priority:1;index:idx_conversation_turn_dialogue,priority:1" json:"-"`
+	ExecutionID  string     `gorm:"column:execution_id;type:varchar(128);not null;uniqueIndex:uniq_conversation_turn_owner_execution,priority:2" json:"execution_id"`
+	DialogueID   string     `gorm:"column:dialogue_id;type:varchar(255);not null;index:idx_conversation_turn_dialogue,priority:2" json:"dialogue_id"`
+	ParentID     int64      `gorm:"column:parent_id;type:bigint;not null;default:0;index:idx_conversation_turn_parent" json:"parent_id"`
+	Operation    string     `gorm:"column:operation;type:varchar(16);not null" json:"operation"`
+	Query        string     `gorm:"column:query;type:mediumtext;not null" json:"query"`
+	TitleQuery   string     `gorm:"column:title_query;type:text;not null" json:"title_query"`
+	ToolName     string     `gorm:"column:tool_name;type:varchar(64);not null" json:"tool_name"`
+	Mode         string     `gorm:"column:mode;type:varchar(20);not null" json:"mode"`
+	Status       string     `gorm:"column:status;type:varchar(32);not null" json:"status"`
+	ReactionType string     `gorm:"column:reaction_type;type:varchar(8);not null;default:'0'" json:"reaction_type"`
+	CollectType  string     `gorm:"column:collect_type;type:varchar(8);not null;default:'0'" json:"collect_type"`
+	ContextJSON  string     `gorm:"column:context_json;type:longtext" json:"-"`
+	CreatedAt    time.Time  `gorm:"column:created_at;type:datetime;not null" json:"created_at"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at;type:datetime;not null;index:idx_conversation_turn_updated" json:"updated_at"`
+	DeleteAt     *time.Time `gorm:"column:delete_at;type:datetime;index:idx_conversation_turn_retention" json:"-"`
+}
+
+func (ConversationTurnV2) TableName() string {
+	return "conversation_turns_v2"
+}
+
+// ConversationTurnSequenceV2 owns the numeric turn-id namespace shared with
+// retained legacy QuestionAgentLog ids. The allocator seeds itself from both
+// stores and advances this singleton under a database transaction, so V2 ids
+// remain safe for existing numeric REST contracts without writing legacy rows.
+type ConversationTurnSequenceV2 struct {
+	Name      string    `gorm:"column:name;type:varchar(32);primaryKey" json:"-"`
+	LastID    int64     `gorm:"column:last_id;type:bigint;not null" json:"last_id"`
+	UpdatedAt time.Time `gorm:"column:updated_at;type:datetime;not null" json:"updated_at"`
+}
+
+func (ConversationTurnSequenceV2) TableName() string {
+	return "conversation_turn_sequences_v2"
+}
+
+// ConversationMessageV2 is Web's ordered, owner-scoped conversation read
+// model. Bot remains authoritative for execution facts; the Web projector is
+// the sole writer of Bot-derived assistant/tool/summary/result items. The
+// legacy question_agent_logs row is retained only as a bounded compatibility
+// alias while existing reactions, collections, and history consumers migrate.
+type ConversationMessageV2 struct {
+	MessageID       string                            `gorm:"column:message_id;type:varchar(128);primaryKey" json:"message_id"`
+	UserName        string                            `gorm:"column:user_name;type:varchar(255);not null;uniqueIndex:uniq_conversation_message_owner_index,priority:1;uniqueIndex:uniq_conversation_message_source_event,priority:1;index:idx_conversation_message_execution,priority:1" json:"-"`
+	DialogueID      string                            `gorm:"column:dialogue_id;type:varchar(255);not null;uniqueIndex:uniq_conversation_message_owner_index,priority:2;index:idx_conversation_message_dialogue" json:"conversation_id"`
+	MessageIndex    int64                             `gorm:"column:message_index;type:bigint;not null;uniqueIndex:uniq_conversation_message_owner_index,priority:3" json:"message_index"`
+	ExecutionID     string                            `gorm:"column:execution_id;type:varchar(128);not null;uniqueIndex:uniq_conversation_message_source_event,priority:2;index:idx_conversation_message_execution,priority:2" json:"execution_id"`
+	TurnID          *int64                            `gorm:"column:turn_id;type:bigint;index:idx_conversation_message_turn" json:"turn_id,omitempty"`
+	LegacyMessageID *int64                            `gorm:"column:legacy_message_id;type:bigint;index:idx_conversation_message_legacy" json:"legacy_message_id,omitempty"`
+	SourceMessageID string                            `gorm:"column:source_message_id;type:varchar(128);not null" json:"source_message_id"`
+	ParentMessageID *string                           `gorm:"column:parent_message_id;type:varchar(128)" json:"parent_message_id,omitempty"`
+	MessageType     string                            `gorm:"column:message_type;type:varchar(32);not null" json:"type"`
+	Role            string                            `gorm:"column:role;type:varchar(32);not null" json:"role"`
+	Visibility      string                            `gorm:"column:visibility;type:varchar(32);not null;default:'user'" json:"visibility"`
+	SourceEventID   *string                           `gorm:"column:source_event_id;type:varchar(128);uniqueIndex:uniq_conversation_message_source_event,priority:3" json:"source_event_id,omitempty"`
+	ToolCallID      *string                           `gorm:"column:tool_call_id;type:varchar(128)" json:"tool_call_id,omitempty"`
+	ContentRevision int64                             `gorm:"column:content_revision;type:bigint;not null;default:0" json:"content_revision"`
+	ContentOffset   int64                             `gorm:"column:content_offset;type:bigint;not null;default:0" json:"content_offset"`
+	ContentLength   int64                             `gorm:"column:content_length;type:bigint;not null;default:0" json:"content_length"`
+	ContentSHA256   string                            `gorm:"column:content_sha256;type:char(64);not null;default:''" json:"content_sha256,omitempty"`
+	Content         string                            `gorm:"column:content;type:mediumtext;not null" json:"content"`
+	References      []ConversationCitationReferenceV2 `gorm:"column:references_json;type:longtext;serializer:json" json:"references,omitempty"`
+	TargetJSON      string                            `gorm:"column:target_json;type:longtext" json:"-"`
+	Status          string                            `gorm:"column:status;type:varchar(32);not null" json:"status"`
+	OccurredAt      time.Time                         `gorm:"column:occurred_at;type:datetime;not null" json:"occurred_at"`
+	CreatedAt       time.Time                         `gorm:"column:created_at;type:datetime;not null" json:"created_at"`
+	UpdatedAt       time.Time                         `gorm:"column:updated_at;type:datetime;not null" json:"updated_at"`
+	DeleteAt        *time.Time                        `gorm:"column:delete_at;type:datetime;index:idx_conversation_message_retention" json:"-"`
+}
+
+// ConversationCitationReferenceV2 is the finite bibliography persisted with
+// one projected assistant message. Resolver URLs are derived by the browser
+// from DOI/PMID values and are never stored in the public execution journal.
+type ConversationCitationReferenceV2 struct {
+	Title      string `json:"title,omitempty"`
+	Authors    string `json:"au,omitempty"`
+	WorkTitle  string `json:"ti,omitempty"`
+	Source     string `json:"so,omitempty"`
+	Volume     string `json:"vl,omitempty"`
+	BeginPage  string `json:"bp,omitempty"`
+	EndPage    string `json:"ep,omitempty"`
+	Article    string `json:"ar,omitempty"`
+	Year       string `json:"py,omitempty"`
+	DOI        string `json:"di,omitempty"`
+	PMID       string `json:"pm,omitempty"`
+	DOIMissing *bool  `json:"doi_missing,omitempty"`
+}
+
+func (ConversationMessageV2) TableName() string {
+	return "conversation_messages_v2"
+}
+
+// QuestionAgentExecutionOutbox is the durable dispatch intent created in the
+// same transaction as the assistant shell and admission. Workers lease rows;
+// HTTP request goroutines never call Bot for V2 executions.
+type QuestionAgentExecutionOutbox struct {
+	ID               int64      `gorm:"column:id;type:bigint;primaryKey;autoIncrement" json:"id"`
+	UserName         string     `gorm:"column:user_name;type:varchar(255);not null;uniqueIndex:uniq_execution_outbox_owner_execution" json:"-"`
+	ExecutionID      string     `gorm:"column:execution_id;type:varchar(128);not null;uniqueIndex:uniq_execution_outbox_owner_execution" json:"execution_id"`
+	CommandJSON      string     `gorm:"column:command_json;type:longtext;not null" json:"-"`
+	State            string     `gorm:"column:state;type:varchar(32);not null;default:'pending';index:idx_execution_outbox_due,priority:1" json:"state"`
+	Attempts         int        `gorm:"column:attempts;type:int;not null;default:0" json:"attempts"`
+	Revision         int64      `gorm:"column:revision;type:bigint;not null;default:0" json:"revision"`
+	NextAttemptAt    time.Time  `gorm:"column:next_attempt_at;type:datetime;not null;index:idx_execution_outbox_due,priority:2" json:"next_attempt_at"`
+	LeaseOwner       *string    `gorm:"column:lease_owner;type:varchar(128)" json:"-"`
+	LeaseUntil       *time.Time `gorm:"column:lease_until;type:datetime;index:idx_execution_outbox_lease" json:"-"`
+	Classification   *string    `gorm:"column:classification;type:varchar(16)" json:"classification,omitempty"`
+	BoundaryState    *string    `gorm:"column:boundary_state;type:varchar(32)" json:"boundary_state,omitempty"`
+	FirstErrorCode   *string    `gorm:"column:first_error_code;type:varchar(64)" json:"first_error_code,omitempty"`
+	LastErrorCode    *string    `gorm:"column:last_error_code;type:varchar(64)" json:"last_error_code,omitempty"`
+	NextReconcileAt  *time.Time `gorm:"column:next_reconcile_at;type:datetime;index:idx_execution_outbox_reconcile" json:"next_reconcile_at,omitempty"`
+	LastErrorMessage *string    `gorm:"column:last_error_message;type:varchar(512)" json:"-"`
+	AcknowledgedAt   *time.Time `gorm:"column:acknowledged_at;type:datetime" json:"acknowledged_at,omitempty"`
+	DeadLetterAt     *time.Time `gorm:"column:dead_letter_at;type:datetime" json:"dead_letter_at,omitempty"`
+	CreatedAt        time.Time  `gorm:"column:created_at;type:datetime;not null" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at;type:datetime;not null" json:"updated_at"`
+}
+
+func (QuestionAgentExecutionOutbox) TableName() string {
+	return "question_agent_execution_outbox"
+}
+
+// QuestionAgentExecutionEventV2 is the bounded Web cache of Bot-committed
+// public facts. It exists for conversation history/offline UI only; Bot's
+// journal remains the source of truth.
+type QuestionAgentExecutionEventV2 struct {
+	UserName    string    `gorm:"column:user_name;type:varchar(255);primaryKey" json:"-"`
+	ExecutionID string    `gorm:"column:execution_id;type:varchar(128);primaryKey" json:"execution_id"`
+	Seq         int64     `gorm:"column:seq;type:bigint;primaryKey" json:"seq"`
+	EventID     string    `gorm:"column:event_id;type:varchar(128);not null;uniqueIndex:uniq_execution_event_owner_id" json:"event_id"`
+	EventType   string    `gorm:"column:event_type;type:varchar(64);not null;index:idx_execution_event_type" json:"event_type"`
+	EventJSON   string    `gorm:"column:event_json;type:longtext;not null" json:"-"`
+	OccurredAt  time.Time `gorm:"column:occurred_at;type:datetime;not null" json:"occurred_at"`
+	CreatedAt   time.Time `gorm:"column:created_at;type:datetime;not null" json:"created_at"`
+}
+
+func (QuestionAgentExecutionEventV2) TableName() string {
+	return "question_agent_execution_events_v2"
+}
+
 type GeneList struct {
 	Id       int64  `gorm:"column:id;type:int(11) unsigned;primary_key;AUTO_INCREMENT;comment:primary key ID" json:"id"`
 	Title    string `gorm:"column:title;type:varchar(255);comment:title;NOT NULL" json:"title"`

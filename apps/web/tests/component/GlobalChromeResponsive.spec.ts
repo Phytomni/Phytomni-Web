@@ -154,7 +154,7 @@ describe("Global application chrome", () => {
   });
 
   it("uses the product mark for assistant message identity", () => {
-    expect(CHAT_ROW_SOURCE).toContain("@/assets/images/chat/logo.png");
+    expect(CHAT_ROW_SOURCE).toContain('const BOT_LOGO_SRC = "/logo.png"');
     expect(CHAT_ROW_SOURCE).not.toContain("/avatars/bot.svg");
   });
 

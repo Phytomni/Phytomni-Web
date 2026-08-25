@@ -6,6 +6,31 @@ import {
 import { mustGet } from "../../../../helpers/mockFactories";
 
 describe("reduceAGUIEvent", () => {
+  it("folds a committed phyto.run_event outside transcript blocks", () => {
+    const state = reduceAGUIEvent(initReducerState(), {
+      type: "Custom",
+      data: {
+        name: "phyto.run_event",
+        value: {
+          event: {
+            schema_version: 1,
+            event_id: "evt-1",
+            run_id: "run-1",
+            seq: 1,
+            occurred_at: "2026-08-18T00:00:00Z",
+            kind: "run.accepted",
+            status: "queued",
+            summary: { key: "activity.run.accepted", text: "Accepted" },
+            payload: {},
+            ignorable: false,
+          },
+        },
+      },
+    });
+    expect(state.runId).toBe("run-1");
+    expect(state.executionRun?.latestSeq).toBe(1);
+    expect(state.blocks).toEqual([]);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

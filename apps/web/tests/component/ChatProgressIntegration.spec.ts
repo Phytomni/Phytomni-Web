@@ -1,19 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
-const SEND_PROGRESS_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/components/SendProgress.vue"),
-  "utf8"
-);
-const AGENT_PROGRESS_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/utils/agentProgress.ts"),
+const EXECUTION_ACTIVITY_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../src/views/chat/components/ExecutionActivityPanel.vue"
+  ),
   "utf8"
 );
 const COMPOSER_SOURCE = readFileSync(
@@ -43,69 +40,32 @@ const loadingStart = CHAT_SOURCE.indexOf("<!-- Loading message:");
 const loadingEnd = CHAT_SOURCE.indexOf("</ChatMessageRow>", loadingStart);
 const LOADING_BUBBLE = CHAT_SOURCE.slice(loadingStart, loadingEnd);
 
-const getMessage = (messages: unknown, path: string) =>
-  path.split(".").reduce<unknown>((node, key) => {
-    if (node && typeof node === "object" && key in node) {
-      return (node as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, messages);
-
 describe("Chat progress placement integration", () => {
-  it("renders TransferProgress or SendProgress mutually exclusively in the loading bubble", () => {
+  it("renders upload progress or the same canonical execution activity in the loading bubble", () => {
     expect(LOADING_BUBBLE).toContain("<TransferProgress");
-    expect(LOADING_BUBBLE).toContain("<SendProgress");
+    expect(LOADING_BUBBLE).toContain("<ExecutionActivityPanel");
     expect(LOADING_BUBBLE).toMatch(
       /<TransferProgress[\s\S]*?v-if="uploadTransfer"/
     );
-    expect(LOADING_BUBBLE).toMatch(/<SendProgress[\s\S]*?v-else/);
-    // Both must not appear under a simultaneous v-if without exclusion.
-    expect(LOADING_BUBBLE).not.toMatch(
-      /<TransferProgress[\s\S]*?<SendProgress(?![\s\S]*v-else)/
-    );
+    expect(LOADING_BUBBLE).toMatch(/<ExecutionActivityPanel[\s\S]*?v-else/);
+    expect(LOADING_BUBBLE).not.toContain("<SendProgress");
+    expect(CHAT_SOURCE).not.toContain("PendingExecutionActivity");
+    expect(CHAT_SOURCE).not.toContain("PendingExecutionRail");
   });
 
-  it("uses a routing-derived stage label without inferring one from elapsed time", () => {
-    expect(LOADING_BUBBLE).toContain(
-      "progressLabelKey === 'chat.progress.selectingAgent'"
-    );
-    expect(CHAT_SOURCE).toMatch(
-      /const progressLabelKey = computed\(\(\) =>[\s\S]*?chatMode\.value === "expert"[\s\S]*?activeAgentName === ""[\s\S]*?"chat\.progress\.selectingAgent"[\s\S]*?: "chat\.progress\.processing"/
-    );
-    expect(SEND_PROGRESS_SOURCE).toContain("stageLabel?: string");
-    expect(SEND_PROGRESS_SOURCE).toContain("revealedStageCount(");
-    expect(SEND_PROGRESS_SOURCE).toContain("stepDurationMs(");
-    expect(SEND_PROGRESS_SOURCE).not.toMatch(
-      /stageLabel\s*=\s*(?:progressAt|elapsedMs|config)/
-    );
-    expect(AGENT_PROGRESS_SOURCE).not.toMatch(/etaKey|chat\.eta/);
+  it("keeps one Todo and Results rail for admission and execution", () => {
+    expect(CHAT_SOURCE).toContain("<ExecutionRail");
+    expect(CHAT_SOURCE).not.toContain("pendingBlockingExecution");
   });
 
-  it("locks progress locale keys and absence of chat.eta.*", () => {
-    expect(getMessage(enUS, "chat.progress.processing")).toBe("Processing");
-    expect(getMessage(zhCN, "chat.progress.processing")).toBe("处理中");
-    expect(getMessage(enUS, "chat.progress.selectingAgent")).toBe(
-      "Selecting an agent…"
-    );
-    expect(getMessage(zhCN, "chat.progress.selectingAgent")).toBe(
-      "正在选择智能体…"
-    );
-    expect(getMessage(enUS, "chat.progress.valueText")).toBe(
-      "Processing, {percent}%"
-    );
-    expect(getMessage(zhCN, "chat.progress.valueText")).toBe(
-      "处理中，{percent}%"
-    );
-    expect(getMessage(enUS, "chat.progress.etaMinutes")).toEqual(
-      expect.any(String)
-    );
-    expect(getMessage(enUS, "chat.progress.etaHours")).toEqual(
-      expect.any(String)
-    );
-    expect(getMessage(enUS, "chat.eta")).toBeUndefined();
-    expect(getMessage(zhCN, "chat.eta")).toBeUndefined();
-    expect(getMessage(enUS, "chat.eta.fast")).toBeUndefined();
-    expect(getMessage(zhCN, "chat.eta.fast")).toBeUndefined();
+  it("derives activity only from the canonical execution state", () => {
+    expect(EXECUTION_ACTIVITY_SOURCE).toContain("<ExecutionTimeline");
+    expect(EXECUTION_ACTIVITY_SOURCE).toContain("executionActivityIsStreaming");
+    expect(CHAT_SOURCE).not.toContain("progressLabelKey");
+    expect(CHAT_SOURCE).not.toContain("activeAgentName");
+    expect(EXECUTION_ACTIVITY_SOURCE).not.toContain('role="progressbar"');
+    expect(CHAT_SOURCE).not.toContain("SendProgress");
+    expect(CHAT_SOURCE).not.toContain("agentProgress");
   });
 
   it("keeps aggregate transfer progress separate from per-file recovery controls", () => {

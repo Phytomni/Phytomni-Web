@@ -25,7 +25,9 @@ function trackedTestSources(): TestSource[] {
         (entry.name.endsWith(".spec.ts") || entry.name.endsWith(".test.ts")) &&
         !absolutePath.includes("/visual/")
       ) {
-        paths.push(absolutePath.slice(APP_ROOT.length + 1));
+        paths.push(
+          absolutePath.slice(APP_ROOT.length + 1).replaceAll("\\", "/")
+        );
       }
     }
   };

@@ -17,6 +17,48 @@ export const CANONICAL_AGENT_TOOLS = [
 
 export type CanonicalAgentTool = (typeof CANONICAL_AGENT_TOOLS)[number];
 
+const CANONICAL_AGENT_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+
+export const CANONICAL_AGENT_SLUG_BY_TOOL: Record<CanonicalAgentTool, string> =
+  {
+    ChatAgent: "chat",
+    KnowledgeAgent: "knowledge",
+    DataAgent: "data",
+    ReviewAgent: "review",
+    BriefGeneAgent: "brief_gene",
+    AnalystAgent: "analyst",
+    DeepGenomeAgent: "deep_genome",
+    InSilicoResearchAgent: "research",
+    DigitalDesignAgent: "design",
+    GeneNetworkAgent: "network",
+  };
+
+export const CANONICAL_AGENT_TOOL_BY_SLUG: Readonly<
+  Record<string, CanonicalAgentTool>
+> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(CANONICAL_AGENT_SLUG_BY_TOOL).map(([tool, slug]) => [
+      slug,
+      tool as CanonicalAgentTool,
+    ])
+  )
+);
+
+export function isCanonicalAgentTool(
+  value: string | null | undefined
+): value is CanonicalAgentTool {
+  return typeof value === "string" && CANONICAL_AGENT_TOOL_SET.has(value);
+}
+
+export function canonicalAgentToolFromIdentity(
+  selectedAgentId: string | null | undefined,
+  agentSlug: string | null | undefined
+): CanonicalAgentTool | undefined {
+  if (isCanonicalAgentTool(selectedAgentId)) return selectedAgentId;
+  if (!agentSlug) return undefined;
+  return CANONICAL_AGENT_TOOL_BY_SLUG[agentSlug];
+}
+
 /**
  * Stable product order for every user-facing Chat agent selector.
  *

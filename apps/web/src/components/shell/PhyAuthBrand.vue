@@ -2,7 +2,7 @@
   <div class="phy-auth-brand">
     <img
       class="phy-auth-brand__mark"
-      src="/logo.png"
+      :src="BRAND_LOGO_SRC"
       alt=""
       aria-hidden="true"
     />
@@ -11,6 +11,8 @@
 </template>
 
 <script setup lang="ts">
+const BRAND_LOGO_SRC = "/logo.png";
+
 defineProps<{
   title: string;
 }>();

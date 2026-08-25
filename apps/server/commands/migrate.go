@@ -323,6 +323,103 @@ func Migrate() *cli.Command {
 				},
 			},
 			{
+				Name:        "add-execution-event-projection",
+				Usage:       "add the isolated execution event synchronization table",
+				Description: "Add the message-bound Bot execution-event cursor and sanitized projection table. Idempotent and operator-controlled.",
+				Action: func(ctx *cli.Context) error {
+					return model.Default().Exec(`CREATE TABLE IF NOT EXISTS question_agent_execution_states (
+						message_id BIGINT NOT NULL PRIMARY KEY,
+						user_name VARCHAR(255) NOT NULL,
+						dialogue_id VARCHAR(255) NOT NULL,
+						bot_run_id VARCHAR(128) NOT NULL,
+						latest_cursor BIGINT NOT NULL DEFAULT 0,
+						projection_json LONGTEXT NULL,
+						updated_at DATETIME NOT NULL,
+						UNIQUE KEY idx_execution_state_owner_run (user_name, dialogue_id, bot_run_id)
+					)`).Error
+				},
+			},
+			{
+				Name:        "add-execution-admissions",
+				Usage:       "add the owner-scoped early execution admission table",
+				Description: "Persist browser execution identities before blocking Bot dispatch. Idempotent and operator-controlled.",
+				Action: func(ctx *cli.Context) error {
+					return model.Default().Exec(`CREATE TABLE IF NOT EXISTS question_agent_execution_admissions (
+						user_name VARCHAR(255) NOT NULL,
+						execution_id VARCHAR(128) NOT NULL,
+						request_fingerprint CHAR(64) NOT NULL,
+						dialogue_id VARCHAR(255) NULL,
+						message_id BIGINT NULL,
+						bot_run_id VARCHAR(128) NULL,
+						status VARCHAR(32) NOT NULL,
+						latest_cursor BIGINT NOT NULL DEFAULT 0,
+						projection_json LONGTEXT NULL,
+						created_at DATETIME NOT NULL,
+						updated_at DATETIME NOT NULL,
+						PRIMARY KEY (user_name, execution_id),
+						KEY idx_execution_admission_run (user_name, bot_run_id),
+						KEY idx_execution_admission_updated (updated_at)
+					)`).Error
+				},
+			},
+			{
+				Name:        "add-execution-runtime-v2",
+				Usage:       "extend execution admissions and add the durable dispatch outbox",
+				Description: "Additive, idempotent V2 execution-runtime migration. Existing V1 rows remain readable and are not rewritten.",
+				Action: func(ctx *cli.Context) error {
+					db := model.Default()
+					columns := []struct {
+						name string
+						ddl  string
+					}{
+						{"fingerprint_version", "ALTER TABLE question_agent_execution_admissions ADD COLUMN fingerprint_version INT NOT NULL DEFAULT 1 AFTER request_fingerprint"},
+						{"turn_id", "ALTER TABLE question_agent_execution_admissions ADD COLUMN turn_id BIGINT NULL AFTER dialogue_id"},
+						{"user_message_id", "ALTER TABLE question_agent_execution_admissions ADD COLUMN user_message_id VARCHAR(128) NULL AFTER message_id"},
+						{"assistant_message_id", "ALTER TABLE question_agent_execution_admissions ADD COLUMN assistant_message_id VARCHAR(128) NULL AFTER user_message_id"},
+						{"dispatch_revision", "ALTER TABLE question_agent_execution_admissions ADD COLUMN dispatch_revision BIGINT NOT NULL DEFAULT 0 AFTER latest_cursor"},
+						{"projection_revision", "ALTER TABLE question_agent_execution_admissions ADD COLUMN projection_revision BIGINT NOT NULL DEFAULT 0 AFTER dispatch_revision"},
+						{"content_revision", "ALTER TABLE question_agent_execution_admissions ADD COLUMN content_revision BIGINT NOT NULL DEFAULT 0 AFTER projection_revision"},
+						{"content_offset", "ALTER TABLE question_agent_execution_admissions ADD COLUMN content_offset BIGINT NOT NULL DEFAULT 0 AFTER content_revision"},
+						{"context_revision", "ALTER TABLE question_agent_execution_admissions ADD COLUMN context_revision BIGINT NOT NULL DEFAULT 0 AFTER content_offset"},
+						{"terminal_status", "ALTER TABLE question_agent_execution_admissions ADD COLUMN terminal_status VARCHAR(32) NULL AFTER context_revision"},
+						{"terminal_at", "ALTER TABLE question_agent_execution_admissions ADD COLUMN terminal_at DATETIME NULL AFTER terminal_status"},
+						{"last_bot_contact_at", "ALTER TABLE question_agent_execution_admissions ADD COLUMN last_bot_contact_at DATETIME NULL AFTER terminal_at"},
+						{"tracking_health", "ALTER TABLE question_agent_execution_admissions ADD COLUMN tracking_health VARCHAR(32) NOT NULL DEFAULT 'pending' AFTER last_bot_contact_at"},
+						{"projection_lease_owner", "ALTER TABLE question_agent_execution_admissions ADD COLUMN projection_lease_owner VARCHAR(128) NULL AFTER tracking_health"},
+						{"projection_lease_until", "ALTER TABLE question_agent_execution_admissions ADD COLUMN projection_lease_until DATETIME NULL AFTER projection_lease_owner"},
+						{"projection_attempts", "ALTER TABLE question_agent_execution_admissions ADD COLUMN projection_attempts INT NOT NULL DEFAULT 0 AFTER projection_lease_until"},
+						{"next_projection_at", "ALTER TABLE question_agent_execution_admissions ADD COLUMN next_projection_at DATETIME NULL AFTER projection_attempts"},
+					}
+					for _, column := range columns {
+						if err := addColumnIfMissing(db, &model.QuestionAgentExecutionAdmission{}, column.name, column.ddl); err != nil {
+							return err
+						}
+					}
+					indexes := []struct {
+						name string
+						ddl  string
+					}{
+						{"idx_execution_admission_run", "CREATE INDEX idx_execution_admission_run ON question_agent_execution_admissions(user_name, bot_run_id)"},
+						{"idx_execution_admission_updated", "CREATE INDEX idx_execution_admission_updated ON question_agent_execution_admissions(updated_at)"},
+						{"idx_execution_admission_turn", "CREATE INDEX idx_execution_admission_turn ON question_agent_execution_admissions(turn_id)"},
+						{"idx_execution_projection_lease", "CREATE INDEX idx_execution_projection_lease ON question_agent_execution_admissions(projection_lease_until)"},
+						{"idx_execution_projection_due", "CREATE INDEX idx_execution_projection_due ON question_agent_execution_admissions(next_projection_at)"},
+					}
+					for _, index := range indexes {
+						if err := addIndexIfMissing(db, &model.QuestionAgentExecutionAdmission{}, index.name, index.ddl); err != nil {
+							return err
+						}
+					}
+					return db.AutoMigrate(
+						&model.ConversationTurnV2{},
+						&model.ConversationTurnSequenceV2{},
+						&model.ConversationMessageV2{},
+						&model.QuestionAgentExecutionOutbox{},
+						&model.QuestionAgentExecutionEventV2{},
+					)
+				},
+			},
+			{
 				Name:        "dedupe-emails",
 				Usage:       "report duplicate users.email entries (read-only, no rows deleted)",
 				Description: "Report email addresses that appear more than once in the users table. Read-only — no rows are modified. Run before adding a UNIQUE index on users.email so the operator can manually resolve existing duplicates.",
@@ -406,6 +503,12 @@ func Migrate() *cli.Command {
 						&model.ToolName{},
 						&model.UserToolName{},
 						&model.QuestionAgentLog{},
+						&model.QuestionAgentExecutionAdmission{},
+						&model.ConversationTurnV2{},
+						&model.ConversationTurnSequenceV2{},
+						&model.ConversationMessageV2{},
+						&model.QuestionAgentExecutionOutbox{},
+						&model.QuestionAgentExecutionEventV2{},
 						&model.GeneList{},
 						&model.GeneExample{},
 						&model.UserPermission{},

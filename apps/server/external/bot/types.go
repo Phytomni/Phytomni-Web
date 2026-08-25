@@ -60,6 +60,8 @@ type ChatCompletionRequest struct {
 	ResolveGeneID bool                    `json:"resolve_gene_id,omitempty"`
 	DialogueID    string                  `json:"dialogue_id,omitempty"`
 	Conversation  *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	// ExecutionID is transport metadata and must never enter the JSON body.
+	ExecutionID string `json:"-"`
 }
 
 // Formatted is the Phytomni-specific envelope Bot returns alongside the
@@ -113,6 +115,8 @@ type AgentRunRequest struct {
 	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
 	// IdempotencyKey is transport metadata and must never enter the JSON body.
 	IdempotencyKey string `json:"-"`
+	// ExecutionID correlates the browser-owned execution with Bot's native run.
+	ExecutionID string `json:"-"`
 }
 
 // AgentRunResult carries the bounded fields consumed from a submitted run.
@@ -156,11 +160,13 @@ type RouteQueryRequest struct {
 	AllowedTools []string                `json:"allowed_tools,omitempty"`
 	ForcedTool   *string                 `json:"forced_tool"`
 	Conversation *ConversationEnvelopeV1 `json:"conversation,omitempty"`
+	// ExecutionID is transport metadata and must never enter the JSON body.
+	ExecutionID string `json:"-"`
 }
 
 // RouteQueryResponse mirrors AgentRunResponse exactly: Bot's route endpoint
 // MUST return the same envelope (resolved `agent` slug + result.formatted +
-// status/task_ids) so ShapeAnswer and SyncBotRuns reconcile correctly.
+// status/task_ids) so compatibility formatters preserve the Bot contract.
 type RouteQueryResponse = AgentRunResponse
 
 // RunRecord is one row from GET /v1/runs / GET /v1/runs/{id}. The top-level
@@ -218,12 +224,49 @@ type AgentDescriptorAttachments struct {
 	Datasets        *AgentDescriptorDatasetCapability `json:"datasets"`
 }
 
+// AgentDescriptorExecutionEvents is Bot's durable activity discovery surface.
+type AgentDescriptorExecutionEvents struct {
+	MajorVersion     int      `json:"major_version"`
+	ResumableHistory bool     `json:"resumable_history"`
+	CustomEvent      string   `json:"custom_event"`
+	TargetKinds      []string `json:"target_kinds"`
+}
+
+// AgentDescriptorWorkTraceFeatures is the finite per-feature availability
+// accepted from Bot discovery. Values are validated before projection.
+type AgentDescriptorWorkTraceFeatures struct {
+	Lifecycle       string `json:"lifecycle"`
+	SemanticPhases  string `json:"semantic_phases"`
+	SemanticTools   string `json:"semantic_tools"`
+	PublicReasoning string `json:"public_reasoning"`
+	TraceTarget     string `json:"trace_target"`
+}
+
+// AgentDescriptorWorkTraceTarget declares the only supported trace target
+// contract. The opaque target id remains runtime data, not discovery data.
+type AgentDescriptorWorkTraceTarget struct {
+	Kind         string `json:"kind"`
+	MajorVersion int    `json:"major_version"`
+}
+
+// AgentDescriptorWorkTrace is the bounded work-trace discovery contract.
+// Missing or unknown versions remain the zero value and fail closed.
+type AgentDescriptorWorkTrace struct {
+	MajorVersion   int                              `json:"major_version"`
+	State          string                           `json:"state"`
+	Features       AgentDescriptorWorkTraceFeatures `json:"features"`
+	Target         *AgentDescriptorWorkTraceTarget  `json:"target,omitempty"`
+	DetailEndpoint string                           `json:"detail_endpoint,omitempty"`
+}
+
 // AgentDescriptorCapabilities is the finite descriptor capability projection
 // used by the Web manifest boundary.
 type AgentDescriptorCapabilities struct {
-	Attachments AgentDescriptorAttachments `json:"attachments"`
-	Artifacts   bool                       `json:"artifacts"`
-	Streaming   bool                       `json:"streaming"`
+	Attachments     AgentDescriptorAttachments     `json:"attachments"`
+	Artifacts       bool                           `json:"artifacts"`
+	Streaming       bool                           `json:"streaming"`
+	ExecutionEvents AgentDescriptorExecutionEvents `json:"execution_events"`
+	WorkTrace       AgentDescriptorWorkTrace       `json:"work_trace"`
 }
 
 // AgentDescriptor is one row of GET /v1/agents. LegacyAliases is advisory

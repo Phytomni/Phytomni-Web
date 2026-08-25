@@ -18,6 +18,11 @@ const (
 	testProjectionDigestB = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
+func saveBotRunProjectionForTest(ctx context.Context, username string, rowID int64, projection BotRunProjection) error {
+	_, err := saveBotRunProjection(ctx, username, rowID, projection)
+	return err
+}
+
 func testPendingDelivery(revision int64, digest string) *ProjectionDelivery {
 	return &ProjectionDelivery{
 		SchemaVersion:   1,
@@ -376,7 +381,7 @@ func TestSaveBotRunProjectionCannotCrossOwner(t *testing.T) {
 	if err := setupProjectionRow(9, "bob@example.com", -1, ""); err != nil {
 		t.Fatal(err)
 	}
-	err := SaveBotRunProjection(context.Background(), "alice@example.com", 9, BotRunProjection{RunID: "run-9", ReportRevision: 1})
+	err := saveBotRunProjectionForTest(context.Background(), "alice@example.com", 9, BotRunProjection{RunID: "run-9", ReportRevision: 1})
 	if !errors.Is(err, ErrBotProjectionNotFound) {
 		t.Fatalf("err=%v", err)
 	}
@@ -431,7 +436,7 @@ func TestSaveAndLoadBotRunProjectionStoresOnlyPublicFields(t *testing.T) {
 		ChildTaskCount:   2,
 		RawPayload:       []byte("{\"token\":\"must-not-persist\"}"),
 	}
-	if err := SaveBotRunProjection(context.Background(), "alice@example.com", 11, incoming); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), "alice@example.com", 11, incoming); err != nil {
 		t.Fatal(err)
 	}
 
@@ -530,7 +535,7 @@ func TestSaveBotRunProjectionPreservesVisibleReportFromOlderBlankSnapshot(t *tes
 	if err := seedProjection(t, 12, "alice@example.com", current); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveBotRunProjection(context.Background(), "alice@example.com", 12, BotRunProjection{RunID: "run-12", ReportRevision: 3}); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), "alice@example.com", 12, BotRunProjection{RunID: "run-12", ReportRevision: 3}); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := LoadBotRunProjection(context.Background(), "alice@example.com", 12)
@@ -557,7 +562,7 @@ func TestSaveBotRunProjectionConcurrentUpdatesDoNotClobberNewest(t *testing.T) {
 		wg.Add(1)
 		go func(incoming BotRunProjection) {
 			defer wg.Done()
-			errs <- SaveBotRunProjection(context.Background(), "alice@example.com", 13, incoming)
+			errs <- saveBotRunProjectionForTest(context.Background(), "alice@example.com", 13, incoming)
 		}(report)
 	}
 	wg.Wait()
@@ -586,7 +591,7 @@ func TestSaveBotRunProjectionPreservesPrivateConversationContext(t *testing.T) {
 	if err := SaveBotConversationContext(context.Background(), "alice@example.com", 14, privateContext); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveBotRunProjection(context.Background(), "alice@example.com", 14, BotRunProjection{
+	if err := saveBotRunProjectionForTest(context.Background(), "alice@example.com", 14, BotRunProjection{
 		RunID:          "run-14",
 		Status:         "SUCCEEDED",
 		ReportRevision: 2,

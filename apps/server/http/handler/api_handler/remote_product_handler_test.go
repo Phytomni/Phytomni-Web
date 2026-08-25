@@ -77,6 +77,32 @@ func setupRemoteProductHandlerDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create question_agent_logs: %v", err)
 	}
+	if err := gdb.Exec(`CREATE TABLE question_agent_execution_admissions (
+		user_name TEXT NOT NULL, execution_id TEXT NOT NULL, request_fingerprint TEXT NOT NULL,
+		fingerprint_version INTEGER NOT NULL DEFAULT 1,
+		dialogue_id TEXT, message_id INTEGER, bot_run_id TEXT, status TEXT NOT NULL,
+		latest_cursor INTEGER NOT NULL DEFAULT 0, projection_json TEXT,
+		dispatch_revision INTEGER NOT NULL DEFAULT 0,
+		projection_revision INTEGER NOT NULL DEFAULT 0,
+		content_revision INTEGER NOT NULL DEFAULT 0,
+		content_offset INTEGER NOT NULL DEFAULT 0,
+		context_revision INTEGER NOT NULL DEFAULT 0,
+		terminal_status TEXT, terminal_at DATETIME, last_bot_contact_at DATETIME,
+		tracking_health TEXT NOT NULL DEFAULT 'pending',
+		created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+		PRIMARY KEY (user_name, execution_id)
+	)`).Error; err != nil {
+		t.Fatalf("create execution admissions: %v", err)
+	}
+	if err := gdb.AutoMigrate(
+		&model.ConversationTurnV2{},
+		&model.ConversationTurnSequenceV2{},
+		&model.ConversationMessageV2{},
+		&model.QuestionAgentExecutionAdmission{},
+		&model.QuestionAgentExecutionOutbox{},
+	); err != nil {
+		t.Fatalf("migrate V2 execution test tables: %v", err)
+	}
 	db.Set("phytomni-server", gdb)
 	return gdb
 }
@@ -97,11 +123,13 @@ func newRemoteProductHandlerRequest(t *testing.T, tool string, fields map[string
 	if err := mw.WriteField("attachments", `[{"asset_id":"file_route"}]`); err != nil {
 		t.Fatalf("write attachments: %v", err)
 	}
-	if tool == "InSilicoResearchAgent" {
-		if _, supplied := fields["client_turn_id"]; !supplied {
-			if err := mw.WriteField("client_turn_id", "remote-product-research-turn"); err != nil {
-				t.Fatalf("write client turn id: %v", err)
-			}
+	if _, supplied := fields["client_turn_id"]; !supplied {
+		clientTurnID := "turn-product-" + tool
+		if tool == "InSilicoResearchAgent" {
+			clientTurnID = "remote-product-research-turn"
+		}
+		if err := mw.WriteField("client_turn_id", clientTurnID); err != nil {
+			t.Fatalf("write client turn id: %v", err)
 		}
 	}
 	for name, value := range fields {
@@ -129,10 +157,8 @@ func newAttachmentTrackingRequest(t *testing.T, tool string) (*gin.Context, *htt
 	if err := mw.WriteField("query", "remote query"); err != nil {
 		t.Fatalf("write query: %v", err)
 	}
-	if tool == "InSilicoResearchAgent" {
-		if err := mw.WriteField("client_turn_id", "file-part-research-turn"); err != nil {
-			t.Fatalf("write client turn id: %v", err)
-		}
+	if err := mw.WriteField("client_turn_id", "turn-file-part-"+tool); err != nil {
+		t.Fatalf("write client turn id: %v", err)
 	}
 	file, err := mw.CreateFormFile("files", "attachment.txt")
 	if err != nil {
@@ -350,51 +376,15 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			c.Set("username", "remote@example.com")
 			NewHandler().AgentProductRun(c)
 
-			if w.Code != http.StatusOK {
+			if w.Code != http.StatusAccepted {
 				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 			}
 			wantCatalogCalls := 0
 			if tc.slug == "research" {
 				wantCatalogCalls = 1
 			}
-			if catalogCalls != wantCatalogCalls {
-				t.Fatalf("catalog calls=%d, want %d", catalogCalls, wantCatalogCalls)
-			}
-			if gotPath != "/v1/agents/"+tc.slug+"/runs" {
-				t.Fatalf("Bot path = %q, want dedicated %s run", gotPath, tc.slug)
-			}
-			if _, leaked := gotRequest.Arguments["dataset_description"]; leaked {
-				t.Fatal("dataset_description crossed the product boundary inside arguments")
-			}
-			if tc.slug == "research" {
-				if gotIdempotencyKey != "remote-product-research-turn" {
-					t.Fatalf("Research Idempotency-Key=%q", gotIdempotencyKey)
-				}
-				if _, leaked := gotBody["idempotency_key"]; leaked {
-					t.Fatalf("Research idempotency key leaked into JSON body: %#v", gotBody)
-				}
-				dataList, ok := gotRequest.Arguments["data_list"].(map[string]interface{})
-				if !ok || len(dataList) != 0 {
-					t.Fatalf("research data_list=%#v, want an empty JSON object", gotRequest.Arguments["data_list"])
-				}
-			}
-			if obsFileList, ok := gotRequest.Arguments["obs_file_list"].([]interface{}); !ok || len(obsFileList) != 0 {
-				t.Fatalf("%s obs_file_list=%#v, want an empty JSON array", tc.slug, gotRequest.Arguments["obs_file_list"])
-			}
-			if tc.wantGeneID != "" && gotRequest.Arguments["gene_id"] != tc.wantGeneID {
-				t.Fatalf("Bot gene_id = %#v, want %q", gotRequest.Arguments["gene_id"], tc.wantGeneID)
-			}
-			if tc.wantToID != "" && gotRequest.Arguments["to_id"] != tc.wantToID {
-				t.Fatalf("Bot to_id = %#v, want %q", gotRequest.Arguments["to_id"], tc.wantToID)
-			}
-			if tc.wantSpecies != "" && gotRequest.Arguments["species_code"] != tc.wantSpecies {
-				t.Fatalf("Bot species_code = %#v, want %q", gotRequest.Arguments["species_code"], tc.wantSpecies)
-			}
-			if len(gotRequest.Attachments) != 1 || gotRequest.Attachments[0].AssetID != "file_route" {
-				t.Fatalf("opaque attachments=%#v, want file_route", gotRequest.Attachments)
-			}
-			if _, leaked := gotBody["dataset_description"]; leaked {
-				t.Fatalf("dataset_description crossed the product request boundary: %#v", gotBody)
+			if catalogCalls != wantCatalogCalls || gotPath != "" || gotIdempotencyKey != "" || len(gotBody) != 0 || len(gotRequest.Attachments) != 0 {
+				t.Fatalf("admission performed Bot work: catalog=%d path=%q request=%#v", catalogCalls, gotPath, gotRequest)
 			}
 			var response struct {
 				Code int                   `json:"code"`
@@ -403,18 +393,22 @@ func TestAgentProductRunRouteOwnsToolAndMode(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode response %s: %v", w.Body.String(), err)
 			}
-			if response.Code != http.StatusOK || response.Data.DialogueId == "" || response.Data.BotRunID != runID {
+			if response.Code != http.StatusOK || response.Data.DialogueId == "" || response.Data.ExecutionID == "" || response.Data.Status != "ADMITTED" {
 				t.Fatalf("response identity = %#v", response)
 			}
-			var row model.QuestionAgentLog
-			if err := gdb.First(&row).Error; err != nil {
-				t.Fatalf("load persisted row: %v", err)
+			var turn model.ConversationTurnV2
+			if err := gdb.Where("user_name = ? AND execution_id = ?", "remote@example.com", response.Data.ExecutionID).First(&turn).Error; err != nil {
+				t.Fatalf("load persisted V2 turn: %v", err)
 			}
-			if row.DialogueId != response.Data.DialogueId || row.BotRunId != runID || row.ToolName != tc.tool || row.Mode != "instant" {
-				t.Fatalf("persisted row = %#v", row)
+			if turn.ID != response.Data.Id || turn.DialogueID != response.Data.DialogueId || turn.ToolName != tc.tool || turn.Mode != "instant" || turn.Status != "admitted" {
+				t.Fatalf("persisted V2 turn = %#v", turn)
 			}
-			if tc.upstreamCode == http.StatusAccepted && (response.Data.TaskId != taskID || row.TaskId != taskID) {
-				t.Fatalf("async task identity = response:%q row:%q; want %q", response.Data.TaskId, row.TaskId, taskID)
+			var legacyRows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&legacyRows).Error; err != nil {
+				t.Fatalf("count legacy rows: %v", err)
+			}
+			if legacyRows != 0 {
+				t.Fatalf("V2 admission synthesized %d legacy rows", legacyRows)
 			}
 		})
 	}
@@ -518,7 +512,7 @@ func TestAgentProductRunRejectsFilePartsBeforeBot(t *testing.T) {
 	}
 }
 
-func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
+func TestAgentProductAdmissionDoesNotSynchronouslyExposeUpstreamFailures(t *testing.T) {
 	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
 		t.Run(tool, func(t *testing.T) {
 			gdb := setupRemoteProductHandlerDB(t)
@@ -544,8 +538,8 @@ func TestAgentProductRunUpstreamFailuresStayOpaque(t *testing.T) {
 			c.Set("username", "remote@example.com")
 			NewHandler().AgentProductRun(c)
 
-			if w.Code != http.StatusBadGateway {
-				t.Fatalf("status = %d, body = %s; want 502", w.Code, w.Body.String())
+			if w.Code != http.StatusAccepted {
+				t.Fatalf("status = %d, body = %s; want durable 202", w.Code, w.Body.String())
 			}
 			if bytes.Contains(w.Body.Bytes(), []byte("Bot implementation detail")) {
 				t.Fatalf("upstream detail leaked: %s", w.Body.String())

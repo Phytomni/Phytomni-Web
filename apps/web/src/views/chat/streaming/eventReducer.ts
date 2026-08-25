@@ -6,6 +6,12 @@ import {
 } from "../types";
 import type { AguiEvent } from "./aguiEvents";
 import { parseA2uiCustomValue } from "./a2uiParse";
+import {
+  applyExecutionEvent,
+  createExecutionRunState,
+  executionEventFromAGUI,
+  type ExecutionRunState,
+} from "./executionEvents";
 
 // ReducerState folds the AG-UI event stream into ordered content blocks plus
 // the fields the message needs to finalize (run id, follow-ups, done/error).
@@ -15,6 +21,9 @@ export interface ReducerState {
   followUp: string[];
   references: CitationDocument[]; // phyto.references doc_list (P1 cited streaming)
   contextNotice?: ChatContextNotice;
+  /** Durable public execution facts, separate from transcript blocks. */
+  executionRun?: ExecutionRunState;
+  executionContractError?: string;
   done: boolean;
   error?: { message: string };
 }
@@ -81,7 +90,23 @@ export function reduceAGUIEvent(
     case "Custom": {
       const name = stringField(ev.data.name);
       const value = ev.data.value;
-      if (name === "phyto.follow_up" && Array.isArray(value)) {
+      if (name === "phyto.run_event") {
+        const decoded = executionEventFromAGUI(ev);
+        if (!decoded) break;
+        if (!decoded.ok) {
+          next.executionContractError = decoded.reason;
+          if (next.executionRun) {
+            next.executionRun = { ...next.executionRun, delivery: "degraded" };
+          }
+          break;
+        }
+        const run =
+          next.executionRun?.runId === decoded.value.runId
+            ? next.executionRun
+            : createExecutionRunState(decoded.value.runId);
+        next.executionRun = applyExecutionEvent(run, decoded.value);
+        if (!next.runId) next.runId = decoded.value.runId;
+      } else if (name === "phyto.follow_up" && Array.isArray(value)) {
         next.followUp = value.filter(
           (item): item is string => typeof item === "string"
         );

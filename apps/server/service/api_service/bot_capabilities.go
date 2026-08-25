@@ -121,16 +121,42 @@ func HistoryReadModeFromConfig() HistoryReadMode {
 // browser. It intentionally contains no Bot descriptor, URL, credential, or
 // upstream diagnostic field.
 type BotCapability struct {
-	Tool               string   `json:"tool"`
-	Slug               string   `json:"slug"`
-	Execution          string   `json:"execution"`
-	Stream             bool     `json:"stream"`
-	A2UI               bool     `json:"a2ui"`
-	Resolver           bool     `json:"resolver"`
-	Attachments        bool     `json:"attachments"`
-	AttachmentPurposes []string `json:"attachment_purposes"`
-	Artifacts          bool     `json:"artifacts"`
-	Enabled            bool     `json:"enabled"`
+	Tool               string                      `json:"tool"`
+	Slug               string                      `json:"slug"`
+	Execution          string                      `json:"execution"`
+	Stream             bool                        `json:"stream"`
+	A2UI               bool                        `json:"a2ui"`
+	Resolver           bool                        `json:"resolver"`
+	Attachments        bool                        `json:"attachments"`
+	AttachmentPurposes []string                    `json:"attachment_purposes"`
+	Artifacts          bool                        `json:"artifacts"`
+	ExecutionEvents    BotExecutionEventCapability `json:"execution_events"`
+	WorkTrace          BotWorkTraceCapability      `json:"work_trace"`
+	Enabled            bool                        `json:"enabled"`
+}
+
+// BotExecutionEventCapability is the sanitized browser discovery contract.
+type BotExecutionEventCapability struct {
+	Enabled          bool     `json:"enabled"`
+	MajorVersion     int      `json:"major_version"`
+	ResumableHistory bool     `json:"resumable_history"`
+	CustomEvent      string   `json:"custom_event"`
+	TargetKinds      []string `json:"target_kinds"`
+}
+
+// BotWorkTraceCapability is the allowlisted browser projection of Bot's
+// per-Agent declaration. It contains no upstream endpoint template.
+type BotWorkTraceCapability struct {
+	Enabled            bool   `json:"enabled"`
+	MajorVersion       int    `json:"major_version"`
+	State              string `json:"state"`
+	Lifecycle          string `json:"lifecycle"`
+	SemanticPhases     string `json:"semantic_phases"`
+	SemanticTools      string `json:"semantic_tools"`
+	PublicReasoning    string `json:"public_reasoning"`
+	TraceTarget        string `json:"trace_target"`
+	TargetKind         string `json:"target_kind,omitempty"`
+	TargetMajorVersion int    `json:"target_major_version,omitempty"`
 }
 
 const (
@@ -250,6 +276,13 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		}
 
 		manifest.Agents[index].Enabled = true
+		upstreamCapability, _ := rxBot.FindAgentCapability(
+			response, definition.Slug,
+		)
+		manifest.Agents[index].ExecutionEvents = executionEventsFor(
+			upstreamCapability.ExecutionEvents,
+		)
+		manifest.Agents[index].WorkTrace = workTraceFor(upstreamCapability.WorkTrace)
 		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
 		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
 		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug)
@@ -264,6 +297,62 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapability
 		}
 	}
 	return manifest, nil
+}
+
+func workTraceFor(capability rxBot.AgentDescriptorWorkTrace) BotWorkTraceCapability {
+	if !rxBot.SupportsAgentWorkTraceV1(capability) {
+		return disabledBotWorkTraceCapability()
+	}
+	result := BotWorkTraceCapability{
+		Enabled:         true,
+		MajorVersion:    capability.MajorVersion,
+		State:           capability.State,
+		Lifecycle:       capability.Features.Lifecycle,
+		SemanticPhases:  capability.Features.SemanticPhases,
+		SemanticTools:   capability.Features.SemanticTools,
+		PublicReasoning: capability.Features.PublicReasoning,
+		TraceTarget:     capability.Features.TraceTarget,
+	}
+	if capability.Target != nil {
+		result.TargetKind = capability.Target.Kind
+		result.TargetMajorVersion = capability.Target.MajorVersion
+	}
+	return result
+}
+
+func disabledBotWorkTraceCapability() BotWorkTraceCapability {
+	return BotWorkTraceCapability{
+		MajorVersion:    1,
+		State:           "unsupported",
+		Lifecycle:       "unsupported",
+		SemanticPhases:  "unsupported",
+		SemanticTools:   "unsupported",
+		PublicReasoning: "unsupported",
+		TraceTarget:     "unsupported",
+	}
+}
+
+func executionEventsFor(
+	capability rxBot.AgentDescriptorExecutionEvents,
+) BotExecutionEventCapability {
+	if !rxBot.SupportsExecutionEventV1(capability) {
+		return disabledBotExecutionEventCapability()
+	}
+	return BotExecutionEventCapability{
+		Enabled:          true,
+		MajorVersion:     capability.MajorVersion,
+		ResumableHistory: capability.ResumableHistory,
+		CustomEvent:      capability.CustomEvent,
+		TargetKinds:      append([]string(nil), capability.TargetKinds...),
+	}
+}
+
+func disabledBotExecutionEventCapability() BotExecutionEventCapability {
+	return BotExecutionEventCapability{
+		MajorVersion: 1,
+		CustomEvent:  "phyto.run_event",
+		TargetKinds:  []string{},
+	}
 }
 
 func effectiveResearchQueryLimit(advertised int) int {
@@ -348,6 +437,8 @@ func disabledBotCapabilities() []BotCapability {
 			Slug:               definition.Slug,
 			Execution:          definition.Execution,
 			AttachmentPurposes: []string{},
+			ExecutionEvents:    disabledBotExecutionEventCapability(),
+			WorkTrace:          disabledBotWorkTraceCapability(),
 		}
 	}
 	return manifest

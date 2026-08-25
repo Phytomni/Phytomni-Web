@@ -20,6 +20,7 @@ import {
   getObsImages,
   getConversationArtifactDownloadURL,
   getConversationArtifactFile,
+  getExecutionTargetFile,
   getAnalystAgentLog,
   getQuery,
   getQueryAbortable,
@@ -490,6 +491,30 @@ describe("QueryData — conversation artifact contract", () => {
     expect(() =>
       getConversationArtifactFile("https://evil.invalid/report.pdf")
     ).toThrow("Invalid conversation artifact download URL");
+  });
+
+  it("fetches only same-origin execution target content as a blob", async () => {
+    const deliveryURL =
+      "/api/v1/executions/turn-1/targets/artifact/artifact-1/content";
+    const response = { data: new Blob(["result"]), headers: {} };
+    mockCreateAbortableRequest.mockResolvedValueOnce(response);
+
+    await expect(
+      getExecutionTargetFile(deliveryURL, { requestId: "preview-request" })
+    ).resolves.toBe(response);
+    expect(mockCreateAbortableRequest).toHaveBeenCalledWith({
+      url: deliveryURL,
+      method: "get",
+      responseType: "blob",
+      requestId: "preview-request",
+      onDownloadProgress: undefined,
+    });
+    expect(() =>
+      getExecutionTargetFile("https://evil.invalid/result.json")
+    ).toThrow("Invalid execution target delivery URL");
+    expect(() =>
+      getExecutionTargetFile("/api/v1/executions/../secrets")
+    ).toThrow("Invalid execution target delivery URL");
   });
 });
 

@@ -404,12 +404,14 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).not.toMatch(/getGeneratedFormats/);
     expect(INDEX_SOURCE).not.toMatch(/downloadWhiteList/);
 
-    // Analyst log mounts only when deriveAnalystLogRowId(message) is a valid
-    // positive-decimal id; its existing boundary remains independent.
+    // The compatibility log policy and row-id validation remain independent
+    // from the primary execution/work-trace activity surface.
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\)\s*getFileDownUrl/);
+    expect(INDEX_SOURCE).toMatch(/showsInlineLegacyTaskLog\(message\)/);
+    expect(INDEX_SOURCE).toMatch(/!!deriveAnalystLogRowId\(message\)/);
     expect(INDEX_SOURCE).toMatch(
-      /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
+      /message\.tool_name === "AnalystAgent"[\s\S]*primaryExecutionActivitySurface/
     );
     expect(INDEX_SOURCE).not.toMatch(/toggleLogView/);
   });

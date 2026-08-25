@@ -18,6 +18,11 @@ import type {
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ResumableUploadItem } from "./upload/types";
 import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
+import type {
+  ExecutionRunState,
+  ExecutionTargetResolution,
+  ExecutionWorkspaceTab,
+} from "./streaming/executionEvents";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
 
@@ -126,6 +131,23 @@ export interface ChatMessage {
   delivery?: AgentResultDelivery;
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
+  /** Durable public event projection for the owning Bot run. */
+  executionRun?: ExecutionRunState;
+  /** Finite decoder failure; raw rejected payload is never retained. */
+  executionContractError?: string;
+  /** Stable Bot umbrella identity used for owner-scoped history hydration. */
+  botRunId?: string;
+  /** Stable browser/Web/Bot execution identity. This key never changes. */
+  executionId?: string;
+  /** Stable ordered-conversation identity metadata shared by GET and SSE. */
+  messageIndex?: number;
+  sourceMessageId?: string;
+  parentMessageId?: string;
+  messageType?: string;
+  visibility?: "user" | "collapsed";
+  contentRevision?: number;
+  contentOffset?: number;
+  contentLength?: number;
 }
 
 export interface ChatContextNotice {
@@ -198,6 +220,9 @@ export interface ChatResponse extends ConversationContextNotice {
   result_archive_v1?: boolean;
   delivery?: AgentResultDelivery;
   attachments?: AssetAttachmentRef[];
+  schema_version?: number;
+  execution_id?: string;
+  event_cursor?: number;
 }
 
 export type ChatHistoryHydrationStatus =
@@ -255,11 +280,8 @@ export interface ChatUIState {
   /** Last sanitized lifecycle snapshot for each positive Web task-row id. */
   agentRunLifecycles: Record<string, AgentTaskLifecycle>;
   reactions: Record<string, number>;
-  updatingLog: Record<string, boolean>;
   /** Stable enum for analyst-log errors; translate at render time. */
-  logErrorKinds: Record<string, "fetch" | "update" | undefined>;
-  sendStartedAt: number | null;
-  activeAgentName: string;
+  logErrorKinds: Record<string, "fetch" | undefined>;
   completing: boolean;
   mode: "instant" | "expert";
   isStreaming: boolean;
@@ -291,6 +313,21 @@ export interface ChatUIState {
   handledArtifactIdentities: string[];
   /** Retry state remains isolated to the owning dialogue and message. */
   archiveRetryingByMessageId: Record<string, boolean>;
+  /** Durable execution facts, isolated by dialogue and run identity. */
+  executionRuns: Record<string, ExecutionRunState>;
+  selectedExecutionRunId: string | null;
+  executionWorkspaceTabs: ExecutionWorkspaceTab[];
+  activeExecutionWorkspaceTab: string | null;
+  executionWorkspaceOpen: boolean;
+  executionRailOpen: boolean;
+  transcriptScrollTop: number;
+  workspaceScrollTop: number;
+  executionTargetDetails: Record<string, ExecutionTargetResolution | undefined>;
+  executionTargetLoading: Record<string, boolean | undefined>;
+  executionTargetErrors: Record<
+    string,
+    "unavailable" | "forbidden" | undefined
+  >;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

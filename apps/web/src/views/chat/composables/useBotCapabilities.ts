@@ -2,12 +2,38 @@ import { computed, ref, type Ref } from "vue";
 import request from "@/utils/request";
 import type { BotUploadCapability } from "@/api/types";
 import {
+  CANONICAL_AGENT_SLUG_BY_TOOL,
   CANONICAL_AGENT_TOOLS,
   type CanonicalAgentTool,
 } from "@/constants/agents";
 
 export type BotCapabilityExecution = "chat" | "agent_run" | "blocking";
 export type AttachmentChannel = "document" | "dataset";
+export type ExecutionTargetKind =
+  "event" | "artifact" | "report" | "todo" | "preview" | "download" | "trace";
+
+export type WorkTraceFeatureState = "supported" | "degraded" | "unsupported";
+
+export interface BotWorkTraceCapability {
+  enabled: boolean;
+  majorVersion: 1;
+  state: WorkTraceFeatureState;
+  lifecycle: WorkTraceFeatureState;
+  semanticPhases: WorkTraceFeatureState;
+  semanticTools: WorkTraceFeatureState;
+  publicReasoning: WorkTraceFeatureState;
+  traceTarget: WorkTraceFeatureState;
+  targetKind: "trace" | null;
+  targetMajorVersion: 1 | null;
+}
+
+export interface BotExecutionEventCapability {
+  enabled: boolean;
+  majorVersion: 1;
+  resumableHistory: boolean;
+  customEvent: "phyto.run_event";
+  targetKinds: ExecutionTargetKind[];
+}
 
 export interface BotCapability {
   tool: CanonicalAgentTool;
@@ -19,6 +45,8 @@ export interface BotCapability {
   attachments: boolean;
   attachmentChannels: AttachmentChannel[];
   artifacts: boolean;
+  executionEvents: BotExecutionEventCapability;
+  workTrace: BotWorkTraceCapability;
   enabled: boolean;
 }
 
@@ -55,19 +83,15 @@ const RESEARCH_INPUT_MAX_USER_QUERY_CHARS = 1048576;
 const RESEARCH_INPUT_MAX_ATTACHMENTS = 256;
 const RESEARCH_INPUT_MAX_DATASET_PATHS = 256;
 const RESEARCH_INPUT_MAX_REFERENCES = 256;
-
-const TOOL_TO_SLUG: Record<CanonicalAgentTool, string> = {
-  ChatAgent: "chat",
-  KnowledgeAgent: "knowledge",
-  DataAgent: "data",
-  ReviewAgent: "review",
-  BriefGeneAgent: "brief_gene",
-  AnalystAgent: "analyst",
-  DeepGenomeAgent: "deep_genome",
-  InSilicoResearchAgent: "research",
-  DigitalDesignAgent: "design",
-  GeneNetworkAgent: "network",
-};
+const EXECUTION_TARGET_KINDS: readonly ExecutionTargetKind[] = [
+  "event",
+  "artifact",
+  "report",
+  "todo",
+  "preview",
+  "download",
+  "trace",
+];
 
 const EXECUTION_BY_TOOL: Record<CanonicalAgentTool, BotCapabilityExecution> = {
   ChatAgent: "chat",
@@ -105,7 +129,7 @@ function cacheKeyFor(input: CacheKeyInput): string {
 function disabledCapability(tool: CanonicalAgentTool): BotCapability {
   return {
     tool,
-    slug: TOOL_TO_SLUG[tool],
+    slug: CANONICAL_AGENT_SLUG_BY_TOOL[tool],
     execution: EXECUTION_BY_TOOL[tool],
     stream: false,
     a2ui: false,
@@ -113,6 +137,8 @@ function disabledCapability(tool: CanonicalAgentTool): BotCapability {
     attachments: false,
     attachmentChannels: [],
     artifacts: false,
+    executionEvents: disabledExecutionEventCapability(),
+    workTrace: disabledWorkTraceCapability(),
     enabled: false,
   };
 }
@@ -125,6 +151,11 @@ function cloneManifest(manifest: readonly BotCapability[]): BotCapability[] {
   return manifest.map((capability) => ({
     ...capability,
     attachmentChannels: [...capability.attachmentChannels],
+    executionEvents: {
+      ...capability.executionEvents,
+      targetKinds: [...capability.executionEvents.targetKinds],
+    },
+    workTrace: { ...capability.workTrace },
   }));
 }
 
@@ -168,6 +199,126 @@ function parseAttachmentChannels(value: unknown): AttachmentChannel[] {
     parsed.push(item);
   }
   return parsed;
+}
+
+function disabledExecutionEventCapability(): BotExecutionEventCapability {
+  return {
+    enabled: false,
+    majorVersion: 1,
+    resumableHistory: false,
+    customEvent: "phyto.run_event",
+    targetKinds: [],
+  };
+}
+
+function disabledWorkTraceCapability(): BotWorkTraceCapability {
+  return {
+    enabled: false,
+    majorVersion: 1,
+    state: "unsupported",
+    lifecycle: "unsupported",
+    semanticPhases: "unsupported",
+    semanticTools: "unsupported",
+    publicReasoning: "unsupported",
+    traceTarget: "unsupported",
+    targetKind: null,
+    targetMajorVersion: null,
+  };
+}
+
+const WORK_TRACE_STATES = new Set<WorkTraceFeatureState>([
+  "supported",
+  "degraded",
+  "unsupported",
+]);
+
+function parseWorkTraceCapability(value: unknown): BotWorkTraceCapability {
+  const disabled = disabledWorkTraceCapability();
+  if (!isRecord(value) || value.enabled !== true || value.major_version !== 1) {
+    return disabled;
+  }
+  const fields = [
+    value.state,
+    value.lifecycle,
+    value.semantic_phases,
+    value.semantic_tools,
+    value.public_reasoning,
+    value.trace_target,
+  ];
+  if (
+    !fields.every((state) =>
+      WORK_TRACE_STATES.has(state as WorkTraceFeatureState)
+    )
+  ) {
+    return disabled;
+  }
+  if (
+    value.trace_target === "supported" &&
+    (value.target_kind !== "trace" || value.target_major_version !== 1)
+  ) {
+    return disabled;
+  }
+  if (
+    value.trace_target !== "supported" &&
+    (value.target_kind !== undefined ||
+      value.target_major_version !== undefined)
+  ) {
+    return disabled;
+  }
+  return {
+    enabled: true,
+    majorVersion: 1,
+    state: value.state as WorkTraceFeatureState,
+    lifecycle: value.lifecycle as WorkTraceFeatureState,
+    semanticPhases: value.semantic_phases as WorkTraceFeatureState,
+    semanticTools: value.semantic_tools as WorkTraceFeatureState,
+    publicReasoning: value.public_reasoning as WorkTraceFeatureState,
+    traceTarget: value.trace_target as WorkTraceFeatureState,
+    targetKind: value.trace_target === "supported" ? "trace" : null,
+    targetMajorVersion: value.trace_target === "supported" ? 1 : null,
+  };
+}
+
+export function supportsAgentWorkTrace(
+  capability: BotCapability | undefined
+): boolean {
+  return (
+    capability?.enabled === true &&
+    capability.executionEvents.enabled === true &&
+    capability.executionEvents.targetKinds.includes("trace") &&
+    capability.workTrace.enabled === true &&
+    capability.workTrace.state === "supported" &&
+    capability.workTrace.traceTarget === "supported" &&
+    capability.workTrace.targetKind === "trace" &&
+    capability.workTrace.targetMajorVersion === 1
+  );
+}
+
+function parseExecutionEventCapability(
+  value: unknown
+): BotExecutionEventCapability {
+  const disabled = disabledExecutionEventCapability();
+  if (!isRecord(value) || value.enabled !== true) return disabled;
+  const targetKinds = value.target_kinds;
+  if (
+    value.major_version !== 1 ||
+    value.resumable_history !== true ||
+    value.custom_event !== "phyto.run_event" ||
+    !Array.isArray(targetKinds) ||
+    targetKinds.length !== EXECUTION_TARGET_KINDS.length ||
+    !EXECUTION_TARGET_KINDS.every(
+      (target, index) => targetKinds[index] === target
+    )
+  ) {
+    return disabled;
+  }
+  return {
+    enabled: true,
+    majorVersion: 1,
+    resumableHistory: true,
+    customEvent: "phyto.run_event",
+    targetKinds: [...EXECUTION_TARGET_KINDS],
+  };
 }
 
 export function disabledBotUploadCapability(): BotUploadCapability {
@@ -305,7 +456,7 @@ function parseAgentCapabilities(records: unknown): BotCapability[] {
     if (index === undefined || seen.has(tool)) continue;
     seen.add(tool);
 
-    const expectedSlug = TOOL_TO_SLUG[tool];
+    const expectedSlug = CANONICAL_AGENT_SLUG_BY_TOOL[tool];
     const execution = candidate.execution;
     if (
       candidate.slug !== expectedSlug ||
@@ -337,6 +488,12 @@ function parseAgentCapabilities(records: unknown): BotCapability[] {
           ? parseAttachmentChannels(candidate.attachment_purposes)
           : [],
       artifacts: candidate.artifacts as boolean,
+      executionEvents: enabled
+        ? parseExecutionEventCapability(candidate.execution_events)
+        : disabledExecutionEventCapability(),
+      workTrace: enabled
+        ? parseWorkTraceCapability(candidate.work_trace)
+        : disabledWorkTraceCapability(),
       enabled,
     };
   }

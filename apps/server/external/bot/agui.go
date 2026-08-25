@@ -98,7 +98,7 @@ func (a *AGUIAccumulator) Observe(ev AGUIEvent) {
 		// blank run_id clobbering an already-captured registry id — a blank
 		// bot_run_id would strand the persisted row out of the GA cron's
 		// WHERE status='RUNNING' reconcile set (same zero-value-clobber
-		// invariant SyncBotRuns / QueryAnalystUpdateLog already enforce).
+		// invariant enforced by the canonical execution projector).
 		if id := stringField(ev.Data, "run_id"); id != "" {
 			a.runID = id
 		}
