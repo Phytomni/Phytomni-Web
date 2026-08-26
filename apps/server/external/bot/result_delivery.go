@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	maxResultArchiveOutputDirs = 8
+	maxResultArchiveOutputDirs = MaxProjectionArtifactCount
 	maxResultArchiveNameRunes  = 128
 	maxResultArchiveFieldRunes = 128
 	maxResultArchiveSizeBytes  = int64(10 * 1024 * 1024 * 1024)
@@ -347,9 +347,9 @@ func validateRunDeliveryState(delivery RunDelivery, agent string) error {
 
 // deriveRunArchiveObjectRef resolves Bot's opaque archive reference inside the
 // one publish root that defines the Web service's storage scope. Sibling
-// children/part-NNN directories collapse to that shared root; unrelated run
-// roots still fail. The resulting path remains server-only and is never sent
-// back to the browser.
+// children/part-NNN directories and obs:// vs /obs/ spellings collapse to that
+// shared root; unrelated run roots still fail. The resulting path remains
+// server-only and is never sent back to the browser.
 func deriveRunArchiveObjectRef(delivery RunDelivery, outputDirs []string) (string, error) {
 	if delivery.Status != "ready" || delivery.Archive == nil {
 		return "", nil
@@ -371,13 +371,22 @@ func uniqueResultArchivePublishRoots(outputDirs []string) []string {
 	roots := make([]string, 0, 1)
 	for _, outputDir := range outputDirs {
 		root := resultArchivePublishRoot(outputDir)
-		if _, exists := seen[root]; exists {
+		key := canonicalOBSPath(root)
+		if _, exists := seen[key]; exists {
 			continue
 		}
-		seen[root] = struct{}{}
+		seen[key] = struct{}{}
 		roots = append(roots, root)
 	}
 	return roots
+}
+
+func canonicalOBSPath(value string) string {
+	const scheme = "obs://"
+	if strings.HasPrefix(value, scheme) {
+		return "/obs/" + strings.TrimPrefix(value, scheme)
+	}
+	return value
 }
 
 var resultChildPart = regexp.MustCompile(`^part-(?:00[1-9]|0[1-9][0-9]|1[0-9]{2})$`)

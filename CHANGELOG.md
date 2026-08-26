@@ -20,6 +20,9 @@ Newest first.
   several `children/part-NNN` directories under one run. The wait card
   can complete; the ZIP still resolves under the shared
   `children/delivery` root.
+- Ready decode counts unique publish roots after collapsing parts, so
+  Research's 20-goal cap is inside the archive-dir limit. `obs://` and
+  `/obs/` spellings of the same root collapse together.
 
 ### 🐛 Design wait card no longer Failed on packing errors
 

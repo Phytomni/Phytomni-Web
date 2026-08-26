@@ -3,6 +3,7 @@ package api_service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -180,6 +181,50 @@ func TestDecodeRunProjectionAcceptsReadyArchiveUnderSiblingChildParts(t *testing
 	}
 	if got.VisibleReport() != "# Design report" {
 		t.Fatalf("report = %q", got.VisibleReport())
+	}
+}
+
+func TestDecodeRunProjectionReadySiblingPartCountBoundary(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	dirs := func(count int) string {
+		items := make([]string, count)
+		for i := range items {
+			items[i] = fmt.Sprintf(`"/obs/bucket/owner/run/children/part-%03d"`, i+1)
+		}
+		return strings.Join(items, ",")
+	}
+	record := func(count int) rxBot.RunRecord {
+		return rxBot.RunRecord{
+			RunID:  "run-research-parts",
+			Agent:  "research",
+			Status: "succeeded",
+			Result: json.RawMessage(`{
+				"formatted":{"answer":"# Research report"},
+				"execution":{
+					"output_dirs":[` + dirs(count) + `],
+					"delivery":{
+						"schema_version":1,"required":true,"status":"ready","revision":1,
+						"inventory_digest":"` + digest + `",
+						"archive":{"role":"result_archive","name":"research-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+						"error_code":null,"retryable":false
+					}
+				}
+			}`),
+		}
+	}
+
+	for _, count := range []int{8, 9, 20} {
+		got, err := DecodeRunProjection(record(count))
+		if err != nil {
+			t.Fatalf("%d sibling parts rejected: %v", count, err)
+		}
+		if got.Status != "SUCCEEDED" || got.Delivery == nil || got.Delivery.Status != "ready" {
+			t.Fatalf("%d-part projection = %#v", count, got)
+		}
+	}
+
+	if _, err := DecodeRunProjection(record(rxBot.MaxProjectionArtifactCount + 1)); err == nil {
+		t.Fatal("too many sibling parts accepted")
 	}
 }
 
