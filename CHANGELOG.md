@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Expert send failures show the gateway 4xx message
+
+- Blocking chat send uses the Surfaceable 4xx `message` from the gateway
+  and still attaches the request id, so a Research planning 400 is no
+  longer only "Failed to send message".
+- 5xx and overlong or unsafe messages stay on the generic sendFailed copy.
+
 ### 🐛 Explicit logout revokes the current token
 
 - The sidebar and layout logout actions call `POST /api/v1/auth/logout`

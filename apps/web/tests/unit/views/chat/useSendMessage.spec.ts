@@ -1796,6 +1796,63 @@ describe("useSendMessage", () => {
     expect(failedAssistant.content).not.toContain("bot-private-request");
   });
 
+  it("surfaces the gateway 4xx message and request id", async () => {
+    stateFor("A").messageInput = "Reproduce the paper";
+    mockGetQueryAbortable.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          code: 400,
+          message: "Research input resolution failed.",
+          pre_dispatch: true,
+          request_id: "web-request-422",
+        },
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+    const failedAssistant = lastMessageFor(
+      stateFor("A"),
+      "pre-dispatch 4xx message"
+    );
+    expect(failedAssistant.content).toContain(
+      "Research input resolution failed."
+    );
+    expect(failedAssistant.content).toContain(
+      "chat.requestId: web-request-422"
+    );
+    expect(failedAssistant.content).not.toBe("chat.sendFailed");
+  });
+
+  it("keeps sendFailed when the 4xx message is unsafe", async () => {
+    stateFor("A").messageInput = "Reproduce the paper";
+    mockGetQueryAbortable.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          message: `x${"a".repeat(600)}`,
+          request_id: "web-request-long",
+          pre_dispatch: true,
+        },
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn());
+    try {
+      const { sendMessage } = makeComposable();
+      await sendMessage();
+    } finally {
+      consoleError.mockRestore();
+    }
+    expect(lastMessageFor(stateFor("A"), "overlong 4xx").content).toContain(
+      "chat.sendFailed"
+    );
+  });
+
   it("🔒 capture invariant: switching currentChatId mid-send, cleanup still lands on the captured original dialogue A", async () => {
     stateFor("A").messageInput = "Original dialogue message";
 
