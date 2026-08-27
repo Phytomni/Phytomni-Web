@@ -117,6 +117,14 @@ func Logger() *zap.Logger {
 	return logger
 }
 
+// ReplaceLoggerForTest swaps the process logger for a test observer.
+// The caller must restore via the returned function.
+func ReplaceLoggerForTest(next *zap.Logger) func() {
+	previous := logger
+	logger = next
+	return func() { logger = previous }
+}
+
 func Flush() {
 	_ = logger.Sync()
 }

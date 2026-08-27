@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Failed chat logs include the request id
+
+- Query 5xx, 4xx, and stream failures log the same `request_id` the error
+  bubble shows, plus the conversation id when the route has one, so ops can
+  grep the id a user pasted.
+
 ### 🐛 Ready ZIP with sibling child parts no longer stays RUNNING
 
 - Design and multi-goal Research no longer freeze on RUNNING after Bot

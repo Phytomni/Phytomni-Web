@@ -110,6 +110,17 @@ func localizedQueryErrorStatus(ctx *gin.Context, err error) (int, string) {
 	return status, message
 }
 
+func queryFailureLogFields(ctx *gin.Context, user any, err error, extra ...any) []any {
+	fields := []any{"user", user, "err", err}
+	if requestID := common.A2uiRequestID(ctx); requestID != "" {
+		fields = append(fields, "request_id", requestID)
+	}
+	if dialogueID := strings.TrimSpace(ctx.Param("id")); dialogueID != "" {
+		fields = append(fields, "dialogue_id", dialogueID)
+	}
+	return append(fields, extra...)
+}
+
 func writeQueryError(ctx *gin.Context, status int, message string) {
 	if status >= 400 && status < 500 && status != http.StatusUnauthorized && status != http.StatusForbidden {
 		ctx.Header("X-Phyto-Dispatch-State", "not-started")
@@ -696,7 +707,7 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 			}
 			_, serr := ph.service.QueryStream(ctx, name.(string), in, onReady, forward)
 			if serr != nil {
-				rxLog.Sugar().Errorw("ApiQuery stream failed", "user", name, "err", serr)
+				rxLog.Sugar().Errorw("ApiQuery stream failed", queryFailureLogFields(ctx, name, serr)...)
 				status, msg := queryErrorStatus(serr)
 				if headerSent {
 					// Frames already flushed: HTTP status is locked, so surface
@@ -727,9 +738,9 @@ func (ph *Handler) queryForSurface(ctx *gin.Context, surface api_service.QuerySu
 		}
 		status, msg := localizedQueryErrorStatus(ctx, err)
 		if status >= http.StatusInternalServerError {
-			rxLog.Sugar().Errorw("ApiQuery failed", "user", name, "err", err)
+			rxLog.Sugar().Errorw("ApiQuery failed", queryFailureLogFields(ctx, name, err)...)
 		} else {
-			rxLog.Sugar().Warnw("ApiQuery client error", "user", name, "status", status, "err", err)
+			rxLog.Sugar().Warnw("ApiQuery client error", queryFailureLogFields(ctx, name, err, "status", status)...)
 		}
 		writeQueryError(ctx, status, msg)
 		return
