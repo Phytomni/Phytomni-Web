@@ -43,7 +43,10 @@ vi.mock("@/plugins/cache", () => ({
   },
 }));
 
-import service, { asBinaryResponse } from "@/utils/request";
+import service, {
+  asBinaryResponse,
+  type PhytomniRequestConfig,
+} from "@/utils/request";
 import { AxiosError } from "axios";
 import type { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 
@@ -347,9 +350,30 @@ describe("request.ts interceptor pipeline via custom adapter", () => {
     );
     expect(requestMocks.alert).toHaveBeenCalledTimes(1);
     expect(requestMocks.fedLogOut).toHaveBeenCalledTimes(1);
+    expect(requestMocks.fedLogOut.mock.calls[0][0]).toBeUndefined();
     expect(JSON.stringify(requestMocks.alert.mock.calls)).not.toContain(
       "response-secret"
     );
+  });
+
+  it("does not start session-expired logout for skipSessionExpired requests", async () => {
+    service.defaults.adapter = async (config) => ({
+      data: { code: 401, message: "expired" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: config as InternalAxiosRequestConfig,
+      request: { responseType: "" },
+    });
+
+    await expect(
+      service.post("/api/v1/auth/logout", undefined, {
+        skipSessionExpired: true,
+        suppressErrorToast: true,
+      } as PhytomniRequestConfig)
+    ).rejects.toBe("error");
+    expect(requestMocks.alert).not.toHaveBeenCalled();
+    expect(requestMocks.fedLogOut).not.toHaveBeenCalled();
   });
 
   it("continues cache cleanup when logout rejects after a 401 response", async () => {

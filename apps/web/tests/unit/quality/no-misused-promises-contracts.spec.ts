@@ -28,7 +28,7 @@ describe("no-misused-promises callback contracts", () => {
     );
 
     expect(layout).toMatch(
-      /UserStore\.FedLogOut\(\)[\s\S]*?\.catch\(\(\) => undefined\)\n\s*\.then\(\(\) => router\.replace\("\/login"\)\)\n\s*\.catch\(\(\) => undefined\);/
+      /UserStore\.FedLogOut\(\{ revoke: true \}\)[\s\S]*?\.catch\(\(\) => undefined\)\n\s*\.then\(\(\) => router\.replace\("\/login"\)\)\n\s*\.catch\(\(\) => undefined\);/
     );
     expect(profile).not.toContain("validate(async");
     expect(changePassword).not.toContain(".finally(() => {");

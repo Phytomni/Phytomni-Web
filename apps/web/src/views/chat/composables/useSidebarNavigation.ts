@@ -2,7 +2,10 @@ import type { Router } from "vue-router";
 
 export function useSidebarNavigation(opts: {
   router: Router;
-  userStore: { permission_list: string[]; FedLogOut: () => Promise<unknown> };
+  userStore: {
+    permission_list: string[];
+    FedLogOut: (options?: { revoke?: boolean }) => Promise<unknown>;
+  };
   onStartNewChat: () => void;
   onStartTutorial: () => void;
   onSelectChat: (dialogueId: string) => void;
@@ -34,7 +37,7 @@ export function useSidebarNavigation(opts: {
 
   // logout
   const handleLogout = () => {
-    Promise.resolve(opts.userStore.FedLogOut())
+    Promise.resolve(opts.userStore.FedLogOut({ revoke: true }))
       .then(() => Promise.resolve(opts.router.replace("/login")))
       .catch(() => undefined);
   };

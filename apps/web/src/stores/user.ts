@@ -2,6 +2,7 @@
 import { defineStore } from "pinia";
 import { getToken, removeToken, removeExpiresIn } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
+import { logout } from "@/api/login";
 import {
   CANONICAL_AGENT_DISPLAY_ORDER,
   type RemoteAgentTool,
@@ -92,42 +93,53 @@ export default defineStore("user", {
         this.rolesLoading = false;
       }
     },
-    // frontend logout
-    FedLogOut() {
-      return new Promise((resolve, reject) => {
-        this.SET_ROLES([]);
-        this.SET_PERMISSIONS([]);
-        removeToken();
-        // clear the username
-        this.name = "";
-        localStorage.removeItem("userName");
-        // clear cookies
-        removeExpiresIn();
-        Object.keys(Cookies.get()).forEach((cookieName) => {
-          Cookies.remove(cookieName);
-        });
+    // Local session teardown. Explicit logout passes { revoke: true } so the
+    // current JWT is blocklisted first. 401/403 interceptors must omit that
+    // flag — posting /logout from an already-rejected token would loop.
+    FedLogOut(options?: { revoke?: boolean }) {
+      const clearLocal = () =>
+        new Promise((resolve, reject) => {
+          this.SET_ROLES([]);
+          this.SET_PERMISSIONS([]);
+          removeToken();
+          // clear the username
+          this.name = "";
+          localStorage.removeItem("userName");
+          // clear cookies
+          removeExpiresIn();
+          Object.keys(Cookies.get()).forEach((cookieName) => {
+            Cookies.remove(cookieName);
+          });
 
-        const failures: string[] = [];
-        try {
-          localStorage.clear();
-        } catch (err) {
-          console.warn("FedLogOut: localStorage.clear failed", err);
-          failures.push("localStorage");
-        }
-        try {
-          sessionStorage.clear();
-        } catch (err) {
-          console.warn("FedLogOut: sessionStorage.clear failed", err);
-          failures.push("sessionStorage");
-        }
-        if (failures.length > 0) {
-          reject(
-            new Error(`FedLogOut storage clears failed: ${failures.join(", ")}`)
-          );
-        } else {
-          resolve(true);
-        }
-      });
+          const failures: string[] = [];
+          try {
+            localStorage.clear();
+          } catch (err) {
+            console.warn("FedLogOut: localStorage.clear failed", err);
+            failures.push("localStorage");
+          }
+          try {
+            sessionStorage.clear();
+          } catch (err) {
+            console.warn("FedLogOut: sessionStorage.clear failed", err);
+            failures.push("sessionStorage");
+          }
+          if (failures.length > 0) {
+            reject(
+              new Error(
+                `FedLogOut storage clears failed: ${failures.join(", ")}`
+              )
+            );
+          } else {
+            resolve(true);
+          }
+        });
+      if (!options?.revoke) {
+        return clearLocal();
+      }
+      return logout()
+        .catch(() => undefined)
+        .then(() => clearLocal());
     },
 
     /* synchronous state updates */

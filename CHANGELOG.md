@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Explicit logout revokes the current token
+
+- The sidebar and layout logout actions call `POST /api/v1/auth/logout`
+  before clearing local storage, so a stolen JWT cannot outlive the click.
+- Session-expired 401 handling still only clears locally and does not post
+  logout, so an already-rejected token cannot loop.
+
 ### 🐛 Failed chat logs include the request id
 
 - Query 5xx, 4xx, and stream failures log the same `request_id` the error
