@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Chat query failures log Bot status and code
+
+- `ApiQuery` client and server failures record `bot_status`, `bot_code`,
+  and `bot_path` when the error is a Bot APIError, so a Request ID can be
+  joined to the Research 422 without logging the Bot message body.
+
 ### 🐛 Expert send failures show the gateway 4xx message
 
 - Blocking chat send uses the Surfaceable 4xx `message` from the gateway

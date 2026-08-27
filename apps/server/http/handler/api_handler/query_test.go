@@ -181,6 +181,40 @@ func TestQueryFailureLogFieldsIncludeRequestAndDialogueIDs(t *testing.T) {
 	}
 }
 
+func TestQueryFailureLogFieldsIncludeBotAPIError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("x-request-id", "87b85d0d-3c3d-4282-b646-c3c28032979e")
+
+	err := &rxBot.APIError{
+		Method:  http.MethodPost,
+		Path:    "/v1/agents/research/runs",
+		Status:  422,
+		Code:    "research_dataset_not_found",
+		Message: "Research dataset metadata could not be verified.",
+	}
+	fields := queryFailureLogFields(c, "ops@example.com", err)
+	got := logFieldMap(t, fields)
+	if got["request_id"] != "87b85d0d-3c3d-4282-b646-c3c28032979e" {
+		t.Fatalf("request_id = %#v", got["request_id"])
+	}
+	if got["bot_status"] != 422 {
+		t.Fatalf("bot_status = %#v", got["bot_status"])
+	}
+	if got["bot_code"] != "research_dataset_not_found" {
+		t.Fatalf("bot_code = %#v", got["bot_code"])
+	}
+	if got["bot_path"] != "/v1/agents/research/runs" {
+		t.Fatalf("bot_path = %#v", got["bot_path"])
+	}
+	if _, ok := got["message"]; ok {
+		t.Fatalf("must not log APIError.Message: %#v", got)
+	}
+}
+
 func TestQueryFailureLogFieldsOmitBlankCorrelation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

@@ -118,6 +118,16 @@ func queryFailureLogFields(ctx *gin.Context, user any, err error, extra ...any) 
 	if dialogueID := strings.TrimSpace(ctx.Param("id")); dialogueID != "" {
 		fields = append(fields, "dialogue_id", dialogueID)
 	}
+	var botAPIError *rxBot.APIError
+	if errors.As(err, &botAPIError) {
+		fields = append(fields, "bot_status", botAPIError.Status)
+		if code := strings.TrimSpace(botAPIError.Code); code != "" {
+			fields = append(fields, "bot_code", code)
+		}
+		if path := strings.TrimSpace(botAPIError.Path); path != "" {
+			fields = append(fields, "bot_path", path)
+		}
+	}
 	return append(fields, extra...)
 }
 
