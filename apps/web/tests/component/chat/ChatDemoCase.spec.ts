@@ -196,6 +196,10 @@ describe("ChatView demo case tapes", () => {
     expect(CHAT_SOURCE).not.toContain("AgentDemoShell");
   });
 
+  it("downloads /static/ demo zips via anchor, not OBS signing", () => {
+    expect(CHAT_SOURCE).toContain('path.startsWith("/static/")');
+  });
+
   it("plays the knowledge tape as a read-only ChatView without cases or composer", async () => {
     const { wrapper } = await mountChatView("/cases/knowledge-agent");
     try {

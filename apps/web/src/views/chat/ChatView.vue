@@ -1811,6 +1811,11 @@ function downloadChatFile(path: string): void {
     startNetworkSampleDownloads(triggerAnchorDownload);
     return;
   }
+  if (path.startsWith("/static/")) {
+    const fileName = path.split("/").pop() || "download";
+    triggerAnchorDownload(path, fileName);
+    return;
+  }
   void downloadFile(path);
 }
 
