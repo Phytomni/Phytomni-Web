@@ -121,18 +121,17 @@ export const CANONICAL_AGENT_ROUTES = {
 /**
  * Permission-independent destinations used by the eight Chat case cards.
  *
- * Gene Network and Digital Design have separate live product routes. Their
- * case cards must continue to open the existing static examples instead of
- * entering the capability-gated execution surfaces.
+ * Every case card is permission-independent and must not enter
+ * capability-gated live surfaces.
  */
 export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
-  KnowledgeAgent: "/knowledge-agent",
-  DataAgent: "/data-agent",
-  AnalystAgent: "/analyst-agent",
-  ReviewAgent: "/review-agent",
-  BriefGeneAgent: "/brief-gene-agent",
+  KnowledgeAgent: "/cases/knowledge-agent",
+  DataAgent: "/cases/data-agent",
+  AnalystAgent: "/cases/analyst-agent",
+  ReviewAgent: "/cases/review-agent",
+  BriefGeneAgent: "/cases/brief-gene-agent",
   GeneNetworkAgent: "/cases/gene-network-agent",
-  DeepGenomeAgent: "/deep-genome-agent",
+  DeepGenomeAgent: "/cases/deep-genome-agent",
   DigitalDesignAgent: "/cases/digital-design-agent",
 };
 

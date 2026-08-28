@@ -12,13 +12,13 @@ const CASES_SOURCE = readFileSync(
 );
 
 const routes = [
-  "/knowledge-agent",
-  "/data-agent",
-  "/analyst-agent",
-  "/review-agent",
+  "/cases/knowledge-agent",
+  "/cases/data-agent",
+  "/cases/analyst-agent",
+  "/cases/review-agent",
   "/cases/gene-network-agent",
-  "/brief-gene-agent",
-  "/deep-genome-agent",
+  "/cases/brief-gene-agent",
+  "/cases/deep-genome-agent",
   "/cases/digital-design-agent",
 ];
 
@@ -169,5 +169,7 @@ describe("ChatCases", () => {
     expect(hrefs).toContain("/cases/digital-design-agent");
     expect(hrefs).not.toContain("/gene-network-agent");
     expect(hrefs).not.toContain("/digital-design-agent");
+    expect(hrefs).not.toContain("/analyst-agent");
+    expect(hrefs).toContain("/cases/analyst-agent");
   });
 });

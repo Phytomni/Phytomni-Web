@@ -41,6 +41,12 @@ describe("sidebar agent route options", () => {
     expect(
       options.find((option) => option.toolName === "DigitalDesignAgent")?.route
     ).toBe("/cases/digital-design-agent");
+    expect(
+      options.find((option) => option.toolName === "AnalystAgent")?.route
+    ).toBe("/cases/analyst-agent");
+    expect(
+      options.find((option) => option.toolName === "KnowledgeAgent")?.route
+    ).toBe("/cases/knowledge-agent");
 
     const briefGene = options.find(
       (option) => option.toolName === "BriefGeneAgent"
