@@ -12,44 +12,56 @@ type DemoContract = {
   path: string;
   source: string;
   required: string[];
-  shell?: "agent-demo";
-  boundedContent?: string;
 };
 
+const CASE_CHAT_SOURCE = "views/chat/ChatView.vue";
+const CASE_CHAT_REQUIRED = ["PhyAdaptiveShell", "ChatCases"];
+
+const CASE_DEMO_CONTRACTS: DemoContract[] = [
+  {
+    path: "/cases/knowledge-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/data-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/analyst-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/review-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/gene-network-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/brief-gene-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/deep-genome-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+  {
+    path: "/cases/digital-design-agent",
+    source: CASE_CHAT_SOURCE,
+    required: CASE_CHAT_REQUIRED,
+  },
+];
+
 const DEMO_CONTRACTS: DemoContract[] = [
-  {
-    path: "/knowledge-agent",
-    source: "views/knowledge-agent/KnowledgeAgentView.vue",
-    required: ["AgentDemoShell", 'ns="kb"', "CitedAnswer", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
-  },
-  {
-    path: "/brief-gene-agent",
-    source: "views/brief-gene-agent/BriefGeneAgentView.vue",
-    required: ["AgentDemoShell", 'ns="bg"', "CitedAnswer", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
-  },
-  {
-    path: "/review-agent",
-    source: "views/review-agent/ReviewAgentView.vue",
-    required: ["AgentDemoShell", 'ns="review"', "CitedAnswer", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
-  },
-  {
-    path: "/data-agent",
-    source: "views/data-agent/DataAgentView.vue",
-    required: [
-      "AgentDemoShell",
-      "data-agent-round",
-      "ScientificMarkdown",
-      "router.back",
-    ],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
-  },
+  ...CASE_DEMO_CONTRACTS,
   {
     path: "/analyst-agent",
     source: "views/analyst-agent/AnalystAgentView.vue",
@@ -59,13 +71,6 @@ const DEMO_CONTRACTS: DemoContract[] = [
       'locale-prefix="agents.analyst"',
       ':state="state"',
     ],
-  },
-  {
-    path: "/cases/gene-network-agent",
-    source: "views/agent-cases/GeneNetworkCase.vue",
-    required: ["AgentDemoShell", "gene-network-download", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
   },
   {
     path: "/gene-network-agent",
@@ -85,13 +90,6 @@ const DEMO_CONTRACTS: DemoContract[] = [
     ],
   },
   {
-    path: "/cases/digital-design-agent",
-    source: "views/agent-cases/DigitalDesignCase.vue",
-    required: ["AgentDemoShell", "digital-design-download", "router.back"],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
-  },
-  {
     path: "/digital-design-agent",
     source: "views/digital-design-agent/DigitalDesignAgentView.vue",
     required: [
@@ -107,18 +105,6 @@ const DEMO_CONTRACTS: DemoContract[] = [
       'data-test="design-artifact"',
       "width: min(100%, 1080px);",
     ],
-  },
-  {
-    path: "/deep-genome-agent",
-    source: "views/deep-genome-agent/DeepGenomeAgentView.vue",
-    required: [
-      "AgentDemoShell",
-      "DeepGenomeArtifact",
-      'ns="deep-genome-demo"',
-      "router.back",
-    ],
-    shell: "agent-demo",
-    boundedContent: "agent-demo-result",
   },
   {
     path: "/design",
@@ -159,16 +145,17 @@ describe("routed agent demonstration inventory", () => {
     );
 
     expect(DEMO_CONTRACTS.map((contract) => contract.path)).toEqual([
-      "/knowledge-agent",
-      "/brief-gene-agent",
-      "/review-agent",
-      "/data-agent",
-      "/analyst-agent",
+      "/cases/knowledge-agent",
+      "/cases/data-agent",
+      "/cases/analyst-agent",
+      "/cases/review-agent",
       "/cases/gene-network-agent",
-      "/gene-network-agent",
+      "/cases/brief-gene-agent",
+      "/cases/deep-genome-agent",
       "/cases/digital-design-agent",
+      "/analyst-agent",
+      "/gene-network-agent",
       "/digital-design-agent",
-      "/deep-genome-agent",
       "/design",
     ]);
     expect(
@@ -218,26 +205,40 @@ describe("routed agent demonstration inventory", () => {
     expect(shell).not.toContain("width: min(100%, clamp(1160px");
   });
 
-  it("keeps every static Agent route attached to the shared scroll and result owner", () => {
-    const shell = readDemoSource("components/demo/AgentDemoShell.vue");
-    const staticContracts = DEMO_CONTRACTS.filter(
-      (contract) => contract.shell === "agent-demo"
+  it("routes /design through AgentDemoShell and eight /cases records through ChatView", () => {
+    const design = DEMO_CONTRACTS.find(
+      (contract) => contract.path === "/design"
+    );
+    const caseContracts = DEMO_CONTRACTS.filter((contract) =>
+      contract.path.startsWith("/cases/")
     );
 
-    expect(staticContracts.map((contract) => contract.path)).toEqual([
-      "/knowledge-agent",
-      "/brief-gene-agent",
-      "/review-agent",
-      "/data-agent",
-      "/cases/gene-network-agent",
-      "/cases/digital-design-agent",
-      "/deep-genome-agent",
-    ]);
-    expect(shell).toContain('data-scroll-root="agent-demo"');
+    expect(design?.source).toBe("views/design/DesignView.vue");
+    expect(design?.required).toContain("AgentDemoShell");
+    expect(readDemoSource("views/design/DesignView.vue")).toContain(
+      "AgentDemoShell"
+    );
 
-    for (const contract of staticContracts) {
-      expect(readDemoSource(contract.source)).toContain("AgentDemoShell");
-      expect(shell).toContain(`data-test="${contract.boundedContent}"`);
+    expect(caseContracts.map((contract) => contract.path)).toEqual([
+      "/cases/knowledge-agent",
+      "/cases/data-agent",
+      "/cases/analyst-agent",
+      "/cases/review-agent",
+      "/cases/gene-network-agent",
+      "/cases/brief-gene-agent",
+      "/cases/deep-genome-agent",
+      "/cases/digital-design-agent",
+    ]);
+
+    for (const contract of caseContracts) {
+      expect(contract.source).toBe(CASE_CHAT_SOURCE);
+      expect(contract.required).toEqual(CASE_CHAT_REQUIRED);
+      expect(contract.required).not.toContain("AgentDemoShell");
+      expect(contract.required).not.toContain("ChatDemoAskCta");
+      expect(readDemoSource(contract.source)).toContain("PhyAdaptiveShell");
+      expect(readDemoSource(contract.source)).toContain("ChatCases");
+      expect(readDemoSource(contract.source)).not.toContain("AgentDemoShell");
+      expect(router.resolve(contract.path).path).toBe(contract.path);
     }
   });
 
@@ -251,11 +252,13 @@ describe("routed agent demonstration inventory", () => {
           marker
         );
       }
-      for (const marker of LEGACY_DEMO_MARKERS) {
-        expect(
-          source,
-          `${contract.path} still contains ${marker}`
-        ).not.toContain(marker);
+      if (contract.source !== CASE_CHAT_SOURCE) {
+        for (const marker of LEGACY_DEMO_MARKERS) {
+          expect(
+            source,
+            `${contract.path} still contains ${marker}`
+          ).not.toContain(marker);
+        }
       }
     }
   );

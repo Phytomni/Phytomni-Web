@@ -17,7 +17,13 @@ type RouteRecord = {
 };
 
 type ProductLayout =
-  "auth" | "conversation" | "demo" | "document" | "standalone" | "workspace";
+  | "adaptive-chat"
+  | "auth"
+  | "conversation"
+  | "demo"
+  | "document"
+  | "standalone"
+  | "workspace";
 
 type RouteContract = {
   path: string;
@@ -94,20 +100,20 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     sourceMarkers: ["PhyWorkspaceShell"],
   },
   {
-    path: "/knowledge-agent",
-    component: "views/knowledge-agent/KnowledgeAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
+    path: "/cases/knowledge-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
-    path: "/data-agent",
-    component: "views/data-agent/DataAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
+    path: "/cases/data-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
     path: "/analyst-agent",
@@ -118,33 +124,36 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     sourceMarkers: ["RemoteAnalysisAgentWorkspace", "AnalystAgent"],
   },
   {
-    path: "/review-agent",
-    component: "views/review-agent/ReviewAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
+    path: "/cases/analyst-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: [
-      "AgentDemoShell",
-      'ns="review"',
-      "CitedAnswer",
-      "router.back",
-    ],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
-    path: "/brief-gene-agent",
-    component: "views/brief-gene-agent/BriefGeneAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
+    path: "/cases/review-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    sourceMarkers: ["PhyAdaptiveShell"],
+  },
+  {
+    path: "/cases/brief-gene-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
+    behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
     path: "/cases/gene-network-agent",
-    component: "views/agent-cases/GeneNetworkCase.vue",
-    productLayout: "demo",
-    migrationTask: "agent case shell",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell", "gene-network-download"],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
     path: "/gene-network-agent",
@@ -159,20 +168,20 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     ],
   },
   {
-    path: "/deep-genome-agent",
-    component: "views/deep-genome-agent/DeepGenomeAgentView.vue",
-    productLayout: "demo",
-    migrationTask: "agent demo shell",
+    path: "/cases/deep-genome-agent",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell"],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
     path: "/cases/digital-design-agent",
-    component: "views/agent-cases/DigitalDesignCase.vue",
-    productLayout: "demo",
-    migrationTask: "agent case shell",
+    component: "views/chat/ChatView.vue",
+    productLayout: "adaptive-chat",
+    migrationTask: "adaptive conversation shell",
     behaviorTest: "tests/component/demo/AgentDemoRoutes.spec.ts",
-    sourceMarkers: ["AgentDemoShell", "digital-design-download"],
+    sourceMarkers: ["PhyAdaptiveShell"],
   },
   {
     path: "/digital-design-agent",
@@ -331,12 +340,13 @@ const activeLeafRoutes = flattenLeafRoutes(
 );
 
 const STATIC_AGENT_DEMO_PATHS = [
-  "/knowledge-agent",
-  "/data-agent",
-  "/review-agent",
-  "/brief-gene-agent",
+  "/cases/knowledge-agent",
+  "/cases/data-agent",
+  "/cases/analyst-agent",
+  "/cases/review-agent",
+  "/cases/brief-gene-agent",
   "/cases/gene-network-agent",
-  "/deep-genome-agent",
+  "/cases/deep-genome-agent",
   "/cases/digital-design-agent",
 ] as const;
 
@@ -388,23 +398,24 @@ const ROUTE_OWNERSHIP_CONTRACTS = [
     footerMarker: "Footer",
   },
   {
-    paths: ["/chat"],
+    paths: [
+      "/chat",
+      "/cases/analyst-agent",
+      "/cases/brief-gene-agent",
+      "/cases/data-agent",
+      "/cases/deep-genome-agent",
+      "/cases/digital-design-agent",
+      "/cases/gene-network-agent",
+      "/cases/knowledge-agent",
+      "/cases/review-agent",
+    ],
     component: "views/chat/ChatView.vue",
     ownerMarker: "PhyAdaptiveShell",
     scrollMarker: 'data-testid="chat-content-stack"',
     footerMarker: "",
   },
   {
-    paths: [
-      "/knowledge-agent",
-      "/data-agent",
-      "/review-agent",
-      "/brief-gene-agent",
-      "/cases/gene-network-agent",
-      "/deep-genome-agent",
-      "/cases/digital-design-agent",
-      "/design",
-    ],
+    paths: ["/design"],
     component: "components/demo/AgentDemoShell.vue",
     ownerMarker: "agent-demo-shell",
     scrollMarker: 'data-scroll-root="agent-demo"',
@@ -465,7 +476,7 @@ describe("routed visual archetypes", () => {
     const actualPaths = activeLeafRoutes.map((route) => route.path).sort();
     const contractPaths = ROUTE_CONTRACTS.map((route) => route.path).sort();
 
-    expect(contractPaths).toHaveLength(34);
+    expect(contractPaths).toHaveLength(35);
     expect(new Set(contractPaths).size).toBe(contractPaths.length);
     expect(actualPaths).toEqual(contractPaths);
   });
@@ -477,7 +488,7 @@ describe("routed visual archetypes", () => {
 
       expect(source).toBeTruthy();
       expect(contract.productLayout).toMatch(
-        /^(auth|conversation|demo|document|standalone|workspace)$/
+        /^(adaptive-chat|auth|conversation|demo|document|standalone|workspace)$/
       );
       expect(contract.migrationTask.trim()).not.toBe("");
       expect(
@@ -522,7 +533,7 @@ describe("routed visual archetypes", () => {
     ]);
   });
 
-  it("keeps static Agent routes connected to their one scroll and content owner", () => {
+  it("keeps static Agent case routes on ChatView and /design on AgentDemoShell", () => {
     const shell = readSource("components/demo/AgentDemoShell.vue");
     const staticDemoRoutes = ROUTE_CONTRACTS.filter((route) =>
       STATIC_AGENT_DEMO_PATHS.includes(
@@ -534,8 +545,17 @@ describe("routed visual archetypes", () => {
       STATIC_AGENT_DEMO_PATHS
     );
     for (const route of staticDemoRoutes) {
-      expect(readSource(route.component)).toContain("AgentDemoShell");
+      expect(route.component).toBe("views/chat/ChatView.vue");
+      expect(route.productLayout).toBe("adaptive-chat");
+      expect(readSource(route.component)).toContain("PhyAdaptiveShell");
+      expect(readSource(route.component)).not.toContain("AgentDemoShell");
     }
+
+    const design = ROUTE_CONTRACTS.find((route) => route.path === "/design");
+    expect(design?.component).toBe("views/design/DesignView.vue");
+    expect(readSource("views/design/DesignView.vue")).toContain(
+      "AgentDemoShell"
+    );
     expect(shell).toContain('data-scroll-root="agent-demo"');
     expect(shell).toContain('data-test="agent-demo-result"');
     expect(shell).toContain(
