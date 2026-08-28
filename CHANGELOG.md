@@ -13,6 +13,16 @@ Newest first.
 
 ## [Unreleased]
 
+### ✨ Agent cases play inside Chat
+
+- The eight empty-state case cards and Explore Agents entries open a
+  read-only Chat transcript of the frozen example, not a separate demo
+  shell, and they do not appear in history.
+- Ask this agent returns to a new Expert chat with that agent selected
+  and does not copy the sample question.
+- Legacy `/knowledge-agent` (and four sibling demo URLs) redirect to
+  `/cases/…`. `/analyst-agent` stays the gated product page.
+
 ### 🐛 Chat query failures log Bot status and code
 
 - `ApiQuery` client and server failures record `bot_status`, `bot_code`,
