@@ -4,18 +4,7 @@
     :subtitle="$t('agents.deepGenome.subtitle')"
     @back="goBack"
   >
-    <template #question>
-      [Species Name: rice (Oryza sativa) Gene Names:
-      d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2]
-      Provide a scientifically rigorous and integrated account of the rice
-      (Oryza sativa)
-      d18h|GA3ox1|OsGA3OX2|OsGA3ox-2|d18-h|GA3OX2|d18-I|d25|dwf15|ga3ox2|d18-dy|OsGA3ox2|d18|d18-k|d18-AD|D18|GA3ox-2
-      gene. Consolidate data for all gene aliases (separated by '|') as
-      representing identical genetic entities. Maintain strict adherence to
-      evidence-based reporting, excluding unsupported assertions. Prioritize
-      conciseness while preserving informational density comparable to source
-      materials.
-    </template>
+    <template #question>{{ DEEP_GENOME_CASE_QUESTION }}</template>
 
     <template #result>
       <DeepGenomeArtifact
@@ -58,8 +47,9 @@ import {
   artifactDownloadFormat,
 } from "@/views/chat/utils/artifact-chrome";
 import {
-  DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
+  DEEP_GENOME_CASE_QUESTION,
+  DEEP_GENOME_CASE_REFERENCES,
 } from "./deep-genome-case";
 
 const { t } = useI18n();

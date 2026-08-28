@@ -1,3 +1,6 @@
+import type { CanonicalAgentTool } from "@/constants/agents";
+import type { ChatMessage } from "@/views/chat/types";
+
 export const AGENT_CASE_DEMO_KEYS = [
   "knowledge",
   "data",
@@ -20,8 +23,8 @@ export interface AgentCaseDemoEmptyCopy {
 
 /** Tape loaded into ChatView for a `/cases/…` demo dialogue. */
 export interface AgentCaseDemoFixture {
-  tool: string;
-  messages: readonly unknown[];
+  tool: CanonicalAgentTool;
+  messages: ChatMessage[];
   empty?: AgentCaseDemoEmptyCopy;
 }
 
