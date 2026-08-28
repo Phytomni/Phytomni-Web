@@ -6,6 +6,7 @@ import {
   isAgentCaseDemoKey,
   isDemoDialogueId,
 } from "@/views/chat/demos/catalog";
+import { NETWORK_SAMPLE_DOWNLOAD_SENTINEL } from "@/views/chat/demos/networkStaticDownload";
 import { KNOWLEDGE_CASE } from "@/views/knowledge-agent/knowledge-case";
 import { REVIEW_CASE } from "@/views/review-agent/review-case";
 
@@ -71,5 +72,23 @@ describe("agent case demo catalog", () => {
     expect(
       String(fixtureForDemoKey("deep-genome")?.messages[1].content)
     ).toContain("Os01g0177400");
+  });
+
+  it("freezes Network and Design as a question plus a downloadable sample", () => {
+    const network = fixtureForDemoKey("network");
+    expect(network?.messages[0].content).toBe(
+      "Please help me to analysis the hormone regulatory network in the traits of TO:0000011"
+    );
+    expect(network?.messages[1].tool_name).toBe("GeneNetworkAgent");
+    expect(network?.messages[1].download_path).toBe(
+      NETWORK_SAMPLE_DOWNLOAD_SENTINEL
+    );
+    const design = fixtureForDemoKey("design");
+    expect(design?.messages[0].content).toBe(
+      "Please help me design the protein structure based on evolution information for gene Os01g0177400."
+    );
+    expect(design?.messages[1].download_path).toBe(
+      "/static/downloads/7.Digital Design Agent/2.DigitalAgent/results/design_results.zip"
+    );
   });
 });
