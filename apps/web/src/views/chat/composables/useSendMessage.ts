@@ -28,6 +28,7 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
+import { isDemoDialogueId } from "@/views/chat/demos/catalog";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
@@ -452,6 +453,7 @@ export function useSendMessage(opts: {
     currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
+    if (isDemoDialogueId(currentChatId.value)) return;
     if (!currentChatId.value || attachmentTargetBlocked?.value) return;
 
     const sendingDialogueId = currentChatId.value;

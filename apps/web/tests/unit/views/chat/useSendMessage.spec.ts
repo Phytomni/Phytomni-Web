@@ -287,6 +287,20 @@ describe("useSendMessage", () => {
     return useSendMessage(composableOptions);
   }
 
+  it("does not send when the current dialogue is a demo tape", async () => {
+    currentChatId.value = "demo:knowledge";
+    const state = getChatState("demo:knowledge");
+    state.messageInput = "should not send";
+    state.mode = "expert";
+    state.selectedAgent = "KnowledgeAgent";
+
+    await makeComposable().sendMessage();
+
+    expect(mockGetQueryAbortable).not.toHaveBeenCalled();
+    expect(streamHarness.streamMessage).not.toHaveBeenCalled();
+    expect(state.isSending).toBe(false);
+  });
+
   it("rejects an over-limit forced Research draft before any mutation", async () => {
     const draft = "🧬".repeat(131073);
     const state = stateFor("A");

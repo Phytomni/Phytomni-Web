@@ -551,6 +551,15 @@ export default {
     cases: {
       title: "Explore Agent Cases",
       ariaLabel: "Agent case demonstrations",
+      askThisAgent: "Ask this agent",
+      demoEmpty: {
+        title: "No example conversation yet",
+        body: "This is a static example. A sample report will be added later. You can ask this agent now.",
+      },
+      demoLoadError: {
+        title: "Could not load this example",
+        body: "Return to chat and try again, or ask this agent now.",
+      },
     },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:

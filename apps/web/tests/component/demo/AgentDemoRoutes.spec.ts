@@ -15,7 +15,7 @@ type DemoContract = {
 };
 
 const CASE_CHAT_SOURCE = "views/chat/ChatView.vue";
-const CASE_CHAT_REQUIRED = ["PhyAdaptiveShell", "ChatCases"];
+const CASE_CHAT_REQUIRED = ["PhyAdaptiveShell", "ChatCases", "ChatDemoAskCta"];
 
 const CASE_DEMO_CONTRACTS: DemoContract[] = [
   {
@@ -234,9 +234,10 @@ describe("routed agent demonstration inventory", () => {
       expect(contract.source).toBe(CASE_CHAT_SOURCE);
       expect(contract.required).toEqual(CASE_CHAT_REQUIRED);
       expect(contract.required).not.toContain("AgentDemoShell");
-      expect(contract.required).not.toContain("ChatDemoAskCta");
+      expect(contract.required).toContain("ChatDemoAskCta");
       expect(readDemoSource(contract.source)).toContain("PhyAdaptiveShell");
       expect(readDemoSource(contract.source)).toContain("ChatCases");
+      expect(readDemoSource(contract.source)).toContain("ChatDemoAskCta");
       expect(readDemoSource(contract.source)).not.toContain("AgentDemoShell");
       expect(router.resolve(contract.path).path).toBe(contract.path);
     }

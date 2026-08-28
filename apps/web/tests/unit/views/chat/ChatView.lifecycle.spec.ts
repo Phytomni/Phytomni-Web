@@ -57,6 +57,14 @@ vi.mock("vue-router", async (importOriginal) => {
   return {
     ...actual,
     useRouter: () => ({ push: vi.fn(), back: vi.fn(), go: vi.fn() }),
+    useRoute: () => ({
+      name: "chat",
+      path: "/chat",
+      meta: {},
+      params: {},
+      query: {},
+      matched: [],
+    }),
   };
 });
 

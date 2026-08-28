@@ -547,6 +547,15 @@ export default {
     cases: {
       title: "智能体案例",
       ariaLabel: "智能体案例展示",
+      askThisAgent: "向它提问",
+      demoEmpty: {
+        title: "暂无示例对话",
+        body: "这是静态示例。示例报告稍后提供。你可以先向该智能体提问。",
+      },
+      demoLoadError: {
+        title: "无法加载示例",
+        body: "请返回对话后再试，或向该智能体提问。",
+      },
     },
     inputPlaceholderTip: "请输入您的问题",
     uploadFile:

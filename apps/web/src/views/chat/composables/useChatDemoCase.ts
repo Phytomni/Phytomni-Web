@@ -1,13 +1,21 @@
 import type { Ref } from "vue";
+import type { RouteLocationNormalizedLoaded } from "vue-router";
 import type { CanonicalAgentTool } from "@/constants/agents";
 import {
   demoDialogueId,
   fixtureForDemoKey,
+  isAgentCaseDemoKey,
   type AgentCaseDemoEmptyCopy,
   type AgentCaseDemoFixture,
   type AgentCaseDemoKey,
 } from "@/views/chat/demos/catalog";
 import type { ChatUIState } from "@/views/chat/types";
+
+export function routeDemoKey(
+  route: Pick<RouteLocationNormalizedLoaded, "meta">
+): AgentCaseDemoKey | null {
+  return isAgentCaseDemoKey(route.meta.demoKey) ? route.meta.demoKey : null;
+}
 
 export function applyAgentCaseDemo(options: {
   demoKey: AgentCaseDemoKey;
@@ -67,4 +75,23 @@ export function demoAskTarget(demoKey: AgentCaseDemoKey): {
     tool: fixture.tool,
     query: "",
   };
+}
+
+export async function askThisAgentFromDemo(options: {
+  demoKey: AgentCaseDemoKey;
+  router: { push: (to: { name: string }) => Promise<unknown> };
+  startNewChat: () => void;
+  chatMode: { value: "instant" | "expert" };
+  messageInput: { value: string };
+  selectedAgent: { value: string };
+  authorizedAgentTools: readonly string[];
+}): Promise<void> {
+  const target = demoAskTarget(options.demoKey);
+  await options.router.push({ name: "chat" });
+  options.startNewChat();
+  options.chatMode.value = target.chatMode;
+  options.messageInput.value = target.query;
+  if (options.authorizedAgentTools.includes(target.tool)) {
+    options.selectedAgent.value = target.tool;
+  }
 }

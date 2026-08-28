@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import {
   applyAgentCaseDemo,
+  askThisAgentFromDemo,
   demoAskTarget,
+  routeDemoKey,
 } from "@/views/chat/composables/useChatDemoCase";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { demoDialogueId } from "@/views/chat/demos/catalog";
@@ -57,5 +60,41 @@ describe("useChatDemoCase", () => {
       tool: "KnowledgeAgent",
       query: "",
     });
+  });
+
+  it("reads demoKey from route meta and ignores unknown keys", () => {
+    expect(routeDemoKey({ meta: { demoKey: "knowledge" } })).toBe("knowledge");
+    expect(routeDemoKey({ meta: { demoKey: "research" } })).toBeNull();
+    expect(routeDemoKey({ meta: {} })).toBeNull();
+  });
+
+  it("asks this agent into a new Expert chat with the tool and an empty draft", async () => {
+    const chatMode = ref<"instant" | "expert">("instant");
+    const messageInput = ref("sample question");
+    const selectedAgent = ref("");
+    const startNewChat = vi.fn(() => {
+      chatMode.value = "instant";
+      messageInput.value = "leftover";
+      selectedAgent.value = "";
+    });
+    const router = {
+      push: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await askThisAgentFromDemo({
+      demoKey: "knowledge",
+      router,
+      startNewChat,
+      chatMode,
+      messageInput,
+      selectedAgent,
+      authorizedAgentTools: ["KnowledgeAgent"],
+    });
+
+    expect(router.push).toHaveBeenCalledWith({ name: "chat" });
+    expect(startNewChat).toHaveBeenCalledTimes(1);
+    expect(chatMode.value).toBe("expert");
+    expect(selectedAgent.value).toBe("KnowledgeAgent");
+    expect(messageInput.value).toBe("");
   });
 });

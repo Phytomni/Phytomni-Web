@@ -168,7 +168,8 @@ export function releaseDialogueUploads(
                 <div
                   v-else-if="
                     currentHistoryHydration === 'new' &&
-                    !currentChat?.messages?.length
+                    !currentChat?.messages?.length &&
+                    !demoKey
                   "
                   class="empty-chat"
                 >
@@ -185,6 +186,31 @@ export function releaseDialogueUploads(
                       />
                     </template>
                   </PhyEmptyState>
+                </div>
+                <div
+                  v-else-if="demoKey && demoError"
+                  class="empty-chat"
+                  data-testid="chat-demo-load-error"
+                >
+                  <PhyErrorState
+                    :title="$t(demoError.titleKey)"
+                    :description="$t(demoError.bodyKey)"
+                  />
+                </div>
+                <div
+                  v-else-if="
+                    demoKey &&
+                    demoEmpty &&
+                    !currentChat?.messages?.length &&
+                    !demoError
+                  "
+                  class="empty-chat"
+                  data-testid="chat-demo-empty"
+                >
+                  <PhyEmptyState
+                    :title="$t(demoEmpty.titleKey)"
+                    :subtitle="$t(demoEmpty.bodyKey)"
+                  />
                 </div>
                 <div class="transcript-content">
                   <template v-if="currentChat?.messages?.length">
@@ -337,7 +363,7 @@ export function releaseDialogueUploads(
                               if (message.id) handleReaction(message.id, type);
                             }
                           "
-                          @direct-download="(path) => downloadFile(path)"
+                          @direct-download="(path) => downloadChatFile(path)"
                           @download-format="
                             (format) => {
                               if (message.id)
@@ -418,6 +444,7 @@ export function releaseDialogueUploads(
               <!-- Input area -->
               <div class="input-container">
                 <ChatComposer
+                  v-if="!demoKey"
                   ref="composerRef"
                   v-model="displayMessageInput"
                   :is-sending="isSending || hasActivePollableAssistantWait"
@@ -458,9 +485,10 @@ export function releaseDialogueUploads(
                   @clear-agent="clearSelectedAgent"
                   @toggle-agent="handleButtonClick"
                 />
+                <ChatDemoAskCta v-if="demoKey" @ask="onAskThisAgent" />
               </div>
               <div
-                v-if="!currentChat?.messages?.length"
+                v-if="!demoKey && !currentChat?.messages?.length"
                 ref="tourCasesTarget"
                 class="chat-cases-region"
               >
@@ -687,6 +715,7 @@ import TransferProgress from "@/components/TransferProgress.vue";
 import SendProgress from "./components/SendProgress.vue";
 import ChatComposer from "./components/ChatComposer.vue";
 import ChatCases from "./components/ChatCases.vue";
+import ChatDemoAskCta from "./components/ChatDemoAskCta.vue";
 import ChatMessageRow from "./components/ChatMessageRow.vue";
 import ChatMessageContent from "./components/ChatMessageContent.vue";
 import ChatMessageActions from "./components/ChatMessageActions.vue";
@@ -751,6 +780,21 @@ import {
   analystLogActivityKey,
 } from "./composables/useLogView";
 import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import {
+  applyAgentCaseDemo,
+  askThisAgentFromDemo,
+  routeDemoKey,
+} from "./composables/useChatDemoCase";
+import {
+  isDemoDialogueId,
+  type AgentCaseDemoEmptyCopy,
+  type AgentCaseDemoKey,
+} from "./demos/catalog";
+import {
+  NETWORK_SAMPLE_DOWNLOAD_SENTINEL,
+  startNetworkSampleDownloads,
+} from "./demos/networkStaticDownload";
 import { ElMessage } from "element-plus";
 import { abortRequest } from "@/utils/request";
 import { cancelTask, normalizePositiveTaskRowId } from "@/api/task";
@@ -818,6 +862,11 @@ const chatRootRef = ref<HTMLElement | null>(null);
 
 const timestamp = ref(Date.now());
 const { locale, t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const demoKey = computed(() => routeDemoKey(route));
+const demoEmpty = ref<AgentCaseDemoEmptyCopy | null>(null);
+const demoError = ref<{ titleKey: string; bodyKey: string } | null>(null);
 
 // Left sidebar state
 const leftSidebarCollapsed = ref(false);
@@ -1005,6 +1054,11 @@ onMounted(async () => {
 
   // Fetch the history question list
   getHistoryQuestionData().then(() => {
+    if (demoKey.value) {
+      applyDemoTape(demoKey.value);
+      return;
+    }
+
     // Get the chatId from the URL
     const urlChatId = getChatIdFromUrl();
 
@@ -1064,6 +1118,29 @@ const {
   copyTimeRef,
   refreshingMessages,
 } = useChatStates();
+
+function applyDemoTape(key: AgentCaseDemoKey): void {
+  const applied = applyAgentCaseDemo({
+    demoKey: key,
+    currentChatId,
+    getChatState,
+  });
+  demoEmpty.value = applied.empty ?? null;
+  demoError.value = applied.error ?? null;
+}
+
+watch(
+  demoKey,
+  (key) => {
+    if (!key) {
+      demoEmpty.value = null;
+      demoError.value = null;
+      return;
+    }
+    applyDemoTape(key);
+  },
+  { immediate: true }
+);
 
 function announceAttachment(message: string): void {
   const ownerDialogueId = currentChatId.value;
@@ -1716,6 +1793,27 @@ const { fallbackCopyText, downloadFile, getFileDownUrl } = useCopyDownload({
   t,
 });
 
+function triggerAnchorDownload(href: string, fileName: string): void {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
+}
+
+function downloadChatFile(path: string): void {
+  if (path === NETWORK_SAMPLE_DOWNLOAD_SENTINEL) {
+    startNetworkSampleDownloads(triggerAnchorDownload);
+    return;
+  }
+  void downloadFile(path);
+}
+
 // Agent image fetch state (GeneNetworkAgent / DigitalDesignAgent)
 const {
   geneNetworkImages,
@@ -1726,6 +1824,9 @@ const {
 
 // Start a new chat
 const startNewChat = () => {
+  if (demoKey.value) {
+    void router.push({ name: "chat" });
+  }
   releaseDialogueUploads(currentChatId.value, uploadQueue.cancelDialogue);
   // Create the state for a new chat
   const newDialogueId = "new_" + Date.now();
@@ -2210,6 +2311,20 @@ const chatAgentRunLifecycle = useChatAgentRunLifecycle({
   reloadChat,
 });
 
+function onAskThisAgent(): void {
+  const key = demoKey.value;
+  if (!key) return;
+  void askThisAgentFromDemo({
+    demoKey: key,
+    router,
+    startNewChat,
+    chatMode,
+    messageInput,
+    selectedAgent,
+    authorizedAgentTools: authorizedAgentTools.value,
+  });
+}
+
 const retrySelectedChat = () => {
   const dialogueId = currentChatId.value;
   if (!dialogueId) return;
@@ -2263,6 +2378,7 @@ const handleMarkdownFinish = (messageIndex: number) => {
 
 // Handle the follow-up question click event
 const handleFollowUpQuestionClick = (question: string) => {
+  if (isDemoDialogueId(currentChatId.value)) return;
   // If sending or refreshing, block the action
   if (isSending.value || attachmentTargetBlocked.value) return;
 
@@ -2403,13 +2519,17 @@ const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   ) {
     items.push({ kind: "upload", path: message.upload_path });
   }
-  if (
-    message?.download_path &&
-    message.download_path !== "" &&
-    message?.tool_name !== "GeneNetworkAgent" &&
-    message?.tool_name !== "DigitalDesignAgent"
-  ) {
-    items.push({ kind: "file", path: message.download_path });
+  if (message?.download_path && message.download_path !== "") {
+    const allowDemoDownload =
+      isDemoDialogueId(currentChatId.value) ||
+      message.download_path === NETWORK_SAMPLE_DOWNLOAD_SENTINEL;
+    if (
+      allowDemoDownload ||
+      (message.tool_name !== "GeneNetworkAgent" &&
+        message.tool_name !== "DigitalDesignAgent")
+    ) {
+      items.push({ kind: "file", path: message.download_path });
+    }
   }
   return items;
 };
