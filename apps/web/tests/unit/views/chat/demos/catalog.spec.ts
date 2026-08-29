@@ -9,6 +9,7 @@ import {
 import { DESIGN_CASE_QUESTION } from "@/views/chat/demos/design-fixture";
 import { NETWORK_CASE_QUESTION } from "@/views/chat/demos/network-fixture";
 import { NETWORK_SAMPLE_DOWNLOAD_SENTINEL } from "@/views/chat/demos/networkStaticDownload";
+import { DEEP_GENOME_CASE_QUESTION } from "@/views/deep-genome-agent/deep-genome-case";
 import { KNOWLEDGE_CASE } from "@/views/knowledge-agent/knowledge-case";
 import { REVIEW_CASE } from "@/views/review-agent/review-case";
 
@@ -86,6 +87,12 @@ describe("agent case demo catalog", () => {
     expect(fixtureForDemoKey("brief-gene")?.messages[0].content).toBe(
       "Os01g0177400"
     );
+    const deepGenomeQuestion = String(
+      fixtureForDemoKey("deep-genome")?.messages[0].content
+    );
+    expect(deepGenomeQuestion).toBe(DEEP_GENOME_CASE_QUESTION);
+    expect(deepGenomeQuestion).toContain("rice");
+    expect(deepGenomeQuestion).toContain("Os01g0177400");
     expect(fixtureForDemoKey("deep-genome")?.messages[1].tool_name).toBe(
       "DeepGenomeAgent"
     );

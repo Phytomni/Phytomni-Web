@@ -73,10 +73,8 @@ describe("Deep Genome Agent static demonstration", () => {
     const wrapper = mountDemo();
 
     const question = wrapper.get("[data-test=shell-question]").text();
-    expect(question).toContain("Species Name: rice (Oryza sativa)");
-    expect(question).toContain("d18h|GA3ox1|OsGA3OX2|OsGA3ox-2");
-    expect(question).toContain(
-      "Maintain strict adherence to evidence-based reporting"
+    expect(question).toBe(
+      "Please give me a scientifically rigorous and integrated account of the rice (Oryza sativa) gene Os01g0177400."
     );
 
     expect(wrapper.findAll("[data-test=deep-genome-artifact]")).toHaveLength(1);
