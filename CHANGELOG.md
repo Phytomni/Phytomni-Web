@@ -18,6 +18,8 @@ Newest first.
 - Add the original 1000-query identity verification HTML as a static file
   at `/model-identity.html`. Nginx serves it before SPA fallback. Nothing
   in the product UI links to it.
+- Restyle that page to Phytomni chrome (page surface, type, action blue).
+  The pie chart, category colors, counts, table, and copy stay the same.
 
 ### ✨ Agent cases play inside Chat
 
