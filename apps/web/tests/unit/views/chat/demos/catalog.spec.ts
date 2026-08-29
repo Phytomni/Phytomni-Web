@@ -67,9 +67,20 @@ describe("agent case demo catalog", () => {
   });
 
   it("freezes Review, Brief Gene, and Deep Genome from existing case blobs", () => {
-    expect(fixtureForDemoKey("review")?.messages[0].content).toBe(
-      REVIEW_CASE.question
-    );
+    const review = fixtureForDemoKey("review");
+    expect(review?.messages[0].content).toBe(REVIEW_CASE.question);
+    expect(
+      review?.messages[1].doc_list?.every(
+        (row) =>
+          typeof row.formatted_citation === "string" &&
+          row.formatted_citation.length > 0
+      )
+    ).toBe(true);
+    expect(
+      review?.messages[1].doc_list?.some(
+        (row) => typeof row.au === "string" && row.au.length > 0
+      )
+    ).toBe(true);
     expect(fixtureForDemoKey("brief-gene")?.messages[0].content).toBe(
       "Os01g0177400"
     );

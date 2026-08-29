@@ -91,6 +91,9 @@ def _is_scannable(path: str) -> str | None:
     """Return the rule-family for a path, or None if it should be skipped."""
     if path.endswith((".spec.ts", ".test.ts")):
         return None
+    # Frozen Expert demo tapes carry bibliographic titles, not UI chrome.
+    if path.endswith("-case.ts"):
+        return None
     if path.startswith("apps/web/src/") and path.endswith((".vue", ".ts")):
         return "web"
     if path.startswith("apps/server/") and path.endswith(".go") and not path.endswith("_test.go"):

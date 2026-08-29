@@ -28,6 +28,9 @@ Newest first.
   Expert-path recapture of the original questions (cited Chat replies,
   not the 2025-08 static wording). Demo `doc_list` keeps Bot
   `formatted.references` rows (`formatted_citation`).
+- Review is recaptured the same way after A2UI confirm resume.
+  Bibliographic enrichment runs only after resume, so the demo list
+  includes Nature rows when the citation database hits.
 
 ### 🐛 Chat query failures log Bot status and code
 
