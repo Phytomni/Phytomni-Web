@@ -22,6 +22,8 @@ Newest first.
   and does not copy the sample question.
 - Legacy `/knowledge-agent` (and four sibling demo URLs) redirect to
   `/cases/…`. `/analyst-agent` stays the gated product page.
+- The cited list prefers a Bot `formatted_citation` Nature-style string
+  the same way a live Expert stream does.
 
 ### 🐛 Chat query failures log Bot status and code
 
