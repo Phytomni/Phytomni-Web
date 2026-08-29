@@ -31,6 +31,7 @@ Newest first.
 - Review is recaptured the same way after A2UI confirm resume.
   Bibliographic enrichment runs only after resume, so the demo list
   includes Nature rows when the citation database hits.
+- Network and Design sample questions now name rice.
 
 ### 🐛 Chat query failures log Bot status and code
 

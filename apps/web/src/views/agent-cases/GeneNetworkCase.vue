@@ -63,12 +63,12 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { Download } from "@element-plus/icons-vue";
 import { AgentDemoShell } from "@/components/demo";
+import { NETWORK_CASE_QUESTION } from "@/views/chat/demos/network-fixture";
 
 const router = useRouter();
 const { t } = useI18n();
 
-const sampleQuestion =
-  "Please help me to analysis the hormone regulatory network in the traits of TO:0000011";
+const sampleQuestion = NETWORK_CASE_QUESTION;
 
 const fileParts = [
   "network_results.zip.001",

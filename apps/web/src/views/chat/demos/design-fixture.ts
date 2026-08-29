@@ -1,13 +1,15 @@
 import type { AgentCaseDemoFixture } from "./types";
 
+export const DESIGN_CASE_QUESTION =
+  "Please help me design the protein structure based on evolution information for rice gene Os01g0177400.";
+
 /** Design case tape: question + static zip download (no invented report). */
 export const DESIGN_CASE_FIXTURE: AgentCaseDemoFixture = {
   tool: "DigitalDesignAgent",
   messages: [
     {
       role: "user",
-      content:
-        "Please help me design the protein structure based on evolution information for gene Os01g0177400.",
+      content: DESIGN_CASE_QUESTION,
     },
     {
       role: "assistant",
