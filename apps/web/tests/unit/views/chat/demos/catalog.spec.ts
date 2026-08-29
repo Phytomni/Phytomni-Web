@@ -50,6 +50,13 @@ describe("agent case demo catalog", () => {
     expect(fixture?.messages[1].role).toBe("assistant");
     expect(fixture?.messages[1].tool_name).toBe("KnowledgeAgent");
     expect(fixture?.messages[1].doc_list?.length).toBeGreaterThan(0);
+    expect(
+      fixture?.messages[1].doc_list?.every(
+        (row) =>
+          typeof row.formatted_citation === "string" &&
+          row.formatted_citation.length > 0
+      )
+    ).toBe(true);
   });
 
   it("freezes Data as three user/assistant table rounds", () => {

@@ -24,6 +24,10 @@ Newest first.
   `/cases/…`. `/analyst-agent` stays the gated product page.
 - The cited list prefers a Bot `formatted_citation` Nature-style string
   the same way a live Expert stream does.
+- Knowledge and Brief Gene example transcripts now use a live
+  Expert-path recapture of the original questions (cited Chat replies,
+  not the 2025-08 static wording). Demo `doc_list` keeps Bot
+  `formatted.references` rows (`formatted_citation`).
 
 ### 🐛 Chat query failures log Bot status and code
 
