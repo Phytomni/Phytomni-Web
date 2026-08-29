@@ -13,6 +13,12 @@ Newest first.
 
 ## [Unreleased]
 
+### ✨ Unlisted model identity page
+
+- Add the original 1000-query identity verification HTML as a static file
+  at `/model-identity.html`. Nginx serves it before SPA fallback. Nothing
+  in the product UI links to it.
+
 ### ✨ Agent cases play inside Chat
 
 - The eight empty-state case cards and Explore Agents entries open a
