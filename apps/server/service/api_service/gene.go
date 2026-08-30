@@ -126,14 +126,24 @@ func (ps *Service) fetchGeneFiles(ctx context.Context, title string) ([]*model.G
 		if item == nil {
 			continue
 		}
-		if title != "" {
-			if !strings.Contains(item.SpeciesCode, title) && !strings.Contains(item.GeneId, title) {
-				continue
-			}
+		if !geneMatchesQuery(item, title) {
+			continue
 		}
 		list = append(list, item)
 	}
 	return list, nil
+}
+
+// geneMatchesQuery reports whether a listed gene matches the search box.
+// Comparison is a case-insensitive substring on species code or gene id.
+// An empty query matches every row (the unfiltered list).
+func geneMatchesQuery(item *model.GeneExample, query string) bool {
+	if query == "" {
+		return true
+	}
+	needle := strings.ToLower(query)
+	return strings.Contains(strings.ToLower(item.SpeciesCode), needle) ||
+		strings.Contains(strings.ToLower(item.GeneId), needle)
 }
 
 func parseGeneFile(filename string) *model.GeneExample {

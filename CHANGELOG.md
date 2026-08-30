@@ -13,6 +13,11 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Deep Genome database search ignores case
+
+- Gene list `title` matches species code and gene id without regard to
+  letter case, so `os01g0177400` finds `Os01g0177400`.
+
 ### 🐛 Demo case copy and citation markup
 
 - Citation rows render Bot `&lt;i&gt;` italics as emphasis and turn
