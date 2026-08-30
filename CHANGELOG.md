@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Deep Genome case citations and references
+
+- The Os01g0177400 example uses superscript citation numbers instead of
+  `[document:N]` tokens, matching live Expert cited answers.
+- The report body no longer repeats the Reference list already shown under
+  the answer.
+
 ### ✨ Unlisted model identity page
 
 - Add the original 1000-query identity verification HTML as a static file

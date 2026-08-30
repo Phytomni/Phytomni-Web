@@ -9,12 +9,27 @@ export interface DeepGenomeCaseReference {
 export const DEEP_GENOME_CASE_QUESTION =
   "Please give me a scientifically rigorous and integrated account of the rice (Oryza sativa) gene Os01g0177400.";
 
-// Preserve the complete checked-in report and its Bot-authored citation tokens.
-export const DEEP_GENOME_CASE_MARKDOWN = rawDeepGenomeCase.trimEnd();
+const RAW_DEEP_GENOME_CASE = rawDeepGenomeCase.trimEnd();
+const REFERENCE_HEADING = "\n## Reference:\n";
+const referenceHeadingIndex = RAW_DEEP_GENOME_CASE.indexOf(REFERENCE_HEADING);
+const referenceSection =
+  referenceHeadingIndex >= 0
+    ? RAW_DEEP_GENOME_CASE.slice(referenceHeadingIndex)
+    : "";
+const bodyMarkdown =
+  referenceHeadingIndex >= 0
+    ? RAW_DEEP_GENOME_CASE.slice(0, referenceHeadingIndex).trimEnd()
+    : RAW_DEEP_GENOME_CASE;
 
-const referenceSection = DEEP_GENOME_CASE_MARKDOWN.slice(
-  DEEP_GENOME_CASE_MARKDOWN.indexOf("\n## Reference:\n")
-);
+function documentTokensToSuperscripts(markdown: string): string {
+  return markdown.replace(
+    /\[document\s*:\s*(\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*)\]/gi,
+    (_match, body: string) => `<sup>${body.replace(/\s+/g, "")}</sup>`
+  );
+}
+
+export const DEEP_GENOME_CASE_MARKDOWN =
+  documentTokensToSuperscripts(bodyMarkdown);
 
 export const DEEP_GENOME_CASE_REFERENCES: readonly DeepGenomeCaseReference[] =
   Array.from(

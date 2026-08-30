@@ -90,9 +90,11 @@ describe("Deep Genome Agent static demonstration", () => {
     expect(artifact.attributes("data-markdown")).toContain(
       "Os01t0177400-01_seed_101_sample_0.cif"
     );
-    expect(artifact.attributes("data-markdown")).toContain(
+    expect(artifact.attributes("data-markdown")).toContain("<sup>5</sup>");
+    expect(artifact.attributes("data-markdown")).not.toContain(
       "[256] Physiological and Transcriptome Analyses"
     );
+    expect(artifact.attributes("data-markdown")).not.toContain("## Reference:");
     expect(artifact.get("[data-test=artifact-evidence]").text()).toContain(
       "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism."
     );
