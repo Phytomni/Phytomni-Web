@@ -22,6 +22,8 @@ Newest first.
 - Brief Gene asks as a rice gene question.
 - Data's CDS table is labeled `CDS length (bp)` instead of
   `LENGTH([sequence_2])`.
+- Deep Genome opens with comma-separated aliases, `Discussion`, and
+  `Structure` / `Single-cell` figure names.
 
 ### 🐛 Deep Genome case citations, figures, and references
 

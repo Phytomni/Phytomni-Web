@@ -88,7 +88,7 @@ describe("Deep Genome Agent static demonstration", () => {
       "# Deep Genome Analysis of Os01g0177400"
     );
     expect(artifact.attributes("data-markdown")).toContain(
-      "GA3ox-2|D18|GA3OX2"
+      "GA3ox-2, D18, GA3OX2"
     );
     expect(artifact.attributes("data-markdown")).toContain(
       "Os01t0177400-01_seed_101_sample_0.cif"

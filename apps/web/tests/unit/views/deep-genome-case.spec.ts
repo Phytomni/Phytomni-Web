@@ -15,8 +15,14 @@ describe("Deep Genome case tape", () => {
       "# Deep Genome Analysis of Os01g0177400"
     );
     expect(DEEP_GENOME_CASE_MARKDOWN).toContain(
-      "GA3ox-2|D18|GA3OX2|dwf15|OsGA3ox-2"
+      "GA3ox-2, D18, GA3OX2, dwf15, OsGA3ox-2"
     );
+    expect(DEEP_GENOME_CASE_MARKDOWN).not.toContain("GA3ox-2|D18|");
+    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("## Discussion");
+    expect(DEEP_GENOME_CASE_MARKDOWN).not.toContain("## Disscussion");
+    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("![Structure Image]");
+    expect(DEEP_GENOME_CASE_MARKDOWN).not.toContain("![Sturcture Image]");
+    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("![Single-cell Umap Image]");
   });
 
   it("uses superscript citation numbers instead of [document:N] tokens", () => {

@@ -29,8 +29,22 @@ function documentTokensToSuperscripts(markdown: string): string {
   );
 }
 
-export const DEEP_GENOME_CASE_MARKDOWN =
-  documentTokensToSuperscripts(bodyMarkdown);
+function polishDeepGenomeReport(markdown: string): string {
+  return markdown
+    .replace(/^## Disscussion$/m, "## Discussion")
+    .replace(/!\[Sturcture Image\]/g, "![Structure Image]")
+    .replace(/!\[Single_cell /g, "![Single-cell ")
+    .replace(/^[^\n]*\|[^\n]*Os01g0177400 in rice/m, (line) => {
+      const marker = " in rice";
+      const splitAt = line.indexOf(marker);
+      if (splitAt < 0) return line;
+      return `${line.slice(0, splitAt).split("|").join(", ")}${line.slice(splitAt)}`;
+    });
+}
+
+export const DEEP_GENOME_CASE_MARKDOWN = polishDeepGenomeReport(
+  documentTokensToSuperscripts(bodyMarkdown)
+);
 
 export const DEEP_GENOME_CASE_REFERENCES: readonly DeepGenomeCaseReference[] =
   Array.from(
