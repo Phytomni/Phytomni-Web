@@ -186,15 +186,27 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(ref.html).not.toContain("<img");
   });
 
-  it("does not double-escape Bot entity-escaped italics in formatted_citation", () => {
+  it("renders Bot entity-escaped italics as emphasis, not raw tags", () => {
     const [ref] = buildReferences([
       {
         formatted_citation:
           "Liu, Q. et al. Manipulating &lt;i&gt;osa-MIR156f&lt;/i&gt;.",
       },
     ]);
-    expect(ref.html).toContain("&lt;i&gt;osa-MIR156f&lt;/i&gt;");
-    expect(ref.html).not.toContain("&amp;lt;i&amp;gt;");
+    expect(ref.html).toContain("<em>osa-MIR156f</em>");
+    expect(ref.html).not.toContain("&lt;i&gt;");
+    expect(ref.html).not.toContain("<i>");
+  });
+
+  it("turns filename-style escaped underscores into commas", () => {
+    const [ref] = buildReferences([
+      {
+        formatted_citation:
+          "Decoding phytohormone signaling Insights\\_ challenges\\_ and future directions",
+      },
+    ]);
+    expect(ref.html).toContain("Insights, challenges, and future directions");
+    expect(ref.html).not.toContain("\\_");
   });
 
   it("neutralizes a javascript: markdown DOI in formatted_citation", () => {

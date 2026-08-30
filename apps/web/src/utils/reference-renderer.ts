@@ -35,8 +35,16 @@ function decodeBasicEntities(value: string): string {
     .replace(/&quot;/g, '"');
 }
 
+function softenCitationMarkup(text: string): string {
+  return decodeBasicEntities(text)
+    .replace(/\\([_()*])/g, "$1")
+    .replace(/<\/(?:i|em)>/gi, "*")
+    .replace(/<(?:i|em)(?:\s[^>]*)?>/gi, "*")
+    .replace(/_(?= )/g, ",");
+}
+
 function citationMarkupToSafeHtml(text: string): string {
-  const escaped = escapeHtml(decodeBasicEntities(text));
+  const escaped = escapeHtml(softenCitationMarkup(text));
   const withLinks = escaped.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
     (_match, label: string, href: string) =>

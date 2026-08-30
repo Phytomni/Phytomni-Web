@@ -13,6 +13,11 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Demo case copy and citation markup
+
+- Citation rows render Bot `&lt;i&gt;` italics as emphasis and turn
+  filename-style `\_` separators into commas.
+
 ### 🐛 Deep Genome case citations, figures, and references
 
 - The Os01g0177400 example uses superscript citation numbers instead of
