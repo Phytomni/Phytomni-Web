@@ -10,9 +10,9 @@ export const DATA_CASE = [
   {
     question:
       "How many bases does the CDS sequence of rice transcript Os01t0177400-01 contain?",
-    response: `| LENGTH([sequence_2]) |
-| :------------------: |
-|         1113         |`,
+    response: `| CDS length (bp) |
+| :-------------: |
+|      1113       |`,
     captionKey: "agents.data.tableCaptions.cdsLength",
   },
   {

@@ -83,7 +83,7 @@ describe("Data Agent static demonstration", () => {
       )
     ).toEqual([
       "|  Transcript ID  |\n| :-------------: |\n| Os01t0177400-01 |\n",
-      "| LENGTH([sequence_2]) |\n| :------------------: |\n|         1113         |",
+      "| CDS length (bp) |\n| :-------------: |\n|      1113       |",
       "| Query Gene ID | Query Species | Homology Gene ID | Homology Species |\n| ------------- | :-----------: | :--------------: | :--------------: |\n| Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |",
     ]);
   });

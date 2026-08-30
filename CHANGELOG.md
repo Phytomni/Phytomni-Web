@@ -20,6 +20,8 @@ Newest first.
 - Knowledge, Review, and Brief Gene tapes no longer show raw HTML tags,
   escaped underscores, or a `Title:` manuscript prefix.
 - Brief Gene asks as a rice gene question.
+- Data's CDS table is labeled `CDS length (bp)` instead of
+  `LENGTH([sequence_2])`.
 
 ### 🐛 Deep Genome case citations, figures, and references
 
