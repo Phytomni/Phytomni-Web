@@ -121,9 +121,9 @@ export const KNOWLEDGE_CASE = {
     {
       file_id: "23fb2dbecfc9d9eaae96f430246547d8",
       title:
-        "Decoding phytohormone signaling in plant stress physiology Insights_ challenges_ and future directions",
+        "Decoding phytohormone signaling in plant stress physiology: Insights, challenges, and future directions",
       formatted_citation:
-        "Decoding phytohormone signaling in plant stress physiology Insights\\_ challenges\\_ and future directions",
+        "Decoding phytohormone signaling in plant stress physiology: Insights, challenges, and future directions",
       doi_missing: true,
     },
     {

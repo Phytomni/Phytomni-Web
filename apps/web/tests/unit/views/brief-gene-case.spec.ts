@@ -3,7 +3,9 @@ import { BRIEF_GENE_CASE } from "@/views/brief-gene-agent/brief-gene-case";
 
 describe("BriefGene static case projection", () => {
   it("keeps the admitted Os01g0177400 report and required sections", () => {
-    expect(BRIEF_GENE_CASE.question).toBe("Os01g0177400");
+    expect(BRIEF_GENE_CASE.question).toBe(
+      "Please give me a brief gene analysis of the rice (Oryza sativa) gene Os01g0177400."
+    );
     expect(BRIEF_GENE_CASE.content).toContain(
       "# Brief Gene Analysis of Os01g0177400"
     );

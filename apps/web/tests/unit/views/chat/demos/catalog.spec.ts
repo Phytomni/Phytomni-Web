@@ -85,7 +85,7 @@ describe("agent case demo catalog", () => {
       )
     ).toBe(true);
     expect(fixtureForDemoKey("brief-gene")?.messages[0].content).toBe(
-      "Os01g0177400"
+      "Please give me a brief gene analysis of the rice (Oryza sativa) gene Os01g0177400."
     );
     const deepGenomeQuestion = String(
       fixtureForDemoKey("deep-genome")?.messages[0].content

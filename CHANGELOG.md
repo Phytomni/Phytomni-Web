@@ -17,6 +17,9 @@ Newest first.
 
 - Citation rows render Bot `&lt;i&gt;` italics as emphasis and turn
   filename-style `\_` separators into commas.
+- Knowledge, Review, and Brief Gene tapes no longer show raw HTML tags,
+  escaped underscores, or a `Title:` manuscript prefix.
+- Brief Gene asks as a rice gene question.
 
 ### 🐛 Deep Genome case citations, figures, and references
 
