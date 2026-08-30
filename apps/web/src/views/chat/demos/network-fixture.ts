@@ -2,7 +2,7 @@ import { NETWORK_SAMPLE_DOWNLOAD_SENTINEL } from "./networkStaticDownload";
 import type { AgentCaseDemoFixture } from "./types";
 
 export const NETWORK_CASE_QUESTION =
-  "Please help me to analysis the hormone regulatory network in the traits of TO:0000011 in rice.";
+  "Please help me analyze the hormone regulatory network in the traits of TO:0000011 in rice.";
 
 /** Network case tape: question + split-zip download sentinel (no invented report). */
 export const NETWORK_CASE_FIXTURE: AgentCaseDemoFixture = {

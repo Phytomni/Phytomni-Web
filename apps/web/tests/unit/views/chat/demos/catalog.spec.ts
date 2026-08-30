@@ -116,6 +116,8 @@ describe("agent case demo catalog", () => {
     expect(network?.messages[0].content).toBe(NETWORK_CASE_QUESTION);
     expect(NETWORK_CASE_QUESTION).toContain("rice");
     expect(NETWORK_CASE_QUESTION).toContain("TO:0000011");
+    expect(NETWORK_CASE_QUESTION).toContain("analyze");
+    expect(NETWORK_CASE_QUESTION).not.toContain("to analysis");
     expect(network?.messages[1].tool_name).toBe("GeneNetworkAgent");
     expect(network?.messages[1].download_path).toBe(
       NETWORK_SAMPLE_DOWNLOAD_SENTINEL

@@ -24,6 +24,8 @@ Newest first.
   `LENGTH([sequence_2])`.
 - Deep Genome opens with comma-separated aliases, `Discussion`, and
   `Structure` / `Single-cell` figure names.
+- Network asks to analyze the rice hormone network, not "to analysis".
+- Case cards expose the agent title as the accessible name.
 
 ### 🐛 Deep Genome case citations, figures, and references
 

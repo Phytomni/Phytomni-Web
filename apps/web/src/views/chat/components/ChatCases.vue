@@ -12,6 +12,7 @@
         :to="item.route"
         class="chat-case-link"
         data-testid="chat-case-link"
+        :aria-label="item.title"
       >
         <span class="chat-case-icon" aria-hidden="true">
           <img
