@@ -106,6 +106,9 @@ describe("agent case demo catalog", () => {
     expect(fixtureForDemoKey("deep-genome")?.messages[1].doc_list).toHaveLength(
       256
     );
+    expect(
+      fixtureForDemoKey("deep-genome")?.messages[1].resources
+    ).toHaveLength(14);
   });
 
   it("freezes Network and Design as a question plus a downloadable sample", () => {

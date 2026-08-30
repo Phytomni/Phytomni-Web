@@ -40,6 +40,7 @@ import { artifactChrome } from "@/views/chat/utils/artifact-chrome";
 import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
+  DEEP_GENOME_CASE_RESOURCES,
 } from "@/views/deep-genome-agent/deep-genome-case";
 import {
   CONTRACT_DEEP_GENOME_MARKDOWN,
@@ -56,7 +57,9 @@ const isContract =
 const markdown = isContract
   ? CONTRACT_DEEP_GENOME_MARKDOWN
   : DEEP_GENOME_CASE_MARKDOWN;
-const resources = isContract ? CONTRACT_DEEP_GENOME_RESOURCES : [];
+const resources = isContract
+  ? CONTRACT_DEEP_GENOME_RESOURCES
+  : DEEP_GENOME_CASE_RESOURCES;
 const tabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),

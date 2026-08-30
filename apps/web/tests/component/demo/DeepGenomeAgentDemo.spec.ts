@@ -30,6 +30,7 @@ const DeepGenomeArtifactStub = {
     status: { type: String, default: "" },
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
+    resources: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
   },
   template: `
@@ -39,6 +40,7 @@ const DeepGenomeArtifactStub = {
       :data-ns="ns"
       :data-markdown="markdown"
       :data-reference-count="references.length"
+      :data-resource-count="resources.length"
     >
       <div data-test="artifact-report">{{ markdown }}</div>
       <ol data-test="artifact-evidence">
@@ -81,6 +83,7 @@ describe("Deep Genome Agent static demonstration", () => {
     const artifact = wrapper.get("[data-test=deep-genome-artifact]");
     expect(artifact.attributes("data-ns")).toBe("deep-genome-demo");
     expect(artifact.attributes("data-reference-count")).toBe("256");
+    expect(artifact.attributes("data-resource-count")).toBe("14");
     expect(artifact.attributes("data-markdown")).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );

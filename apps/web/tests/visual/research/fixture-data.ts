@@ -1,6 +1,7 @@
 export {
   DEEP_GENOME_CASE_MARKDOWN as REAL_DEEP_GENOME_MARKDOWN,
   DEEP_GENOME_CASE_REFERENCES as REAL_DEEP_GENOME_REFERENCES,
+  DEEP_GENOME_CASE_RESOURCES as REAL_DEEP_GENOME_RESOURCES,
 } from "@/views/deep-genome-agent/deep-genome-case";
 
 import authorizedFigureUrl from "./fixtures/authorized-figure.svg?url&no-inline";

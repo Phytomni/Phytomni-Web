@@ -12,6 +12,7 @@
         :metadata="$t('agents.deepGenome.subtitle')"
         :markdown="DEEP_GENOME_CASE_MARKDOWN"
         :references="DEEP_GENOME_CASE_REFERENCES"
+        :resources="DEEP_GENOME_CASE_RESOURCES"
         ns="deep-genome-demo"
         :tab-labels="artifactTabLabels"
         :tabs="artifactTabs"
@@ -50,6 +51,7 @@ import {
   DEEP_GENOME_CASE_MARKDOWN,
   DEEP_GENOME_CASE_QUESTION,
   DEEP_GENOME_CASE_REFERENCES,
+  DEEP_GENOME_CASE_RESOURCES,
 } from "./deep-genome-case";
 
 const { t } = useI18n();

@@ -94,6 +94,9 @@ export function useArtifactPanel(opts: {
     (): readonly AuthorizedScientificResource[] => {
       const message = currentArtifactMessage.value;
       if (!message) return [];
+      if (message.resources && message.resources.length > 0) {
+        return message.resources;
+      }
       const presentation = artifactPresentationForMessage(message);
       const source =
         presentation?.report ??

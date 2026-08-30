@@ -162,13 +162,14 @@ const mountContent = (
           props: {
             markdown: String,
             references: Array,
+            resources: Array,
             ns: String,
             embedded: Boolean,
             showActions: Boolean,
             showReferences: Boolean,
           },
           template:
-            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" :data-show-actions=\"showActions ? 'true' : 'false'\" :data-show-references=\"showReferences ? 'true' : 'false'\" />",
+            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" :data-show-actions=\"showActions ? 'true' : 'false'\" :data-show-references=\"showReferences ? 'true' : 'false'\" :data-resource-count=\"Array.isArray(resources) ? String(resources.length) : '0'\" />",
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -1051,6 +1052,37 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
         wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
       ).toBe("__absent__");
     }
+  });
+
+  it("forwards demo case resources to the inline Deep Genome viewer", () => {
+    const resources = [
+      {
+        id: "tree",
+        name: "Tree Image",
+        kind: "image" as const,
+        markdownHref: "./.out/Os01g0177400/Os01g0177400_tree.png",
+        displayUrl: "/attachments/Os01g0177400/Os01g0177400_tree.png",
+      },
+    ];
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "# Deep Genome Analysis of Os01g0177400\n\nBody",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [{ title: "One" }],
+      resources,
+    });
+
+    expect(detectBranch(wrapper)).toBe("deep-genome");
+    expect(
+      wrapper
+        .find('[data-testid="deep-genome"]')
+        .attributes("data-resource-count")
+    ).toBe("1");
+    expect(
+      wrapper
+        .findComponent({ name: "DeepGenomeResultViewer" })
+        .props("resources")
+    ).toEqual(resources);
   });
 
   it("keeps the DeepGenome full source out of the Chat preview", () => {

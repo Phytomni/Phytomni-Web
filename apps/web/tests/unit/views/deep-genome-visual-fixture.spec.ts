@@ -19,6 +19,7 @@ import {
   CONTRACT_DEEP_GENOME_RESOURCES,
   REAL_DEEP_GENOME_MARKDOWN,
   REAL_DEEP_GENOME_REFERENCES,
+  REAL_DEEP_GENOME_RESOURCES,
 } from "../../visual/research/fixture-data";
 
 const WEB_ROOT = resolve(__dirname, "../../..");
@@ -188,6 +189,18 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(REAL_DEEP_GENOME_REFERENCES.at(-1)?.title).toContain(
       "Physiological and Transcriptome Analyses"
     );
+  });
+
+  it("authorizes the real-case figures from public attachments", () => {
+    expect(REAL_DEEP_GENOME_RESOURCES).toHaveLength(14);
+    expect(
+      REAL_DEEP_GENOME_RESOURCES.every(
+        (resource) =>
+          typeof resource.displayUrl === "string" &&
+          resource.displayUrl.startsWith("/attachments/Os01g0177400/")
+      )
+    ).toBe(true);
+    expect(VISUAL_FIXTURE_SOURCE).toContain("DEEP_GENOME_CASE_RESOURCES");
   });
 
   it("shares one production case source with the route and visual fixture", () => {

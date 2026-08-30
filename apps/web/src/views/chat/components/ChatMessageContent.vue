@@ -234,6 +234,7 @@
           artifactPresentation?.report ?? chatContentToText(message.content)
         "
         :references="message.doc_list || []"
+        :resources="message.resources ?? []"
         :ns="'m' + index"
         :rendering-file-id="message.id"
         :show-actions="showDeepGenomeFinalActions"

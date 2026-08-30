@@ -1,4 +1,5 @@
 import rawDeepGenomeCase from "@/assets/agentOut/round1-phytomni_output-Os01g0177400_result.md?raw";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 
 export interface DeepGenomeCaseReference {
   file_id: string;
@@ -37,5 +38,21 @@ export const DEEP_GENOME_CASE_REFERENCES: readonly DeepGenomeCaseReference[] =
     ([, number, title]) => ({
       file_id: `deep-genome-case-reference-${number.padStart(3, "0")}`,
       title,
+    })
+  );
+
+const CASE_ATTACHMENT_ROOT = "/attachments";
+
+export const DEEP_GENOME_CASE_RESOURCES: readonly AuthorizedScientificResource[] =
+  Array.from(
+    DEEP_GENOME_CASE_MARKDOWN.matchAll(
+      /!\[([^\]]*)\]\((\.\/\.out\/([^)]+\.(png|cif)))\)/g
+    ),
+    ([, alt, href, relative, ext], index) => ({
+      id: `deep-genome-case-resource-${String(index + 1).padStart(2, "0")}`,
+      name: alt,
+      kind: ext === "cif" ? ("cif" as const) : ("image" as const),
+      markdownHref: href,
+      displayUrl: `${CASE_ATTACHMENT_ROOT}/${relative}`,
     })
   );

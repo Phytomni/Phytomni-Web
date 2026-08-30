@@ -13,10 +13,11 @@ Newest first.
 
 ## [Unreleased]
 
-### 🐛 Deep Genome case citations and references
+### 🐛 Deep Genome case citations, figures, and references
 
 - The Os01g0177400 example uses superscript citation numbers instead of
   `[document:N]` tokens, matching live Expert cited answers.
+- Case figures and the structure file load from `/attachments/Os01g0177400/`.
 - The report body no longer repeats the Reference list already shown under
   the answer.
 

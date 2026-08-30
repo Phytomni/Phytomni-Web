@@ -1,6 +1,7 @@
 import type { A2uiActionTransport } from "./streaming/a2uiAction";
 import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
 import type {
   AnalystAgentLog,
@@ -123,6 +124,8 @@ export interface ChatMessage {
   /** Monotonic report state derived from the sanitized Bot projection. */
   botLifecycle?: BotLifecycleState;
   artifacts?: readonly ConversationArtifactLink[];
+  /** Preauthorized report figures; demo tapes set this, live Chat signs artifacts. */
+  resources?: readonly AuthorizedScientificResource[];
   delivery?: AgentResultDelivery;
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
