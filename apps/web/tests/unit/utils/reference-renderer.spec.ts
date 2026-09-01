@@ -185,6 +185,67 @@ describe("buildDisplayReferences — XSS invariant", () => {
     expect(out[2].html).toContain("3. ");
   });
 
+  it("prefers Bot formatted_citation over reconstructed au/ti or title", () => {
+    const [ref] = buildReferences([
+      {
+        title: "file.pdf",
+        au: "Smith J",
+        ti: "Gene study",
+        so: "Nature",
+        formatted_citation:
+          "Smith J. Gene study. *Nature* **1**, (2020). [https://doi.org/10.1/x](https://doi.org/10.1/x)",
+      },
+    ]);
+    expect(ref.html).toContain('<div class="doc-citation">');
+    expect(ref.html).toContain("<em>Nature</em>");
+    expect(ref.html).toContain("<strong>1</strong>");
+    expect(ref.html).toContain(
+      '<a href="https://doi.org/10.1/x" target="_blank" class="doi-link">https://doi.org/10.1/x</a>'
+    );
+    expect(ref.html).not.toContain("file.pdf");
+  });
+
+  it("escapes a raw tag in formatted_citation", () => {
+    const [ref] = buildReferences([
+      { title: "T", formatted_citation: "<img onerror=x>foo" },
+    ]);
+    expect(ref.html).toContain("&lt;img onerror=x&gt;foo");
+    expect(ref.html).not.toContain("<img");
+  });
+
+  it("renders Bot entity-escaped italics as emphasis, not raw tags", () => {
+    const [ref] = buildReferences([
+      {
+        formatted_citation:
+          "Liu, Q. et al. Manipulating &lt;i&gt;osa-MIR156f&lt;/i&gt;.",
+      },
+    ]);
+    expect(ref.html).toContain("<em>osa-MIR156f</em>");
+    expect(ref.html).not.toContain("&lt;i&gt;");
+    expect(ref.html).not.toContain("<i>");
+  });
+
+  it("turns filename-style escaped underscores into commas", () => {
+    const [ref] = buildReferences([
+      {
+        formatted_citation:
+          "Decoding phytohormone signaling Insights\\_ challenges\\_ and future directions",
+      },
+    ]);
+    expect(ref.html).toContain("Insights, challenges, and future directions");
+    expect(ref.html).not.toContain("\\_");
+  });
+
+  it("neutralizes a javascript: markdown DOI in formatted_citation", () => {
+    const [ref] = buildReferences([
+      {
+        formatted_citation: "Paper. [x](javascript:alert(1))",
+      },
+    ]);
+    expect(ref.html).toContain('<a href="#" target="_blank" class="doi-link">');
+    expect(ref.html).not.toContain('href="javascript:');
+  });
+
   it("renders the rich branch when a doc carries BOTH title and au/ti (flip)", () => {
     const [ref] = buildReferences([
       {

@@ -12,13 +12,13 @@ const CASES_SOURCE = readFileSync(
 );
 
 const routes = [
-  "/knowledge-agent",
-  "/data-agent",
-  "/analyst-agent",
-  "/review-agent",
+  "/cases/knowledge-agent",
+  "/cases/data-agent",
+  "/cases/analyst-agent",
+  "/cases/review-agent",
   "/cases/gene-network-agent",
-  "/brief-gene-agent",
-  "/deep-genome-agent",
+  "/cases/brief-gene-agent",
+  "/cases/deep-genome-agent",
   "/cases/digital-design-agent",
 ];
 
@@ -129,6 +129,9 @@ describe("ChatCases", () => {
     expect(links.map((link) => link.get(".chat-case-title").text())).toEqual(
       zhTitles
     );
+    expect(links.map((link) => link.attributes("aria-label"))).toEqual(
+      zhTitles
+    );
     expect(wrapper.text()).not.toContain("Knowledge Agent");
     expect(wrapper.text()).not.toContain("Deep Genome Agent");
   });
@@ -148,6 +151,10 @@ describe("ChatCases", () => {
     expect(monograms).toHaveLength(1);
     expect(monograms[0].text()).toBe("BG");
     expect(monograms[0].attributes("aria-hidden")).toBe("true");
+    const labels = wrapper
+      .findAll('[data-testid="chat-case-link"]')
+      .map((link) => link.attributes("aria-label"));
+    expect(labels).toEqual(enTitles);
   });
 
   it("keeps byte-identical copies of the approved legacy icons", () => {
@@ -169,5 +176,7 @@ describe("ChatCases", () => {
     expect(hrefs).toContain("/cases/digital-design-agent");
     expect(hrefs).not.toContain("/gene-network-agent");
     expect(hrefs).not.toContain("/digital-design-agent");
+    expect(hrefs).not.toContain("/analyst-agent");
+    expect(hrefs).toContain("/cases/analyst-agent");
   });
 });

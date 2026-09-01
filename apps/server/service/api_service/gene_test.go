@@ -337,6 +337,77 @@ func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
 	}
 }
 
+func TestGeneMatchesQuery_CaseInsensitive(t *testing.T) {
+	rice := &model.GeneExample{SpeciesCode: "Osa", GeneId: "Os01g0107900"}
+	wheat := &model.GeneExample{SpeciesCode: "tae", GeneId: "TraesCS1A02G000100"}
+
+	cases := []struct {
+		name  string
+		item  *model.GeneExample
+		query string
+		want  bool
+	}{
+		{name: "empty query matches", item: rice, query: "", want: true},
+		{name: "exact gene id", item: rice, query: "Os01g0107900", want: true},
+		{name: "lower gene id", item: rice, query: "os01g0107900", want: true},
+		{name: "upper gene substring", item: rice, query: "OS01G", want: true},
+		{name: "lower species", item: rice, query: "osa", want: true},
+		{name: "upper species", item: rice, query: "OSA", want: true},
+		{name: "canonical species", item: rice, query: "Osa", want: true},
+		{name: "stored-lower species upper query", item: wheat, query: "TAE", want: true},
+		{name: "other species", item: rice, query: "Ath", want: false},
+		{name: "other gene prefix", item: rice, query: "AT1G", want: false},
+		{name: "unrelated", item: rice, query: "nogene", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := geneMatchesQuery(tc.item, tc.query); got != tc.want {
+				t.Fatalf("geneMatchesQuery(%q) = %v, want %v", tc.query, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestGeneSearch_CaseInsensitiveTitle: the list filter lowercases both the
+// query and the derived species/gene fields. Delete the ToLower in
+// geneMatchesQuery and os01g / OSA stop matching the rice row.
+func TestGeneSearch_CaseInsensitiveTitle(t *testing.T) {
+	writeGeneObsfs(t, []string{"Os01g0107900_result.md", "AT1G01010_result.md"})
+	ps := NewService()
+
+	list, total, _, err := ps.GeneSearch(context.Background(), 1, 10, "os01g0107900")
+	if err != nil {
+		t.Fatalf("lower gene id: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].GeneId != "Os01g0107900" {
+		t.Fatalf("os01g0107900 should hit rice, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "OSA")
+	if err != nil {
+		t.Fatalf("upper species: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].SpeciesCode != "Osa" {
+		t.Fatalf("OSA should hit rice species, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "AT1G")
+	if err != nil {
+		t.Fatalf("canonical arabidopsis substring: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].GeneId != "AT1G01010" {
+		t.Fatalf("AT1G should hit arabidopsis, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "nogene")
+	if err != nil {
+		t.Fatalf("unrelated query: %v", err)
+	}
+	if total != 0 || len(list) != 0 {
+		t.Fatalf("nogene should miss, got total=%d list=%+v", total, list)
+	}
+}
+
 // TestGeneDetails_ObsfsRead: with the mount set, GeneDetails returns the md body
 // verbatim; image URLs already in /api/v1/gene-images/ form are left untouched
 // (no backend rewrite).

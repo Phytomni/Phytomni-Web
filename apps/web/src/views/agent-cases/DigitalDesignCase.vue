@@ -43,11 +43,11 @@
 import { useRouter } from "vue-router";
 import { Download } from "@element-plus/icons-vue";
 import { AgentDemoShell } from "@/components/demo";
+import { DESIGN_CASE_QUESTION } from "@/views/chat/demos/design-fixture";
 
 const router = useRouter();
 
-const sampleQuestion =
-  "Please help me design the protein structure based on evolution information for gene Os01g0177400.";
+const sampleQuestion = DESIGN_CASE_QUESTION;
 
 const goBack = () => {
   router.back();

@@ -48,6 +48,14 @@ def test_skips_spec_files_entirely():
     assert v == []
 
 
+def test_skips_agent_case_demo_tapes():
+    v = scan_text_for_violations(
+        "apps/web/src/views/review-agent/review-case.ts",
+        'title: "单细胞转录组测序技术发展及其在甘薯中的应用_赵楠",\n',
+    )
+    assert v == []
+
+
 # --- ElMessage literal (rule B) ---
 
 

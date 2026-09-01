@@ -30,6 +30,7 @@ const DeepGenomeArtifactStub = {
     status: { type: String, default: "" },
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
+    resources: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
   },
   template: `
@@ -39,6 +40,7 @@ const DeepGenomeArtifactStub = {
       :data-ns="ns"
       :data-markdown="markdown"
       :data-reference-count="references.length"
+      :data-resource-count="resources.length"
     >
       <div data-test="artifact-report">{{ markdown }}</div>
       <ol data-test="artifact-evidence">
@@ -73,28 +75,29 @@ describe("Deep Genome Agent static demonstration", () => {
     const wrapper = mountDemo();
 
     const question = wrapper.get("[data-test=shell-question]").text();
-    expect(question).toContain("Species Name: rice (Oryza sativa)");
-    expect(question).toContain("d18h|GA3ox1|OsGA3OX2|OsGA3ox-2");
-    expect(question).toContain(
-      "Maintain strict adherence to evidence-based reporting"
+    expect(question).toBe(
+      "Please give me a scientifically rigorous and integrated account of the rice (Oryza sativa) gene Os01g0177400."
     );
 
     expect(wrapper.findAll("[data-test=deep-genome-artifact]")).toHaveLength(1);
     const artifact = wrapper.get("[data-test=deep-genome-artifact]");
     expect(artifact.attributes("data-ns")).toBe("deep-genome-demo");
     expect(artifact.attributes("data-reference-count")).toBe("256");
+    expect(artifact.attributes("data-resource-count")).toBe("14");
     expect(artifact.attributes("data-markdown")).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
     expect(artifact.attributes("data-markdown")).toContain(
-      "GA3ox-2|D18|GA3OX2"
+      "GA3ox-2, D18, GA3OX2"
     );
     expect(artifact.attributes("data-markdown")).toContain(
       "Os01t0177400-01_seed_101_sample_0.cif"
     );
-    expect(artifact.attributes("data-markdown")).toContain(
+    expect(artifact.attributes("data-markdown")).toContain("<sup>5</sup>");
+    expect(artifact.attributes("data-markdown")).not.toContain(
       "[256] Physiological and Transcriptome Analyses"
     );
+    expect(artifact.attributes("data-markdown")).not.toContain("## Reference:");
     expect(artifact.get("[data-test=artifact-evidence]").text()).toContain(
       "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism."
     );

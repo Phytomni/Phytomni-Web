@@ -62,13 +62,13 @@ describe("CANONICAL_AGENT_ROUTES registry lock", () => {
       "DigitalDesignAgent",
     ]);
     expect(caseOptions.map((option) => option.route)).toEqual([
-      "/knowledge-agent",
-      "/data-agent",
-      "/analyst-agent",
-      "/review-agent",
+      "/cases/knowledge-agent",
+      "/cases/data-agent",
+      "/cases/analyst-agent",
+      "/cases/review-agent",
       "/cases/gene-network-agent",
-      "/brief-gene-agent",
-      "/deep-genome-agent",
+      "/cases/brief-gene-agent",
+      "/cases/deep-genome-agent",
       "/cases/digital-design-agent",
     ]);
 

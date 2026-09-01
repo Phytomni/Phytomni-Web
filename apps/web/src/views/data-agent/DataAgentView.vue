@@ -7,7 +7,7 @@
     <template #default>
       <div class="data-agent-conversation" data-test="data-agent-conversation">
         <article
-          v-for="(round, index) in rounds"
+          v-for="(round, index) in DATA_CASE"
           :key="round.captionKey"
           class="data-agent-round"
           data-test="data-agent-round"
@@ -45,37 +45,12 @@
 import { useRouter } from "vue-router";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import { AgentDemoShell } from "@/components/demo";
+import { DATA_CASE } from "./data-case";
 
 const router = useRouter();
 const goBack = () => {
   router.back();
 };
-
-const rounds = [
-  {
-    question: "Please list the transcript ID of Os01g0177400 in rice.",
-    response: `|  Transcript ID  |
-| :-------------: |
-| Os01t0177400-01 |
-`,
-    captionKey: "agents.data.tableCaptions.transcript",
-  },
-  {
-    question:
-      "How many bases does the CDS sequence of rice transcript Os01t0177400-01 contain?",
-    response: `| LENGTH([sequence_2]) |
-| :------------------: |
-|         1113         |`,
-    captionKey: "agents.data.tableCaptions.cdsLength",
-  },
-  {
-    question: "List the homologous genes of rice Os01g0177400 in maize.",
-    response: `| Query Gene ID | Query Species | Homology Gene ID | Homology Species |
-| ------------- | :-----------: | :--------------: | :--------------: |
-| Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |`,
-    captionKey: "agents.data.tableCaptions.homologs",
-  },
-] as const;
 </script>
 
 <style scoped>

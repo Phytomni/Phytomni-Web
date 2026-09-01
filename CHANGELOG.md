@@ -13,6 +13,99 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Deep Genome database search ignores case
+
+- Gene list `title` matches species code and gene id without regard to
+  letter case, so `os01g0177400` finds `Os01g0177400`.
+
+### 🐛 Demo case copy and citation markup
+
+- Citation rows render Bot `&lt;i&gt;` italics as emphasis and turn
+  filename-style `\_` separators into commas.
+- Knowledge, Review, and Brief Gene tapes no longer show raw HTML tags,
+  escaped underscores, or a `Title:` manuscript prefix.
+- Brief Gene asks as a rice gene question.
+- Data's CDS table is labeled `CDS length (bp)` instead of
+  `LENGTH([sequence_2])`.
+- Deep Genome opens with comma-separated aliases, `Discussion`, and
+  `Structure` / `Single-cell` figure names.
+- Network asks to analyze the rice hormone network, not "to analysis".
+- Case cards expose the agent title as the accessible name.
+
+### 🐛 Deep Genome case citations, figures, and references
+
+- The Os01g0177400 example uses superscript citation numbers instead of
+  `[document:N]` tokens, matching live Expert cited answers.
+- Case figures and the structure file load from `/attachments/Os01g0177400/`.
+- The report body no longer repeats the Reference list already shown under
+  the answer.
+
+### ✨ Unlisted model identity page
+
+- Add the original 1000-query identity verification HTML as a static file
+  at `/model-identity.html`. Nginx serves it before SPA fallback. Nothing
+  in the product UI links to it.
+- Restyle that page to Phytomni chrome (page surface, type, action blue).
+  The pie chart, category colors, counts, table, and copy stay the same.
+
+### ✨ Agent cases play inside Chat
+
+- The eight empty-state case cards and Explore Agents entries open a
+  read-only Chat transcript of the frozen example, not a separate demo
+  shell, and they do not appear in history.
+- Ask this agent returns to a new Expert chat with that agent selected
+  and does not copy the sample question.
+- Legacy `/knowledge-agent` (and four sibling demo URLs) redirect to
+  `/cases/…`. `/analyst-agent` stays the gated product page.
+- The cited list prefers a Bot `formatted_citation` Nature-style string
+  the same way a live Expert stream does.
+- Knowledge and Brief Gene example transcripts now use a live
+  Expert-path recapture of the original questions (cited Chat replies,
+  not the 2025-08 static wording). Demo `doc_list` keeps Bot
+  `formatted.references` rows (`formatted_citation`).
+- Review is recaptured the same way after A2UI confirm resume.
+  Bibliographic enrichment runs only after resume, so the demo list
+  includes Nature rows when the citation database hits.
+- Network and Design sample questions now name rice.
+- Deep Genome asks as a person for rice gene `Os01g0177400`.
+
+### 🐛 Chat query failures log Bot status and code
+
+- `ApiQuery` client and server failures record `bot_status`, `bot_code`,
+  and `bot_path` when the error is a Bot APIError, so a Request ID can be
+  joined to the Research 422 without logging the Bot message body.
+
+### 🐛 Expert send failures show the gateway 4xx message
+
+- Blocking chat send uses the Surfaceable 4xx `message` from the gateway
+  and still attaches the request id, so a Research planning 400 is no
+  longer only "Failed to send message".
+- 5xx and overlong or unsafe messages stay on the generic sendFailed copy.
+
+### 🐛 Explicit logout revokes the current token
+
+- The sidebar and layout logout actions call `POST /api/v1/auth/logout`
+  before clearing local storage, so a stolen JWT cannot outlive the click.
+- Session-expired 401 handling still only clears locally and does not post
+  logout, so an already-rejected token cannot loop.
+
+### 🐛 Failed chat logs include the request id
+
+- Query 5xx, 4xx, and stream failures log the same `request_id` the error
+  bubble shows, plus the conversation id when the route has one, so ops can
+  grep the id a user pasted.
+
+### 🐛 Ready ZIP with sibling child parts no longer stays RUNNING
+
+- Design and multi-goal Research no longer freeze on RUNNING after Bot
+  marks the result archive ready, when `execution.output_dirs` lists
+  several `children/part-NNN` directories under one run. The wait card
+  can complete; the ZIP still resolves under the shared
+  `children/delivery` root.
+- Ready decode counts unique publish roots after collapsing parts, so
+  Research's 20-goal cap is inside the archive-dir limit. `obs://` and
+  `/obs/` spellings of the same root collapse together.
+
 ### 🐛 Design wait card no longer Failed on packing errors
 
 - When science succeeded and the result ZIP failed because a producer

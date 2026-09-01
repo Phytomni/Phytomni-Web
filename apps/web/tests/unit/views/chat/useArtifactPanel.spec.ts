@@ -235,6 +235,35 @@ describe("useArtifactPanel", () => {
     });
   });
 
+  it("uses preauthorized demo resources without signing conversation artifacts", async () => {
+    const { states, panel } = makePanel();
+    artifactMocks.getConversationArtifactDownloadURL.mockReset();
+    const resources = [
+      {
+        id: "tree",
+        name: "Tree Image",
+        kind: "image" as const,
+        markdownHref: "./.out/Os01g0177400/Os01g0177400_tree.png",
+        displayUrl: "/attachments/Os01g0177400/Os01g0177400_tree.png",
+      },
+    ];
+    const message = eligibleMessage("91", {
+      tool_name: "DeepGenomeAgent",
+      content: "![Tree Image](./.out/Os01g0177400/Os01g0177400_tree.png)",
+      resources,
+    });
+    states.currentChatId.value = "A";
+    states.currentChat.value = { dialogue_id: "A", messages: [message] };
+
+    panel.openArtifact(reportIdentity("91"));
+    await nextTick();
+
+    expect(panel.currentArtifactResources.value).toEqual(resources);
+    expect(
+      artifactMocks.getConversationArtifactDownloadURL
+    ).not.toHaveBeenCalled();
+  });
+
   it("keeps a failed signing attempt as an unavailable resource", async () => {
     const { states, panel } = makePanel();
     const image = {

@@ -18,6 +18,50 @@ function canonicalDoiURL(value: string | undefined): string | undefined {
   return `https://doi.org/${doi}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formattedCitationOf(doc: unknown): string | undefined {
+  if (!isRecord(doc)) return undefined;
+  const value = doc.formatted_citation;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * Bot `formatted_citation` is Nature-style text with markdown * / ** and
+ * `[label](href)` DOI links. The string is attacker-influenced: escape first,
+ * then lift only those markdown tokens into sanitized HTML.
+ */
+function decodeBasicEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+function softenCitationMarkup(text: string): string {
+  return decodeBasicEntities(text)
+    .replace(/\\([_()*])/g, "$1")
+    .replace(/<\/(?:i|em)>/gi, "*")
+    .replace(/<(?:i|em)(?:\s[^>]*)?>/gi, "*")
+    .replace(/_(?= )/g, ",");
+}
+
+function citationMarkupToSafeHtml(text: string): string {
+  const escaped = escapeHtml(softenCitationMarkup(text));
+  const withLinks = escaped.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_match, label: string, href: string) =>
+      `<a href="${sanitizeHref(href)}" target="_blank" class="doi-link">${label}</a>`
+  );
+  const withBold = withLinks.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return withBold.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
 // Build the formatted HTML for the reference list (extracted verbatim from
 // DeepGenomeResultViewer's displayReferences computed).
 //
@@ -41,6 +85,15 @@ export const buildDisplayReferences = (
 
   return references.map((doc, index) => {
     const refIndex = index + 1;
+    const natureCitation = formattedCitationOf(doc);
+    if (natureCitation !== undefined) {
+      return {
+        html: `<div class="doc-citation">${refIndex}. ${citationMarkupToSafeHtml(
+          natureCitation
+        )}</div>`,
+        id: refId(refIndex),
+      };
+    }
     const normalized = normalizeReferenceDocument(doc);
 
     if (normalized.au || normalized.ti) {

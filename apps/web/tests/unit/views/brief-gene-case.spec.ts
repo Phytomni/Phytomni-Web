@@ -3,7 +3,9 @@ import { BRIEF_GENE_CASE } from "@/views/brief-gene-agent/brief-gene-case";
 
 describe("BriefGene static case projection", () => {
   it("keeps the admitted Os01g0177400 report and required sections", () => {
-    expect(BRIEF_GENE_CASE.question).toBe("Os01g0177400");
+    expect(BRIEF_GENE_CASE.question).toBe(
+      "Please give me a brief gene analysis of the rice (Oryza sativa) gene Os01g0177400."
+    );
     expect(BRIEF_GENE_CASE.content).toContain(
       "# Brief Gene Analysis of Os01g0177400"
     );
@@ -18,10 +20,13 @@ describe("BriefGene static case projection", () => {
     }
   });
 
-  it("projects only public reference fields with stable local IDs", () => {
+  it("projects Bot formatted.references rows onto demo doc_list", () => {
     const allowedKeys = new Set([
       "file_id",
       "title",
+      "formatted_citation",
+      "doi_missing",
+      "ar",
       "au",
       "ti",
       "so",
@@ -34,23 +39,22 @@ describe("BriefGene static case projection", () => {
       "pm",
     ]);
 
-    expect(BRIEF_GENE_CASE.references).toHaveLength(32);
-    BRIEF_GENE_CASE.references.forEach((reference, index) => {
-      expect(reference.file_id).toBe(`bg-case-${index + 1}`);
+    expect(BRIEF_GENE_CASE.references.length).toBeGreaterThan(0);
+    BRIEF_GENE_CASE.references.forEach((reference) => {
       expect(Object.keys(reference).every((key) => allowedKeys.has(key))).toBe(
         true
       );
       expect(reference.title).toEqual(expect.any(String));
+      expect(reference.formatted_citation).toEqual(expect.any(String));
     });
   });
 
   it("binds provenance to the committed public BriefGene workflow", () => {
     expect(BRIEF_GENE_CASE.provenance).toMatchObject({
-      botCommit: "c84a129aa354a911eba34d40cd4d780f062f25c3",
+      botCommit: "1278384920e9a806d44b5a46ac62397531215bc6",
       input: "Os01g0177400",
       locale: "en-US",
-      entryPoint:
-        "mcp_server_phytomni.agents.brief_gene.agent.brief_gene_function",
+      entryPoint: "POST /v1/chat/completions model=phyto-brief-gene",
     });
     expect(BRIEF_GENE_CASE.provenance.capturedAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/

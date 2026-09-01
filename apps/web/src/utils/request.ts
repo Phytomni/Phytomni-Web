@@ -44,6 +44,7 @@ const service: AxiosInstance = axios.create({
 export type PhytomniRequestConfig<D = unknown> = AxiosRequestConfig<D> & {
   requestId?: string;
   suppressErrorToast?: boolean;
+  skipSessionExpired?: boolean;
 };
 
 /** Axios returns the interceptor's unwrapped payload at runtime. */
@@ -230,6 +231,10 @@ function suppressesErrorToast(config: unknown): boolean {
   return isRecord(config) && config.suppressErrorToast === true;
 }
 
+function skipsSessionExpired(config: unknown): boolean {
+  return isRecord(config) && config.skipSessionExpired === true;
+}
+
 // response interceptor
 responseInterceptors.use(
   (res: AxiosResponse<unknown>) => {
@@ -270,7 +275,10 @@ responseInterceptors.use(
         ? responseData.detail.code
         : undefined;
     const suppressErrorToast = suppressesErrorToast(res.config);
-    if (code === 401 || detailCode === 403) {
+    if (
+      (code === 401 || detailCode === 403) &&
+      !skipsSessionExpired(res.config)
+    ) {
       if (!isRelogin.show) {
         isRelogin.show = true;
         ElMessageBox.alert(i18n.global.t("request.sessionExpired"), {
@@ -347,7 +355,12 @@ responseInterceptors.use(
       responseData && isRecord(responseData.detail)
         ? responseData.detail.code
         : undefined;
-    if (detailCode === 403) {
+    const errorConfig = axios.isAxiosError<unknown>(error)
+      ? error.config
+      : isRecord(error)
+        ? error.config
+        : undefined;
+    if (detailCode === 403 && !skipsSessionExpired(errorConfig)) {
       isRelogin.show = false;
       const UserStore = userStore();
       UserStore.FedLogOut()

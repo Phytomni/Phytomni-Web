@@ -3,6 +3,7 @@ package api_handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"mime/multipart"
@@ -13,8 +14,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
 	"phytomni-server/service/api_service"
 )
 
@@ -151,4 +155,149 @@ func TestQueryRejectsForbiddenAttachmentFields(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestQueryFailureLogFieldsIncludeRequestAndDialogueIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/dialogue-7/messages", nil)
+	c.Params = gin.Params{{Key: "id", Value: "dialogue-7"}}
+	c.Set("x-request-id", "87b85d0d-3c3d-4282-b646-c3c28032979e")
+
+	fields := queryFailureLogFields(c, "ops@example.com", errors.New("bot request failed"))
+	got := logFieldMap(t, fields)
+	if got["user"] != "ops@example.com" {
+		t.Fatalf("user = %#v", got["user"])
+	}
+	if fmt.Sprint(got["err"]) != "bot request failed" {
+		t.Fatalf("err = %#v", got["err"])
+	}
+	if got["request_id"] != "87b85d0d-3c3d-4282-b646-c3c28032979e" {
+		t.Fatalf("request_id = %#v", got["request_id"])
+	}
+	if got["dialogue_id"] != "dialogue-7" {
+		t.Fatalf("dialogue_id = %#v", got["dialogue_id"])
+	}
+}
+
+func TestQueryFailureLogFieldsIncludeBotAPIError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+	c.Set("x-request-id", "87b85d0d-3c3d-4282-b646-c3c28032979e")
+
+	err := &rxBot.APIError{
+		Method:  http.MethodPost,
+		Path:    "/v1/agents/research/runs",
+		Status:  422,
+		Code:    "research_dataset_not_found",
+		Message: "Research dataset metadata could not be verified.",
+	}
+	fields := queryFailureLogFields(c, "ops@example.com", err)
+	got := logFieldMap(t, fields)
+	if got["request_id"] != "87b85d0d-3c3d-4282-b646-c3c28032979e" {
+		t.Fatalf("request_id = %#v", got["request_id"])
+	}
+	if got["bot_status"] != 422 {
+		t.Fatalf("bot_status = %#v", got["bot_status"])
+	}
+	if got["bot_code"] != "research_dataset_not_found" {
+		t.Fatalf("bot_code = %#v", got["bot_code"])
+	}
+	if got["bot_path"] != "/v1/agents/research/runs" {
+		t.Fatalf("bot_path = %#v", got["bot_path"])
+	}
+	if _, ok := got["message"]; ok {
+		t.Fatalf("must not log APIError.Message: %#v", got)
+	}
+}
+
+func TestQueryFailureLogFieldsOmitBlankCorrelation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", nil)
+	c.Params = gin.Params{{Key: "id", Value: "  "}}
+
+	fields := queryFailureLogFields(c, "ops@example.com", errors.New("invalid chat routing"), "status", 400)
+	got := logFieldMap(t, fields)
+	if _, ok := got["request_id"]; ok {
+		t.Fatalf("blank request_id still logged: %#v", got["request_id"])
+	}
+	if _, ok := got["dialogue_id"]; ok {
+		t.Fatalf("blank dialogue_id still logged: %#v", got["dialogue_id"])
+	}
+	if got["status"] != 400 {
+		t.Fatalf("status extra = %#v", got["status"])
+	}
+}
+
+func TestQueryFailedLogsRequestAndDialogueIDs(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	restore := rxLog.ReplaceLoggerForTest(zap.New(core))
+	t.Cleanup(restore)
+
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: false}
+	rxBot.SetConversationContextV1Advertised(false)
+	t.Cleanup(func() {
+		rxBot.BotConfig = previous
+		rxBot.SetConversationContextV1Advertised(false)
+	})
+	previousQuota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", previousQuota) })
+
+	c, w := newChatQueryHandlerRequest(t, map[string]string{"query": "ping"})
+	c.Set("username", "ops@example.com")
+	c.Set("x-request-id", "87b85d0d-3c3d-4282-b646-c3c28032979e")
+	c.Params = gin.Params{{Key: "id", Value: "0"}}
+
+	NewHandler().Query(c)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want 503", w.Code, w.Body.String())
+	}
+
+	var found bool
+	for _, entry := range observed.All() {
+		if entry.Message != "ApiQuery failed" {
+			continue
+		}
+		found = true
+		got := entry.ContextMap()
+		if got["request_id"] != "87b85d0d-3c3d-4282-b646-c3c28032979e" {
+			t.Fatalf("request_id = %#v", got["request_id"])
+		}
+		if got["dialogue_id"] != "0" {
+			t.Fatalf("dialogue_id = %#v", got["dialogue_id"])
+		}
+		if fmt.Sprint(got["user"]) != "ops@example.com" {
+			t.Fatalf("user = %#v", got["user"])
+		}
+		if _, ok := got["err"]; !ok {
+			t.Fatal("missing err field")
+		}
+	}
+	if !found {
+		t.Fatal("ApiQuery failed was not logged")
+	}
+}
+
+func logFieldMap(t *testing.T, fields []any) map[string]any {
+	t.Helper()
+	if len(fields)%2 != 0 {
+		t.Fatalf("odd log field count: %#v", fields)
+	}
+	got := make(map[string]any, len(fields)/2)
+	for i := 0; i < len(fields); i += 2 {
+		key, ok := fields[i].(string)
+		if !ok {
+			t.Fatalf("log key %d is %T, want string", i, fields[i])
+		}
+		got[key] = fields[i+1]
+	}
+	return got
 }

@@ -26,6 +26,7 @@ import {
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
+import { isDemoDialogueId } from "@/views/chat/demos/catalog";
 import { createChatRequestKey } from "../utils/chat-request-key";
 import {
   clientTurnDraftFingerprint,
@@ -60,6 +61,7 @@ import { executionV2TransportEnabled } from "../executionFeature";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
 const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const MAX_SURFACEABLE_CLIENT_MESSAGE = 512;
 
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
@@ -88,6 +90,19 @@ function clearCapturedSelectionAfterAcceptance(
   ) {
     chatState.selectedAgent = "";
   }
+}
+
+function surfaceableClientMessage(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (
+    trimmed === "" ||
+    trimmed.length > MAX_SURFACEABLE_CLIENT_MESSAGE ||
+    trimmed.includes("\0")
+  ) {
+    return undefined;
+  }
+  return trimmed;
 }
 
 function hasDurableRowId(value: unknown): boolean {
@@ -429,6 +444,7 @@ export function useSendMessage(opts: {
     currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
+    if (isDemoDialogueId(currentChatId.value)) return;
     if (!currentChatId.value || attachmentTargetBlocked?.value) return;
 
     const sendingDialogueId = currentChatId.value;
@@ -1222,10 +1238,16 @@ export function useSendMessage(opts: {
         chatState.activeRequestId === requestKey &&
         !chatState.generationStopped
       ) {
-        const isTimeout = response?.status === 504;
+        const status =
+          typeof response?.status === "number" ? response.status : 0;
+        const isTimeout = status === 504;
+        const surfaced =
+          status >= 400 && status < 500 && status !== 401 && status !== 403
+            ? surfaceableClientMessage(responseData?.message)
+            : undefined;
         const baseMessage = isTimeout
           ? t("chat.timeoutFailed")
-          : t("chat.sendFailed");
+          : (surfaced ?? t("chat.sendFailed"));
         const requestID = safeWebRequestID(responseData?.request_id);
         sendingMessages.push({
           role: "assistant",

@@ -4,6 +4,7 @@ import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage, ChatUIState } from "../types";
 import type { ChatReloadResult } from "./useSelectChat";
 import { isPollableChatAgentTool } from "../utils/async-agent-policy";
+import { isDemoDialogueId } from "../demos/catalog";
 import {
   type LifecycleScheduler,
   useAgentRunLifecycle,
@@ -261,6 +262,7 @@ export function useChatAgentRunLifecycle(options: {
     for (const [dialogueId, state] of Object.entries(
       options.chatStates.value
     )) {
+      if (isDemoDialogueId(dialogueId)) continue;
       if (state.historyHydration !== "ready") continue;
       for (const message of state.renderedChat?.messages ?? []) {
         const rowId = isWatchableMessage(message);

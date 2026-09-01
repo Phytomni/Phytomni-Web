@@ -119,6 +119,28 @@ export const dynamicRoutes = [
   },
 ];
 
+function agentCaseChatRoute(
+  path: string,
+  name: string,
+  demoKey:
+    | "knowledge"
+    | "data"
+    | "analyst"
+    | "review"
+    | "network"
+    | "brief-gene"
+    | "deep-genome"
+    | "design",
+  title: string
+) {
+  return {
+    path,
+    name,
+    component: () => import("@/views/chat/ChatView.vue"),
+    meta: { title, layout: "nolayout" as const, demoKey },
+  };
+}
+
 export const constantRoutes = [
   // standalone routes (no layout needed)
   {
@@ -178,15 +200,12 @@ export const constantRoutes = [
       {
         path: "/knowledge-agent",
         name: "knowledgeAgent",
-        component: () =>
-          import("@/views/knowledge-agent/KnowledgeAgentView.vue"),
-        meta: { title: "Knowledge Agent", layout: "nolayout" },
+        redirect: "/cases/knowledge-agent",
       },
       {
         path: "/data-agent",
         name: "dataAgent",
-        component: () => import("@/views/data-agent/DataAgentView.vue"),
-        meta: { title: "Data Agent", layout: "nolayout" },
+        redirect: "/cases/data-agent",
       },
       {
         path: "/analyst-agent",
@@ -198,22 +217,19 @@ export const constantRoutes = [
       {
         path: "/review-agent",
         name: "reviewAgent",
-        component: () => import("@/views/review-agent/ReviewAgentView.vue"),
-        meta: { title: "Review Agent", layout: "nolayout" },
+        redirect: "/cases/review-agent",
       },
       {
         path: "/brief-gene-agent",
         name: "briefGeneAgent",
-        component: () =>
-          import("@/views/brief-gene-agent/BriefGeneAgentView.vue"),
-        meta: { title: "Brief Gene Agent", layout: "nolayout" },
+        redirect: "/cases/brief-gene-agent",
       },
-      {
-        path: "/cases/gene-network-agent",
-        name: "geneNetworkAgentCase",
-        component: () => import("@/views/agent-cases/GeneNetworkCase.vue"),
-        meta: { title: "Gene Network Agent Case", layout: "nolayout" },
-      },
+      agentCaseChatRoute(
+        "/cases/gene-network-agent",
+        "geneNetworkAgentCase",
+        "network",
+        "Gene Network Agent Case"
+      ),
       {
         path: "/gene-network-agent",
         name: "geneNetworkAgent",
@@ -224,9 +240,7 @@ export const constantRoutes = [
       {
         path: "/deep-genome-agent",
         name: "deepGenomeAgent",
-        component: () =>
-          import("@/views/deep-genome-agent/DeepGenomeAgentView.vue"),
-        meta: { title: "Deep Genome Agent", layout: "nolayout" },
+        redirect: "/cases/deep-genome-agent",
       },
       {
         path: "/digital-design-agent",
@@ -235,12 +249,12 @@ export const constantRoutes = [
           import("@/views/digital-design-agent/DigitalDesignAgentView.vue"),
         meta: { title: "Digital Design Agent", layout: "nolayout" },
       },
-      {
-        path: "/cases/digital-design-agent",
-        name: "digitalDesignAgentCase",
-        component: () => import("@/views/agent-cases/DigitalDesignCase.vue"),
-        meta: { title: "Digital Design Agent Case", layout: "nolayout" },
-      },
+      agentCaseChatRoute(
+        "/cases/digital-design-agent",
+        "digitalDesignAgentCase",
+        "design",
+        "Digital Design Agent Case"
+      ),
       {
         path: "/design",
         name: "design",
@@ -284,6 +298,42 @@ export const constantRoutes = [
         component: () => import("@/views/chat/ChatView.vue"),
         meta: { title: "Chat", layout: "nolayout" },
       },
+      agentCaseChatRoute(
+        "/cases/knowledge-agent",
+        "knowledgeAgentCase",
+        "knowledge",
+        "Knowledge Agent Case"
+      ),
+      agentCaseChatRoute(
+        "/cases/data-agent",
+        "dataAgentCase",
+        "data",
+        "Data Agent Case"
+      ),
+      agentCaseChatRoute(
+        "/cases/analyst-agent",
+        "analystAgentCase",
+        "analyst",
+        "Analyst Agent Case"
+      ),
+      agentCaseChatRoute(
+        "/cases/review-agent",
+        "reviewAgentCase",
+        "review",
+        "Review Agent Case"
+      ),
+      agentCaseChatRoute(
+        "/cases/brief-gene-agent",
+        "briefGeneAgentCase",
+        "brief-gene",
+        "Brief Gene Agent Case"
+      ),
+      agentCaseChatRoute(
+        "/cases/deep-genome-agent",
+        "deepGenomeAgentCase",
+        "deep-genome",
+        "Deep Genome Agent Case"
+      ),
       {
         path: "/favorites",
         name: "favorites",

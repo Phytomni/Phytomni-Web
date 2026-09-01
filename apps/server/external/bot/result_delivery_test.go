@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,6 +76,128 @@ func TestDecodeRunDeliveryResolvesArchiveUnderResultChildRoot(t *testing.T) {
 	expectedObjectRef := "/obs/bucket/owner/run/children/delivery/" + strings.TrimPrefix(testArchiveDigest, "sha256:") + "/analyst-results.zip"
 	if got.Archive == nil || got.Archive.ObjectRef != expectedObjectRef {
 		t.Fatalf("object ref = %#v, want %q", got.Archive, expectedObjectRef)
+	}
+}
+
+func siblingChildParts(count int) []string {
+	parts := make([]string, count)
+	for i := range parts {
+		parts[i] = fmt.Sprintf("/obs/bucket/owner/run/children/part-%03d", i+1)
+	}
+	return parts
+}
+
+func TestDecodeRunDeliveryReadyOutputDirFreezeShapes(t *testing.T) {
+	digestHex := strings.TrimPrefix(testArchiveDigest, "sha256:")
+	wantChildrenRef := "/obs/bucket/owner/run/children/delivery/" + digestHex + "/research-results.zip"
+	cases := []struct {
+		name    string
+		roots   []string
+		wantErr string
+		wantRef string
+	}{
+		{
+			name:    "eight sibling parts",
+			roots:   siblingChildParts(8),
+			wantRef: wantChildrenRef,
+		},
+		{
+			name:    "nine sibling parts",
+			roots:   siblingChildParts(9),
+			wantRef: wantChildrenRef,
+		},
+		{
+			name:    "twenty sibling parts at research goal cap",
+			roots:   siblingChildParts(20),
+			wantRef: wantChildrenRef,
+		},
+		{
+			name:    "too many sibling parts",
+			roots:   siblingChildParts(MaxProjectionArtifactCount + 1),
+			wantErr: "count is outside bounds",
+		},
+		{
+			name: "run root mixed with sibling part",
+			roots: []string{
+				"/obs/bucket/owner/run",
+				"/obs/bucket/owner/run/children/part-001",
+			},
+			wantErr: "exactly one publish root",
+		},
+		{
+			name: "obs scheme mixed with slash-obs sibling part",
+			roots: []string{
+				"/obs/bucket/owner/run/children/part-001",
+				"obs://bucket/owner/run/children/part-002",
+			},
+			wantRef: wantChildrenRef,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := DecodeRunDelivery(
+				encodeDeliveryPayload(t, readyDeliveryPayload("research")),
+				"research",
+				tc.roots,
+			)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("accepted freeze shape: %#v", got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("rejected accepted shape: %v", err)
+			}
+			if got.Archive == nil || got.Archive.ObjectRef != tc.wantRef {
+				t.Fatalf("object ref = %#v, want %q", got.Archive, tc.wantRef)
+			}
+		})
+	}
+}
+
+func TestDecodeRunDeliveryResolvesArchiveUnderSiblingChildParts(t *testing.T) {
+	digestHex := strings.TrimPrefix(testArchiveDigest, "sha256:")
+	cases := []struct {
+		agent string
+		roots []string
+		want  string
+	}{
+		{
+			agent: "design",
+			roots: []string{
+				"/obs/bucket/owner/run/children/part-002",
+				"/obs/bucket/owner/run/children/part-001",
+			},
+			want: "/obs/bucket/owner/run/children/delivery/" + digestHex + "/design-results.zip",
+		},
+		{
+			agent: "research",
+			roots: []string{
+				"/obs/bucket/owner/run/children/part-001",
+				"/obs/bucket/owner/run/children/part-002",
+				"/obs/bucket/owner/run/children/part-003",
+			},
+			want: "/obs/bucket/owner/run/children/delivery/" + digestHex + "/research-results.zip",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.agent, func(t *testing.T) {
+			got, err := DecodeRunDelivery(
+				encodeDeliveryPayload(t, readyDeliveryPayload(tc.agent)),
+				tc.agent,
+				tc.roots,
+			)
+			if err != nil {
+				t.Fatalf("sibling parts rejected: %v", err)
+			}
+			if got.Archive == nil || got.Archive.ObjectRef != tc.want {
+				t.Fatalf("object ref = %#v, want %q", got.Archive, tc.want)
+			}
+		})
 	}
 }
 
@@ -189,6 +312,10 @@ func TestDecodeRunDeliveryRejectsMalformedContracts(t *testing.T) {
 		}},
 		{name: "missing root", mutate: func(map[string]interface{}) {}, roots: []string{}},
 		{name: "multiple roots", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/run", "obs://bucket/owner/second-run"}},
+		{name: "multiple publish roots", mutate: func(map[string]interface{}) {}, roots: []string{
+			"/obs/bucket/owner/run/children/part-001",
+			"/obs/bucket/owner/second-run/children/part-001",
+		}},
 		{name: "url root", mutate: func(map[string]interface{}) {}, roots: []string{"https://example.invalid/run"}},
 		{name: "traversal root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/../run"}},
 		{name: "control character root", mutate: func(map[string]interface{}) {}, roots: []string{"obs://bucket/owner/\nrun"}},

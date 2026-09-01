@@ -268,7 +268,7 @@ const handleMenuSelect = () => {
 // logout
 const handleLogout = () => {
   const UserStore = userStore();
-  UserStore.FedLogOut()
+  UserStore.FedLogOut({ revoke: true })
     .catch(() => undefined)
     .then(() => router.replace("/login"))
     .catch(() => undefined);

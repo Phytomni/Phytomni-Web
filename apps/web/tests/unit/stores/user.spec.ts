@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import userStore from "@/stores/user";
+import { logout } from "@/api/login";
 
 // FedLogOut's contract: best-effort clearing of localStorage + sessionStorage (a
 // throw in one does not block the other); resolve(true) if all succeed, reject with
@@ -11,6 +12,8 @@ import userStore from "@/stores/user";
 describe("userStore.FedLogOut", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    vi.mocked(logout).mockReset();
+    vi.mocked(logout).mockResolvedValue({ code: 200, data: "logged out" });
   });
 
   it("resolves true when both storage clears succeed", async () => {
@@ -56,9 +59,32 @@ describe("userStore.FedLogOut", () => {
     await expect(store.FedLogOut()).rejects.toThrow();
     expect(sessionClear).toHaveBeenCalled();
   });
+
+  it("does not call the server logout on a local-only clear", async () => {
+    const store = userStore();
+    await expect(store.FedLogOut()).resolves.toBe(true);
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it("revokes the current token then clears local session on explicit logout", async () => {
+    const store = userStore();
+    await expect(store.FedLogOut({ revoke: true })).resolves.toBe(true);
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("still clears local session when server revoke fails", async () => {
+    vi.mocked(logout).mockRejectedValueOnce(new Error("network"));
+    const store = userStore();
+    await expect(store.FedLogOut({ revoke: true })).resolves.toBe(true);
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
 });
 
 vi.mock("@/api/chat", () => ({ getUserTool: vi.fn() }));
+vi.mock("@/api/login", () => ({
+  login: vi.fn(),
+  logout: vi.fn(),
+}));
 import { getUserTool } from "@/api/chat";
 const mockGetUserTool = vi.mocked(getUserTool);
 

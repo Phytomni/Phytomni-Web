@@ -200,6 +200,7 @@
           artifactPresentation?.report ?? chatContentToText(message.content)
         "
         :references="message.doc_list || []"
+        :resources="message.resources ?? []"
         :ns="'m' + index"
         :show-actions="showDeepGenomeFinalActions"
         :show-references="hasDeepGenomeReferences"
