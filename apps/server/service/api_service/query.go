@@ -2321,12 +2321,7 @@ func isExpertEnvelopeDecodeError(err error) bool {
 }
 
 func responseReportRevision(values ...*int64) int64 {
-	for _, value := range values {
-		if value != nil && *value >= 0 {
-			return *value
-		}
-	}
-	return 0
+	return responseReportRevisionOrDefault(-1, values...)
 }
 
 func responseReportRevisionOrDefault(defaultValue int64, values ...*int64) int64 {

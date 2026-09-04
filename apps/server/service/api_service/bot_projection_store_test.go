@@ -118,6 +118,77 @@ func TestMergeBotRunProjectionRejectsEqualBlankReport(t *testing.T) {
 	}
 }
 
+func TestMergeBotRunProjectionAcceptsUnversionedTerminalOverZeroRevision(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-design-wait", Status: "RUNNING", ReportRevision: 0, ResultArchiveV1: true,
+		Delivery: testPendingDelivery(1, testProjectionDigestA),
+	}
+	incoming := BotRunProjection{
+		RunID: "run-design-wait", Status: "SUCCEEDED", ReportRevision: -1,
+		FinalReport: "...terminal outcome...", ResultArchiveV1: true,
+		Delivery: testReadyDelivery(1, testProjectionDigestA),
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "...terminal outcome..." {
+		t.Fatalf("merged=%#v changed=%v, want SUCCEEDED with terminal report", merged, changed)
+	}
+	if merged.ReportRevision != 0 {
+		t.Fatalf("report revision=%d, want stored 0 (do not persist -1)", merged.ReportRevision)
+	}
+	if merged.Delivery == nil || merged.Delivery.Status != "ready" {
+		t.Fatalf("delivery=%#v, want ready", merged.Delivery)
+	}
+}
+
+func TestMergeBotRunProjectionAcceptsUnversionedSucceededOnBothSentinels(t *testing.T) {
+	current := BotRunProjection{RunID: "run-both-sentinel", Status: "RUNNING", ReportRevision: -1}
+	incoming := BotRunProjection{
+		RunID: "run-both-sentinel", Status: "SUCCEEDED", ReportRevision: -1, FinalReport: "done",
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "done" || merged.ReportRevision != -1 {
+		t.Fatalf("merged=%#v changed=%v", merged, changed)
+	}
+}
+
+func TestMergeBotRunProjectionAcceptsUnversionedTerminalOverPositiveRevision(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-rev5", Status: "RUNNING", ReportRevision: 5, IntermediateReport: "partial",
+	}
+	incoming := BotRunProjection{
+		RunID: "run-rev5", Status: "SUCCEEDED", ReportRevision: -1, FinalReport: "final",
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "final" || merged.ReportRevision != 5 {
+		t.Fatalf("merged=%#v changed=%v, want SUCCEEDED at stored revision 5", merged, changed)
+	}
+}
+
+func TestMergeBotRunProjectionKeepsTerminalAgainstUnversionedFailure(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-already-done", Status: "SUCCEEDED", ReportRevision: 0, FinalReport: "kept",
+	}
+	incoming := BotRunProjection{
+		RunID: "run-already-done", Status: "FAILED", ReportRevision: -1, FinalReport: "should not replace",
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "kept" {
+		t.Fatalf("merged=%#v changed=%v, want stored success kept", merged, changed)
+	}
+}
+
 func TestMergeBotRunProjectionAcceptsNewerVisibleReport(t *testing.T) {
 	current := BotRunProjection{RunID: "run-1", ReportRevision: 1, IntermediateReport: "old"}
 	incoming := BotRunProjection{RunID: "run-1", ReportRevision: 2, FinalReport: "new", Status: "SUCCEEDED"}

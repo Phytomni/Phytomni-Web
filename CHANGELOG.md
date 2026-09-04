@@ -13,6 +13,13 @@ Newest first.
 
 ## [Unreleased]
 
+### 🐛 Design terminal runs close without report_revision
+
+- A RUNNING Design ledger whose stored revision is 0 still takes a
+  succeeded Bot GET that omits `report_revision`, so the wait card
+  clears and the zip can download. Missing revision is no longer
+  written as 0.
+
 ### 🐛 Deep Genome database search ignores case
 
 - Gene list `title` matches species code and gene id without regard to

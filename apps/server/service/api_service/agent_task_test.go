@@ -984,6 +984,38 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	}
 }
 
+// TestSyncBotRuns_UnversionedDesignSuccessClosesZeroRevisionLedger pins the
+// Design wait-card incident: a RUNNING row whose stored revision is 0 must
+// still take a succeeded GET that omits report_revision.
+func TestSyncBotRuns_UnversionedDesignSuccessClosesZeroRevisionLedger(t *testing.T) {
+	gdb := setupTestDB(t)
+	digest := testProjectionDigestA
+	projection := `{"run_id":"run-design-unversioned","agent":"design","status":"RUNNING","report_revision":0,"result_archive_v1":true,"delivery":{"schema_version":1,"required":true,"status":"pending","revision":1,"retryable":false}}`
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, bot_projection_json, bot_report_revision, created_at) VALUES
+		(55, 'dlg-design-unversioned', 'alice', 'AT1G66350 ath', '', 'DigitalDesignAgent', 'run-design-unversioned', 'RUNNING', ?, 0, '2026-01-01 00:00:00')`, projection).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-design-unversioned","agent":"design","status":"succeeded","result":{"formatted":{"answer":"...terminal outcome..."},"execution":{"output_dirs":["/obs/bucket/owner/run/children/part-001"],"delivery":{"schema_version":1,"required":true,"status":"ready","revision":1,"inventory_digest":"`+digest+`","archive":{"role":"result_archive","name":"design-results.zip","media_type":"application/zip","size_bytes":20619922,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:`+digest+`"},"error_code":null,"retryable":false}}}}`)
+
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 55, BotRunId: "run-design-unversioned", Status: "RUNNING", ToolName: "DigitalDesignAgent"}})
+
+	status, answer := readStatusAnswer(t, gdb, 55)
+	if status != "SUCCEEDED" {
+		t.Errorf("status = %q, want SUCCEEDED", status)
+	}
+	if !strings.Contains(answer, "...terminal outcome...") {
+		t.Errorf("answer = %q, want terminal report", answer)
+	}
+	var revision int64
+	if err := gdb.Raw(`SELECT bot_report_revision FROM question_agent_logs WHERE id = 55`).Scan(&revision).Error; err != nil {
+		t.Fatalf("revision: %v", err)
+	}
+	if revision != 0 {
+		t.Errorf("bot_report_revision = %d, want stored 0", revision)
+	}
+}
+
 // TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope follows the supported
 // Expert route for a Bot-resolved DeepGenome run: the Web submits one umbrella
 // run, reconciles two intermediate revisions and a final report, then reads

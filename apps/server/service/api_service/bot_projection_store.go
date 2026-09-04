@@ -95,7 +95,8 @@ type botProjectionRunRow struct {
 // MergeBotRunProjection combines a poll snapshot with the row currently in
 // storage. Report revisions are monotonic: an older snapshot is ignored, an
 // equal snapshot may advance metadata, and a newer snapshot wins while blank
-// fields never erase already-visible content.
+// fields never erase already-visible content. An unversioned terminal
+// snapshot may still close a non-terminal ledger.
 func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection, bool, error) {
 	if current.RunID != "" && incoming.RunID != "" && current.RunID != incoming.RunID {
 		return BotRunProjection{}, false, errors.New("bot projection run id mismatch")
@@ -141,7 +142,7 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 	if merged.RunID == "" {
 		merged.RunID = incoming.RunID
 	}
-	if incoming.ReportRevision >= current.ReportRevision {
+	if projectionMetadataMergeable(current, incoming) {
 		newer := incoming.ReportRevision > current.ReportRevision
 		mergeProjectionMetadata(&merged, incoming)
 		if newer {
@@ -500,6 +501,19 @@ func isProjectionTerminalStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+// projectionMetadataMergeable reports whether incoming may update status and
+// report text. Non-negative revisions stay monotonic. A missing revision (-1)
+// may still close an in-flight ledger when the snapshot is scientifically
+// terminal, without persisting -1 over a stored non-negative revision.
+func projectionMetadataMergeable(current, incoming BotRunProjection) bool {
+	if incoming.ReportRevision >= current.ReportRevision {
+		return true
+	}
+	return incoming.ReportRevision < 0 &&
+		!isProjectionTerminalStatus(current.Status) &&
+		isProjectionTerminalStatus(incoming.Status)
 }
 
 func isProjectionFailureStatus(status string) bool {

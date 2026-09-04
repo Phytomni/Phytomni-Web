@@ -32,6 +32,19 @@ func compatChatServer(t *testing.T, chatBody string) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
 
+func TestResponseReportRevisionMissingIsSentinel(t *testing.T) {
+	if got := responseReportRevision(); got != -1 {
+		t.Fatalf("empty = %d, want -1", got)
+	}
+	if got := responseReportRevision(nil); got != -1 {
+		t.Fatalf("nil pointer = %d, want -1", got)
+	}
+	seven := int64(7)
+	if got := responseReportRevision(nil, &seven); got != 7 {
+		t.Fatalf("present = %d, want 7", got)
+	}
+}
+
 func TestQueryUsesRunIDNotOpenAICompletionID(t *testing.T) {
 	setupExpertTestDB(t)
 	compatChatServer(t, `{"id":"chatcmpl-7","run_id":"run-7","report_revision":7,"choices":[{"message":{"content":"answer"}}]}`)
