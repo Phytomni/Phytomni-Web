@@ -61,6 +61,62 @@ jwt:
 Verification is pinned to HS256 (`0.1.3`). Keep the secret stable across
 deploys so issued tokens stay valid. Overridable via `PHYTOMNI_JWT_SECRET`.
 
+### `document_export.font_dir` — academic cited-report fonts
+
+```yaml
+document_export:
+  font_dir: "/opt/phytomni/report-fonts"
+```
+
+This server-side-only directory supplies the four genuine Times New Roman
+faces required by cited PDF exports:
+
+- `times.ttf` — regular
+- `timesbd.ttf` — bold
+- `timesi.ttf` — italic
+- `timesbi.ttf` — bold italic
+
+Operations is responsible for obtaining these files from an authorized source,
+retaining the applicable provenance and license records, and keeping the font
+binaries outside the repository. The service does not download fonts or
+silently substitute Times-Roman, DejaVu, the embedded CJK face, or another
+serif font. The existing embedded CJK face remains available only for script
+coverage when Times New Roman lacks a glyph.
+
+The directory is read and validated on the first cited PDF request, then its
+success or failure is cached until process restart. A missing, malformed,
+misidentified, duplicate-role, or non-embeddable face causes that cited PDF
+export to fail with a controlled error; it does not block service startup or
+ordinary Chat exports. Resource changes therefore require a service restart.
+The browser cannot supply or override the directory or font bytes.
+
+For each face, the loader checks embedding rights on the bytes it read, writes
+those exact bytes to an owner-only (`0600`) temporary validation snapshot, and
+runs the path-only font metadata parser against that snapshot. It closes and
+runs the path-only font metadata parser against that snapshot. The loader
+closes its snapshot writer before parsing and removes the snapshot pathname on
+success, parser error, or parser panic; it never reopens the mutable source path
+for metadata parsing. This temporary validation copy is not a bundled or
+distributed font resource.
+
+DOCX output specifies Times New Roman by family name and does not embed these
+files. Any environment used for Word-compatible visual acceptance must install
+the same authorized family separately.
+
+For local Go tests that exercise genuine font loading, point the process-only
+test resource variable at an authorized directory:
+
+```bash
+PHYTOMNI_REPORT_FONT_DIR=/path/to/authorized/fonts \
+  GOCACHE=/tmp/phytomni-review-export-go \
+  go test ./common/document_format/mdoc -run 'TestFont' -count=1
+```
+
+`PHYTOMNI_REPORT_FONT_DIR` is only a test input; it does not override the
+runtime `document_export.font_dir` setting. Genuine-font tests fail when this
+resource is absent or invalid rather than skipping or substituting another
+font.
+
 ### `auth` — public self-registration gate (default ON)
 
 ```yaml
