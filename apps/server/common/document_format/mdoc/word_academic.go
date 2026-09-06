@@ -321,9 +321,11 @@ func (w *academicWordWriter) writeInlinesWithin(p *docx.Paragraph, ordinal int, 
 			p.GetCT().Children[index].Run.Property.Fonts = academicWordFonts(academicCodeDOCXFamily)
 		}
 		if in.citation != nil {
-			r.Size(academicCitationFontSizePt)
+			// Word applies native superscript scaling to the 12 pt body-size base.
+			size := uint64(academicLayout(roleBody).sizePt)
+			r.Size(size)
 			pr := p.GetCT().Children[index].Run.Property
-			pr.SizeCs = ctypes.NewFontSizeCS(academicCitationFontSizePt * 2)
+			pr.SizeCs = ctypes.NewFontSizeCS(size * 2)
 			pr.VertAlign = ctypes.NewGenSingleStrVal(stypes.VerticalAlignRun("superscript"))
 			continue
 		}

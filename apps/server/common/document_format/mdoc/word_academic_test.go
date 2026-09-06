@@ -187,34 +187,61 @@ func TestCitedWordUsesRealSuperscript(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	doc, e := BuildCited("# Plant adaptation\n\n## Abstract\n\nEvidence [1].", rows, Options{})
-	if e != nil {
-		t.Fatal(e)
-	}
-	data, e := RenderCitedWord(doc)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if !strings.Contains(wordDocumentXML(t, data), "superscript") {
-		t.Fatal("missing superscript")
-	}
-	parts := wordParts(t, data)
-	tree := readWordNode(t, parts["word/document.xml"])
-	styles := readWordNode(t, parts["word/styles.xml"])
-	found := false
-	for _, p := range tree.all(testWordNS, "p") {
-		for _, r := range p.all(testWordNS, "r") {
-			if r.content() == "1" {
-				props := resolvedWordProps(t, styles, p, r, "rPr")
-				if props["vertAlign/val"] != "superscript" || props["sz/val"] != "16" || props["rFonts/ascii"] != "Times New Roman" {
-					t.Fatalf("citation properties %v", props)
-				}
-				found = true
+	for _, tc := range []struct{ name, markdown string }{
+		{"body", "Evidence [1]."},
+		{"table", "| Claim | Detail |\n|--|--|\n| Evidence [1]. | Result |"},
+		{"list", "- Evidence [1]."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, e := BuildCited("# Plant adaptation\n\n## Abstract\n\n"+tc.markdown, rows, Options{})
+			if e != nil {
+				t.Fatal(e)
 			}
-		}
-	}
-	if !found {
-		t.Fatal("missing citation text")
+			data, e := RenderCitedWord(doc)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if !strings.Contains(wordDocumentXML(t, data), "superscript") {
+				t.Fatal("missing superscript")
+			}
+			parts := wordParts(t, data)
+			tree := readWordNode(t, parts["word/document.xml"])
+			styles := readWordNode(t, parts["word/styles.xml"])
+			container := tree
+			if tc.name == "table" {
+				tables := tree.all(testWordNS, "tbl")
+				if len(tables) != 1 {
+					t.Fatalf("table count %d", len(tables))
+				}
+				container = tables[0]
+			}
+			found := 0
+			for _, p := range container.all(testWordNS, "p") {
+				for _, r := range p.all(testWordNS, "r") {
+					if r.content() != "1" {
+						continue
+					}
+					if tc.name == "list" && p.child("pPr").child("numPr") == nil {
+						t.Fatal("citation is not in a real list item")
+					}
+					pr := r.child("rPr")
+					for property, want := range map[string]string{"sz": "24", "szCs": "24", "vertAlign": "superscript"} {
+						n := pr.child(property)
+						if n == nil || n.attr(testWordNS, "val") != want {
+							t.Errorf("citation direct %s = %+v, want %s", property, n, want)
+						}
+					}
+					props := resolvedWordProps(t, styles, p, r, "rPr")
+					if props["vertAlign/val"] != "superscript" || props["sz/val"] != "24" || props["szCs/val"] != "24" || props["rFonts/ascii"] != "Times New Roman" {
+						t.Errorf("citation properties %v", props)
+					}
+					found++
+				}
+			}
+			if found != 1 {
+				t.Fatalf("citation count %d, want 1", found)
+			}
+		})
 	}
 }
 
