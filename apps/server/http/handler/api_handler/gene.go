@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"errors"
 	"mime"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
+	"phytomni-server/service/api_service"
 	"phytomni-server/utils"
 	"phytomni-server/utils/errs"
 
@@ -220,16 +222,26 @@ func (ph *Handler) GeneImage(ctx *gin.Context) {
 }
 
 func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	usernameValue, _ := ctx.Get("username")
+	username, ok := usernameValue.(string)
+	if !ok || strings.TrimSpace(username) == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "conversation_artifact.unauthorized")})
+		return
+	}
+	id, err := strconv.Atoi(ctx.PostForm("id"))
 	format := ctx.PostForm("document_format")
 
-	if id == 0 || format == "" {
+	if err != nil || id <= 0 || format == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.missing_parameter")})
 		return
 	}
-	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)
+	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, username, id, format)
+	if errors.Is(err, api_service.ErrRenderingDownloadNotFound) {
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "conversation_artifact.not_found")})
+		return
+	}
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "conversation_artifact.unavailable")})
 		return
 	}
 

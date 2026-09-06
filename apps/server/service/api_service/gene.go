@@ -735,12 +735,37 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	return imageUrls, nil
 }
 
-func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
+var (
+	ErrRenderingDownloadUnauthorized = errors.New("rendering download requires an authenticated owner")
+	ErrRenderingDownloadNotFound     = errors.New("rendering download not found")
+)
+
+func (ps *Service) DownloadObsRenderingFile(ctx context.Context, username string, id int, format string) ([]byte, string, error) {
+	if strings.TrimSpace(username) == "" {
+		return nil, "", ErrRenderingDownloadUnauthorized
+	}
+	if id <= 0 {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
 
 	var questionAgentLog *model.QuestionAgentLog
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{})
 
-	if err := db.Where("id = ?", id).First(&questionAgentLog).Error; err != nil {
+	// Conversation deletion tombstones only the root, so a live child must
+	// still belong to a live root owned by the same user and dialogue.
+	err := db.Where("id = ? AND user_name = ? AND delete_at IS NULL", id, username).
+		Where(`(f_id = 0 OR EXISTS (
+			SELECT 1 FROM question_agent_logs AS conversation_root
+			WHERE conversation_root.id = question_agent_logs.f_id
+				AND conversation_root.f_id = 0
+				AND conversation_root.user_name = question_agent_logs.user_name
+				AND conversation_root.dialogue_id = question_agent_logs.dialogue_id
+				AND conversation_root.delete_at IS NULL
+		))`).First(&questionAgentLog).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
+	if err != nil {
 		return nil, "", err
 	}
 	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
