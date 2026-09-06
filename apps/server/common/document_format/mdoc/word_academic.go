@@ -176,13 +176,22 @@ func (w *academicWordWriter) writeBlocks(blocks []block, depth int) {
 		case blockHR:
 			w.paragraphWithRole(roleLead)
 		case blockTable:
-			table := w.doc.AddTable()
-			table.Style("TableGrid")
 			columns := 0
 			for _, row := range b.rows {
 				columns = max(columns, len(row))
 			}
-			for _, row := range b.rows {
+			rows, headerHeightPt, compact, err := academicWordTableRows(b.rows, columns)
+			if err != nil {
+				w.err = err
+				return
+			}
+			if compact {
+				p, id := w.paragraphWithRole(roleCaption)
+				w.writeInlines(p, id, []inline{{text: "Full header follows once; Column numbers map to the data columns."}})
+			}
+			table := w.doc.AddTable()
+			table.Style("TableGrid")
+			for rowIndex, row := range rows {
 				r := table.AddRow()
 				for i := 0; i < columns; i++ {
 					var cell []inline
@@ -197,7 +206,11 @@ func (w *academicWordWriter) writeBlocks(blocks []block, depth int) {
 						p.Style(academicWordStyle(roleCaption))
 					}
 					width := academicWordColumnWidth(columns, i) - 2*academicWordCellSideMarginTwips
-					w.writeInlinesWithin(p, id, cell, float64(width)*25.4/1440)
+					imageHeightMM := float64(academicPageHeightMM - 2*academicPageMarginMM)
+					if rowIndex > 0 {
+						imageHeightMM = (imageHeightMM - (headerHeightPt+academicWordTableLineHeightPt())*25.4/72) / academicLayout(roleCaption).lineMultiple
+					}
+					w.writeInlinesWithin(p, id, cell, float64(width)*25.4/1440, imageHeightMM)
 				}
 			}
 		}
@@ -270,17 +283,17 @@ func academicWordText(p *docx.Paragraph, text string) *docx.Run {
 	return r
 }
 func (w *academicWordWriter) writeInlines(p *docx.Paragraph, ordinal int, inlines []inline) {
-	w.writeInlinesWithin(p, ordinal, inlines, academicPageWidthMM-2*academicPageMarginMM)
+	w.writeInlinesWithin(p, ordinal, inlines, academicPageWidthMM-2*academicPageMarginMM, academicPageHeightMM-2*academicPageMarginMM)
 }
 
-func (w *academicWordWriter) writeInlinesWithin(p *docx.Paragraph, ordinal int, inlines []inline, widthMM float64) {
+func (w *academicWordWriter) writeInlinesWithin(p *docx.Paragraph, ordinal int, inlines []inline, widthMM, heightMM float64) {
 	for _, in := range inlines {
 		if in.kind == inlineImage {
-			if in.image != nil && len(in.image.Bytes) > 0 && widthMM <= 0 {
+			if in.image != nil && len(in.image.Bytes) > 0 && (widthMM <= 0 || heightMM <= 0) {
 				w.err = fmt.Errorf("academic Word image cannot fit cell geometry")
 				return
 			}
-			if in.image != nil && w.images.addPictureWithin(p, in.image, widthMM/25.4, (academicPageHeightMM-2*academicPageMarginMM)/25.4) == nil {
+			if in.image != nil && w.images.addPictureWithin(p, in.image, widthMM/25.4, heightMM/25.4) == nil {
 				continue
 			}
 			if in.text != "" {

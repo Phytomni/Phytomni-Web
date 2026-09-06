@@ -911,8 +911,8 @@ func TestWordTableRejectsCellsWithoutDrawableImageWidth(t *testing.T) {
 		t.Fatal("cell narrower than retained margins produced a document")
 	}
 	row[0] = []inline{{text: "Text-only cell"}}
-	if _, err := RenderCitedWord(Document{blocks: []block{{kind: blockTable, rows: [][][]inline{row}}}}); err != nil {
-		t.Fatal("image geometry guard changed text-only table behavior")
+	if data, err := RenderCitedWord(Document{blocks: []block{{kind: blockTable, rows: [][][]inline{row}}}}); err == nil || data != nil {
+		t.Fatal("table with no drawable cell width must also reject text-only content")
 	}
 }
 
@@ -941,6 +941,13 @@ func TestWordTableFixtureAllSourceAndGridPolicy(t *testing.T) {
 	tables := tree.all(testWordNS, "tbl")
 	if len(tables) != 2 {
 		t.Fatal("fixture tables lost")
+	}
+	ordinaryRows := tables[0].all(testWordNS, "tr")
+	exceptionalRows := tables[1].all(testWordNS, "tr")
+	if ordinaryRows[0].content() != "LEFTHEADERRIGHTHEADER" || exceptionalRows[0].content() != "Column 1Column 2" ||
+		!strings.Contains(exceptionalRows[1].content(), "H0000") || !strings.Contains(exceptionalRows[1].content(), "H1499") ||
+		exceptionalRows[1].child("trPr").child("tblHeader") != nil {
+		t.Fatal("oversized source header must be a non-repeating splittable row after the compact header")
 	}
 	for _, table := range tables {
 		if table.child("tblPr").child("tblW").attr(testWordNS, "w") != "9071" || len(table.all(testWordNS, "tblHeader")) != 1 || len(table.all(testWordNS, "cantSplit")) != 0 {
