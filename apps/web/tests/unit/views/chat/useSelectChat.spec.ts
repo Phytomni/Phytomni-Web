@@ -189,6 +189,34 @@ describe("useSelectChat", () => {
     }
   );
 
+  it("hydrates canonical cited history without shifting malformed reference slots", async () => {
+    const doc = {
+      citation: {
+        runs: [{ text: "Canonical history source" }],
+        links: [{ label: "Article", href: "https://doi.org/10.1000/history" }],
+      },
+    };
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "42",
+          query: "Question",
+          tool_name: "KnowledgeAgent",
+          answer: JSON.stringify({
+            content: "Answer [3].",
+            doc_list: [doc, null, doc],
+          }),
+          status: "SUCCEEDED",
+        }),
+      ])
+    );
+    await makeComposable().selectChat("d1");
+    const messages = renderedFor("d1", "canonical history").messages;
+    const assistant = messages?.find((message) => message.role === "assistant");
+    expect(assistant?.content).toBe("Answer [3].");
+    expect(assistant?.doc_list).toEqual([doc, { citation: null }, doc]);
+  });
+
   it("hydrates structured attachments with purpose-free same-account metadata", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(
       historyResponse([

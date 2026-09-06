@@ -332,10 +332,10 @@ func TestResumeQuestionStreamResuppliesFromBotWhenHubMissing(t *testing.T) {
 
 func TestResumeQuestionStreamPersistsKnowledgeReferences(t *testing.T) {
 	gdb := setupStreamTestDB(t)
+	textFrame, referenceFrame := reviewedCitationFrames(t)
 	streamer := &fakeRunStream{
 		body: "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-refs\"}\n\n" +
-			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"# report [1]\"}\n\n" +
-			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"Doc A\",\"au\":\"Archetti\"}]}}\n\n" +
+			textFrame + "\n" + referenceFrame + "\n" +
 			"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-refs\"}\n\n",
 	}
 	svc := streamCapableService()
@@ -373,12 +373,136 @@ func TestResumeQuestionStreamPersistsKnowledgeReferences(t *testing.T) {
 	if err := json.Unmarshal([]byte(row.Answer), &parsed); err != nil {
 		t.Fatalf("persisted answer is not cited JSON: %v (%s)", err, row.Answer)
 	}
-	if parsed.Content != "# report [1]" {
-		t.Fatalf("content = %q, want # report [1]", parsed.Content)
+	assertReviewedAnswer(t, row.Answer)
+}
+
+func TestResumeQuestionStreamPersistsKnowledgeReferencesProtocolFailure(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	streamer := &fakeRunStream{body: "event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"bot-bad-refs\"}\n\n" +
+		"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"body [3]\"}\n\n" +
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"First\"},null,{\"title\":\"Third\"}]}}\n\n" +
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":\"private malformed source\"}}\n\n" +
+		"event: RunFinished\ndata: {\"type\":\"RunFinished\"}\n\n"}
+	svc := streamCapableService()
+	svc.runStream = streamer
+	row := model.QuestionAgentLog{DialogueId: "dlg-bad-refs", UserName: "alice@example.com", Query: "q", ToolName: "KnowledgeAgent", Status: "RUNNING", Mode: "expert", BotRunId: "bot-bad-refs"}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
 	}
-	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
-		t.Fatalf("persisted doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
+	var frames strings.Builder
+	if err := svc.ResumeQuestionStream(context.Background(), row.UserName, row.DialogueId, row.Id, 0, func(frame StreamFrame) error { frames.Write(frame.Bytes); return nil }); err != nil {
+		t.Fatal(err)
 	}
+	calls, _, _ := streamer.snapshot()
+	if calls != 1 || strings.Contains(frames.String(), "private") || strings.Contains(frames.String(), "RunFinished") || strings.Count(frames.String(), "event: RunError") != 1 || !strings.Contains(frames.String(), `"code":"invalid_reference_payload"`) {
+		t.Fatalf("invalid forwarding/retry: calls=%d frames=%s", calls, frames.String())
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "FAILED" || !strings.Contains(row.Answer, `"title":"Third"`) || !strings.Contains(row.Answer, "Reference details unavailable.") {
+		t.Fatalf("failed row lost valid references: %+v", row)
+	}
+	var replay strings.Builder
+	if err := svc.ResumeQuestionStream(context.Background(), row.UserName, row.DialogueId, row.Id, 0, func(frame StreamFrame) error { replay.Write(frame.Bytes); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if replay.String() != frames.String() {
+		t.Fatal("second client did not receive identical canonical bytes")
+	}
+}
+
+func TestResumeQuestionStreamPersistsKnowledgeReferencesSettlementFailure(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	row := model.QuestionAgentLog{DialogueId: "dlg-settle-refs", UserName: "alice@example.com", Query: "q", ToolName: "KnowledgeAgent", Status: "RUNNING", Mode: "expert", BotRunId: "bot-settle-refs"}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Callback().Update().Before("gorm:update").Register("test:fail_stream_settlement", func(tx *gorm.DB) { tx.AddError(errors.New("private database failure")) }); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { gdb.Callback().Update().Remove("test:fail_stream_settlement") })
+	streamer := &fakeRunStream{body: "event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"body\"}\n\n" + "id: 88\nevent: RunFinished\ndata: {\"type\":\"RunFinished\"}\n\n"}
+	svc := streamCapableService()
+	svc.copyBotRunStreamToHub(context.Background(), row, row.BotRunId, streamer)
+	var frames strings.Builder
+	for _, frame := range svc.hub().After(row.Id, 0) {
+		frames.Write(frame.Bytes)
+	}
+	if strings.Contains(frames.String(), "RunFinished") || strings.Contains(frames.String(), "private") || strings.Count(frames.String(), "event: RunError") != 1 || !strings.Contains(frames.String(), `"code":"stream_settlement_failed"`) {
+		t.Fatalf("unsafe settlement terminal: %s", frames.String())
+	}
+	calls, _, _ := streamer.snapshot()
+	if calls != 1 || svc.hub().ProducerState(row.Id) != StreamProducerFinished {
+		t.Fatalf("calls=%d state=%v", calls, svc.hub().ProducerState(row.Id))
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "RUNNING" || row.Answer != "" {
+		t.Fatal("failed transaction appeared settled")
+	}
+}
+
+func TestResumeQuestionStreamPersistsKnowledgeReferencesDisconnectAndTerminalIdentity(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	textFrame, referenceFrame := reviewedCitationFrames(t)
+	row := model.QuestionAgentLog{DialogueId: "dlg-disconnect-refs", UserName: "alice@example.com", Query: "q", ToolName: "KnowledgeAgent", Status: "RUNNING", Mode: "expert", BotRunId: "bot-disconnect-refs"}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	terminal := "id: 91\r\n: terminal comment\r\nevent: RunFinished\r\nretry: 300\r\ndata: {\"type\":\"RunFinished\",\"run_id\":\"bot-disconnect-refs\"}\r\n\r\n"
+	streamer := &scriptedRunStream{bodies: []string{
+		textFrame + "\nid: 90\n" + referenceFrame + "\n",
+		"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[]}}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":null}}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\"}\n\n" + terminal,
+	}}
+	svc := streamCapableService()
+	svc.copyBotRunStreamToHub(context.Background(), row, row.BotRunId, streamer)
+	afters := streamer.calledAfters()
+	if len(afters) != 2 || afters[0] != 0 || afters[1] != 2 {
+		t.Fatalf("resupply cursors=%v", afters)
+	}
+	frames := svc.hub().After(row.Id, 0)
+	if len(frames) != 6 || string(frames[5].Bytes) != "id: 6\n"+terminal {
+		t.Fatalf("terminal identity changed: %+v", frames)
+	}
+	var clientOne, clientTwo strings.Builder
+	for _, frame := range frames {
+		clientOne.Write(frame.Bytes)
+	}
+	if err := svc.ResumeQuestionStream(context.Background(), row.UserName, row.DialogueId, row.Id, 0, func(frame StreamFrame) error { clientTwo.Write(frame.Bytes); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if clientOne.String() != clientTwo.String() || !strings.Contains(clientOne.String(), `"citation"`) {
+		t.Fatal("canonical frame replay changed")
+	}
+	var suffix strings.Builder
+	if err := svc.ResumeQuestionStream(context.Background(), row.UserName, row.DialogueId, row.Id, 2, func(frame StreamFrame) error { suffix.Write(frame.Bytes); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var expectedSuffix strings.Builder
+	for _, frame := range frames[2:] {
+		expectedSuffix.Write(frame.Bytes)
+	}
+	if suffix.String() != expectedSuffix.String() {
+		t.Fatal("client disconnect cursor replay changed")
+	}
+	if err := gdb.First(&row, row.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	var answer struct {
+		Content string            `json:"content"`
+		DocList []json.RawMessage `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(row.Answer), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "SUCCEEDED" {
+		t.Fatalf("settled references=%s status=%s", row.Answer, row.Status)
+	}
+	assertReviewedAnswer(t, row.Answer)
 }
 
 func TestResumeQuestionStreamNonterminalBotEOFFailsHub(t *testing.T) {

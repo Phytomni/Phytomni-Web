@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"phytomni-server/common/citation"
 )
 
 // ShapeAnswer rewrites a Bot reply into the JSON-string-in-answer contract
@@ -13,16 +15,15 @@ import (
 // (knowledge/review/deep_genome) become {content, doc_list}; data becomes
 // {headers, rows} with positional rows; chat/analyst (and any unknown slug)
 // pass through as a plain string. answerText is the display answer already
-// sourced from the right Bot field. It never panics: any decode/encode trouble
-// degrades to answerText (or an empty table).
-func ShapeAnswer(slug string, answerText string, f *Formatted) string {
+// sourced from the right Bot field. Malformed reference roots are rejected.
+func ShapeAnswer(slug string, answerText string, f *Formatted) (string, error) {
 	switch slug {
 	case "knowledge", "review", "deep_genome", "brief_gene":
 		return citedAnswer(answerText, f)
 	case "data":
-		return tableAnswer(f)
+		return tableAnswer(f), nil
 	default:
-		return answerText
+		return answerText, nil
 	}
 }
 
@@ -40,64 +41,21 @@ func ChatAnswerText(resp *ChatCompletionResponse) string {
 	return resp.Formatted.Answer
 }
 
-// citedAnswer emits {"content": answerText, "doc_list": [{"title": ..., <bibliographic>}]}.
-// Bot references always carry {file_id, title}; on a bibliographic-library hit they additionally
-// carry au/ti/so/vl/bp/ep/py/di/dl/pm (any may be absent; pm may be null). title is always written
-// (empty title falls back to file_id) so the Web app's title row + the document_format consumers
-// stay safe; the additional fields are written only when non-empty so unenriched docs stay title-only.
-func citedAnswer(answerText string, f *Formatted) string {
-	docList := []map[string]interface{}{}
-	if f != nil && len(f.References) > 0 {
-		var refs []struct {
-			FileID json.RawMessage `json:"file_id"`
-			Title  string          `json:"title"`
-			Au     string          `json:"au"`
-			Ti     string          `json:"ti"`
-			So     string          `json:"so"`
-			Vl     string          `json:"vl"`
-			Bp     string          `json:"bp"`
-			Ep     string          `json:"ep"`
-			Py     string          `json:"py"`
-			Di     string          `json:"di"`
-			Dl     string          `json:"dl"`
-			Pm     *string         `json:"pm"`
-		}
-		if err := json.Unmarshal(f.References, &refs); err == nil {
-			for _, r := range refs {
-				title := r.Title
-				if title == "" && len(r.FileID) > 0 {
-					title = string(unquote(r.FileID))
-				}
-				el := map[string]interface{}{"title": title}
-				putIfSet(el, "au", r.Au)
-				putIfSet(el, "ti", r.Ti)
-				putIfSet(el, "so", r.So)
-				putIfSet(el, "vl", r.Vl)
-				putIfSet(el, "bp", r.Bp)
-				putIfSet(el, "ep", r.Ep)
-				putIfSet(el, "py", r.Py)
-				putIfSet(el, "di", r.Di)
-				putIfSet(el, "dl", r.Dl)
-				if r.Pm != nil && *r.Pm != "" {
-					el["pm"] = *r.Pm
-				}
-				docList = append(docList, el)
-			}
-		}
+// citedAnswer preserves source positions and regenerates canonical presentation.
+func citedAnswer(answerText string, f *Formatted) (string, error) {
+	var raw json.RawMessage
+	if f != nil {
+		raw = f.References
 	}
-	out, err := json.Marshal(map[string]interface{}{"content": answerText, "doc_list": docList})
+	references, err := citation.NormalizeRows(raw)
 	if err != nil {
-		return answerText
+		return "", err
 	}
-	return string(out)
-}
-
-// putIfSet writes key=value into el only when value is non-empty, keeping unenriched
-// reference elements title-only.
-func putIfSet(el map[string]interface{}, key, value string) {
-	if value != "" {
-		el[key] = value
+	out, err := json.Marshal(map[string]any{"content": answerText, "doc_list": references})
+	if err != nil {
+		return "", citation.ErrInvalidReferences
 	}
+	return NormalizeCitedAnswer(string(out))
 }
 
 // tableAnswer emits {"headers": [...], "rows": [[...]]}. The table lives in
@@ -461,13 +419,4 @@ func artifactPathWithinDirectory(directory, artifactPath string) bool {
 		return false
 	}
 	return item.Path == base.Path || strings.HasPrefix(item.Path, strings.TrimSuffix(base.Path, "/")+"/")
-}
-
-// unquote strips surrounding quotes from a JSON-encoded scalar so a string
-// file_id renders without quotes when used as a title fallback.
-func unquote(b json.RawMessage) []byte {
-	if len(b) >= 2 && b[0] == '"' && b[len(b)-1] == '"' {
-		return b[1 : len(b)-1]
-	}
-	return b
 }

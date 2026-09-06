@@ -5,10 +5,19 @@ vi.mock("@/utils/request", () => ({
   registerAbortController: vi.fn(),
   unregisterAbortController: vi.fn(),
 }));
+vi.mock("@/api/chat", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/chat")>()),
+  getAnswerCheck: vi.fn(),
+}));
 
 import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
 import { artifactPresentationForMessage } from "@/views/chat/utils/artifact-policy";
-import { unregisterAbortController } from "@/utils/request";
+import {
+  registerAbortController,
+  unregisterAbortController,
+} from "@/utils/request";
+import { getAnswerCheck } from "@/api/chat";
+import type { ApiEnvelope, ChatHistoryRecord } from "@/api/types";
 import type { ChatMessage, ChatUIState } from "@/views/chat/types";
 import { buildChatState } from "../../../../helpers/chatBuilders";
 import { mustGet } from "../../../../helpers/mockFactories";
@@ -72,7 +81,346 @@ function chunkedStream(chunks: string[]): ReadableStream<Uint8Array> {
 describe("useStreamMessage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(getAnswerCheck).mockReset();
+    vi.mocked(getAnswerCheck).mockResolvedValue({
+      code: 200,
+      message: "ok",
+      data: [],
+    });
   });
+
+  function authoritativeRecord(
+    overrides: Partial<ChatHistoryRecord> = {}
+  ): ChatHistoryRecord {
+    return {
+      id: "42",
+      dialogue_id: CANONICAL_DIALOGUE_ID,
+      bot_run_id: "r1",
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      answer: JSON.stringify({
+        content: "Canonical body [1].\n\n",
+        doc_list: [
+          {
+            title: "Study",
+            citation: { runs: [{ text: "Study." }], links: [] },
+          },
+        ],
+      }),
+      ...overrides,
+    };
+  }
+
+  function terminalFixture(
+    headers: Record<string, string> = {
+      "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+      "X-Phyto-Message-Id": "42",
+    },
+    runId = "r1"
+  ) {
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "ReviewAgent",
+    };
+    const chatState = makeStreamState();
+    const otherState = makeStreamState();
+    const api = useStreamMessage({
+      getChatState: (id) => (id === "other" ? otherState : chatState),
+      t: (key) => key,
+    });
+    mockedFetch().mockResolvedValueOnce(
+      new Response(
+        sseStream([
+          `data: ${JSON.stringify({ type: "RunStarted", run_id: runId })}\n\n`,
+          'data: {"type":"TextMessageContent","delta":"Received [1].\\n\\n## References\\n\\n1. Study"}\n\n',
+          'data: {"type":"TextMessageEnd"}\n\n',
+          'data: {"type":"ToolCallStart","tool_name":"review"}\n\n',
+          'data: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-terminal","widget":"confirm","props":{"title":"OK?"}}}\n\n',
+          'data: {"type":"Custom","name":"phyto.follow_up","value":["More?"]}\n\n',
+          'data: {"type":"RunFinished","run_id":"r1"}\n\n',
+        ]),
+        {
+          status: 200,
+          headers,
+        }
+      )
+    );
+    return { placeholder, chatState, otherState, api };
+  }
+
+  it.each(["send", "resume"])(
+    "reconciles one captured %s message body and references after successful EOF",
+    async (mode) => {
+      const { placeholder, api } = terminalFixture();
+      vi.mocked(getAnswerCheck).mockResolvedValueOnce({
+        code: 200,
+        message: "ok",
+        data: [authoritativeRecord({ id: "41" }), authoritativeRecord()],
+      });
+      const result =
+        mode === "send"
+          ? await api.streamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              formData: new FormData(),
+              requestId: "terminal",
+              placeholder,
+            })
+          : await api.resumeStreamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              messageId: "42",
+              requestId: "terminal",
+              placeholder,
+            });
+      expect(result.completed).toBe(true);
+      expect(getAnswerCheck).toHaveBeenCalledExactlyOnceWith(
+        {
+          dialogue_id: CANONICAL_DIALOGUE_ID,
+        },
+        expect.any(AbortSignal)
+      );
+      expect(placeholder.content).toBe("Canonical body [1].\n\n");
+      expect(markdownBlock(placeholder, "reconciled").text).toBe(
+        "Canonical body [1].\n\n"
+      );
+      expect(placeholder.doc_list?.[0].citation?.runs[0].text).toBe("Study.");
+      expect(
+        placeholder.blocks?.find((block) => block.type === "tool")?.toolName
+      ).toBe("review");
+      expect(
+        placeholder.blocks?.find((block) => block.type === "agent-surface")
+          ?.a2ui?.surface.surface_id
+      ).toBe("surf-terminal");
+      expect(placeholder.followUpQuestions).toEqual(["More?"]);
+      expect(placeholder.id).toBe("42");
+      expect(placeholder.a2uiRuntime?.runId).toBe("r1");
+    }
+  );
+
+  it("retains received text on failed authoritative read without rerunning", async () => {
+    const { placeholder, api } = terminalFixture();
+    vi.mocked(getAnswerCheck).mockRejectedValueOnce(
+      new Error("read unavailable")
+    );
+    const result = await api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    expect(result.completed).toBe(true);
+    expect(markdownBlock(placeholder, "received").text).toContain(
+      "Received [1]"
+    );
+    expect(placeholder.streamTerminalFailure).toBeUndefined();
+    expect(mockedFetch()).toHaveBeenCalledTimes(1);
+    expect(getAnswerCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["send", "resume"])(
+    "promptly cleans up an aborted %s while the owner-read promise stays unresolved",
+    async (mode) => {
+      const { placeholder, chatState, api } = terminalFixture();
+      let settleRead!: (value: ApiEnvelope<ChatHistoryRecord[]>) => void;
+      vi.mocked(getAnswerCheck).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            settleRead = resolve;
+          })
+      );
+      let settled = false;
+      const pending = (
+        mode === "send"
+          ? api.streamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              formData: new FormData(),
+              requestId: "pending-owner-read",
+              placeholder,
+            })
+          : api.resumeStreamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              messageId: "42",
+              requestId: "pending-owner-read",
+              placeholder,
+            })
+      ).then((result) => {
+        settled = true;
+        return result;
+      });
+      await vi.waitFor(() => expect(getAnswerCheck).toHaveBeenCalledTimes(1));
+      const registration = vi.mocked(registerAbortController).mock.calls.at(-1);
+      expect(registration?.[0]).toBe("pending-owner-read");
+      const controller = mustGet(registration, "pending read controller")[1];
+      const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+      expect(getAnswerCheck).toHaveBeenCalledWith(
+        { dialogue_id: CANONICAL_DIALOGUE_ID },
+        controller.signal
+      );
+      controller.abort();
+      await vi.waitFor(() => expect(settled).toBe(true));
+      expect((await pending).completed).toBe(true);
+      expect(unregisterAbortController).toHaveBeenCalledWith(
+        "pending-owner-read"
+      );
+      expect(chatState.isStreaming).toBe(false);
+      expect(chatState.streamingMessageId).toBeNull();
+      expect(placeholder.streaming).toBe(false);
+      expect(markdownBlock(placeholder, "cancelled owner read").text).toContain(
+        "Received [1]"
+      );
+      expect(placeholder.doc_list).toBeUndefined();
+      expect(mockedFetch()).toHaveBeenCalledTimes(1);
+      expect(removeListener).toHaveBeenCalledWith(
+        "abort",
+        expect.any(Function)
+      );
+      // Only after prompt cleanup is proven may the ignored read settle.
+      const receivedBlocks = placeholder.blocks;
+      settleRead({ code: 200, message: "ok", data: [authoritativeRecord()] });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(placeholder.blocks).toBe(receivedBlocks);
+      expect(placeholder.doc_list).toBeUndefined();
+      expect(placeholder.streaming).toBe(false);
+      removeListener.mockRestore();
+    }
+  );
+
+  it.each([
+    { id: "99" },
+    { dialogue_id: "other" },
+    { bot_run_id: "new-run" },
+    { bot_run_id: undefined },
+    { status: "RUNNING" },
+    { answer: "malformed" },
+    { answer: '{"content":"Bad","doc_list":{}}' },
+  ])("ignores unrelated or incomplete terminal history %j", async (record) => {
+    const { placeholder, api } = terminalFixture();
+    vi.mocked(getAnswerCheck).mockResolvedValueOnce({
+      code: 200,
+      message: "ok",
+      data: [authoritativeRecord(record)],
+    });
+    await api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    expect(markdownBlock(placeholder, "received").text).toContain(
+      "Received [1]"
+    );
+    expect(placeholder.doc_list).toBeUndefined();
+  });
+
+  it.each([
+    "switched-chat",
+    "replacement-run",
+    "replacement-run-in-place",
+    "replacement-blocks",
+    "new-request",
+    "aborted-read",
+  ])("guards captured reconciliation during %s", async (race) => {
+    const { placeholder, chatState, otherState, api } = terminalFixture();
+    let resolveRead!: (response: ApiEnvelope<ChatHistoryRecord[]>) => void;
+    vi.mocked(getAnswerCheck).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        })
+    );
+    const pending = api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    await vi.waitFor(() => expect(getAnswerCheck).toHaveBeenCalledTimes(1));
+    const oldTool = placeholder.blocks?.find((block) => block.type === "tool");
+    if (race === "replacement-run" && placeholder.a2uiRuntime)
+      placeholder.a2uiRuntime = {
+        ...placeholder.a2uiRuntime,
+        runId: "new-run",
+      };
+    if (race === "replacement-run-in-place" && placeholder.a2uiRuntime)
+      placeholder.a2uiRuntime.runId = "new-run";
+    if (race === "replacement-blocks")
+      placeholder.blocks = [
+        { type: "markdown", authority: "web", text: "New replacement" },
+      ];
+    if (race === "new-request") chatState.streamingMessageId = "new-request";
+    if (race === "aborted-read") {
+      const registration = vi.mocked(registerAbortController).mock.calls.at(-1);
+      expect(registration?.[0]).toBe("terminal");
+      registration?.[1].abort();
+    }
+    if (race === "switched-chat")
+      otherState.messageInput = "Another chat selected";
+    resolveRead({ code: 200, message: "ok", data: [authoritativeRecord()] });
+    await pending;
+    if (race === "switched-chat") {
+      expect(markdownBlock(placeholder, "captured").text).toBe(
+        "Canonical body [1].\n\n"
+      );
+      expect(placeholder.blocks?.find((block) => block.type === "tool")).toBe(
+        oldTool
+      );
+      expect(otherState.messageInput).toBe("Another chat selected");
+    } else {
+      expect(markdownBlock(placeholder, "newer").text).not.toContain(
+        "Canonical"
+      );
+      expect(placeholder.doc_list).toBeUndefined();
+    }
+    if (race === "new-request")
+      expect(chatState.streamingMessageId).toBe("new-request");
+    if (race.startsWith("replacement-")) {
+      expect(placeholder.streaming).toBe(true);
+      expect(placeholder.instantMessage).toBeUndefined();
+    } else {
+      expect(placeholder.streaming).toBe(false);
+      expect(placeholder.instantMessage).toBe(true);
+    }
+  });
+
+  it.each([
+    [{}, "r1"],
+    [
+      { "X-Phyto-Dialogue-Id": "not-a-dialogue", "X-Phyto-Message-Id": "42" },
+      "r1",
+    ],
+    [
+      {
+        "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+        "X-Phyto-Message-Id": "new_42",
+      },
+      "r1",
+    ],
+    [
+      {
+        "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+        "X-Phyto-Message-Id": "42",
+      },
+      "",
+    ],
+  ] as [Record<string, string>, string][])(
+    "does not reconcile an absent or malformed terminal identity %j",
+    async (headers, runId) => {
+      const { placeholder, api } = terminalFixture(headers, runId);
+      await api.streamMessage({
+        dialogueId: CANONICAL_DIALOGUE_ID,
+        formData: new FormData(),
+        requestId: "terminal",
+        placeholder,
+      });
+      expect(getAnswerCheck).not.toHaveBeenCalled();
+      expect(markdownBlock(placeholder, "identity").text).toContain(
+        "Received [1]"
+      );
+    }
+  );
 
   it("accumulates content into placeholder.blocks and finalizes on RunFinished", async () => {
     const body = sseStream([
@@ -549,7 +897,7 @@ describe("useStreamMessage", () => {
       requestId: "r",
       placeholder,
     });
-    expect(placeholder.doc_list).toEqual([{ title: "T1" }]);
+    expect(placeholder.doc_list).toEqual([{ title: "T1", citation: null }]);
   });
 
   it("keeps the first valid context notice and rejects malformed or conflicting duplicates", async () => {

@@ -57,6 +57,11 @@ func (ps *Service) AsyncTaskList(ctx context.Context, username string, current, 
 	}
 
 	for _, v := range QuestionAgentLogList {
+		answer, err := normalizeCitationAnswerForTool(v.ToolName, v.Answer)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		v.Answer = answer
 		if v.FId != 0 {
 			var result *model.QuestionAgentLog
 			if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).
@@ -90,7 +95,12 @@ func (ps *Service) AsyncTaskInfo(ctx context.Context, id int, username string) (
 		return nil, errors.New("task not found")
 	}
 
-	return
+	copy := *QuestionAgentLogList
+	copy.Answer, err = normalizeCitationAnswerForTool(copy.ToolName, copy.Answer)
+	if err != nil {
+		return nil, err
+	}
+	return &copy, nil
 }
 
 func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.QueryListRequest, error) {
@@ -201,22 +211,37 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 // callers that need an observation outcome. The existing AnswerCheck wrapper
 // above deliberately returns only rows, preserving the public HTTP payload.
 func (ps *Service) AnswerCheckWithMode(ctx context.Context, username string, dialogueId string, mode HistoryReadMode) (HistoryReadResult, error) {
+	var result HistoryReadResult
+	var err error
 	switch mode {
 	case HistoryReadModeDual:
-		return ps.answerCheckProjectionFirst(ctx, username, dialogueId, true)
+		result, err = ps.answerCheckProjectionFirst(ctx, username, dialogueId, true)
 	case HistoryReadModeProjection:
-		return ps.answerCheckProjectionFirst(ctx, username, dialogueId, false)
+		result, err = ps.answerCheckProjectionFirst(ctx, username, dialogueId, false)
 	default:
-		rows, err := ps.answerCheckLegacy(ctx, username, dialogueId)
-		result := HistoryReadResult{Rows: rows, Source: historySourceLegacy}
-		if len(rows) > 0 {
-			result.Sources = make([]string, len(rows))
+		result.Rows, err = ps.answerCheckLegacy(ctx, username, dialogueId)
+		result.Source = historySourceLegacy
+		if len(result.Rows) > 0 {
+			result.Sources = make([]string, len(result.Rows))
 			for index := range result.Sources {
 				result.Sources[index] = historySourceLegacy
 			}
 		}
-		return result, err
 	}
+	if err != nil {
+		return HistoryReadResult{}, err
+	}
+	result.Rows = cloneHistoryRows(result.Rows)
+	for _, row := range result.Rows {
+		if row == nil {
+			continue
+		}
+		row.Answer, err = normalizeCitationAnswerForTool(row.ToolName, row.Answer)
+		if err != nil {
+			return HistoryReadResult{}, err
+		}
+	}
+	return result, nil
 }
 
 // answerCheckLegacy is the compatibility path used when the dual-read flag is
@@ -231,14 +256,18 @@ func (ps *Service) answerCheckLegacy(ctx context.Context, username string, dialo
 	// A persisted bounded projection is the first history source during the
 	// reversible cutover. It remains available even when Bot is dark or
 	// temporarily unreachable; Web-owned fields stay on the row.
-	ps.overlayPersistedBotProjections(ctx, QuestionAgentLogList)
+	if err := ps.overlayPersistedBotProjections(ctx, QuestionAgentLogList); err != nil {
+		return nil, err
+	}
 
 	// Bot is the content source of truth when the gateway is active: overlay MySQL
 	// transition fields with Bot content, leaving Web-only fields (id,
 	// reaction_type, upload_path) intact. proxy_enabled=false or Bot unreachable
 	// falls back to MySQL legacy fields (degrade, not error).
 	if rxBot.BotConfig != nil && rxBot.BotConfig.ProxyEnabled {
-		ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList)
+		if err := ps.overlayBotContent(ctx, dialogueId, QuestionAgentLogList); err != nil {
+			return nil, err
+		}
 	}
 	return QuestionAgentLogList, nil
 }
@@ -360,7 +389,15 @@ func (ps *Service) answerCheckProjectionFirst(ctx context.Context, username stri
 		} else {
 			projectionErr = ErrBotProjectionNotFound
 		}
-		if projectionErr == nil && strings.TrimSpace(projection.RunID) == runID && runID != "" && applyBotProjectionToHistoryRow(row, projection) {
+		applied := false
+		if projectionErr == nil && strings.TrimSpace(projection.RunID) == runID && runID != "" {
+			var err error
+			applied, err = applyBotProjectionToHistoryRow(row, projection)
+			if err != nil {
+				return HistoryReadResult{}, err
+			}
+		}
+		if applied {
 			sources[index] = historySourceProjection
 			projectionByRun[runID] = projection
 			if dual {
@@ -437,9 +474,9 @@ func (ps *Service) answerCheckProjectionFirst(ctx context.Context, username stri
 // overlayBotContent fetches Bot runs for a dialogue in a single call and
 // overrides the content columns (query/answer/tool_name/status) on rows that
 // carry a bot_run_id, leaving Web-only fields (id, reaction_type, upload_path)
-// intact. Any Bot failure leaves the MySQL legacy fields in place — a degrade,
-// not an error — so history replay never 500s on Bot trouble.
-func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, list []*model.QuestionAgentLog) {
+// intact. Bot transport failures retain the stored source; malformed reference
+// projections return their generic formatting error to the authorized reader.
+func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, list []*model.QuestionAgentLog) error {
 	hasRun := false
 	for _, r := range list {
 		if r.BotRunId != "" {
@@ -448,12 +485,12 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		}
 	}
 	if !hasRun {
-		return
+		return nil
 	}
 	resp, err := rxBot.NewClient().ListRuns(ctx, dialogueId)
 	if err != nil {
 		rxLog.Sugar().Warnw("answer-check bot list runs failed, using legacy fields", "dialogue_id", dialogueId, "err", err)
-		return
+		return nil
 	}
 	byRun := make(map[string]rxBot.RunRecord, len(resp.Data))
 	for _, rec := range resp.Data {
@@ -476,7 +513,9 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		}
 		if projection, projectionErr := DecodeRunProjection(&rec); projectionErr == nil && projection.RunID == strings.TrimSpace(row.BotRunId) {
 			formatted, _, _ := rxBot.ParseRunFormatted(rec.Result)
-			applyBotProjectionToHistoryRowWithFormatted(row, projection, formatted)
+			if _, err := applyBotProjectionToHistoryRowWithFormatted(row, projection, formatted); err != nil {
+				return err
+			}
 			continue
 		}
 		if rec.Query != "" {
@@ -489,10 +528,18 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 		// flat answer for runs with no rendered content yet (still running, or
 		// analyst awaiting Bot's formatted answer).
 		if f, answerText, ok := rxBot.ParseRunFormatted(rec.Result); ok {
-			row.Answer = rxBot.ShapeAnswer(rec.Agent, answerText, f)
+			answer, err := rxBot.ShapeAnswer(rec.Agent, answerText, f)
+			if err != nil {
+				return err
+			}
+			row.Answer = answer
 		} else if fr, ok := rxBot.ParseRunFinalReport(rec.Result); ok {
 			// final_report is deep_genome-exclusive; reshape with the known slug.
-			row.Answer = rxBot.ShapeAnswer("deep_genome", fr, nil)
+			answer, err := rxBot.ShapeAnswer("deep_genome", fr, nil)
+			if err != nil {
+				return err
+			}
+			row.Answer = answer
 		} else if rec.Answer != "" {
 			row.Answer = rec.Answer
 		}
@@ -505,9 +552,10 @@ func (ps *Service) overlayBotContent(ctx context.Context, dialogueId string, lis
 			row.Status = strings.ToUpper(rec.Status)
 		}
 	}
+	return nil
 }
 
-func (ps *Service) overlayPersistedBotProjections(ctx context.Context, list []*model.QuestionAgentLog) {
+func (ps *Service) overlayPersistedBotProjections(ctx context.Context, list []*model.QuestionAgentLog) error {
 	for _, row := range list {
 		if row == nil || strings.TrimSpace(row.BotRunId) == "" || strings.TrimSpace(row.UserName) == "" {
 			continue
@@ -516,11 +564,14 @@ func (ps *Service) overlayPersistedBotProjections(ctx context.Context, list []*m
 		if err != nil || strings.TrimSpace(projection.RunID) == "" || projection.RunID != strings.TrimSpace(row.BotRunId) {
 			continue
 		}
-		applyBotProjectionToHistoryRow(row, projection)
+		if _, err := applyBotProjectionToHistoryRow(row, projection); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotRunProjection) bool {
+func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotRunProjection) (bool, error) {
 	return applyBotProjectionToHistoryRowWithFormatted(row, projection, nil)
 }
 
@@ -535,15 +586,22 @@ func persistedReviewAnswerMatchesReport(answer string, report string) bool {
 	return shaped.Content == report && len(shaped.DocList) > 0
 }
 
-func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) bool {
+func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) (bool, error) {
 	if row == nil || strings.TrimSpace(projection.RunID) == "" {
-		return false
+		return false, nil
+	}
+	if err := validateCitationReferencesForAgent(projection.Agent, formatted); err != nil {
+		return false, err
 	}
 	if report := projection.VisibleReport(); strings.TrimSpace(report) != "" {
 		preserveDurableReview := formatted == nil && projection.Agent == "review" &&
 			persistedReviewAnswerMatchesReport(row.Answer, report)
 		if !preserveDurableReview {
-			row.Answer = rxBot.ShapeAnswer(projection.Agent, report, formatted)
+			answer, err := rxBot.ShapeAnswer(projection.Agent, report, formatted)
+			if err != nil {
+				return false, err
+			}
+			row.Answer = answer
 		}
 	}
 	if strings.TrimSpace(projection.Status) != "" {
@@ -555,7 +613,7 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 	if toolName := slugToToolName[projection.Agent]; toolName != "" {
 		row.ToolName = toolName
 	}
-	return true
+	return true, nil
 }
 
 func (ps *Service) QueryListDelete(ctx context.Context, name string, id int) (int, error) {

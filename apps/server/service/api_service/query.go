@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
@@ -806,15 +807,19 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 	if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
 		return nil, err
 	}
+	out.Answer, err = normalizeCitationAnswerForTool(out.ToolName, out.Answer)
+	if err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
 func queryDataFromReplacementTerminal(
 	row model.QuestionAgentLog,
 	replacement *persistedConversationReplacement,
-) *QueryData {
+) (*QueryData, error) {
 	if replacement == nil || replacement.TerminalResult == nil {
-		return nil
+		return nil, nil
 	}
 	terminal := replacement.TerminalResult
 	out := &QueryData{
@@ -836,7 +841,12 @@ func queryDataFromReplacementTerminal(
 		interop := *terminal.Interop
 		out.InterOp = &interop
 	}
-	return out
+	answer, err := normalizeCitationAnswerForTool(out.ToolName, out.Answer)
+	if err != nil {
+		return nil, err
+	}
+	out.Answer = answer
+	return out, nil
 }
 
 func queryDataFromReplacementCandidate(
@@ -985,7 +995,7 @@ func persistReplacementTerminalResult(
 			return nil, result.Error
 		}
 		if result.RowsAffected == 1 {
-			return queryDataFromReplacementTerminal(submission.row, next.Replacement), nil
+			return queryDataFromReplacementTerminal(submission.row, next.Replacement)
 		}
 	}
 	return nil, ErrDuplicateClientTurn
@@ -1383,11 +1393,11 @@ func (ps *Service) resolveExistingV1SubmissionWithDB(
 			return nil, ErrDuplicateClientTurn
 		}
 		if match.private.Replacement.TerminalResult != nil {
-			submission.duplicate = queryDataFromReplacementTerminal(
+			submission.duplicate, err = queryDataFromReplacementTerminal(
 				match.row,
 				match.private.Replacement,
 			)
-			return submission, nil
+			return submission, err
 		}
 		submission.duplicate = queryDataFromReplacementCandidate(
 			match.row,
@@ -2870,7 +2880,10 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		// formatting survives and SyncBotRuns reconciles async runs by agent slug.
 		if botSubmission.Status == "SUCCEEDED" {
 			if resp.Result.Formatted != nil {
-				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else if terminalStatus, terminal := canonicalImmediateTerminalStatus(botSubmission.Status); terminal {
@@ -2880,7 +2893,10 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			// terminal and never invent a pollable task.
 			out.Status = terminalStatus
 			if resp.Result.Formatted != nil {
-				out.Answer = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(resolvedSlug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else {
@@ -2955,10 +2971,16 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		if terminalStatus, terminal := canonicalImmediateTerminalStatus(resp.Status); terminal {
 			out.Status = terminalStatus
 			if resp.Result.Formatted != nil {
-				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			} else {
-				out.Answer = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, rxBot.ChatAnswerText(resp), &resp.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 			}
 		} else if strings.EqualFold(strings.TrimSpace(resp.Status), "input_required") && !reviewAnswerCompleted {
@@ -2980,11 +3002,17 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			// (knowledge/review become {content, doc_list}; chat stays plain). A
 			// completed Review result wins over a contradictory stale interrupt.
 			if reviewAnswerCompleted || (strings.EqualFold(strings.TrimSpace(resp.Status), "succeeded") && len(resp.Choices) == 0 && resp.Result.Formatted != nil) {
-				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			} else {
 				answerText := rxBot.ChatAnswerText(resp)
-				out.Answer = rxBot.ShapeAnswer(slug, answerText, &resp.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, answerText, &resp.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Formatted.FollowUpQuestions)
 			}
 		}
@@ -3108,7 +3136,10 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			// Synchronous agent (e.g. data): the answer is already here.
 			if resp.Result.Formatted != nil {
 				// Reshape the sync agent payload (data -> {headers, rows}).
-				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 			// out.Status stays "SUCCEEDED".
@@ -3124,7 +3155,10 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			// required failure even when the umbrella response still says running.
 			out.Status = terminalStatus
 			if resp.Result.Formatted != nil {
-				out.Answer = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				out.Answer, err = rxBot.ShapeAnswer(slug, resp.Result.Formatted.Answer, resp.Result.Formatted)
+				if err != nil {
+					return nil, v1SubmissionError(ctx, username, submission, err)
+				}
 				out.FollowUpQuestions = string(resp.Result.Formatted.FollowUpQuestions)
 			}
 		} else {
@@ -3546,16 +3580,23 @@ func replacementTerminalResultFromProjection(
 	replacement *persistedConversationReplacement,
 	projection BotRunProjection,
 	rec *rxBot.RunRecord,
-) *persistedReplacementTerminalResult {
+) (*persistedReplacementTerminalResult, error) {
 	answer := ""
 	followUp := ""
+	var err error
 	formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
+	if err := validateCitationReferencesForAgent(projection.Agent, formatted); err != nil {
+		return nil, err
+	}
 	if visible := strings.TrimSpace(projection.VisibleReport()); visible != "" {
 		if hasFormatted {
-			answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
+			answer, err = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
 			followUp = string(formatted.FollowUpQuestions)
 		} else {
-			answer = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil)
+			answer, err = rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	terminal := &persistedReplacementTerminalResult{
@@ -3573,7 +3614,7 @@ func replacementTerminalResultFromProjection(
 		interop := *projection.InterOp
 		terminal.Interop = &interop
 	}
-	return terminal
+	return terminal, nil
 }
 
 func promotedReplacementContext(
@@ -3708,7 +3749,11 @@ func (ps *Service) applyPrivateReplacementRunProjection(
 				"tool_name":           replacement.ToolName,
 				"upload_path":         "",
 			}
-			for key, value := range botProjectionLegacyUpdates(projection, projection, rec, true) {
+			legacyUpdates, err := botProjectionLegacyUpdates(projection, projection, rec, true)
+			if err != nil {
+				return err
+			}
+			for key, value := range legacyUpdates {
 				updates[key] = value
 			}
 			err = model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -3740,11 +3785,14 @@ func (ps *Service) applyPrivateReplacementRunProjection(
 			nextReplacement.ActiveA2UI = nil
 			nextReplacement.ActiveInterop = nil
 			nextReplacement.ActiveDelivery = nil
-			nextReplacement.TerminalResult = replacementTerminalResultFromProjection(
+			nextReplacement.TerminalResult, err = replacementTerminalResultFromProjection(
 				replacement,
 				projection,
 				rec,
 			)
+			if err != nil {
+				return err
+			}
 		} else {
 			nextStatus := "RUNNING"
 			if projection.Status == "INPUT_REQUIRED" && !pendingDelivery {
@@ -3816,6 +3864,10 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 	projection.RequestID = strings.TrimSpace(meta.BotRequestID)
 	logBotResponseMeta(ctx, meta)
 
+	// Reject malformed bibliography before saving even the successful projection.
+	if _, err := botProjectionLegacyUpdates(projection, projection, rec, statusPresent); err != nil {
+		return err
+	}
 	for attempt := 0; attempt < botProjectionApplyAttempts; attempt++ {
 		if err := saveBotRunProjectionForRun(ctx, row.UserName, row.Id, row.BotRunId, projection); err != nil {
 			return err
@@ -3829,7 +3881,10 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 		if err != nil {
 			return err
 		}
-		updates := botProjectionLegacyUpdates(projection, storedProjection, rec, statusPresent)
+		updates, err := botProjectionLegacyUpdates(projection, storedProjection, rec, statusPresent)
+		if err != nil {
+			return err
+		}
 		if len(updates) == 0 {
 			return nil
 		}
@@ -3846,7 +3901,11 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 	return ErrBotProjectionConflict
 }
 
-func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.RunRecord, statusPresent bool) map[string]interface{} {
+func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.RunRecord, statusPresent bool) (map[string]interface{}, error) {
+	formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
+	if err := validateCitationReferencesForAgent(incoming.Agent, formatted); err != nil {
+		return nil, err
+	}
 	updates := make(map[string]interface{})
 	if statusPresent && stored.Status != "" {
 		businessStatus := stored.Status
@@ -3858,15 +3917,18 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 
 	visible := strings.TrimSpace(stored.VisibleReport())
 	if visible != "" {
-		formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
 		if strings.TrimSpace(incoming.VisibleReport()) != visible {
 			hasFormatted = false
 		}
+		var shapeFormatted *rxBot.Formatted
 		if hasFormatted {
-			if shaped := rxBot.ShapeAnswer(stored.Agent, stored.VisibleReport(), formatted); shaped != "" {
-				updates["answer"] = shaped
-			}
-		} else if shaped := rxBot.ShapeAnswer(stored.Agent, stored.VisibleReport(), nil); shaped != "" {
+			shapeFormatted = formatted
+		}
+		shaped, err := rxBot.ShapeAnswer(stored.Agent, stored.VisibleReport(), shapeFormatted)
+		if err != nil {
+			return nil, err
+		}
+		if shaped != "" {
 			updates["answer"] = shaped
 		}
 		if hasFormatted && len(formatted.FollowUpQuestions) > 0 && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "" && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "null" {
@@ -3884,7 +3946,7 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 			}
 		}
 	}
-	return updates
+	return updates, nil
 }
 
 func taskLogMatchesID(log map[string]interface{}, taskID string) bool {
@@ -4019,9 +4081,9 @@ func (ps *Service) QueryAnalystUpdateLog(ctx context.Context, username, taskID, 
 	}
 	formatted, _, hasFormatted := rxBot.ParseRunFormatted(rec.Result)
 	if hasFormatted {
-		return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted), nil
+		return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), formatted)
 	}
-	return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil), nil
+	return rxBot.ShapeAnswer(projection.Agent, projection.VisibleReport(), nil)
 }
 
 // persistOwnerAllocatedQuestionLog settles a preallocated owner row without
@@ -4659,7 +4721,21 @@ func (ps *Service) QueryStream(
 	persistedRunID := ""
 	var streamErr error
 	for scanner.Scan() {
-		frame := scanner.Bytes()
+		if acc.Finished() || acc.Err() != nil {
+			// References after the first terminal no longer belong to this run's
+			// accepted citation state. Keep other event validation unchanged.
+			if event, ok := rxBot.ParseAGUIFrame(scanner.Bytes()); ok && event.Type == "Custom" {
+				var name string
+				if json.Unmarshal(event.Data["name"], &name) == nil && name == "phyto.references" {
+					continue
+				}
+			}
+		}
+		frame, err := rxBot.NormalizeReferenceFrame(scanner.Bytes())
+		if err != nil {
+			streamErr = err
+			break
+		}
 		if ev, ok := rxBot.ParseAGUIFrame(frame); ok {
 			acc.Observe(ev)
 			if acc.ProtocolErr() != nil && streamErr == nil {
@@ -4798,7 +4874,18 @@ func (ps *Service) QueryStream(
 		Attachments:  append([]rxBot.AssetAttachmentRef(nil), in.Attachments...),
 	}
 	if !conversationV1 || status == statusSucceeded {
-		out.Answer = rxBot.ShapeAnswer(slug, acc.AnswerText(), acc.CitedFormatted())
+		answer, err := rxBot.ShapeAnswer(slug, acc.AnswerText(), acc.CitedFormatted())
+		if err != nil {
+			if status == statusSucceeded {
+				status = "FAILED"
+				out.Status = status
+			}
+			if acc.Err() == nil {
+				streamErr = err
+			}
+		} else {
+			out.Answer = answer
+		}
 		out.FollowUpQuestions = acc.FollowUpJSON()
 	}
 	if retainSubmitting {
@@ -4808,15 +4895,19 @@ func (ps *Service) QueryStream(
 	finalizeCtx, cancelFinalize := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancelFinalize()
 	if streamReplacement && status != statusSucceeded {
-		if acc.Err() != nil {
-			return persistReplacementTerminalResult(
+		if acc.Err() != nil || errors.Is(streamErr, citation.ErrInvalidReferences) {
+			settled, err := persistReplacementTerminalResult(
 				finalizeCtx,
 				username,
 				submission,
 				out,
 			)
+			if err != nil {
+				return nil, err
+			}
+			return settled, streamErr
 		}
-		// A read or protocol failure after RunStarted is ambiguous. Leave the
+		// Other read or protocol failures after RunStarted remain ambiguous. Leave the
 		// private active identity durable so an exact retry fails closed rather
 		// than promoting a partial answer or dispatching a second Bot run.
 		out.Status = "RUNNING"
@@ -5078,11 +5169,13 @@ func (ps *Service) cancelKnownOwnerRun(ctx context.Context, runID string) {
 // splitting on the blank-line (LF or CRLF) separator. The trailing separator is
 // included in the token so forwarding can preserve Bot's bytes exactly.
 func splitSSEFrames(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
-		return i + 4, data[:i+4], nil
+	crlf := bytes.Index(data, []byte("\r\n\r\n"))
+	lf := bytes.Index(data, []byte("\n\n"))
+	if crlf >= 0 && (lf < 0 || crlf < lf) {
+		return crlf + 4, data[:crlf+4], nil
 	}
-	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
-		return i + 2, data[:i+2], nil
+	if lf >= 0 {
+		return lf + 2, data[:lf+2], nil
 	}
 	if atEOF && len(data) > 0 {
 		return len(data), data, nil

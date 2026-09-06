@@ -494,6 +494,7 @@ export default {
     },
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
+    referenceUnavailable: "Reference details unavailable.",
     welcomeTitle: "What would you like to explore?",
     history: {
       loading: "Loading conversation history",

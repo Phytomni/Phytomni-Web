@@ -209,6 +209,32 @@ func permissionRouteServer(t *testing.T, effects *queryPermissionEffects, captur
 // (the SlugFor("")->"chat" collapse). Reshapes by the resolved slug and
 // persists mode="expert".
 func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
+	t.Run("reviewed contract blocking and persistence", func(t *testing.T) {
+		gdb := setupExpertTestDB(t)
+		content, refs, _ := reviewedCitationFixture(t)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/query/route" {
+				t.Errorf("wrong expert endpoint %s", r.URL.Path)
+				w.WriteHeader(404)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "reviewed-run", "run_id": "reviewed-run", "object": "agent.run", "agent": "knowledge", "status": "succeeded", "task_ids": []string{}, "result": map[string]any{"formatted": map[string]any{"answer": content, "references": refs}}})
+		}))
+		defer server.Close()
+		previous := rxBot.BotConfig
+		rxBot.BotConfig = &rxBot.Config{BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+		defer func() { rxBot.BotConfig = previous }()
+		out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "Synthetic contract", Mode: "expert"})
+		if err != nil || out == nil {
+			t.Fatalf("query %v", err)
+		}
+		row := waitForQuestionRowTerminal(t, gdb, out.Id)
+		assertReviewedAnswer(t, row.Answer)
+		if row.Mode != "expert" || row.ToolName != "KnowledgeAgent" {
+			t.Fatal("blocking route identity drift")
+		}
+	})
 	gdb := setupExpertTestDB(t)
 	var hit string
 	botRouter(t, &hit)

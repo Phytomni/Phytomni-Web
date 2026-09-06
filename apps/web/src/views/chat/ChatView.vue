@@ -814,7 +814,8 @@ import {
   safeParse,
   upsertPendingChatListEntry,
 } from "@/utils/pending-chat";
-import { formatDetailedCitation } from "@/utils/citation";
+import { referenceListPlainText } from "@/utils/citation-presentation";
+import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { messagePlainText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
@@ -2465,16 +2466,9 @@ const setTourInputTarget = (el: HTMLElement | null) => {
 const copyMessageWithDocs = (message: ChatMessage, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
-      ? message.doc_list
-          .map((item, idx) => {
-            if (item.au || item.ti) {
-              return `${idx + 1}. ${formatDetailedCitation(item)}`;
-            } else if (item.title) {
-              return `${idx + 1}. ${item.title}`;
-            }
-            return `${idx + 1}. ${JSON.stringify(item)}`;
-          })
-          .join("\n")
+      ? referenceListPlainText(
+          buildDisplayReferences(message.doc_list, `copy-${index + 1}`)
+        )
       : "";
   const text =
     messagePlainText(message) +

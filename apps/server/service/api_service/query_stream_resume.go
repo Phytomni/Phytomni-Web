@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
+	rxLog "phytomni-server/log"
 	"phytomni-server/model"
 
 	"gorm.io/gorm"
@@ -146,15 +148,17 @@ func (ps *Service) copyBotRunStreamToHub(
 	hub := ps.hub()
 	accumulator := rxBot.NewAGUIAccumulator("")
 	var cursor int64
-	terminal := false
+	var terminalFrame []byte
+	var streamErr error
 
-	for attempt := 0; attempt < streamResupplyAttempts && !terminal; attempt++ {
+	for attempt := 0; attempt < streamResupplyAttempts; attempt++ {
 		reader, meta, err := stream.RunStreamWithMeta(ctx, runID, cursor)
 		logBotResponseMeta(ctx, meta)
 		if err == nil && reader != nil {
-			cursor, terminal = copyBotRunStreamAttempt(hub, row.Id, cursor, reader, accumulator)
+			cursor, terminalFrame, err = copyBotRunStreamAttempt(hub, row.Id, cursor, reader, accumulator)
 		}
-		if terminal || ctx.Err() != nil {
+		streamErr = err
+		if errors.Is(err, citation.ErrInvalidReferences) || len(terminalFrame) > 0 || ctx.Err() != nil {
 			break
 		}
 		if attempt+1 < streamResupplyAttempts {
@@ -166,16 +170,31 @@ func (ps *Service) copyBotRunStreamToHub(
 	}
 
 	status := resuppliedTerminalStatus(accumulator)
-	if !terminal {
+	errorCode := ""
+	if errors.Is(streamErr, citation.ErrInvalidReferences) {
 		status = "FAILED"
-		hub.Append(row.Id, []byte(
-			"event: RunError\n"+
-				"data: {\"type\":\"RunError\",\"code\":\"stream_replay_incomplete\",\"message\":\"Bot replay ended before a terminal event\"}\n\n",
-		))
+		errorCode = "invalid_reference_payload"
+	} else if len(terminalFrame) == 0 {
+		status = "FAILED"
+		errorCode = "stream_replay_incomplete"
 	}
 	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
-	_ = ps.settleResuppliedQuestionStream(settleCtx, row, accumulator, status)
+	if err := ps.settleResuppliedQuestionStream(settleCtx, row, accumulator, status); err != nil {
+		// Do not publish a successful terminal when persistence failed. The
+		// unchanged row remains available for later owner-authorized recovery.
+		rxLog.Sugar().Error("failed to settle resupplied question stream")
+		if errors.Is(err, citation.ErrInvalidReferences) {
+			errorCode = "invalid_reference_payload"
+		} else if errorCode == "" {
+			errorCode = "stream_settlement_failed"
+		}
+	}
+	if errorCode != "" {
+		hub.Append(row.Id, []byte("event: RunError\ndata: {\"type\":\"RunError\",\"code\":\""+errorCode+"\",\"message\":\"upstream service failed\"}\n\n"))
+	} else {
+		hub.Append(row.Id, terminalFrame)
+	}
 	hub.Finish(row.Id)
 }
 
@@ -185,25 +204,27 @@ func copyBotRunStreamAttempt(
 	cursor int64,
 	reader io.ReadCloser,
 	accumulator *rxBot.AGUIAccumulator,
-) (int64, bool) {
+) (int64, []byte, error) {
 	defer reader.Close()
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	scanner.Split(splitSSEFrames)
-	terminal := false
 	for scanner.Scan() {
-		frame := append([]byte(nil), scanner.Bytes()...)
-		stored := hub.Append(messageID, frame)
-		cursor = stored.Seq
+		frame, err := rxBot.NormalizeReferenceFrame(scanner.Bytes())
+		if err != nil {
+			return cursor, nil, err
+		}
 		if event, ok := rxBot.ParseAGUIFrame(frame); ok {
 			accumulator.Observe(event)
-			terminal = isTerminalAGUIFrame(frame)
 		}
-		if terminal {
-			break
+		if isTerminalAGUIFrame(frame) {
+			// The caller commits settlement before publishing this exact frame.
+			return cursor, append([]byte(nil), frame...), nil
 		}
+		stored := hub.Append(messageID, frame)
+		cursor = stored.Seq
 	}
-	return cursor, terminal
+	return cursor, nil, scanner.Err()
 }
 
 func resuppliedTerminalStatus(accumulator *rxBot.AGUIAccumulator) string {
@@ -244,7 +265,11 @@ func (ps *Service) settleResuppliedQuestionStream(
 			if !ok {
 				return fmt.Errorf("unknown stream tool %q", stored.ToolName)
 			}
-			updates["answer"] = rxBot.ShapeAnswer(slug, answer, accumulator.CitedFormatted())
+			shaped, err := rxBot.ShapeAnswer(slug, answer, accumulator.CitedFormatted())
+			if err != nil {
+				return err
+			}
+			updates["answer"] = shaped
 		}
 		result := tx.Model(&model.QuestionAgentLog{}).
 			Where("id = ? AND user_name = ? AND dialogue_id = ?", row.Id, row.UserName, row.DialogueId).

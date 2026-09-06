@@ -130,6 +130,81 @@ func newForcedExpertStreamTestRequest(t *testing.T, tool string) *http.Request {
 	return req
 }
 
+func TestQuery_ReplacementMalformedReferencesSettlesBeforeSafeTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gdb := setupStreamHandlerTestDB(t)
+	seed := model.QuestionAgentLog{
+		DialogueId: "98989898-9898-4989-8989-989898989898", UserName: "alice@example.com",
+		Query: "accepted query", Answer: "accepted answer", ToolName: "AnalystAgent",
+		Status: "SUCCEEDED", Mode: "expert", BotRunId: "accepted-run", BotReportRevision: 0,
+		BotProjectionJSON: `{"run_id":"accepted-run","agent":"analyst","status":"SUCCEEDED","report_revision":0,"conversation_context":{"client_turn_id":"accepted-turn","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","mode_lock_state":"locked"}}`,
+	}
+	if err := gdb.Create(&seed).Error; err != nil {
+		t.Fatal(err)
+	}
+	var botCalls atomic.Int32
+	srv := newAdvertisedStreamingBotServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("unexpected path=%s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		botCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"replacement-bad-refs\"}\n\n" +
+			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"candidate answer\"}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":\"private invalid root\"}}\n\n" +
+			"event: RunFinished\ndata: {\"type\":\"RunFinished\"}\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	request := func() *httptest.ResponseRecorder {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		for key, value := range map[string]string{"query": "replace accepted answer", "mode": "instant", "client_turn_id": "handler-replacement-bad-refs", "refresh_id": strconv.FormatInt(seed.Id, 10)} {
+			if err := mw.WriteField(key, value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := mw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("username", "alice@example.com")
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/0/messages", &body)
+		c.Request.Header.Set("Content-Type", mw.FormDataContentType())
+		c.Request.Header.Set("Accept", "text/event-stream")
+		c.Params = gin.Params{{Key: "id", Value: "0"}}
+		NewHandler().Query(c)
+		return w
+	}
+	first := request()
+	if first.Code != http.StatusOK || !strings.HasPrefix(first.Header().Get("Content-Type"), "text/event-stream") || strings.Count(first.Body.String(), "event: RunError") != 1 || !strings.Contains(first.Body.String(), `"message":"upstream service failed"`) || strings.Contains(first.Body.String(), "RunFinished") || strings.Contains(first.Body.String(), "private invalid root") {
+		t.Fatalf("unsafe handler failure: status=%d body=%s", first.Code, first.Body.String())
+	}
+	var stored model.QuestionAgentLog
+	if err := gdb.First(&stored, seed.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Query != seed.Query || stored.Answer != seed.Answer || stored.ToolName != seed.ToolName || stored.Status != seed.Status || stored.BotRunId != seed.BotRunId || stored.BotReportRevision != seed.BotReportRevision {
+		t.Fatalf("accepted public projection changed: %+v", stored)
+	}
+	private, err := api_service.LoadBotConversationContext(context.Background(), seed.UserName, seed.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if private.Replacement == nil || private.Replacement.TerminalResult == nil || private.Replacement.TerminalResult.Status != "FAILED" || private.Replacement.ActiveStatus != "" || private.Replacement.ActiveBotRunID != "" {
+		t.Fatalf("replacement was not terminal before handler return: %+v", private.Replacement)
+	}
+	second := request()
+	if botCalls.Load() != 1 || strings.Count(second.Body.String(), "event: RunError") != 1 || strings.Contains(second.Body.String(), "RunFinished") || strings.Contains(second.Body.String(), "private invalid root") {
+		t.Fatalf("retry redispatched or lost terminal: calls=%d body=%s", botCalls.Load(), second.Body.String())
+	}
+}
+
 func TestQuery_AutonomousExpertModeSkipsStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true}

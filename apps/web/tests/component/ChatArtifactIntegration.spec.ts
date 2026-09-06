@@ -151,7 +151,14 @@ const citedMessage: ChatMessage = {
   tool_name: "KnowledgeAgent",
   status: "SUCCEEDED",
   content: "# Full cited report\n\nEvidence-backed finding [1].",
-  doc_list: [{ title: "Complete source document" }],
+  doc_list: [
+    {
+      citation: {
+        runs: [{ text: "Complete source document" }],
+        links: [],
+      },
+    },
+  ],
 };
 
 const knowledgeZeroReferenceRaw =
@@ -1563,12 +1570,28 @@ describe("Chat artifact shell integration", () => {
       ...knowledgeZeroReferenceMessage,
       id: "knowledge-reference-1",
       content: "One supporting source [1].",
-      doc_list: [{ title: "Usable knowledge source" }],
+      doc_list: [
+        {
+          citation: {
+            runs: [{ text: "Usable knowledge source" }],
+            links: [],
+          },
+        },
+      ],
       botProjection: parseBotProjection({
         agent: "KnowledgeAgent",
         status: "SUCCEEDED",
-        answer:
-          '{"content":"One supporting source [1].","doc_list":[{"title":"Usable knowledge source"}]}',
+        answer: JSON.stringify({
+          content: "One supporting source [1].",
+          doc_list: [
+            {
+              citation: {
+                runs: [{ text: "Usable knowledge source" }],
+                links: [],
+              },
+            },
+          ],
+        }),
       }),
     };
 

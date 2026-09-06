@@ -1,4 +1,5 @@
 import type { CitationDocument } from "../messageTypes";
+import { decodeCitationPresentation } from "@/utils/citation-presentation";
 
 // Check whether a string is valid JSON
 export const isValidJSON = (str: string): boolean => {
@@ -32,12 +33,16 @@ export function optionalStringValue(
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-/** Keep only object-shaped citation rows from an untrusted agent answer. */
+/** Preserve source-array positions, including rejected presentation slots. */
 export function decodeCitationDocuments(
   value: unknown
 ): CitationDocument[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.filter((item): item is CitationDocument => isRecord(item));
+  return Array.from(value, (item) =>
+    isRecord(item)
+      ? { ...item, citation: decodeCitationPresentation(item.citation) }
+      : { citation: null }
+  );
 }
 
 // Convert data into Element Plus Table format

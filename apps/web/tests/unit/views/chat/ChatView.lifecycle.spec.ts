@@ -104,6 +104,195 @@ describe("ChatView lifecycle cleanup", () => {
     expect(cancelDialogue).not.toHaveBeenCalled();
   });
 
+  it("keeps canonical reference copy identical across assistant message shapes", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const context = createTestAppContext({ locale: "en-US" });
+    const wrapper = context.mount(ChatView, {
+      global: {
+        stubs: {
+          RouterLink: {
+            name: "RouterLink",
+            props: ["to"],
+            template: '<a :href="to"><slot /></a>',
+          },
+          ChatComposer: {
+            name: "ChatComposer",
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({
+                openHeader: vi.fn(),
+                closeHeader: vi.fn(),
+                popoverVisible: false,
+              });
+              return {};
+            },
+            template: "<div />",
+          },
+          ChatMessageActions: {
+            name: "ChatMessageActions",
+            emits: ["copy"],
+            template:
+              '<button data-testid="action-copy" type="button" @click="$emit(\'copy\')">Copy</button>',
+          },
+          ScientificMarkdown: true,
+          DeepGenomeResultViewer: true,
+          ChatSidebarNav: true,
+          ChatHistoryList: true,
+          FollowUpQuestions: true,
+          ChatActivity: true,
+          ChatAnalystLog: true,
+          StreamMessage: true,
+          TransferProgress: true,
+          ElTour: true,
+          ElTourStep: true,
+          ElBacktop: true,
+          ElDialog: true,
+          ElAvatar: true,
+          ElIcon: true,
+          ElTable: true,
+          ElTableColumn: true,
+          ElButton: {
+            template: '<button type="button"><slot /></button>',
+          },
+        },
+      },
+    });
+
+    const state = testState.chatStates;
+    if (!state) throw new Error("Chat state capture was not initialized");
+    const dialogueId = "canonical-copy-dialogue";
+    state.currentChatId.value = dialogueId;
+    state.getChatState(dialogueId).renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        {
+          role: "assistant",
+          content: "Answer text.",
+          doc_list: [
+            {
+              citation: {
+                runs: [
+                  { text: "Journal", italic: true },
+                  { text: " " },
+                  { text: "12", bold: true },
+                ],
+                links: [
+                  {
+                    label: "PubMed",
+                    href: "https://pubmed.ncbi.nlm.nih.gov/123/",
+                  },
+                ],
+              },
+              au: "Legacy Author",
+              ti: "Legacy Title",
+              asset_id: "private-asset-id",
+            },
+            { citation: null, asset_id: "private-rejected-slot" },
+          ],
+        },
+      ],
+    };
+    await nextTick();
+
+    await wrapper.get('[data-testid="action-copy"]').trigger("click");
+    await Promise.resolve();
+
+    const expected =
+      "Answer text.\nReferences:\n1. Journal 12\nPubMed: https://pubmed.ncbi.nlm.nih.gov/123/\n\n2. Reference details unavailable.";
+    expect(writeText).toHaveBeenCalledWith(expected);
+    const copied = String(writeText.mock.calls[0]?.[0]);
+    expect(copied).not.toContain("private-asset-id");
+    expect(copied).not.toContain("private-rejected-slot");
+    expect(copied).not.toContain("Legacy Author");
+    expect(copied).not.toContain("Legacy Title");
+    expect(copied).not.toContain('{"citation"');
+
+    const docList =
+      state.getChatState(dialogueId).renderedChat.messages[0].doc_list;
+    const assistantShapes = [
+      {
+        role: "assistant",
+        id: "history-row",
+        content: "Answer text.",
+        doc_list: docList,
+      },
+      {
+        role: "assistant",
+        content: "",
+        blocks: [
+          {
+            type: "markdown" as const,
+            authority: "agent" as const,
+            text: "Answer text.",
+            complete: true,
+          },
+        ],
+        doc_list: docList,
+      },
+      {
+        role: "assistant",
+        content: "",
+        blocks: [
+          {
+            type: "markdown" as const,
+            authority: "agent" as const,
+            text: "Answer text.",
+            complete: true,
+          },
+          { type: "agent-surface" as const, authority: "agent" as const },
+        ],
+        doc_list: docList,
+      },
+      {
+        role: "assistant",
+        content: "Answer text.",
+        instantMessage: true,
+        doc_list: docList,
+      },
+    ];
+    for (const message of assistantShapes) {
+      writeText.mockClear();
+      state.getChatState(dialogueId).renderedChat = {
+        dialogue_id: dialogueId,
+        messages: [message],
+      };
+      await nextTick();
+      await wrapper.get('[data-testid="action-copy"]').trigger("click");
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith(expected);
+    }
+
+    writeText.mockClear();
+    state.getChatState(dialogueId).renderedChat = {
+      dialogue_id: dialogueId,
+      messages: [
+        { role: "user", content: "User question.", doc_list: docList },
+        {
+          role: "assistant",
+          content: "Rendered table",
+          original: "Gene\nOs01g",
+          tableHeaders: [{ prop: "gene", label: "Gene" }],
+          doc_list: docList,
+        },
+      ],
+    };
+    await nextTick();
+    const copyActions = wrapper.findAll('[data-testid="action-copy"]');
+    await copyActions[0].trigger("click");
+    await copyActions[1].trigger("click");
+    await Promise.resolve();
+    expect(writeText.mock.calls.map(([text]) => text)).toEqual([
+      "User question.",
+      "Gene\nOs01g",
+    ]);
+    wrapper.unmount();
+    vi.unstubAllGlobals();
+  });
+
   it("renders report-backed Research previews regardless of lifecycle status", async () => {
     const context = createTestAppContext({ locale: "en-US" });
     const wrapper = context.mount(ChatView, {

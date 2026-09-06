@@ -30,7 +30,15 @@ describe("CitationReferenceList", () => {
 
   it("renders one safe row per buildDisplayReferences output with namespaced ids", () => {
     const wrapper = mountList({
-      references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],
+      references: [
+        { citation: { runs: [{ text: "Doc A" }], links: [] } },
+        {
+          citation: {
+            runs: [{ text: "Smith. T. " }, { text: "Nature", italic: true }],
+            links: [],
+          },
+        },
+      ],
       ns: "m3",
     });
     const rows = wrapper.findAll(".doc-list-item");
@@ -54,6 +62,10 @@ describe("CitationReferenceList", () => {
         {
           title: '<img src=x onerror="alert(1)">',
           dl: 'javascript:alert(1)"onmouseover="alert(2)',
+          citation: {
+            runs: [{ text: '<img src=x onerror="alert(1)">' }],
+            links: [],
+          },
         },
       ],
       ns: "m1",
@@ -68,12 +80,24 @@ describe("CitationReferenceList", () => {
 
   it("renders malformed and partially populated references without throwing", () => {
     const wrapper = mountList({
-      references: [null, 42, { au: null, title: "Fallback" }],
+      references: [
+        null,
+        42,
+        {
+          citation: {
+            runs: [{ text: "Canonical title-only source" }],
+            links: [],
+          },
+        },
+      ],
       ns: "m2",
     });
 
     expect(wrapper.findAll(".doc-list-item")).toHaveLength(3);
-    expect(wrapper.text()).toContain("Fallback");
+    expect(wrapper.text()).toContain("Canonical title-only source");
+    expect(wrapper.findAll(".doc-list-item")[2].attributes("id")).toBe(
+      "m2-ref-3"
+    );
     expect(wrapper.html()).not.toContain("undefined");
   });
 

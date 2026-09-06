@@ -56,10 +56,16 @@ func TestAccumulator_AnswerRunIDFollowUp(t *testing.T) {
 
 func TestAccumulator_PhytoReferencesShapeCitedAnswer(t *testing.T) {
 	a := NewAGUIAccumulator("")
+	content, refs, canonical := reviewedBotCitationFixture(t)
+	text, _ := json.Marshal(content)
+	referencePayload, err := json.Marshal(map[string]any{"doc_list": refs})
+	if err != nil {
+		t.Fatal(err)
+	}
 	feed := []string{
 		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run_refs"}`,
-		`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"body [1]"}`,
-		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A","au":"Archetti"}]}}`,
+		`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":` + string(text) + `}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":` + string(referencePayload) + `}`,
 		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run_refs"}`,
 	}
 	for _, f := range feed {
@@ -67,19 +73,19 @@ func TestAccumulator_PhytoReferencesShapeCitedAnswer(t *testing.T) {
 			a.Observe(ev)
 		}
 	}
-	got := ShapeAnswer("knowledge", a.AnswerText(), a.CitedFormatted())
+	got, err := ShapeAnswer("knowledge", a.AnswerText(), a.CitedFormatted())
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
-		Content string                   `json:"content"`
-		DocList []map[string]interface{} `json:"doc_list"`
+		Content string          `json:"content"`
+		DocList json.RawMessage `json:"doc_list"`
 	}
 	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
 		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
 	}
-	if parsed.Content != "body [1]" {
-		t.Fatalf("content = %q, want body [1]", parsed.Content)
-	}
-	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
-		t.Fatalf("doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
+	if parsed.Content != content || string(parsed.DocList) != string(canonical) || a.RunID() != "run_refs" {
+		t.Fatal("accumulated source/references/run identity drift")
 	}
 }
 
@@ -115,15 +121,18 @@ func TestAccumulator_PhytoReferencesBlankDoesNotClobber(t *testing.T) {
 			a.Observe(ev)
 		}
 	}
-	got := ShapeAnswer("knowledge", "body", a.CitedFormatted())
+	got, err := ShapeAnswer("knowledge", "body", a.CitedFormatted())
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		DocList []map[string]interface{} `json:"doc_list"`
 	}
 	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
 		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
 	}
-	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" {
-		t.Fatalf("doc_list = %#v, want Doc A kept across blank and mixed rows", parsed.DocList)
+	if len(parsed.DocList) != 3 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[1]["citation"] == nil || parsed.DocList[2]["citation"] == nil {
+		t.Fatalf("doc_list = %#v, want Doc A and both unavailable slots retained", parsed.DocList)
 	}
 }
 

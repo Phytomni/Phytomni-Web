@@ -492,6 +492,7 @@ export default {
     },
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",
+    referenceUnavailable: "参考文献信息暂不可用。",
     welcomeTitle: "今天想探索什么？",
     history: {
       loading: "正在加载对话历史",

@@ -620,7 +620,13 @@ describe("decodeA2uiActionResponse", () => {
     const answer = `REVIEW-START\n${"x".repeat(
       A2UI_LIMITS.textChars + 256
     )}\nREVIEW-END`;
-    const references = [{ title: "Review source", pm: "12345" }];
+    const references = [
+      {
+        title: "Review source",
+        pm: "12345",
+        citation: { runs: [{ text: "Canonical review source" }], links: [] },
+      },
+    ];
     const followUpQuestions = ["Which evidence should be compared next?"];
     const response = structuredClone(
       fixture("http/terminal_succeeded.json")
@@ -648,7 +654,7 @@ describe("decodeA2uiActionResponse", () => {
   });
 
   it.each([
-    ["references", [{ title: "valid" }, "invalid"]],
+    ["references", "invalid"],
     ["follow_up_questions", ["valid", 7]],
   ] as const)("rejects a malformed formatted %s array", (field, value) => {
     const response = structuredClone(
@@ -657,6 +663,25 @@ describe("decodeA2uiActionResponse", () => {
     response.result.formatted = { answer: "Complete review", [field]: value };
 
     expectReason(decodeA2uiActionResponse(response), "props_invalid");
+  });
+
+  it("retains malformed reference slots without rejecting the valid terminal answer", () => {
+    const doc = { citation: { runs: [{ text: "Canonical" }], links: [] } };
+    const response = structuredClone(
+      fixture("http/terminal_succeeded.json")
+    ) as { result: Record<string, unknown> };
+    response.result.formatted = {
+      answer: "Complete review",
+      references: [doc, null, doc],
+    };
+    const result = decodeA2uiActionResponse(response);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.status === "succeeded")
+      expect(result.value.result.formatted?.references).toEqual([
+        doc,
+        { citation: null },
+        doc,
+      ]);
   });
 });
 

@@ -400,10 +400,12 @@ opens an eligible report and downloads still require a durable row id.
 ### Citation and HTML safety
 
 Citation links emit typed activation events to the owning reference list and
-must use a matching namespace. The only retained HTML sink is the separately
-reviewed, escaped reference-row renderer; its text uses `escapeHtml` and fixed
-URLs use `sanitizeHref`. Vue-bound resource links use `safeHrefValue`; do not
-resurrect report HTML, add raw report-body `v-html`, or bypass these validators.
+must use a matching namespace. Reference rows render canonical citation runs
+through Vue text interpolation and controlled emphasis nodes, never `v-html`.
+Fixed-label citation links use `safeHrefValue` plus HTTP(S) and userinfo
+validation; rejected presentations retain their numbered slot with localized
+unavailable copy. Vue-bound resource links use `safeHrefValue`; do not resurrect
+report HTML, reconstruct bibliography from metadata, or bypass these validators.
 
 ## Auth, PII, and legal invariants
 

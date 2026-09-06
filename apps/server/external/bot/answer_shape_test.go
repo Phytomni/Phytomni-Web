@@ -7,7 +7,10 @@ import (
 
 func TestShapeAnswer_Cited(t *testing.T) {
 	f := &Formatted{References: json.RawMessage(`[{"file_id":"f1","title":"Doc A"},{"file_id":42,"title":""}]`)}
-	got := ShapeAnswer("knowledge", "body [1]", f)
+	got, err := ShapeAnswer("knowledge", "body [1]", f)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Content string                   `json:"content"`
 		DocList []map[string]interface{} `json:"doc_list"`
@@ -24,8 +27,8 @@ func TestShapeAnswer_Cited(t *testing.T) {
 	if parsed.DocList[0]["title"] != "Doc A" {
 		t.Errorf("doc[0].title = %v", parsed.DocList[0]["title"])
 	}
-	if parsed.DocList[1]["title"] != "42" { // empty title falls back to file_id
-		t.Errorf("doc[1].title fallback = %v", parsed.DocList[1]["title"])
+	if parsed.DocList[1]["title"] != "" {
+		t.Errorf("file identity must not become title = %v", parsed.DocList[1]["title"])
 	}
 }
 
@@ -35,7 +38,10 @@ func TestShapeAnswer_CitedEnriched(t *testing.T) {
 		{"file_id":"f2","title":"Doc B"}
 	]`
 	f := &Formatted{References: json.RawMessage(refs)}
-	got := ShapeAnswer("knowledge", "body [1][2]", f)
+	got, err := ShapeAnswer("knowledge", "body [1][2]", f)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var parsed struct {
 		Content string                   `json:"content"`
@@ -71,7 +77,10 @@ func TestShapeAnswer_CitedEnriched(t *testing.T) {
 }
 
 func TestShapeAnswer_CitedEmptyRefs(t *testing.T) {
-	got := ShapeAnswer("review", "md", &Formatted{})
+	got, err := ShapeAnswer("review", "md", &Formatted{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Content string        `json:"content"`
 		DocList []interface{} `json:"doc_list"`
@@ -86,7 +95,10 @@ func TestShapeAnswer_CitedEmptyRefs(t *testing.T) {
 
 func TestShapeAnswer_BriefGeneCited(t *testing.T) {
 	f := &Formatted{References: json.RawMessage(`[{"file_id":"f1","title":"Brief A"}]`)}
-	got := ShapeAnswer("brief_gene", "summary [1]", f)
+	got, err := ShapeAnswer("brief_gene", "summary [1]", f)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Content string                   `json:"content"`
 		DocList []map[string]interface{} `json:"doc_list"`
@@ -104,7 +116,10 @@ func TestShapeAnswer_BriefGeneCited(t *testing.T) {
 
 func TestShapeAnswer_DataPositional(t *testing.T) {
 	f := &Formatted{Tabular: json.RawMessage(`{"headers":["gene","len"],"rows":[["g1",100],["g2",200]]}`)}
-	got := ShapeAnswer("data", "2 rows x 2 columns", f)
+	got, err := ShapeAnswer("data", "2 rows x 2 columns", f)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Headers []string        `json:"headers"`
 		Rows    [][]interface{} `json:"rows"`
@@ -119,7 +134,10 @@ func TestShapeAnswer_DataPositional(t *testing.T) {
 
 func TestShapeAnswer_DataObjectRows(t *testing.T) {
 	f := &Formatted{Tabular: json.RawMessage(`{"headers":["gene","len"],"rows":[{"gene":"g1","len":100}]}`)}
-	got := ShapeAnswer("data", "1 row x 2 columns", f)
+	got, err := ShapeAnswer("data", "1 row x 2 columns", f)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Rows [][]interface{} `json:"rows"`
 	}
@@ -132,7 +150,10 @@ func TestShapeAnswer_DataObjectRows(t *testing.T) {
 }
 
 func TestShapeAnswer_DataEmptyTabular(t *testing.T) {
-	got := ShapeAnswer("data", "0 rows", &Formatted{})
+	got, err := ShapeAnswer("data", "0 rows", &Formatted{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Headers []string        `json:"headers"`
 		Rows    [][]interface{} `json:"rows"`
@@ -146,10 +167,10 @@ func TestShapeAnswer_DataEmptyTabular(t *testing.T) {
 }
 
 func TestShapeAnswer_Plain(t *testing.T) {
-	if got := ShapeAnswer("chat", "hello", &Formatted{}); got != "hello" {
+	if got, err := ShapeAnswer("chat", "hello", &Formatted{}); err != nil || got != "hello" {
 		t.Errorf("chat passthrough = %q", got)
 	}
-	if got := ShapeAnswer("analyst", "Task created: x", nil); got != "Task created: x" {
+	if got, err := ShapeAnswer("analyst", "Task created: x", nil); err != nil || got != "Task created: x" {
 		t.Errorf("analyst passthrough = %q", got)
 	}
 }
@@ -209,7 +230,10 @@ func TestParseRunFinalReport(t *testing.T) {
 // deep_genome reshapes its final_report through the cited family (f == nil),
 // yielding {content, doc_list: []} — the JSON the Web app's DeepGenomeResultViewer parses.
 func TestShapeAnswer_DeepGenomeFinalReport(t *testing.T) {
-	got := ShapeAnswer("deep_genome", "report md", nil)
+	got, err := ShapeAnswer("deep_genome", "report md", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var parsed struct {
 		Content string        `json:"content"`
 		DocList []interface{} `json:"doc_list"`

@@ -20,12 +20,11 @@ describe("BriefGene static case projection", () => {
     }
   });
 
-  it("projects Bot formatted.references rows onto demo doc_list", () => {
+  it("projects canonical bibliography rows onto demo doc_list", () => {
     const allowedKeys = new Set([
-      "file_id",
       "title",
       "formatted_citation",
-      "doi_missing",
+      "citation",
       "ar",
       "au",
       "ti",
@@ -46,6 +45,9 @@ describe("BriefGene static case projection", () => {
       );
       expect(reference.title).toEqual(expect.any(String));
       expect(reference.formatted_citation).toEqual(expect.any(String));
+      expect(reference.citation.runs).toEqual(expect.any(Array));
+      expect(reference.citation.links).toEqual(expect.any(Array));
+      expect(reference).not.toHaveProperty("file_id");
     });
   });
 

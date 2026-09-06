@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 	"phytomni-server/utils"
@@ -1069,6 +1070,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 		terminalEvent      string
 		wantStatus         string
 		wantPublicPromoted bool
+		wantCitationError  bool
 	}{
 		{
 			name:               "RunFinished promotes candidate",
@@ -1080,6 +1082,13 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 			name:          "RunError keeps accepted public result",
 			terminalEvent: "event: RunError\ndata: {\"type\":\"RunError\",\"code\":\"replacement_failed\",\"message\":\"safe failure\"}\n\n",
 			wantStatus:    "FAILED",
+		},
+		{
+			name: "Malformed references fail private replacement",
+			terminalEvent: "event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":\"private invalid root\"}}\n\n" +
+				"event: RunFinished\ndata: {\"type\":\"RunFinished\",\"run_id\":\"run-stream-replacement\"}\n\n",
+			wantStatus:        "FAILED",
+			wantCitationError: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1109,6 +1118,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 				RefreshId:    seed.Id, Surface: QuerySurfaceChat,
 			}
 			var (
+				forwarded           strings.Builder
 				identity            StreamIdentity
 				firstFramePublic    model.QuestionAgentLog
 				firstFramePrivate   *persistedConversationContext
@@ -1120,6 +1130,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 				input,
 				func(value StreamIdentity) { identity = value },
 				func(frame []byte) error {
+					forwarded.Write(frame)
 					if !strings.Contains(string(frame), "event: RunStarted") || firstFramePrivate != nil || firstFrameReadError != nil {
 						return nil
 					}
@@ -1134,7 +1145,14 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 					return nil
 				},
 			)
-			if err != nil {
+			if tc.wantCitationError {
+				if !errors.Is(err, citation.ErrInvalidReferences) {
+					t.Fatalf("replacement protocol error=%v", err)
+				}
+				if strings.Contains(forwarded.String(), "private invalid root") || strings.Contains(forwarded.String(), "RunFinished") || strings.Contains(forwarded.String(), "RunError") {
+					t.Fatalf("malformed replacement forwarded competing terminal: %s", forwarded.String())
+				}
+			} else if err != nil {
 				t.Fatalf("keyed replacement QueryStream: %v", err)
 			}
 			if out == nil || out.Id != seed.Id || out.Status != tc.wantStatus ||
@@ -1176,6 +1194,7 @@ func TestQueryStream_KeyedReplacementStagesUntilRunFinished(t *testing.T) {
 					stored.ToolName != seed.ToolName || stored.Status != seed.Status ||
 					stored.BotRunId != seed.BotRunId || private.Replacement == nil ||
 					private.Replacement.TerminalResult == nil ||
+					private.Replacement.ActiveStatus != "" || private.Replacement.ActiveBotRunID != "" ||
 					private.Replacement.TerminalResult.Status != "FAILED" {
 					t.Fatalf("failed replacement changed public or lost terminal candidate: public=%+v private=%+v", stored, private)
 				}
@@ -1656,6 +1675,7 @@ func TestQueryStream_ChatFamilyForwardsCanonicalStreamRequest(t *testing.T) {
 
 func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
 	gdb := setupStreamTestDB(t)
+	textFrame, referenceFrame := reviewedCitationFrames(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
@@ -1663,8 +1683,11 @@ func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(strings.Join([]string{
 			`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run-knowledge-refs"}` + "\n",
-			`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":"# report [1]"}` + "\n",
-			`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A","au":"Archetti"}]}}` + "\n",
+			textFrame,
+			referenceFrame,
+			`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[]}}` + "\n",
+			`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":null}}` + "\n",
+			`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{}}` + "\n",
 			`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run-knowledge-refs"}` + "\n",
 		}, "\n")))
 	}))
@@ -1676,7 +1699,9 @@ func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
 	}
 	t.Cleanup(func() { rxBot.BotConfig = previous })
 
-	out, err := streamCapableService().QueryStream(
+	svc := streamCapableService()
+	var first []byte
+	out, err := svc.QueryStream(
 		context.Background(),
 		"eve@example.com",
 		QueryInput{
@@ -1686,7 +1711,7 @@ func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
 			ClientTurnID: "stream-knowledge-refs",
 		},
 		nil,
-		nil,
+		func(frame []byte) error { first = append(first, frame...); return nil },
 	)
 	if err != nil {
 		t.Fatalf("QueryStream error: %v", err)
@@ -1702,11 +1727,111 @@ func TestQueryStream_PersistsKnowledgeReferences(t *testing.T) {
 	if err := json.Unmarshal([]byte(row.Answer), &parsed); err != nil {
 		t.Fatalf("persisted answer is not cited JSON: %v (%s)", err, row.Answer)
 	}
-	if parsed.Content != "# report [1]" {
-		t.Fatalf("content = %q, want # report [1]", parsed.Content)
+	assertReviewedAnswer(t, row.Answer)
+	assertReviewedAnswer(t, out.Answer)
+	var second []byte
+	if err := svc.ResumeQuestionStream(context.Background(), row.UserName, row.DialogueId, row.Id, 0, func(frame StreamFrame) error { second = append(second, frame.Bytes...); return nil }); err != nil {
+		t.Fatal(err)
 	}
-	if len(parsed.DocList) != 1 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[0]["au"] != "Archetti" {
-		t.Fatalf("persisted doc_list = %#v, want one bibliographic row for Doc A", parsed.DocList)
+	if string(first) != string(second) || !strings.Contains(string(first), `"citation"`) {
+		t.Fatal("clients did not receive identical canonical references")
+	}
+}
+
+func TestQueryStream_PersistsKnowledgeReferencesProtocolFailure(t *testing.T) {
+	gdb := setupStreamTestDB(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"run-bad-refs\"}\n\n" +
+			"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"body [3]\"}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"First\"},null,{\"title\":\"Third\"}]}}\n\n" +
+			"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":\"private malformed source\"}}\n\n" +
+			"event: RunFinished\ndata: {\"type\":\"RunFinished\"}\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+	svc := streamCapableService()
+	var frames strings.Builder
+	out, err := svc.QueryStream(context.Background(), "eve@example.com", QueryInput{Query: "q", Tool: "KnowledgeAgent", Mode: "expert", ClientTurnID: "bad-reference-root"}, nil, func(frame []byte) error { frames.Write(frame); return nil })
+	if !errors.Is(err, citation.ErrInvalidReferences) || out == nil || out.Status != "FAILED" {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if calls.Load() != 1 || strings.Contains(frames.String(), "private") || strings.Contains(frames.String(), "RunFinished") || strings.Contains(frames.String(), "RunError") {
+		t.Fatalf("invalid forwarding/retry: calls=%d frames=%s", calls.Load(), frames.String())
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.First(&row, out.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Status != "FAILED" || !strings.Contains(row.Answer, `"title":"Third"`) || !strings.Contains(row.Answer, `Reference details unavailable.`) {
+		t.Fatalf("failed row lost valid references: %+v", row)
+	}
+	for _, frame := range svc.hub().After(out.Id, 0) {
+		if strings.Contains(string(frame.Bytes), "private") {
+			t.Fatal("invalid frame stored in hub")
+		}
+	}
+}
+
+func TestQueryStream_PersistsKnowledgeReferencesIgnoresLateReferences(t *testing.T) {
+	for _, terminal := range []string{"RunFinished", "RunError"} {
+		t.Run(terminal, func(t *testing.T) {
+			gdb := setupStreamTestDB(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: RunStarted\ndata: {\"type\":\"RunStarted\",\"run_id\":\"late-refs\"}\n\n" +
+					"event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"delta\":\"body [1]\"}\n\n" +
+					"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"First\"}]}}\n\n" +
+					"event: " + terminal + "\ndata: {\"type\":\"" + terminal + "\"}\n\n" +
+					"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":[{\"title\":\"Late replacement\"}]}}\n\n" +
+					"event: Custom\ndata: {\"type\":\"Custom\",\"name\":\"phyto.references\",\"value\":{\"doc_list\":\"private late root\"}}\n\n"))
+			}))
+			t.Cleanup(srv.Close)
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+			svc := streamCapableService()
+			var frames strings.Builder
+			out, err := svc.QueryStream(context.Background(), "eve@example.com", QueryInput{Query: "q", Tool: "KnowledgeAgent", Mode: "expert", ClientTurnID: "late-refs-" + terminal}, nil, func(frame []byte) error { frames.Write(frame); return nil })
+			if err != nil || out == nil {
+				t.Fatalf("out=%+v err=%v", out, err)
+			}
+			if strings.Contains(frames.String(), "Late replacement") || strings.Contains(frames.String(), "private") || strings.Count(frames.String(), "event: "+terminal) != 1 || strings.Count(frames.String(), `"name":"phyto.references"`) != 1 {
+				t.Fatalf("late references forwarded: %s", frames.String())
+			}
+			var row model.QuestionAgentLog
+			if err := gdb.First(&row, out.Id).Error; err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(row.Answer, "Late replacement") || !strings.Contains(row.Answer, `"title":"First"`) {
+				t.Fatalf("late state mutation: %s", row.Answer)
+			}
+			if terminal == "RunFinished" && row.Status != "SUCCEEDED" || terminal == "RunError" && row.Status != "FAILED" {
+				t.Fatalf("terminal status=%s", row.Status)
+			}
+		})
+	}
+}
+
+func TestCitationFrameSplitMixedDelimitersAndEOF(t *testing.T) {
+	frames := []string{"data: one\n\n", "data: two\r\n\r\n", "data: three\n\n", "data: eof"}
+	scanner := bufio.NewScanner(strings.NewReader(strings.Join(frames, "")))
+	scanner.Split(splitSSEFrames)
+	var got []string
+	for scanner.Scan() {
+		got = append(got, scanner.Text())
+	}
+	if scanner.Err() != nil || len(got) != len(frames) {
+		t.Fatalf("frames=%q err=%v", got, scanner.Err())
+	}
+	for i := range frames {
+		if got[i] != frames[i] {
+			t.Fatalf("frame %d=%q want %q", i, got[i], frames[i])
+		}
 	}
 }
 

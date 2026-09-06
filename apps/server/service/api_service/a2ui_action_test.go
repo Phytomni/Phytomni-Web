@@ -352,14 +352,17 @@ func configureA2uiActionRunServer(
 	actionBody string,
 	runStatus int,
 	runBody string,
-) {
+) func() (int32, int32) {
 	t.Helper()
+	var actionCalls, runCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/"+runID+"/a2ui-actions":
+			actionCalls.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(actionBody))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
+			runCalls.Add(1)
 			if runStatus >= 400 {
 				w.Header().Set("Content-Type", "application/problem+json")
 			} else {
@@ -376,6 +379,7 @@ func configureA2uiActionRunServer(
 		BaseURL: server.URL, ProxyEnabled: true,
 		UserAPIKey: "test-user-key", TimeoutSeconds: 5,
 	}
+	return func() (int32, int32) { return actionCalls.Load(), runCalls.Load() }
 }
 
 func seedPublicReviewPause(t *testing.T) {
@@ -455,6 +459,42 @@ func assertReviewReload(t *testing.T, row model.QuestionAgentLog, wantContent st
 }
 
 func TestA2uiAction_TerminalReviewPersistsPublicRunBeforeReturn(t *testing.T) {
+	t.Run("reviewed contract response persistence and reload", func(t *testing.T) {
+		setupA2uiActionTest(t)
+		seedPublicReviewPause(t)
+		content, refs, canonical := reviewedCitationFixture(t)
+		withReferences := func(raw string) string {
+			var envelope map[string]any
+			if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			envelope["result"].(map[string]any)["formatted"].(map[string]any)["references"] = refs
+			data, err := json.Marshal(envelope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(data)
+		}
+		configureA2uiActionRunServer(t, "run-1", withReferences(terminalReviewActionResponse(t, content)), http.StatusOK, withReferences(terminalReviewRunRecord(t, "run-1", content)))
+		out, err := NewService().A2uiAction(context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody))
+		if err != nil || out == nil || out.Status != http.StatusOK {
+			t.Fatalf("action %v %v", out, err)
+		}
+		row := loadA2uiActionRow(t)
+		assertReviewedAnswer(t, row.Answer)
+		assertActionReferenceParity(t, out.Body, row)
+		var returned struct {
+			Result struct {
+				Formatted struct{ References json.RawMessage }
+			}
+		}
+		if err := json.Unmarshal(out.Body, &returned); err != nil {
+			t.Fatal(err)
+		}
+		if string(returned.Result.Formatted.References) != string(canonical) || row.Status != "SUCCEEDED" || row.BotRunId != "run-1" || row.BotReportRevision != 1 {
+			t.Fatal("action canonical/identity drift")
+		}
+	})
 	setupA2uiActionTest(t)
 	seedPublicReviewPause(t)
 	answer := terminalReviewAnswerFixture(t)
@@ -479,6 +519,117 @@ func TestA2uiAction_TerminalReviewPersistsPublicRunBeforeReturn(t *testing.T) {
 	}
 	assertDurableReviewAnswer(t, row.Answer, answer)
 	assertReviewReload(t, row, answer)
+	assertActionReferenceParity(t, outcome.Body, row)
+}
+
+func assertActionReferenceParity(t *testing.T, body []byte, row model.QuestionAgentLog) {
+	t.Helper()
+	var public struct {
+		Result struct {
+			Formatted struct {
+				References json.RawMessage `json:"references"`
+			} `json:"formatted"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &public); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewService().queryDataFromStoredRowWithDB(context.Background(), model.Default(), "alice@x.com", row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		DocList json.RawMessage `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(reloaded.Answer), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if string(public.Result.Formatted.References) != string(stored.DocList) || !strings.Contains(string(stored.DocList), `"citation"`) {
+		t.Fatalf("public/reload references differ: %s / %s", public.Result.Formatted.References, stored.DocList)
+	}
+}
+
+func TestA2uiAction_TerminalReviewMalformedReferences(t *testing.T) {
+	for _, source := range []string{"public", "authoritative", "authoritative typed decode failure"} {
+		t.Run(source, func(t *testing.T) {
+			setupA2uiActionTest(t)
+			seedPublicReviewPause(t)
+			before := loadA2uiActionRow(t)
+			action := terminalReviewActionResponse(t, "body [1]")
+			record := terminalReviewRunRecord(t, "run-1", "body [1]")
+			corrupt := func(raw string) string {
+				var body map[string]interface{}
+				if err := json.Unmarshal([]byte(raw), &body); err != nil {
+					t.Fatal(err)
+				}
+				body["result"].(map[string]interface{})["formatted"].(map[string]interface{})["references"] = "private invalid root"
+				if source == "authoritative typed decode failure" {
+					body["result"].(map[string]interface{})["formatted"].(map[string]interface{})["answer"] = 42
+				}
+				encoded, err := json.Marshal(body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(encoded)
+			}
+			if source == "public" {
+				action = corrupt(action)
+			} else {
+				record = corrupt(record)
+			}
+			calls := configureA2uiActionRunServer(t, "run-1", action, http.StatusOK, record)
+			out, err := NewService().A2uiAction(context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody))
+			if out != nil || !errors.Is(err, ErrA2uiUpstreamProtocol) || strings.Contains(err.Error(), "private") {
+				t.Fatalf("out=%+v err=%v", out, err)
+			}
+			actionCalls, runCalls := calls()
+			wantRunCalls := int32(1)
+			if source == "public" {
+				wantRunCalls = 0
+			}
+			if actionCalls != 1 || runCalls != wantRunCalls {
+				t.Fatalf("protocol failure retried: action=%d run=%d", actionCalls, runCalls)
+			}
+			after := loadA2uiActionRow(t)
+			if after.Answer != before.Answer || after.Status != before.Status || after.BotProjectionJSON != before.BotProjectionJSON || after.BotReportRevision != before.BotReportRevision {
+				t.Fatal("malformed action mutated public projection")
+			}
+		})
+	}
+}
+
+func TestA2uiAction_TerminalReviewReferenceSlots(t *testing.T) {
+	setupA2uiActionTest(t)
+	seedPublicReviewPause(t)
+	withSlots := func(raw string) string {
+		var body map[string]interface{}
+		if err := json.Unmarshal([]byte(raw), &body); err != nil {
+			t.Fatal(err)
+		}
+		body["result"].(map[string]interface{})["formatted"].(map[string]interface{})["references"] = []interface{}{map[string]string{"title": "First"}, nil, map[string]string{"title": "Third"}}
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(encoded)
+	}
+	configureA2uiActionRunServer(t, "run-1", withSlots(terminalReviewActionResponse(t, "body [3]")), http.StatusOK, withSlots(terminalReviewRunRecord(t, "run-1", "body [3]")))
+	out, err := NewService().A2uiAction(context.Background(), "alice@x.com", "dlg-1", []byte(validA2uiActionBody))
+	if err != nil || out == nil {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	row := loadA2uiActionRow(t)
+	assertActionReferenceParity(t, out.Body, row)
+	var answer struct {
+		Content string            `json:"content"`
+		DocList []json.RawMessage `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(row.Answer), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Content != "body [3]" || len(answer.DocList) != 3 || !strings.Contains(string(answer.DocList[1]), "Reference details unavailable.") || !strings.Contains(string(answer.DocList[2]), `"title":"Third"`) {
+		t.Fatalf("reference slots changed: %s", row.Answer)
+	}
 }
 
 func TestA2uiAction_TerminalReviewPersistsPrivateReplacementBeforeReturn(t *testing.T) {
@@ -514,6 +665,7 @@ func TestA2uiAction_TerminalReviewPersistsPrivateReplacementBeforeReturn(t *test
 	}
 	assertDurableReviewAnswer(t, row.Answer, answer)
 	assertReviewReload(t, row, answer)
+	assertActionReferenceParity(t, outcome.Body, row)
 }
 
 func TestA2uiAction_TerminalReviewFetchFailureDoesNotMutatePublicPause(t *testing.T) {

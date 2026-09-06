@@ -73,7 +73,7 @@ describe("StreamMessage", () => {
     expect(w.vm.$.provides).not.toHaveProperty("a2uiTransport");
   });
 
-  it("leaves [N] literal when ns is absent (reference-free streaming)", () => {
+  it("shows compact inactive citation text when ns is absent", () => {
     const blocks: ContentBlock[] = [
       {
         type: "markdown",
@@ -82,13 +82,12 @@ describe("StreamMessage", () => {
       },
     ];
     const w = mountWithApp(StreamMessage, { props: { blocks } });
-    // Scope gate: without ns / references, ScientificMarkdown keeps [N] literal.
-    expect(w.html()).toContain("[1]");
+    expect(w.get(".scientific-citation").text()).toBe("1");
     expect(w.html()).not.toContain('href="#');
     expect(w.find(".doc-list").exists()).toBe(false);
   });
 
-  it("keeps [N] literal when ns is set but references are empty or absent", () => {
+  it("keeps compact citations inactive when references are empty or absent", () => {
     const blocks: ContentBlock[] = [
       {
         type: "markdown",
@@ -101,7 +100,7 @@ describe("StreamMessage", () => {
         props: { blocks, ns: "m0", references },
         global: { mocks: { $t: (k: string) => k } },
       });
-      expect(w.html()).toContain("[1]");
+      expect(w.get(".scientific-citation").text()).toBe("1");
       expect(w.html()).not.toContain("#m0-ref-");
       expect(w.html()).not.toContain('href="#');
       expect(w.find(".doc-list").exists()).toBe(false);
@@ -124,15 +123,15 @@ describe("StreamMessage", () => {
       },
       global: { mocks: { $t: (k: string) => k } },
     });
-    // Before references: empty ns → literal marker, no rows.
-    expect(w.html()).toContain("[1]");
+    // Before references: empty ns -> compact inactive marker, no rows.
+    expect(w.get(".scientific-citation").text()).toBe("1");
     expect(w.html()).not.toContain('class="citation-ref"');
     expect(w.find(".doc-list").exists()).toBe(false);
 
     // Reactive arrival of real references + page ns (same StreamMessage instance).
     await w.setProps({
       ns: "m2",
-      references: [{ title: "Paper One" }],
+      references: [{ citation: { runs: [{ text: "Paper One" }], links: [] } }],
     });
     await nextTick();
 
@@ -158,7 +157,10 @@ describe("StreamMessage", () => {
           { type: "markdown", authority: "web", text: "Evidence [1-2]." },
         ],
         ns: "m-citation",
-        references: [{ title: "Reference one" }, { title: "Reference two" }],
+        references: [
+          { citation: { runs: [{ text: "Reference one" }], links: [] } },
+          { citation: { runs: [{ text: "Reference two" }], links: [] } },
+        ],
       },
     });
     await vi.dynamicImportSettled();
@@ -195,11 +197,19 @@ describe("StreamMessage", () => {
       { type: "markdown", authority: "web", text: "Claim [1]." },
     ];
     const a = mountWithApp(StreamMessage, {
-      props: { blocks, ns: "m0", references: [{ title: "A" }] },
+      props: {
+        blocks,
+        ns: "m0",
+        references: [{ citation: { runs: [{ text: "A" }], links: [] } }],
+      },
       global: { mocks: { $t: (k: string) => k } },
     });
     const b = mountWithApp(StreamMessage, {
-      props: { blocks, ns: "m1", references: [{ title: "B" }] },
+      props: {
+        blocks,
+        ns: "m1",
+        references: [{ citation: { runs: [{ text: "B" }], links: [] } }],
+      },
       global: { mocks: { $t: (k: string) => k } },
     });
     const none = mountWithApp(StreamMessage, {
@@ -214,7 +224,7 @@ describe("StreamMessage", () => {
     expect(a.html()).not.toContain('href="#m1-ref-1"');
     expect(b.html()).not.toContain('href="#m0-ref-1"');
 
-    expect(none.html()).toContain("[1]");
+    expect(none.get(".scientific-citation").text()).toBe("1");
     expect(none.html()).not.toContain('href="#');
     expect(none.find(".doc-list").exists()).toBe(false);
   });

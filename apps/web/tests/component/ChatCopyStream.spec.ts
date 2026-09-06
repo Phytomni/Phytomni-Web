@@ -10,6 +10,8 @@ import { chatContentToText } from "@/views/chat/messageTypes";
 import type { ChatMessage } from "@/views/chat/types";
 import { MESSAGE_SHORT_GENERIC } from "../fixtures/chat";
 import { createTestAppContext } from "../helpers/test-app-context";
+import contractReferences from "../fixtures/cited-contract.generated.json";
+import contract from "../../../server/common/document_format/testdata/cited-contract.json";
 
 const testState = vi.hoisted(() => ({
   chatStates: null as ReturnType<
@@ -39,14 +41,6 @@ vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
     },
   };
 });
-
-vi.mock("@/views/chat/composables/useCopyDownload", () => ({
-  useCopyDownload: () => ({
-    fallbackCopyText: (text: string) => testState.copiedText(text),
-    downloadFile: vi.fn(),
-    getFileDownUrl: vi.fn(),
-  }),
-}));
 
 vi.mock("@/api/chat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/chat")>();
@@ -85,6 +79,10 @@ const CHAT_SOURCE = readFileSync(
 );
 
 const VISIBLE_ANSWER = "Rice has 12 chromosomes.";
+const originalClipboard = Object.getOwnPropertyDescriptor(
+  navigator,
+  "clipboard"
+);
 
 function streamAssistant(
   toolName: ChatMessage["tool_name"],
@@ -204,15 +202,47 @@ beforeEach(() => {
   appContext = createTestAppContext({ locale: "en-US" });
   testState.chatStates = null;
   testState.copiedText.mockReset();
+  testState.copiedText.mockResolvedValue(undefined);
+  vi.stubGlobal("isSecureContext", true);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: testState.copiedText },
+  });
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  if (originalClipboard)
+    Object.defineProperty(navigator, "clipboard", originalClipboard);
+  else Reflect.deleteProperty(navigator, "clipboard");
   while (mountedWrappers.length) {
     mountedWrappers.pop()?.unmount();
   }
 });
 
 describe("stream family copy", () => {
+  it("writes every reviewed sentence and ordered link to the actual clipboard boundary", async () => {
+    await copyAssistant([
+      { role: "user", content: "Synthetic citation contract" },
+      streamAssistant("KnowledgeAgent", contract.content, {
+        doc_list: contractReferences,
+      }),
+    ]);
+    const lines = contract.expected.sentences.map((sentence, i) => {
+      const links = contract.expected.links.filter(
+        (link) => link.index === i + 1
+      );
+      return (
+        `${i + 1}. ${sentence}` +
+        (links.length
+          ? "\n" + links.map((link) => `${link.label}: ${link.href}`).join("\n")
+          : "")
+      );
+    });
+    expect(testState.copiedText.mock.calls[0]?.[0]).toBe(
+      contract.content + "\nReferences:\n" + lines.join("\n\n")
+    );
+  });
   it("copy handler reads the visible message text, not the artifact preview", () => {
     expect(CHAT_SOURCE).toContain('@copy="handleMessageCopy(message, index)"');
     expect(CHAT_SOURCE).toContain("messagePlainText(message)");
@@ -281,7 +311,14 @@ describe("stream family copy", () => {
     await copyAssistant([
       { role: "user", content: "cite this" },
       streamAssistant("ChatAgent", VISIBLE_ANSWER, {
-        doc_list: [{ title: "Complete source document" }],
+        doc_list: [
+          {
+            citation: {
+              runs: [{ text: "Complete source document" }],
+              links: [],
+            },
+          },
+        ],
       }),
     ]);
     expect(testState.copiedText).toHaveBeenCalledWith(

@@ -6,6 +6,7 @@ import { normalizePositiveTaskRowId } from "@/api/task";
 import i18n from "@/locales";
 import { downloadRenderingFile } from "@/utils/download-rendering-file";
 import type { DisplayReference } from "@/utils/reference-renderer";
+import { referenceListMarkdown } from "@/utils/citation-presentation";
 
 export type DeepGenomeMainContentValue =
   HTMLElement | { $el?: Element | null } | null;
@@ -234,10 +235,10 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     } catch (error) {
       ElMessage.error(i18n.global.t("chat.printFailed"));
       console.error("Print error:", error);
+    } finally {
+      printContainer.remove();
+      style.remove();
     }
-
-    // remove the print container
-    document.body.removeChild(printContainer);
   };
 
   const downloadMarkdown = () => {
@@ -247,32 +248,10 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
 
     // add the references section
     if (displayReferences.value && displayReferences.value.length > 0) {
-      convertedMarkdown += "\n\n## References\n";
-
-      displayReferences.value.forEach((ref, index) => {
-        const refIndex = index + 1;
-        let refText = "";
-
-        // extract plain text from HTML, stripping HTML tags
-        if (ref.html) {
-          // create a temporary element to parse the HTML
-          const tempElement = document.createElement("div");
-          tempElement.innerHTML = ref.html;
-
-          // get plain text and drop the reference number (we add it manually)
-          let plainText =
-            tempElement.textContent || tempElement.innerText || "";
-          plainText = plainText.trim();
-
-          // remove the leading number and dot (e.g. "1. ")
-          plainText = plainText.replace(/^\d+\.\s+/, "");
-
-          refText = plainText;
-        }
-
-        // add the formatted reference entry
-        convertedMarkdown += `${refIndex}. ${refText}\n`;
-      });
+      convertedMarkdown +=
+        "\n\n## References\n\n" +
+        referenceListMarkdown(displayReferences.value) +
+        "\n";
     }
 
     // create a Blob and download it

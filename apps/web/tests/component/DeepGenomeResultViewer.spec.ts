@@ -88,6 +88,30 @@ async function settleMarkdown(): Promise<void> {
 }
 
 describe("DeepGenomeResultViewer — shared document boundary", () => {
+  it("renders canonical references and retains rejected slots without interpreting HTML", () => {
+    const wrapper = render("# Report", {
+      references: [
+        {
+          citation: {
+            runs: [
+              { text: '<img src=x onerror="alert(1)">' },
+              { text: "Journal", italic: true },
+            ],
+            links: [{ label: "Article", href: "https://doi.org/10.1000/test" }],
+          },
+        },
+        null,
+        { citation: { runs: [{ text: "Third source" }], links: [] } },
+      ],
+    });
+    expect(wrapper.find("img").exists()).toBe(false);
+    expect(wrapper.get("#deep-test-ref-1 em").text()).toBe("Journal");
+    expect(wrapper.get("#deep-test-ref-1 a").attributes("href")).toBe(
+      "https://doi.org/10.1000/test"
+    );
+    expect(wrapper.get("#deep-test-ref-3").text()).toContain("Third source");
+    expect(wrapper.findAll(".deep-genome-reference")).toHaveLength(3);
+  });
   it("renders one ScientificMarkdown body and keeps references outside the report body sink", async () => {
     const wrapper = render("# Report\n\n## Evidence\n\nBody");
     await settleMarkdown();
@@ -96,7 +120,7 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.find("article.deep-genome-document").exists()).toBe(true);
     expect(VIEWER_TEMPLATE).not.toContain("contentBlocks");
     expect(VIEWER_TEMPLATE).not.toContain('v-html="block');
-    expect(VIEWER_TEMPLATE.match(/\bv-html\s*=/g)).toHaveLength(1);
+    expect(VIEWER_TEMPLATE.match(/\bv-html\s*=/g)).toBeNull();
   });
 
   it("feeds shared heading metadata into the responsive TOC and keeps heading scroll ownership", async () => {
@@ -218,7 +242,7 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(
       wrapper.findAll(".scientific-citation").map((node) => node.text())
-    ).toEqual(["[1-3]", "1", "[1-3]"]);
+    ).toEqual(["1–3", "1", "1–3"]);
   });
 
   it("keeps hostile raw HTML inert while leaving only controlled resource nodes active", async () => {
@@ -335,6 +359,45 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.emitted("resource-activate")).toEqual([
       [{ id: "report-1", kind: "attachment" }],
     ]);
+  });
+
+  it("focuses and highlights inline grouped destinations without crossing namespaces", async () => {
+    const references = [1, 2, 3].map((index) => ({
+      citation: { runs: [{ text: `Source ${index}.` }], links: [] },
+    }));
+    const first = render("Evidence [1-2], then [3].", { references });
+    const second = render("Evidence [1-2].", { references, ns: "other" });
+    document.body.append(first.element, second.element);
+    await settleMarkdown();
+
+    await first
+      .get('.scientific-citation__link[href="#deep-test-ref-1"]')
+      .trigger("click");
+    expect(document.activeElement).toBe(first.get("#deep-test-ref-1").element);
+    expect(first.get("#deep-test-ref-1").attributes("aria-current")).toBe(
+      "true"
+    );
+    expect(
+      first.findAll(".is-citation-target").map((row) => row.attributes("id"))
+    ).toEqual(["deep-test-ref-1", "deep-test-ref-2"]);
+    expect(second.findAll(".is-citation-target")).toHaveLength(0);
+
+    await first
+      .get('.scientific-citation__link[href="#deep-test-ref-3"]')
+      .trigger("click");
+    expect(document.activeElement).toBe(first.get("#deep-test-ref-3").element);
+    expect(
+      first.findAll(".is-citation-target").map((row) => row.attributes("id"))
+    ).toEqual(["deep-test-ref-3"]);
+    expect(
+      first.get("#deep-test-ref-1").attributes("aria-current")
+    ).toBeUndefined();
+    await first.setProps({ references: [...references] });
+    expect(first.findAll(".is-citation-target, [aria-current]")).toHaveLength(
+      0
+    );
+    first.element.remove();
+    second.element.remove();
   });
 
   it("exposes typed PDF and Markdown download methods", () => {

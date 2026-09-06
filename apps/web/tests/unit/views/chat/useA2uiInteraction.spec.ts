@@ -434,7 +434,13 @@ describe("useA2uiInteraction", () => {
     const reply = deferred<A2uiActionResponse>();
     const transport = vi.fn(() => reply.promise);
     const answer = `LIVE-START\n${"review ".repeat(900)}\nLIVE-END`;
-    const references = [{ title: "Review source", pm: "12345" }];
+    const references = [
+      {
+        title: "Review source",
+        pm: "12345",
+        citation: { runs: [{ text: "Canonical review source" }], links: [] },
+      },
+    ];
     const followUpQuestions = ["Which breeding evidence should be compared?"];
     const message = messageWith(transport, {
       tool_name: "ReviewAgent",

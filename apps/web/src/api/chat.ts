@@ -197,13 +197,17 @@ export function resumeMessageStream(opts: {
 }
 
 // Query conversation (all child messages of a conversation)
-export const getAnswerCheck = (data: {
-  dialogue_id: string;
-}): Promise<ApiEnvelope<ChatHistoryRecord[]>> =>
+export const getAnswerCheck = (
+  data: {
+    dialogue_id: string;
+  },
+  signal?: AbortSignal
+): Promise<ApiEnvelope<ChatHistoryRecord[]>> =>
   requestApi(
     {
       url: `/api/v1/conversations/${data.dialogue_id}/messages`,
       method: "get",
+      ...(signal ? { signal } : {}),
     },
     decodeChatHistory
   );

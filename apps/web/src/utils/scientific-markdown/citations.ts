@@ -132,9 +132,9 @@ function isInteractiveCitation(
 
 function citationNode(
   parsed: ParsedCitation,
-  options: CitationOptions,
-  display = `[${parsed.display}]`
+  options: CitationOptions
 ): MdNode {
+  const display = parsed.display.replace(/-/g, "–");
   const interactive = isInteractiveCitation(parsed, options);
   const hChildren = interactive
     ? [
@@ -183,11 +183,7 @@ function rewriteSupTriplets(parent: MdParent, options: CitationOptions): void {
       ) {
         const parsed = parseCitationBody(body.value?.trim() ?? "");
         if (parsed) {
-          parent.children.splice(
-            index,
-            3,
-            citationNode(parsed, options, body.value?.trim() ?? "")
-          );
+          parent.children.splice(index, 3, citationNode(parsed, options));
           continue;
         }
       }
@@ -270,7 +266,7 @@ function rewriteTextCitations(
           value: node.value.slice(offset, matchIndex),
         });
       }
-      parts.push(citationNode(parsed, options, match[0]));
+      parts.push(citationNode(parsed, options));
       offset = matchIndex + match[0].length;
     }
     if (!parts.length) continue;

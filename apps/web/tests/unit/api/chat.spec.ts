@@ -22,6 +22,7 @@ import {
   getConversationArtifactFile,
   getAnalystAgentLog,
   getQuery,
+  getAnswerCheck,
   getQueryAbortable,
   getReactionType,
   retryConversationResultArchive,
@@ -39,6 +40,33 @@ describe("query routing intent transport", () => {
   beforeEach(() => {
     mockRequest.mockReset();
     mockCreateAbortableRequest.mockReset();
+  });
+
+  it("forwards the owner read's captured cancellation signal to the existing transport", async () => {
+    const controller = new AbortController();
+    mockRequest.mockImplementationOnce(
+      (config) =>
+        new Promise((_resolve, reject) => {
+          config.signal?.addEventListener?.(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          );
+        })
+    );
+    const pending = getAnswerCheck(
+      { dialogue_id: "owner-dialogue" },
+      controller.signal
+    );
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/v1/conversations/owner-dialogue/messages",
+        method: "get",
+        signal: controller.signal,
+      })
+    );
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it.each([

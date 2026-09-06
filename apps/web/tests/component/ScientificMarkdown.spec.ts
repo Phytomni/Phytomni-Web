@@ -3,10 +3,39 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mountWithApp } from "../helpers/test-app-context";
 
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import citationGrammar from "../../../server/common/document_format/testdata/citation-grammar.json";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ScientificMarkdown", () => {
+  it.each(citationGrammar)(
+    "shares source-context citation grammar: $name",
+    async (fixture) => {
+      const wrapper = mountWithApp(ScientificMarkdown, {
+        props: {
+          source: fixture.source,
+          citationNamespace: "grammar",
+          referenceCount: 999,
+        },
+      });
+      await vi.dynamicImportSettled();
+      expect(
+        wrapper.findAll(".scientific-citation").map((node) => node.text())
+      ).toEqual(fixture.displays);
+      expect(
+        wrapper
+          .findAll(".scientific-citation__link")
+          .map((node) => node.attributes("href"))
+      ).toEqual(fixture.indices.map((indices) => `#grammar-ref-${indices[0]}`));
+      for (const link of fixture.links ?? []) {
+        const rendered = wrapper
+          .findAll("a")
+          .find((node) => node.attributes("href") === link.href);
+        expect(rendered?.text()).toBe(link.label);
+      }
+      wrapper.unmount();
+    }
+  );
   it("renders GFM tables, math, escaped table pipes, and grouped citations", async () => {
     const markdown = [
       "| Gene | Score | Note |",
@@ -35,7 +64,7 @@ describe("ScientificMarkdown", () => {
     expect(wrapper.text()).toContain("escaped | pipe");
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(wrapper.find(".katex [style]").exists()).toBe(true);
-    expect(wrapper.get(".scientific-citation").text()).toBe("[1-3]");
+    expect(wrapper.get(".scientific-citation").text()).toBe("1–3");
   });
 
   it("keeps raw HTML inert, including glued attributes, unsafe URLs, and Mermaid fences", async () => {
@@ -84,7 +113,7 @@ describe("ScientificMarkdown", () => {
     );
     expect(
       wrapper.findAll(".scientific-citation").map((citation) => citation.text())
-    ).toEqual(["1", "[1-4]"]);
+    ).toEqual(["1", "1–4"]);
     expect(wrapper.text()).toContain('<sup class="not-a-citation">1</sup>');
     expect(wrapper.text()).toContain("<sup><em>1</em></sup>");
     expect(wrapper.text()).toContain("<sup>1</sub>");
@@ -151,7 +180,7 @@ describe("ScientificMarkdown", () => {
     await vi.dynamicImportSettled();
     expect(
       wrapper.findAll(".scientific-citation__link").map((link) => link.text())
-    ).toEqual(["[3]"]);
+    ).toEqual(["3"]);
     expect(wrapper.findAll("a a")).toHaveLength(0);
     expect(wrapper.text()).toContain("Entity & escaped [document:1]");
     expect(wrapper.text()).toContain("Evidence [document:2]");
@@ -168,10 +197,7 @@ describe("ScientificMarkdown", () => {
 
     await vi.dynamicImportSettled();
     const links = wrapper.findAll(".scientific-citation__link");
-    expect(links.map((link) => link.text())).toEqual([
-      "[document:1]",
-      "[document 3, 4]",
-    ]);
+    expect(links.map((link) => link.text())).toEqual(["1", "3,4"]);
 
     await links[1].trigger("click");
     expect(wrapper.emitted("citation-activate")).toEqual([
@@ -237,7 +263,7 @@ describe("ScientificMarkdown", () => {
 
     await vi.dynamicImportSettled();
     expect(wrapper.text()).toContain("<span>x</span> Evidence");
-    expect(wrapper.get(".scientific-citation__link").text()).toBe("[1]");
+    expect(wrapper.get(".scientific-citation__link").text()).toBe("1");
   });
 
   it("opens only external HTTP links in a new tab", async () => {

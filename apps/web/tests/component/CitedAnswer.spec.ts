@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { defineComponent } from "vue";
+import { defineComponent, nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
 
 import CitedAnswer from "@/components/CitedAnswer.vue";
+import contractReferences from "../fixtures/cited-contract.generated.json";
+import contract from "../../../server/common/document_format/testdata/cited-contract.json";
 
 const CITED_ANSWER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/CitedAnswer.vue"),
@@ -39,6 +41,75 @@ const mountCited = (props: Record<string, unknown>) =>
   });
 
 describe("CitedAnswer", () => {
+  it("renders the reviewed contract with real Markdown, rows, and namespace-local group navigation", async () => {
+    const wrappers = ["contract-a", "contract-b"].map((ns) =>
+      mountWithApp(CitedAnswer, {
+        props: {
+          ns,
+          content: contract.content,
+          references: contractReferences,
+        },
+        attachTo: document.body,
+      })
+    );
+    try {
+      await vi.dynamicImportSettled();
+      await nextTick();
+      for (const [message, wrapper] of wrappers.entries()) {
+        const ns = message === 0 ? "contract-a" : "contract-b";
+        const rows = wrapper.findAll(".doc-list-item");
+        expect(
+          rows.map((row) => row.get(".citation-reference-row__sentence").text())
+        ).toEqual(contract.expected.sentences);
+        expect(rows.map((row) => row.attributes("id"))).toEqual(
+          contract.expected.sentences.map((_, i) => `${ns}-ref-${i + 1}`)
+        );
+        const emphasis = rows.flatMap((row, i) =>
+          row.findAll("em, strong").map((node) => ({
+            index: i + 1,
+            text: node.text(),
+            ...(node.element.tagName === "EM"
+              ? { italic: true }
+              : { bold: true }),
+          }))
+        );
+        expect(emphasis).toEqual(contract.expected.emphasis);
+        expect(
+          rows.flatMap((row, i) =>
+            row.findAll("a").map((node) => ({
+              index: i + 1,
+              label: node.text(),
+              href: node.attributes("href"),
+            }))
+          )
+        ).toEqual(contract.expected.links);
+        const marks = wrapper.findAll("sup.scientific-citation");
+        expect(marks.map((node) => node.text())).toEqual(
+          contract.expected.citations.map((mark) => mark.text)
+        );
+        for (const [i, expected] of contract.expected.citations.entries()) {
+          expect(marks[i].find("a").exists()).toBe(expected.active);
+          if (!expected.active) continue;
+          expect(marks[i].get("a").attributes("href")).toBe(
+            `#${ns}-ref-${expected.indices[0]}`
+          );
+          await marks[i].get("a").trigger("click");
+          expect(document.activeElement).toBe(
+            rows[expected.indices[0] - 1].element
+          );
+          expect(
+            wrapper
+              .findAll(".is-citation-target")
+              .map((row) => row.attributes("id"))
+          ).toEqual(expected.indices.map((index) => `${ns}-ref-${index}`));
+        }
+        expect(wrapper.get(".inline-code-tag").text()).toBe("[4]");
+        expect(wrapper.text()).toContain("escaped [5] are not citations.");
+      }
+    } finally {
+      wrappers.forEach((wrapper) => wrapper.unmount());
+    }
+  });
   it("keeps the cited-answer wrapper shrinkable around long cited content", () => {
     expect(CITED_ANSWER_SOURCE).toContain("min-width: 0;");
     expect(CITED_ANSWER_SOURCE).toContain("max-width: 100%;");
@@ -49,7 +120,15 @@ describe("CitedAnswer", () => {
     const wrapper = mountCited({
       content: "body",
       ns: "cited-rows",
-      references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],
+      references: [
+        { citation: { runs: [{ text: "Doc A" }], links: [] } },
+        {
+          citation: {
+            runs: [{ text: "Smith. T. " }, { text: "Nature", italic: true }],
+            links: [],
+          },
+        },
+      ],
     });
     const rows = wrapper.findAll(".doc-list-item");
     expect(rows).toHaveLength(2);

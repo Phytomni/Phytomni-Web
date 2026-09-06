@@ -15,19 +15,19 @@
       ]"
       tabindex="-1"
       :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
-      v-html="ref.html"
-    ></div>
+    >
+      <CitationReferenceRow :index="ref.index" :citation="ref.citation" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 
-// Safe reference-list rows for cited-family and live streaming answers.
-// The only v-html sink is fed exclusively by buildDisplayReferences output
-// (escapeHtml + sanitizeHref); never bind a raw href or agent HTML.
+// Typed rows render only canonical text, semantic emphasis and validated links.
 const props = defineProps<{
   references?: readonly unknown[];
   /** Developer-owned page namespace (e.g. m<index>); never agent text. */
@@ -102,24 +102,5 @@ defineExpose({ focusReferences });
 .doc-list-item:focus-visible {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: 2px;
-}
-
-:deep(.doc-citation) {
-  line-height: 1.6;
-}
-
-:deep(.doc-link-inline) {
-  overflow-wrap: anywhere;
-  word-break: break-all;
-}
-
-:deep(.doi-link),
-:deep(.pmid-link) {
-  color: var(--el-color-primary);
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
 }
 </style>

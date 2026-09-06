@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref, computed, nextTick } from "vue";
 import { buildBinaryResponse } from "../../helpers/apiBuilders";
 import { mustGet } from "../../helpers/mockFactories";
+import { buildDisplayReferences } from "@/utils/reference-renderer";
+import contractReferences from "../../fixtures/cited-contract.generated.json";
+import contract from "../../../../server/common/document_format/testdata/cited-contract.json";
 
 // file-saver mock — hoisted so the vi.mock factory can reference it
 const mockSaveAs = vi.hoisted(() => vi.fn());
@@ -20,12 +23,52 @@ vi.mock("@/api/chat", () => ({
 }));
 
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
+import type { DisplayReference } from "@/utils/reference-renderer";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Characterization test — downloadMarkdown
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("useDeepGenomeDownloads — downloadMarkdown", () => {
+  it("produces the reviewed eight-slot Markdown bibliography from the actual Blob", async () => {
+    const { downloadMarkdown } = useDeepGenomeDownloads(
+      makeOpts(
+        contract.content,
+        "contract.md",
+        buildDisplayReferences(contractReferences, "contract")
+      )
+    );
+    downloadMarkdown();
+    const [blob] = mockSaveAs.mock.calls[0];
+    const text = await (blob as Blob).text();
+    expect(text.startsWith(contract.content + "\n\n## References\n\n")).toBe(
+      true
+    );
+    const bibliography = text.split("\n\n## References\n\n")[1];
+    const sentences = bibliography
+      .split("\n")
+      .filter((line) => /^\d+\. /.test(line))
+      .map((line) =>
+        line
+          .replace(/^\d+\. /, "")
+          .replaceAll("*", "")
+          .replace(/\\(.)/g, "$1")
+      );
+    expect(sentences).toEqual(contract.expected.sentences);
+    const links = [...bibliography.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)].map(
+      (match) => ({ label: match[1], href: match[2].replace(/^<|>$/g, "") })
+    );
+    expect(links).toEqual(
+      contract.expected.links.map(({ label, href }) => ({ label, href }))
+    );
+    for (const emphasis of contract.expected.emphasis) {
+      const row = bibliography
+        .split("\n")
+        .find((line) => line.startsWith(`${emphasis.index}. `));
+      const marker = "bold" in emphasis ? "**" : "*";
+      expect(row).toContain(marker + emphasis.text + marker);
+    }
+  });
   beforeEach(() => {
     mockSaveAs.mockReset();
   });
@@ -33,7 +76,7 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
   function makeOpts(
     markdown: string,
     filename: string | undefined,
-    refs: Array<{ html?: string; id?: string }>
+    refs: DisplayReference[]
   ) {
     return {
       props: { markdown, filename },
@@ -75,8 +118,21 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
 
   it("serialized output includes ## References and entries when references exist", async () => {
     const refs = [
-      { html: "<div>1. Smith et al. 2023</div>", id: "ref-1" },
-      { html: "<div>2. Jones 2022</div>", id: "ref-2" },
+      {
+        citation: {
+          runs: [
+            { text: "Journal", italic: true },
+            { text: " " },
+            { text: "12", bold: true },
+          ],
+          links: [
+            { label: "PubMed", href: "https://pubmed.ncbi.nlm.nih.gov/123/" },
+          ],
+        },
+        id: "m-ref-1",
+        index: 1,
+      },
+      { citation: null, id: "m-ref-2", index: 2 },
     ];
     const opts = makeOpts("Body text.", "out.md", refs);
     const { downloadMarkdown } = useDeepGenomeDownloads(opts);
@@ -85,10 +141,9 @@ describe("useDeepGenomeDownloads — downloadMarkdown", () => {
     const [blob] = mockSaveAs.mock.calls[0];
     const text = await (blob as Blob).text();
 
-    expect(text).toContain("## References");
-    // Numbering starts at 1, with the original numbering prefix in the HTML removed
-    expect(text).toContain("1. Smith et al. 2023");
-    expect(text).toContain("2. Jones 2022");
+    expect(text).toBe(
+      "Body text.\n\n## References\n\n1. *Journal* **12**\n\n   [PubMed](https://pubmed.ncbi.nlm.nih.gov/123/)\n\n2. Reference details unavailable.\n"
+    );
   });
 
   it("does not append a References section when there are no references", async () => {
@@ -195,6 +250,86 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
 
     await downloadPDF();
     expect(toolbarWasCloned).toBe(false);
+    printSpy.mockRestore();
+  });
+
+  it("prints rendered canonical reference links without clipping or leaked print styles", async () => {
+    const fakeEl = document.createElement("div");
+    const reference = document.createElement("div");
+    reference.className = "doc-list-item";
+    reference.style.height = "20px";
+    reference.style.maxHeight = "20px";
+    reference.style.minHeight = "20px";
+    reference.style.overflow = "hidden";
+    reference.style.position = "relative";
+    reference.innerHTML =
+      '<div class="citation-reference-row"><span>1.</span><span><em>Journal</em> <strong>12</strong></span><a href="https://pubmed.ncbi.nlm.nih.gov/123/">PubMed</a></div>';
+    fakeEl.appendChild(reference);
+    const mainContentRef = ref({ $el: fakeEl });
+    const originalStyleCount = document.head.querySelectorAll("style").length;
+    let printedText = "";
+    let printedHref = "";
+    let printedStyle = "";
+    const printSpy = spyOnPrint().mockImplementation(() => {
+      const printReference = document
+        .querySelector("#print-container")
+        ?.querySelector<HTMLElement>(".doc-list-item");
+      printedText = printReference?.textContent ?? "";
+      printedHref =
+        printReference?.querySelector("a")?.getAttribute("href") ?? "";
+      printedStyle = [
+        printReference?.style.height,
+        printReference?.style.maxHeight,
+        printReference?.style.minHeight,
+        printReference?.style.overflow,
+        printReference?.style.position,
+      ].join("|");
+    });
+
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef,
+      displayReferences: computed(() => []),
+    });
+
+    await downloadPDF();
+
+    expect(printedText).toBe("1.Journal 12PubMed");
+    expect(printedHref).toBe("https://pubmed.ncbi.nlm.nih.gov/123/");
+    expect(printedStyle).toBe("auto|none|auto|visible|static");
+    expect(document.querySelector("#print-container")).toBeNull();
+    expect(document.head.querySelectorAll("style")).toHaveLength(
+      originalStyleCount
+    );
+    printSpy.mockRestore();
+  });
+
+  it("cleans up the temporary print surface when native print throws", async () => {
+    const fakeEl = document.createElement("div");
+    fakeEl.appendChild(document.createElement("p"));
+    const originalStyleCount = document.head.querySelectorAll("style").length;
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const printSpy = spyOnPrint().mockImplementation(() => {
+      throw new Error("print unavailable");
+    });
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef: ref({ $el: fakeEl }),
+      displayReferences: computed(() => []),
+    });
+
+    await expect(downloadPDF()).resolves.toBeUndefined();
+
+    expect(document.querySelector("#print-container")).toBeNull();
+    expect(document.head.querySelectorAll("style")).toHaveLength(
+      originalStyleCount
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      "Print error:",
+      expect.objectContaining({ message: "print unavailable" })
+    );
     printSpy.mockRestore();
   });
 

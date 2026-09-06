@@ -73,6 +73,18 @@ func collectBlocks(n ast.Node, src []byte, fetch ImageFetcher, budget *imageBudg
 
 func collectTable(n ast.Node, src []byte, fetch ImageFetcher, budget *imageBudget) block {
 	tbl := block{kind: blockTable}
+	if table, ok := n.(*east.Table); ok {
+		for _, alignment := range table.Alignments {
+			value := alignLeft
+			if alignment == east.AlignCenter {
+				value = alignCenter
+			}
+			if alignment == east.AlignRight {
+				value = alignRight
+			}
+			tbl.alignments = append(tbl.alignments, value)
+		}
+	}
 	for row := n.FirstChild(); row != nil; row = row.NextSibling() {
 		var cells [][]inline
 		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
@@ -89,6 +101,10 @@ func collectInlines(n ast.Node, src []byte, st style, fetch ImageFetcher, budget
 	var out []inline
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch t := c.(type) {
+		case *numericCitationNode:
+			out = append(out, inline{kind: inlineText, text: t.mark.text, style: st, citation: &t.mark})
+		case *citationLiteralNode:
+			out = append(out, inline{kind: inlineText, text: t.value, style: st})
 		case *ast.Text:
 			out = append(out, inline{kind: inlineText, text: string(t.Segment.Value(src)), style: st})
 			if t.SoftLineBreak() {

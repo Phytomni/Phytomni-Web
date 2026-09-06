@@ -1,4 +1,5 @@
 import type { A2uiSurfaceRuntime } from "./streaming/a2uiContract";
+import type { CitationPresentation } from "@/utils/citation-presentation";
 
 /** JSON-shaped content accepted by the blocking and streamed chat surfaces. */
 export type ChatContent =
@@ -14,6 +15,7 @@ export type AgentStep = ChatContent;
 
 /** Citation rows are provider-shaped, but their known display fields are scalar. */
 export interface CitationDocument {
+  citation: CitationPresentation | null;
   au?: string | number | null;
   ti?: string | number | null;
   so?: string | number | null;

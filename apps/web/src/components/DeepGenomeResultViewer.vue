@@ -46,7 +46,7 @@
           :reference-count="referenceRows.length"
           :resources="props.resources"
           @headings="handleHeadings"
-          @citation-activate="emit('citation-activate', $event)"
+          @citation-activate="activateCitation"
           @resource-activate="emit('resource-activate', $event)"
         />
 
@@ -68,8 +68,15 @@
               :key="ref.id"
               :id="ref.id"
               class="deep-genome-reference"
-              v-html="ref.html"
-            ></div>
+              :class="{ 'is-citation-target': activeReferenceIds.has(ref.id) }"
+              tabindex="-1"
+              :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
+            >
+              <CitationReferenceRow
+                :index="ref.index"
+                :citation="ref.citation"
+              />
+            </div>
           </div>
           <p v-else class="deep-genome-empty-references">
             {{ $t("agents.deepGenome.noReferences") }}
@@ -81,10 +88,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { ElButton } from "element-plus";
 import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import type {
   DeepGenomeDownloadFormat,
   DeepGenomeViewerHandle,
@@ -92,6 +107,7 @@ import type {
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 import {
   buildNestedHeadings,
   type NestedScientificHeading,
@@ -135,9 +151,7 @@ const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
 let observerSetupTimer: number | null = null;
 
-// Computed: process the reference list into formatted HTML.
-// Rendering logic (incl. the v-html sanitization invariant) is extracted to
-// @/utils/reference-renderer for direct unit testing.
+// Keep the canonical citation array positions separate from report Markdown.
 const referenceRows = computed<readonly unknown[]>(
   () => props.references ?? []
 );
@@ -147,6 +161,27 @@ const displayReferences = computed(() =>
 const citationNamespace = computed(() =>
   referenceRows.value.length > 0 ? props.ns : ""
 );
+const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const currentReferenceId = ref<string>();
+
+function activateCitation(activation: ScientificCitationActivation): void {
+  if (
+    props.showReferences &&
+    documentRef.value &&
+    activation.namespace === props.ns &&
+    focusReferenceRows({ root: documentRef.value, ...activation })
+  ) {
+    const ids = activation.indices.map((index) => `${props.ns}-ref-${index}`);
+    activeReferenceIds.value = new Set(ids);
+    currentReferenceId.value = ids[0];
+  }
+  emit("citation-activate", activation);
+}
+
+watch([displayReferences, () => props.showReferences], () => {
+  activeReferenceIds.value = new Set();
+  currentReferenceId.value = undefined;
+});
 
 function handleHeadings(nextHeadings: ScientificHeading[]): void {
   headings.value = nextHeadings;
@@ -341,24 +376,16 @@ onBeforeUnmount(() => {
   border-bottom: 0;
 }
 
-.deep-genome-reference :deep(.doc-citation) {
-  line-height: 1.6;
+.deep-genome-reference.is-citation-target {
+  padding-inline: var(--phy-space-8);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--phy-color-accent);
 }
 
-.deep-genome-reference :deep(.doi-link),
-.deep-genome-reference :deep(.pmid-link) {
-  color: var(--phy-color-action-text);
-  text-decoration: none;
-}
-
-.deep-genome-reference :deep(.doi-link:hover),
-.deep-genome-reference :deep(.pmid-link:hover) {
-  color: var(--phy-color-action-text-hover);
-  text-decoration: underline;
-}
-
-.deep-genome-reference :deep(.doc-link-inline) {
-  margin-left: var(--phy-space-4);
+.deep-genome-reference:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 .deep-genome-empty-references {

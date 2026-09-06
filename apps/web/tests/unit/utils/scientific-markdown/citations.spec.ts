@@ -14,6 +14,8 @@ describe("parseCitationBody", () => {
     ["[1, 2-3]", [1, 2, 3]],
     ["1-4", [1, 2, 3, 4]],
     ["[1-4]", [1, 2, 3, 4]],
+    ["999", [999]],
+    ["1-100", Array.from({ length: 100 }, (_, index) => index + 1)],
     ["1-3,7,9-10", [1, 2, 3, 7, 9, 10]],
     ["[document:21]", [21]],
     ["[document 3, 4, 21, 23]", [3, 4, 21, 23]],
@@ -34,6 +36,8 @@ describe("parseCitationBody", () => {
     "4-1",
     "1,,2",
     "2024",
+    "1000",
+    "1-101",
     "1-9999",
     "1,a",
     "1,1",
@@ -57,6 +61,49 @@ describe("requireCitationNamespace", () => {
 
 describe("transformScientificCitations", () => {
   const options = { namespace: "report", referenceCount: 10 };
+
+  it("renders compact citation numbers while retaining target navigation", () => {
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", value: "[1] [1,2] [1-4] " },
+            { type: "html", value: "<sup>" },
+            { type: "text", value: "[1]" },
+            { type: "html", value: "</sup>" },
+            { type: "text", value: " [11]" },
+          ],
+        },
+      ],
+    };
+
+    transformScientificCitations(tree, options);
+
+    const citations = tree.children[0].children.filter(
+      (node: { type: string }) => node.type === "scientificCitation"
+    );
+    expect(citations).toHaveLength(5);
+    expect(
+      citations.map(
+        (citation) =>
+          citation.data?.hChildren[0]?.children?.[0]?.value ??
+          citation.data?.hChildren[0]?.value
+      )
+    ).toEqual(["1", "1,2", "1–4", "1", "11"]);
+    expect(
+      citations.map(
+        (citation) => citation.data?.hChildren[0]?.properties?.href ?? null
+      )
+    ).toEqual([
+      "#report-ref-1",
+      "#report-ref-1",
+      "#report-ref-1",
+      "#report-ref-1",
+      null,
+    ]);
+  });
 
   it("rejects malformed and missing referenced namespaces", () => {
     const tree = {
@@ -350,7 +397,7 @@ describe("transformScientificCitations", () => {
     expect(citation?.data?.hChildren[0].type).toBe("text");
   });
 
-  it("rewrites Bot document markers and preserves their source spelling", () => {
+  it("rewrites Bot document markers to compact display without changing targets", () => {
     const tree = {
       type: "root",
       children: [
@@ -380,14 +427,14 @@ describe("transformScientificCitations", () => {
         href: "#report-ref-1",
         ariaLabel: "Citation 1",
       },
-      children: [{ type: "text", value: "[document:1]" }],
+      children: [{ type: "text", value: "1" }],
     });
     expect(citations[1]?.data?.hChildren[0]).toMatchObject({
       properties: {
         href: "#report-ref-3",
         ariaLabel: "Citation 3,4",
       },
-      children: [{ type: "text", value: "[document 3, 4]" }],
+      children: [{ type: "text", value: "3,4" }],
     });
   });
 });

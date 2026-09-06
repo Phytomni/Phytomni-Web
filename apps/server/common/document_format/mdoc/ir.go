@@ -30,11 +30,12 @@ type style struct {
 }
 
 type inline struct {
-	kind  inlineKind
-	text  string
-	href  string
-	style style
-	image *Image
+	kind     inlineKind
+	text     string
+	href     string
+	style    style
+	image    *Image
+	citation *citationMark
 }
 
 type blockKind int
@@ -50,15 +51,21 @@ const (
 )
 
 type block struct {
-	kind     blockKind
-	level    int
-	ordered  bool
-	inlines  []inline
-	items    [][]block
-	children []block
-	code     string
-	rows     [][][]inline
+	kind           blockKind
+	level          int
+	ordered        bool
+	inlines        []inline
+	items          [][]block
+	children       []block
+	code           string
+	rows           [][][]inline
+	role           reportRole
+	referenceIndex int
+	alignments     []tableAlignment
 }
+
+// Document is the shared semantic cited report consumed by document writers.
+type Document struct{ blocks []block }
 
 const (
 	maxImages          = 16

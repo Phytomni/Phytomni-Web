@@ -20,8 +20,9 @@ import {
 } from "../types";
 import type { ConversationContextNotice } from "@/api/types";
 import { reduceContextStagedNotice } from "../streaming/botLifecycleReducer";
-import { resumeMessageStream } from "@/api/chat";
+import { getAnswerCheck, resumeMessageStream } from "@/api/chat";
 import { isRecord } from "@/api/contracts";
+import { decodeCitationDocuments, parseAgentAnswer } from "../utils/format";
 
 export interface StreamInput {
   dialogueId: string;
@@ -208,6 +209,7 @@ export function useStreamMessage(opts: {
     }
     let contextNotice: ConversationContextNotice = {};
     let result: StreamResult = {};
+    let finalizePlaceholder = true;
     const applyTerminalState = () => {
       placeholder.followUpQuestions = state.followUp;
       if (state.followUp.length) {
@@ -336,6 +338,94 @@ export function useStreamMessage(opts: {
         placeholder.a2uiRuntime = undefined;
       }
       applyTerminalState();
+      // Deltas already shown cannot be retracted over SSE. Once EOF confirms
+      // settlement, reconcile the captured message with its owner-scoped read.
+      // This is a single read, never another agent call or a polling loop.
+      const runtime = placeholder.a2uiRuntime;
+      const receivedBlocks = placeholder.blocks;
+      const completedRunId = state.runId;
+      if (
+        result.completed &&
+        runtime?.runId &&
+        canonicalDialogueId &&
+        canonicalMessageId &&
+        [
+          "KnowledgeAgent",
+          "ReviewAgent",
+          "BriefGeneAgent",
+          "DeepGenomeAgent",
+        ].includes(placeholder.tool_name ?? "") &&
+        !controller.signal.aborted &&
+        chatState.streamingMessageId === requestId
+      ) {
+        const ownsCapturedMessage = () =>
+          placeholder.a2uiRuntime === runtime &&
+          placeholder.blocks === receivedBlocks &&
+          placeholder.id === canonicalMessageId &&
+          runtime.dialogueId === canonicalDialogueId &&
+          runtime.messageId === canonicalMessageId &&
+          runtime.runId === completedRunId;
+        // Forward cancellation to HTTP and release this owner even if a
+        // transport promise does not settle. Neither branch performs late writes.
+        let onReadAbort!: () => void;
+        const readAborted = new Promise<never>((_resolve, reject) => {
+          onReadAbort = () => reject(new DOMException("Aborted", "AbortError"));
+          controller.signal.addEventListener("abort", onReadAbort, {
+            once: true,
+          });
+        });
+        try {
+          const response = await Promise.race([
+            getAnswerCheck(
+              { dialogue_id: canonicalDialogueId },
+              controller.signal
+            ),
+            readAborted,
+          ]);
+          finalizePlaceholder = ownsCapturedMessage();
+          if (
+            controller.signal.aborted ||
+            chatState.streamingMessageId !== requestId ||
+            !finalizePlaceholder
+          )
+            return result;
+          const matches = response.data.filter(
+            (record) =>
+              record.id === canonicalMessageId &&
+              record.dialogue_id === canonicalDialogueId &&
+              record.bot_run_id === completedRunId &&
+              record.status === "SUCCEEDED"
+          );
+          if (matches.length !== 1 || typeof matches[0].answer !== "string")
+            return result;
+          const answer = parseAgentAnswer(matches[0].answer);
+          const references = decodeCitationDocuments(answer.doc_list);
+          if (typeof answer.content !== "string" || !references) return result;
+          let assigned = false;
+          const blocks = (receivedBlocks ?? []).map((block) => {
+            if (block.type !== "markdown") return block;
+            const text = assigned ? "" : (answer.content as string);
+            assigned = true;
+            return { ...block, text, complete: true };
+          });
+          if (!assigned)
+            blocks.push({
+              type: "markdown",
+              authority: "web",
+              text: answer.content,
+              complete: true,
+            });
+          placeholder.content = answer.content;
+          placeholder.blocks = blocks;
+          placeholder.doc_list = references;
+        } catch {
+          finalizePlaceholder = ownsCapturedMessage();
+          // A failed read retains the received terminal report. History can
+          // reconcile it later without revoking the completed agent outcome.
+        } finally {
+          controller.signal.removeEventListener("abort", onReadAbort);
+        }
+      }
     } catch (error: unknown) {
       // Once RunFinished has been reduced, a later transport close/error does
       // not revoke a successfully completed message. Before that terminal
@@ -361,11 +451,14 @@ export function useStreamMessage(opts: {
         applyTerminalState();
       }
     } finally {
-      // Always finalize this request's placeholder and unregister its controller.
+      // Finalize this request's placeholder unless a replacement took ownership
+      // while the terminal read was pending; always unregister its controller.
       // Clear dialogue streaming fields only while this request still owns them —
       // a stale finally must not wipe a newer same-dialogue stream.
-      placeholder.streaming = false;
-      placeholder.instantMessage = true;
+      if (finalizePlaceholder) {
+        placeholder.streaming = false;
+        placeholder.instantMessage = true;
+      }
       if (chatState.streamingMessageId === requestId) {
         chatState.isStreaming = false;
         chatState.streamingMessageId = null;

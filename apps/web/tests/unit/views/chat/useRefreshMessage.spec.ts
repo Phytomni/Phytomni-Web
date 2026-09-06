@@ -194,7 +194,7 @@ describe("useRefreshMessage", () => {
     const rebuilt = messageAt("A", 1, "KnowledgeAgent refresh");
     expect(rebuilt.role).toBe("assistant");
     expect(rebuilt.content).toBe("New answer");
-    expect(rebuilt.doc_list).toEqual([{ pm: "1" }]);
+    expect(rebuilt.doc_list).toEqual([{ pm: "1", citation: null }]);
     expect(rebuilt.tool_name).toBe("KnowledgeAgent");
     expect(rebuilt.id).toBe("msg-2");
     expect(rebuilt.instantMessage).toBe(true);

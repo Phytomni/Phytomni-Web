@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 )
@@ -94,9 +95,22 @@ func (ps *Service) A2uiAction(
 			return nil, ErrA2uiUpstreamProtocol
 		}
 		if actionResponse.Status == "succeeded" {
+			normalized, err := rxBot.NormalizeActionReferences(result.Body)
+			if err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
 			record, meta, err := client.GetRunWithMeta(ctx, env.RunID)
 			if err != nil {
 				return nil, err
+			}
+			// Validate the raw known field before typed projection decoding can
+			// reject unrelated fields or discard a malformed formatted envelope.
+			source, err := json.Marshal(map[string]json.RawMessage{"result": record.Result})
+			if err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			if _, err := rxBot.NormalizeActionReferences(source); err != nil {
+				return nil, ErrA2uiUpstreamProtocol
 			}
 			projection, err := DecodeRunProjection(record)
 			if err != nil {
@@ -118,8 +132,12 @@ func (ps *Service) A2uiAction(
 				err = ps.applyBotRunProjection(ctx, authorizedRow, record, meta)
 			}
 			if err != nil {
+				if errors.Is(err, citation.ErrInvalidReferences) {
+					return nil, ErrA2uiUpstreamProtocol
+				}
 				return nil, err
 			}
+			result.Body = normalized
 		}
 	}
 	return &A2uiActionOutcome{

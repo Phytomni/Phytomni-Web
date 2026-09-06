@@ -1,0 +1,135 @@
+[
+  {
+    "name": "bracket-edge-whitespace-is-literal",
+    "source": "[ 1 ] [1 ]",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "unicode-citation-whitespace",
+    "source": "[1,\u00a02]",
+    "displays": ["1,2"],
+    "indices": [[1, 2]]
+  },
+  {
+    "name": "ecmascript-whitespace-boundaries",
+    "source": "[1,\ufeff2] [1,\u00852]",
+    "displays": ["1,2"],
+    "indices": [[1, 2]]
+  },
+  {
+    "name": "decoded-exact-sup",
+    "source": "<sup>&#49;</sup> <sup>&Tab;1</sup> <sup>&nbsp;1</sup>",
+    "displays": ["1", "1", "1"],
+    "indices": [[1], [1], [1]]
+  },
+  {
+    "name": "character-reference-output-is-not-rescanned",
+    "source": "<sup>&#38;Tab;1</sup> <sup>&#x26;nbsp;1</sup>",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "character-references-require-complete-markdown-syntax",
+    "source": "<sup>&#49</sup> <sup>&nbsp1</sup> <sup>&nbsp1;</sup>",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "compact",
+    "source": "Evidence [1] [1, 2-3] [document:21] <sup>[2-4]</sup>.",
+    "displays": ["1", "1,2–3", "21", "2–4"],
+    "indices": [[1], [1, 2, 3], [21], [2, 3, 4]]
+  },
+  {
+    "name": "invalid",
+    "source": "[0] [4-1] [1,1] [1-101] [1000] [1,,2] [1 2] [documented:1]",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "code",
+    "source": "`[1]`\n\n```md\n[2]\n```\n\n    [3]\n",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "links",
+    "source": "[1](https://example.org) [see [2]](https://example.org) ![3](image.png) [4][ref]\n\n[ref]: https://example.org\n",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "shortcut-link",
+    "source": "[1]\n\n[1]: https://example.org",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "multiline-shortcut-prose",
+    "source": "[1]\n[ref]\n\n[ref]: https://example.org",
+    "displays": ["1"],
+    "indices": [[1]],
+    "links": [{ "label": "ref", "href": "https://example.org" }]
+  },
+  {
+    "name": "invalid-links-are-prose",
+    "source": "[1](unfinished [words [2]]",
+    "displays": ["1", "2"],
+    "indices": [[1], [2]]
+  },
+  {
+    "name": "escapes",
+    "source": "\\[1] \\[2-3] [4]",
+    "displays": ["4"],
+    "indices": [[4]]
+  },
+  {
+    "name": "math",
+    "source": "$x[1]$ $$x[2]$$\n\n$$\nx[3]\n$$\n\n[4]",
+    "displays": ["4"],
+    "indices": [[4]]
+  },
+  {
+    "name": "existing-math-delimiter-boundary",
+    "source": "$x\\$ [1]$ [2]",
+    "displays": ["1", "2"],
+    "indices": [[1], [2]]
+  },
+  {
+    "name": "quoted-raw-html",
+    "source": "Before <span title=\"x > [1]\">[2]</span> <SUP>3</SUP> <sup>[4]</sup>",
+    "displays": ["4"],
+    "indices": [[4]]
+  },
+  {
+    "name": "raw-html",
+    "source": "Before <span>[1] <sup>2</sup></span> <sup class=x>[3]</sup> <sup>not [4]</sup> <sup>5</sup>",
+    "displays": ["5"],
+    "indices": [[5]]
+  },
+  {
+    "name": "multiline-numeric-is-literal",
+    "source": "Evidence [1,\n2] <sup>3,\n4</sup>.",
+    "displays": [],
+    "indices": []
+  },
+  {
+    "name": "multiline-raw-html",
+    "source": "Before <span\nclass=raw>[1] <sup>2</sup></span> [3]",
+    "displays": ["3"],
+    "indices": [[3]]
+  },
+  {
+    "name": "table-list",
+    "source": "| Column |\n| --- |\n| Evidence [1] |\n\n- Evidence [2]\n",
+    "displays": ["1", "2"],
+    "indices": [[1], [2]]
+  },
+  {
+    "name": "resource",
+    "source": "![resource [1]](./files/[2].png) <https://example.org/[3]>",
+    "displays": [],
+    "indices": []
+  }
+]

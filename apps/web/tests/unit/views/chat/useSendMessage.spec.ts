@@ -496,6 +496,33 @@ describe("useSendMessage", () => {
     expect(mockGetQueryAbortable).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps canonical cited blocking output and malformed slots on its own message", async () => {
+    const doc = {
+      citation: {
+        runs: [{ text: "Canonical blocking source" }],
+        links: [{ label: "Article", href: "https://doi.org/10.1000/blocking" }],
+      },
+    };
+    stateFor("A").messageInput = "Find evidence";
+    mockGetQueryAbortable.mockResolvedValueOnce(
+      invalidInput<ApiEnvelope<DecodedQueryData>>({
+        data: {
+          tool_name: "KnowledgeAgent",
+          answer: JSON.stringify({
+            content: "Answer [3].",
+            doc_list: [doc, null, doc],
+          }),
+          id: "citation-message",
+          status: "SUCCEEDED",
+        },
+      })
+    );
+    await makeComposable().sendMessage();
+    const message = messagesFor(getChatState("A"), "canonical output")[1];
+    expect(message.content).toBe("Answer [3].");
+    expect(message.doc_list).toEqual([doc, { citation: null }, doc]);
+  });
+
   it("happy path: pushes user+assistant messages, clears input/files, resets isSending, syncs reaction", async () => {
     stateFor("A").messageInput = "Hello world";
     mockGetQueryAbortable.mockResolvedValueOnce(

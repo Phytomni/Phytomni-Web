@@ -184,11 +184,19 @@ describe("Deep Genome real-content visual fixture", () => {
   it("derives all 256 evidence entries from the complete report", () => {
     expect(REAL_DEEP_GENOME_REFERENCES).toHaveLength(256);
     expect(
-      new Set(REAL_DEEP_GENOME_REFERENCES.map(({ file_id }) => file_id)).size
-    ).toBe(256);
-    expect(REAL_DEEP_GENOME_REFERENCES.at(-1)?.title).toContain(
-      "Physiological and Transcriptome Analyses"
-    );
+      REAL_DEEP_GENOME_REFERENCES.every(
+        (reference) =>
+          reference.citation?.runs.some((run) => run.text.trim()) === true
+      )
+    ).toBe(true);
+    expect(
+      REAL_DEEP_GENOME_REFERENCES.some((reference) => "file_id" in reference)
+    ).toBe(false);
+    expect(
+      REAL_DEEP_GENOME_REFERENCES.at(-1)
+        ?.citation?.runs.map((run) => run.text)
+        .join("")
+    ).toContain("Physiological and Transcriptome Analyses");
   });
 
   it("authorizes the real-case figures from public attachments", () => {

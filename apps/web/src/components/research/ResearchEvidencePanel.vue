@@ -29,8 +29,9 @@
         role="listitem"
         tabindex="-1"
         :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
-        v-html="ref.html"
-      ></div>
+      >
+        <CitationReferenceRow :index="ref.index" :citation="ref.citation" />
+      </div>
     </div>
     <p v-else class="research-evidence-panel__empty">
       {{ $t("common.noData") }}
@@ -48,11 +49,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 
-// Agent-influenced references cross the v-html boundary only after the existing
-// canonical helper escapes text and sanitizes external URLs.
+// Parent rows own namespace, focus and grouped highlighting; content is typed.
 const props = defineProps<{
   references?: readonly unknown[];
   ns: string;
@@ -152,14 +153,6 @@ defineExpose({ focusReferences });
 .research-evidence-panel__empty {
   margin: 0;
   color: var(--phy-color-text-muted);
-}
-
-:deep(.doc-citation) {
-  line-height: inherit;
-}
-
-:deep(.doc-link-inline) {
-  overflow-wrap: anywhere;
 }
 
 :deep(a) {
