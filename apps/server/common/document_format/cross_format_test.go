@@ -1,0 +1,469 @@
+package document_format
+
+import (
+	"bytes"
+	"compress/zlib"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+	"unicode/utf16"
+)
+
+type contractEmphasis struct {
+	Index  int    `json:"index"`
+	Text   string `json:"text"`
+	Bold   bool   `json:"bold,omitempty"`
+	Italic bool   `json:"italic,omitempty"`
+}
+type contractLink struct {
+	Index int    `json:"index"`
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+type contractCitation struct {
+	Text    string `json:"text"`
+	Indices []int  `json:"indices"`
+	Active  bool   `json:"active"`
+}
+type citedContract struct {
+	Content    string          `json:"content"`
+	References json.RawMessage `json:"references"`
+	Expected   struct {
+		Sentences []string           `json:"sentences"`
+		Emphasis  []contractEmphasis `json:"emphasis"`
+		Links     []contractLink     `json:"links"`
+		Citations []contractCitation `json:"citations"`
+	} `json:"expected"`
+}
+
+func TestCrossFormatReviewedContract(t *testing.T) {
+	data, err := os.ReadFile("testdata/cited-contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture citedContract
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := json.Marshal(citedEnvelope{fixture.Content, fixture.References})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"KnowledgeAgent", "ReviewAgent", "BriefGeneAgent", "DeepGenomeAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			for _, format := range []string{"Markdown", "Word", "PDF"} {
+				t.Run(format, func(t *testing.T) {
+					opts := AgentOptions{}
+					if format == "PDF" {
+						opts.FontDir = requiredAcademicFontDir(t)
+					}
+					agent, err := NewAgentWithOptions(tool, opts)
+					if err != nil {
+						t.Fatal(err)
+					}
+					body, _, err := agent.Download(format, string(answer))
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch format {
+					case "Markdown":
+						checkContractMarkdown(t, string(body), fixture)
+					case "Word":
+						checkContractWord(t, body, fixture)
+					case "PDF":
+						checkContractPDF(t, body, fixture)
+					}
+				})
+			}
+		})
+	}
+	again, err := os.ReadFile("testdata/cited-contract.json")
+	if err != nil || !bytes.Equal(data, again) {
+		t.Fatal("dispatcher rewrote fixture")
+	}
+}
+
+func checkContractMarkdown(t *testing.T, body string, f citedContract) {
+	t.Helper()
+	if !strings.HasPrefix(body, f.Content+"\n\n## References\n\n") {
+		t.Fatal("source body or terminal bibliography ownership drift")
+	}
+	bibliography := strings.TrimPrefix(body, f.Content+"\n\n## References\n\n")
+	var sentences []string
+	var links []contractLink
+	var emphasis []contractEmphasis
+	index := 0
+	for _, line := range strings.Split(bibliography, "\n") {
+		if m := regexp.MustCompile(`^(\d+)\. (.*)$`).FindStringSubmatch(line); m != nil {
+			index, _ = strconv.Atoi(m[1])
+			plain := strings.ReplaceAll(m[2], "*", "")
+			plain = regexp.MustCompile(`\\(.)`).ReplaceAllString(plain, "$1")
+			sentences = append(sentences, plain)
+			for _, em := range regexp.MustCompile(`\*\*([^*]+)\*\*|\*([^*]+)\*`).FindAllStringSubmatch(m[2], -1) {
+				value := em[1]
+				bold := value != ""
+				if !bold {
+					value = em[2]
+				}
+				emphasis = append(emphasis, contractEmphasis{index, value, bold, !bold})
+			}
+		}
+		for _, m := range regexp.MustCompile(`\[([^]]+)\]\(([^)]+)\)`).FindAllStringSubmatch(line, -1) {
+			links = append(links, contractLink{index, m[1], strings.TrimSuffix(strings.TrimPrefix(m[2], "<"), ">")})
+		}
+	}
+	if !reflect.DeepEqual(sentences, f.Expected.Sentences) || !reflect.DeepEqual(links, f.Expected.Links) || !reflect.DeepEqual(emphasis, f.Expected.Emphasis) {
+		t.Fatalf("Markdown oracle mismatch: %v %v %v", sentences, links, emphasis)
+	}
+}
+
+type contractWordRun struct {
+	Properties struct {
+		Bold *struct {
+			Val string `xml:"val,attr"`
+		} `xml:"b"`
+		Italic *struct {
+			Val string `xml:"val,attr"`
+		} `xml:"i"`
+		Vertical *struct {
+			Val string `xml:"val,attr"`
+		} `xml:"vertAlign"`
+	} `xml:"rPr"`
+	Text []string `xml:"t"`
+}
+
+func checkContractWord(t *testing.T, body []byte, f citedContract) {
+	t.Helper()
+	var relationships struct {
+		Rows []struct {
+			ID     string `xml:"Id,attr"`
+			Target string `xml:"Target,attr"`
+			Mode   string `xml:"TargetMode,attr"`
+		} `xml:"Relationship"`
+	}
+	if err := xml.Unmarshal([]byte(wordPackagePart(t, body, "word/_rels/document.xml.rels")), &relationships); err != nil {
+		t.Fatal(err)
+	}
+	targets := map[string]string{}
+	for _, r := range relationships.Rows {
+		if r.Mode == "External" {
+			targets[r.ID] = r.Target
+		}
+	}
+	decoder := xml.NewDecoder(strings.NewReader(wordDocumentXML(t, body)))
+	var sentences []string
+	var emphasis []contractEmphasis
+	var links []contractLink
+	var citations []string
+	bodyFaces := map[string][2]bool{}
+	index := 0
+	referenceParagraph := false
+	var sentence strings.Builder
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if end, ok := token.(xml.EndElement); ok && end.Name.Local == "p" {
+			if referenceParagraph {
+				sentences = append(sentences, sentence.String())
+				sentence.Reset()
+			}
+			referenceParagraph = false
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if start.Name.Local == "hyperlink" {
+			id := ""
+			for _, a := range start.Attr {
+				if a.Name.Local == "id" {
+					id = a.Value
+				}
+			}
+			var link struct {
+				Runs []contractWordRun `xml:"r"`
+			}
+			if err := decoder.DecodeElement(&link, &start); err != nil {
+				t.Fatal(err)
+			}
+			label := ""
+			for _, run := range link.Runs {
+				label += strings.Join(run.Text, "")
+			}
+			if href, ok := targets[id]; ok {
+				links = append(links, contractLink{index, label, href})
+			}
+		}
+		if start.Name.Local != "r" {
+			continue
+		}
+		var run contractWordRun
+		if err := decoder.DecodeElement(&run, &start); err != nil {
+			t.Fatal(err)
+		}
+		value := strings.Join(run.Text, "")
+		if value == "bold" || value == "italic" || value == "combined" {
+			bodyFaces[value] = [2]bool{run.Properties.Bold != nil && run.Properties.Bold.Val != "false" && run.Properties.Bold.Val != "0", run.Properties.Italic != nil && run.Properties.Italic.Val != "false" && run.Properties.Italic.Val != "0"}
+		}
+		if value == fmt.Sprintf("%d.", index+1) {
+			index++
+			referenceParagraph = true
+			continue
+		}
+		if referenceParagraph {
+			sentence.WriteString(value)
+			bold := run.Properties.Bold != nil && run.Properties.Bold.Val != "false" && run.Properties.Bold.Val != "0"
+			italic := run.Properties.Italic != nil && run.Properties.Italic.Val != "false" && run.Properties.Italic.Val != "0"
+			if bold || italic {
+				emphasis = append(emphasis, contractEmphasis{index, value, bold, italic})
+			}
+		}
+		if index == 0 && run.Properties.Vertical != nil && run.Properties.Vertical.Val == "superscript" {
+			citations = append(citations, value)
+		}
+	}
+	var marks []string
+	if !reflect.DeepEqual(bodyFaces, map[string][2]bool{"bold": {true, false}, "italic": {false, true}, "combined": {true, true}}) {
+		t.Fatalf("DOCX actual body face properties: %v", bodyFaces)
+	}
+	for _, mark := range f.Expected.Citations {
+		marks = append(marks, mark.Text)
+	}
+	if !reflect.DeepEqual(sentences, f.Expected.Sentences) || !reflect.DeepEqual(emphasis, f.Expected.Emphasis) || !reflect.DeepEqual(links, f.Expected.Links) || !reflect.DeepEqual(citations, marks) {
+		t.Fatalf("DOCX oracle mismatch sentences=%v emphasis=%v links=%v citations=%v", sentences, emphasis, links, citations)
+	}
+}
+
+type contractPDFText struct {
+	text, font string
+	size, x, y float64
+}
+
+// This narrow inspector reads only this writer's Flate text streams and font resources.
+func contractPDFPaint(t *testing.T, data []byte) []contractPDFText {
+	t.Helper()
+	objects := map[string]string{}
+	fonts := map[string]string{}
+	for _, m := range regexp.MustCompile(`(?s)(\d+) 0 obj\s*(.*?)endobj`).FindAllSubmatch(data, -1) {
+		if n := regexp.MustCompile(`/BaseFont /([^\s]+)`).FindSubmatch(m[2]); n != nil {
+			objects[string(m[1])] = string(n[1])
+		}
+	}
+	for _, m := range regexp.MustCompile(`/([^ /\s]+) (\d+) 0 R`).FindAllSubmatch(data, -1) {
+		if font, ok := objects[string(m[2])]; ok {
+			fonts[string(m[1])] = font
+		}
+	}
+	var out []contractPDFText
+	pattern := regexp.MustCompile(`(?s)/([^ /]+) ([0-9.]+) Tf|BT ([0-9.-]+) ([0-9.-]+) Td \(((?:\\.|[^\\)])*)\) Tj`)
+	for _, m := range regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`).FindAllSubmatch(data, -1) {
+		r, err := zlib.NewReader(bytes.NewReader(m[1]))
+		if err != nil {
+			continue
+		}
+		stream, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		font := ""
+		size := 0.0
+		for _, m := range pattern.FindAllStringSubmatch(string(stream), -1) {
+			if m[1] != "" {
+				font = fonts[m[1]]
+				size, _ = strconv.ParseFloat(m[2], 64)
+				continue
+			}
+			raw := []byte(m[5])
+			var unescaped []byte
+			for i := 0; i < len(raw); i++ {
+				if raw[i] == '\\' && i+1 < len(raw) {
+					i++
+					switch raw[i] {
+					case 'n':
+						unescaped = append(unescaped, '\n')
+					case 'r':
+						unescaped = append(unescaped, '\r')
+					default:
+						unescaped = append(unescaped, raw[i])
+					}
+				} else {
+					unescaped = append(unescaped, raw[i])
+				}
+			}
+			value := string(unescaped)
+			if strings.HasPrefix(font, "utf8") {
+				var codes []uint16
+				for i := 0; i+1 < len(unescaped); i += 2 {
+					codes = append(codes, uint16(unescaped[i])<<8|uint16(unescaped[i+1]))
+				}
+				value = string(utf16.Decode(codes))
+			}
+			x, _ := strconv.ParseFloat(m[3], 64)
+			y, _ := strconv.ParseFloat(m[4], 64)
+			out = append(out, contractPDFText{value, font, size, x, y})
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no actual PDF text")
+	}
+	return out
+}
+
+func checkContractPDF(t *testing.T, data []byte, f citedContract) {
+	t.Helper()
+	paint := contractPDFPaint(t, data)
+	bodyFaces := map[string]string{}
+	for _, p := range paint {
+		if p.text == "bold" || p.text == "italic" || p.text == "combined" {
+			bodyFaces[p.text] = p.font
+		}
+	}
+	if !reflect.DeepEqual(bodyFaces, map[string]string{"bold": "utf8academic-tnrB", "italic": "utf8academic-tnrI", "combined": "utf8academic-tnrBI"}) {
+		t.Fatalf("PDF actual body faces: %v", bodyFaces)
+	}
+	var full strings.Builder
+	var fontBytes []string
+	var marks []contractPDFText
+	for _, p := range paint {
+		full.WriteString(p.text)
+		for range []byte(p.text) {
+			fontBytes = append(fontBytes, p.font)
+		}
+		if p.size == 8 {
+			marks = append(marks, p)
+		}
+	}
+	text := full.String()
+	offset := strings.Index(text, "References")
+	if offset < 0 {
+		t.Fatal("PDF bibliography missing")
+	}
+	for i, sentence := range f.Expected.Sentences {
+		start := strings.Index(text[offset:], sentence)
+		if start < 0 {
+			t.Fatalf("PDF sentence %d absent", i+1)
+		}
+		start += offset
+		want := make([]string, len(sentence))
+		for j := range want {
+			want[j] = "utf8academic-tnr"
+		}
+		for _, em := range f.Expected.Emphasis {
+			if em.Index == i+1 {
+				pos := strings.Index(sentence, em.Text)
+				face := "utf8academic-tnr"
+				if em.Bold {
+					face += "B"
+				}
+				if em.Italic {
+					face += "I"
+				}
+				for j := pos; j < pos+len(em.Text); j++ {
+					want[j] = face
+				}
+			}
+		}
+		if !reflect.DeepEqual(fontBytes[start:start+len(sentence)], want) {
+			t.Fatalf("PDF sentence %d real face mismatch", i+1)
+		}
+		offset = start + len(sentence)
+	}
+	if len(marks) != len(f.Expected.Citations) {
+		t.Fatalf("PDF citation count %d", len(marks))
+	}
+	for i, m := range marks {
+		if m.text != f.Expected.Citations[i].Text {
+			t.Fatalf("PDF citation %d: %q", i, m.text)
+		}
+	}
+	var rows []contractPDFText
+	for _, p := range paint {
+		if regexp.MustCompile(`^\d+\.$`).MatchString(p.text) {
+			rows = append(rows, p)
+		}
+	}
+	if len(rows) != len(f.Expected.Sentences) {
+		t.Fatal("PDF bibliography positions shifted")
+	}
+	var links []contractLink
+	for _, m := range regexp.MustCompile(`/Subtype /Link /Rect \[([0-9. -]+)\] /Border \[0 0 0\] /A <</S /URI /URI \(([^)]+)\)`).FindAllSubmatch(data, -1) {
+		coords := strings.Fields(string(m[1]))
+		x, _ := strconv.ParseFloat(coords[0], 64)
+		top, _ := strconv.ParseFloat(coords[1], 64)
+		bottom, _ := strconv.ParseFloat(coords[3], 64)
+		label := ""
+		index := 0
+		for _, p := range paint {
+			if math.Abs(p.x-x) < .02 && p.y < top && p.y > bottom {
+				label += p.text
+				for i, row := range rows {
+					if p.y < row.y {
+						index = i + 1
+					}
+				}
+			}
+		}
+		href := string(m[2])
+		if len(links) > 0 && links[len(links)-1].Href == href && links[len(links)-1].Index == index {
+			links[len(links)-1].Label += label
+		} else {
+			links = append(links, contractLink{index, label, href})
+		}
+	}
+	if !reflect.DeepEqual(links, f.Expected.Links) {
+		t.Fatalf("PDF actual linked labels/destinations: %v", links)
+	}
+	annotations := regexp.MustCompile(`/Subtype /Link /Rect \[([0-9. -]+)\] /Border \[0 0 0\] /Dest \[(\d+) 0 R /XYZ 0 ([0-9.-]+) null\]`).FindAllSubmatch(data, -1)
+	active := 0
+	for i, mark := range f.Expected.Citations {
+		if !mark.Active {
+			continue
+		}
+		if active >= len(annotations) {
+			t.Fatal("PDF active citation link absent")
+		}
+		ann := annotations[active]
+		active++
+		coords := strings.Fields(string(ann[1]))
+		x, _ := strconv.ParseFloat(coords[0], 64)
+		y, _ := strconv.ParseFloat(coords[1], 64)
+		if math.Abs(x-marks[i].x) > .02 || math.Abs(y-marks[i].y-8) > .02 {
+			t.Fatal("PDF link not attached to complete citation marker")
+		}
+		dest, _ := strconv.ParseFloat(string(ann[3]), 64)
+		found := false
+		for _, p := range paint {
+			if p.text == fmt.Sprintf("%d.", mark.Indices[0]) && math.Abs(dest-p.y-12) < .02 {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("PDF target does not match reference %d", mark.Indices[0])
+		}
+	}
+	if active != len(annotations) {
+		t.Fatal("inactive/excluded marker acquired a PDF destination")
+	}
+	for _, face := range []string{"academic-tnr", "academic-tnrB", "academic-tnrI", "academic-tnrBI"} {
+		if !bytes.Contains(data, []byte("/BaseFont /utf8"+face+"\n")) {
+			t.Fatalf("missing embedded face %s", face)
+		}
+	}
+	if bytes.Count(data, []byte("/FontFile2")) != 4 {
+		t.Fatal("PDF did not embed all genuine faces")
+	}
+}

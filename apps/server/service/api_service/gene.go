@@ -745,6 +745,7 @@ func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format 
 	}
 	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
 		FetchImage: newDocumentImageFetcher(ctx, questionAgentLog),
+		FontDir:    viper.GetString("document_export.font_dir"),
 	})
 	if err != nil {
 		return nil, "", err
