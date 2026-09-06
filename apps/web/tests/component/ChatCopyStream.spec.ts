@@ -18,6 +18,7 @@ const testState = vi.hoisted(() => ({
     typeof import("@/views/chat/composables/useChatStates").useChatStates
   > | null,
   copiedText: vi.fn(),
+  loadBotCapabilities: vi.fn(),
 }));
 
 vi.mock("vue-element-plus-x", () => ({
@@ -41,6 +42,23 @@ vi.mock("@/views/chat/composables/useChatStates", async (importOriginal) => {
     },
   };
 });
+
+vi.mock(
+  "@/views/chat/composables/useBotCapabilities",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/views/chat/composables/useBotCapabilities")
+      >();
+    return {
+      ...actual,
+      useBotCapabilities: (caller?: string) => ({
+        ...actual.useBotCapabilities(caller),
+        load: testState.loadBotCapabilities,
+      }),
+    };
+  }
+);
 
 vi.mock("@/api/chat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/chat")>();
@@ -187,6 +205,9 @@ async function mountChatWithMessages(messages: ChatMessage[]) {
   state.currentChatId.value = "instant-copy";
   await nextTick();
   await nextTick();
+  await vi.waitFor(() =>
+    expect(testState.loadBotCapabilities).toHaveBeenCalledTimes(1)
+  );
   return wrapper;
 }
 
@@ -203,6 +224,8 @@ beforeEach(() => {
   testState.chatStates = null;
   testState.copiedText.mockReset();
   testState.copiedText.mockResolvedValue(undefined);
+  testState.loadBotCapabilities.mockReset();
+  testState.loadBotCapabilities.mockResolvedValue([]);
   vi.stubGlobal("isSecureContext", true);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -210,14 +233,20 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.allSettled(
+    testState.loadBotCapabilities.mock.results
+      .filter((result) => result.type === "return")
+      .map((result) => result.value)
+  );
+  while (mountedWrappers.length) {
+    mountedWrappers.pop()?.unmount();
+  }
+  await nextTick();
   vi.unstubAllGlobals();
   if (originalClipboard)
     Object.defineProperty(navigator, "clipboard", originalClipboard);
   else Reflect.deleteProperty(navigator, "clipboard");
-  while (mountedWrappers.length) {
-    mountedWrappers.pop()?.unmount();
-  }
 });
 
 describe("stream family copy", () => {

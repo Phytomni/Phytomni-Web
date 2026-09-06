@@ -93,6 +93,23 @@ func TestStructuredCitationTrimsFieldsAndPreservesTerminalPunctuation(t *testing
 	}
 }
 
+func TestStructuredCitationSeparatesOpaqueAuthorFromTitle(t *testing.T) {
+	for _, tc := range []struct {
+		name, author, want string
+	}{
+		{"organization", "International Rice Research Institute", "International Rice Research Institute. Plant handbook."},
+		{"full name", "Jane Doe", "Jane Doe. Plant handbook."},
+		{"already punctuated", "Crop Trust.", "Crop Trust. Plant handbook."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PlainText(Format(Source{AU: tc.author, TI: "Plant handbook"}))
+			if got != tc.want {
+				t.Fatalf("complete citation = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestStructuredCitationUnavailableUsesInitializedSlices(t *testing.T) {
 	p := Format(Source{})
 	want := Presentation{

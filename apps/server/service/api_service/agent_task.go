@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm/clause"
 
 	"phytomni-server/common"
+	"phytomni-server/common/citation"
+	"phytomni-server/common/document_format/mdoc"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
 	"phytomni-server/model"
@@ -575,15 +577,30 @@ func applyBotProjectionToHistoryRow(row *model.QuestionAgentLog, projection BotR
 	return applyBotProjectionToHistoryRowWithFormatted(row, projection, nil)
 }
 
-func persistedReviewAnswerMatchesReport(answer string, report string) bool {
+func persistedCitedAnswerMatchesReport(answer string, report string) (bool, error) {
 	var shaped struct {
-		Content string            `json:"content"`
-		DocList []json.RawMessage `json:"doc_list"`
+		Content string          `json:"content"`
+		DocList json.RawMessage `json:"doc_list"`
 	}
 	if err := json.Unmarshal([]byte(answer), &shaped); err != nil {
-		return false
+		return false, nil
 	}
-	return shaped.Content == report && len(shaped.DocList) > 0
+	rows, err := citation.DecodeRows(shaped.DocList)
+	if err != nil {
+		return false, err
+	}
+	if len(rows) == 0 {
+		return false, nil
+	}
+	persistedBody, _, err := mdoc.SplitOwnedReferences(shaped.Content, rows)
+	if err != nil {
+		return false, err
+	}
+	projectedBody, _, err := mdoc.SplitOwnedReferences(report, rows)
+	if err != nil {
+		return false, err
+	}
+	return persistedBody == projectedBody, nil
 }
 
 func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, projection BotRunProjection, formatted *rxBot.Formatted) (bool, error) {
@@ -594,9 +611,18 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 		return false, err
 	}
 	if report := projection.VisibleReport(); strings.TrimSpace(report) != "" {
-		preserveDurableReview := formatted == nil && projection.Agent == "review" &&
-			persistedReviewAnswerMatchesReport(row.Answer, report)
-		if !preserveDurableReview {
+		citedAgent := projection.Agent == "knowledge" || projection.Agent == "review" ||
+			projection.Agent == "brief_gene" || projection.Agent == "deep_genome"
+		preserveDurableCited := false
+		if formatted == nil && citedAgent && strings.TrimSpace(row.BotRunId) == strings.TrimSpace(projection.RunID) &&
+			row.BotReportRevision == projection.ReportRevision {
+			var err error
+			preserveDurableCited, err = persistedCitedAnswerMatchesReport(row.Answer, report)
+			if err != nil {
+				return false, err
+			}
+		}
+		if !preserveDurableCited {
 			answer, err := rxBot.ShapeAnswer(projection.Agent, report, formatted)
 			if err != nil {
 				return false, err

@@ -92,7 +92,6 @@ The browser cannot supply or override the directory or font bytes.
 
 For each face, the loader checks embedding rights on the bytes it read, writes
 those exact bytes to an owner-only (`0600`) temporary validation snapshot, and
-runs the path-only font metadata parser against that snapshot. It closes and
 runs the path-only font metadata parser against that snapshot. The loader
 closes its snapshot writer before parsing and removes the snapshot pathname on
 success, parser error, or parser panic; it never reopens the mutable source path

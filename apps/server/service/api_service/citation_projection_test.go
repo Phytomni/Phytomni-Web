@@ -235,6 +235,163 @@ func TestCitationProjectionMatchingReview(t *testing.T) {
 	}
 }
 
+func TestCitationProjectionPersistedBodySplitRetainsRows(t *testing.T) {
+	const (
+		report = "# Report\n\nBody [1].\n\n## References\n\n1. A plant study\n"
+		body   = "# Report\n\nBody [1].\n\n"
+	)
+	references := json.RawMessage(`[{"title":"A plant study","dl":"https://example.org/article"}]`)
+	for _, agent := range []struct {
+		slug string
+		tool string
+	}{
+		{slug: "knowledge", tool: "KnowledgeAgent"},
+		{slug: "review", tool: "ReviewAgent"},
+		{slug: "brief_gene", tool: "BriefGeneAgent"},
+		{slug: "deep_genome", tool: "DeepGenomeAgent"},
+	} {
+		for _, mode := range []HistoryReadMode{HistoryReadModeLegacy, HistoryReadModeProjection, HistoryReadModeDual} {
+			for _, source := range []string{"split-completion", "unsplit-source"} {
+				t.Run(agent.slug+"/"+string(mode)+"/"+source, func(t *testing.T) {
+					gdb := setupTestDB(t)
+					old := rxBot.BotConfig
+					rxBot.BotConfig = nil
+					t.Cleanup(func() { rxBot.BotConfig = old })
+
+					answer, err := rxBot.ShapeAnswer(agent.slug, report, &rxBot.Formatted{References: references})
+					if err != nil {
+						t.Fatalf("shape completion: %v", err)
+					}
+					if source == "unsplit-source" {
+						raw, err := json.Marshal(struct {
+							Content string          `json:"content"`
+							DocList json.RawMessage `json:"doc_list"`
+						}{Content: report, DocList: references})
+						if err != nil {
+							t.Fatalf("marshal unsplit source: %v", err)
+						}
+						answer = string(raw)
+					}
+					projection := BotRunProjection{
+						RunID:          "run-body-split",
+						Agent:          agent.slug,
+						Status:         "SUCCEEDED",
+						ReportRevision: 3,
+						FinalReport:    report,
+					}
+					encoded, err := marshalPersistedProjection(projection)
+					if err != nil {
+						t.Fatalf("marshal projection: %v", err)
+					}
+					if err := gdb.Exec(`INSERT INTO question_agent_logs
+					(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+					(130, 'dlg-body-split', 0, 'alice', 'q', ?, ?, 'run-body-split', ?, 3, 'RUNNING', '2026-01-01 00:00:00')`, answer, agent.tool, encoded).Error; err != nil {
+						t.Fatalf("seed: %v", err)
+					}
+
+					result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-body-split", mode)
+					if err != nil || len(result.Rows) != 1 {
+						t.Fatalf("history result=%#v err=%v", result, err)
+					}
+					var got struct {
+						Content string `json:"content"`
+						DocList []struct {
+							Title        string                `json:"title"`
+							Presentation citation.Presentation `json:"citation"`
+						} `json:"doc_list"`
+					}
+					if err := json.Unmarshal([]byte(result.Rows[0].Answer), &got); err != nil {
+						t.Fatalf("decode history answer: %v", err)
+					}
+					if got.Content != body || len(got.DocList) != 1 || got.DocList[0].Title != "A plant study" ||
+						len(got.DocList[0].Presentation.Links) != 2 || got.DocList[0].Presentation.Links[0].Href != "https://example.org/article" {
+						t.Fatalf("history lost split body/references: %#v", got)
+					}
+					_, stored := readStatusAnswer(t, gdb, 130)
+					if stored != answer {
+						t.Fatal("history projection rewrote durable answer")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestCitationProjectionPersistedBodySplitRequiresEquivalentIdentity(t *testing.T) {
+	const report = "Body [1].\n\n## References\n\n1. A plant study\n"
+	references := json.RawMessage(`[{"title":"A plant study"}]`)
+	answer, err := rxBot.ShapeAnswer("review", report, &rxBot.Formatted{References: references})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := model.QuestionAgentLog{
+		Answer:            answer,
+		ToolName:          "ReviewAgent",
+		BotRunId:          "run-owned",
+		BotReportRevision: 5,
+		Status:            "RUNNING",
+	}
+
+	for _, tc := range []struct {
+		name       string
+		row        model.QuestionAgentLog
+		projection BotRunProjection
+	}{
+		{
+			name: "different report",
+			row:  base,
+			projection: BotRunProjection{RunID: "run-owned", Agent: "review", ReportRevision: 5,
+				FinalReport: "Different report"},
+		},
+		{
+			name: "different run",
+			row:  base,
+			projection: BotRunProjection{RunID: "run-other", Agent: "review", ReportRevision: 5,
+				FinalReport: report},
+		},
+		{
+			name: "different revision",
+			row:  base,
+			projection: BotRunProjection{RunID: "run-owned", Agent: "review", ReportRevision: 6,
+				FinalReport: report},
+		},
+		{
+			name: "ambiguous authored bibliography",
+			row:  base,
+			projection: BotRunProjection{RunID: "run-owned", Agent: "review", ReportRevision: 5,
+				FinalReport: "Body [1].\n\n## References\n\n1. Different authored content\n"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.row
+			applied, err := applyBotProjectionToHistoryRow(&got, tc.projection)
+			if err != nil || !applied {
+				t.Fatalf("projection applied=%v err=%v", applied, err)
+			}
+			var shaped struct {
+				Content string            `json:"content"`
+				DocList []json.RawMessage `json:"doc_list"`
+			}
+			if err := json.Unmarshal([]byte(got.Answer), &shaped); err != nil {
+				t.Fatal(err)
+			}
+			if len(shaped.DocList) != 0 || shaped.Content != tc.projection.FinalReport {
+				t.Fatalf("non-equivalent projection retained rows: %#v", shaped)
+			}
+		})
+	}
+
+	malformed := base
+	malformed.Answer = `{"content":"Body [1].\n\n","doc_list":{"bad":"private-source"}}`
+	before := malformed
+	applied, err := applyBotProjectionToHistoryRow(&malformed, BotRunProjection{
+		RunID: "run-owned", Agent: "review", ReportRevision: 5, FinalReport: report,
+	})
+	if applied || !errors.Is(err, citation.ErrInvalidReferences) || malformed != before {
+		t.Fatalf("malformed durable rows applied=%v err=%v row=%#v", applied, err, malformed)
+	}
+}
+
 func TestCitationProjectionStoredReplay(t *testing.T) {
 	for _, raw := range []string{citationAnswerFixture, reviewedAnswerFixture(t), `{"doc_list":{"bad":"private-source"}}`} {
 		t.Run(raw, func(t *testing.T) {

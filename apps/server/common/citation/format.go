@@ -52,6 +52,9 @@ func formatStructured(source Source) Presentation {
 
 	appendRun(&presentation, Run{Text: authors})
 	if authors != "" && (title != "" || hasPublication || year != "") {
+		if title != "" && !endsWithSentencePunctuation(authors) {
+			appendRun(&presentation, Run{Text: "."})
+		}
 		appendRun(&presentation, Run{Text: " "})
 	}
 
@@ -143,6 +146,9 @@ func transferTitleEmphasis(presentation *Presentation, source Source, imported P
 	authors := formatAuthors(source.AU)
 	structuredStart := len(authors)
 	if authors != "" {
+		if !endsWithSentencePunctuation(authors) {
+			structuredStart++
+		}
 		structuredStart++
 	}
 	presentation.Runs = replaceRunRange(presentation.Runs, structuredStart, structuredStart+len(title), titleRuns)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -741,6 +742,41 @@ func TestWordTableRectangularCellsTopAligned(t *testing.T) {
 	}
 }
 
+func wordHeadingContractError(levels map[string][]string, hasTitle bool) error {
+	offset := 0
+	expectedCount := map[string]int{
+		"Report":       0,
+		"Introduction": 1,
+		"Detail":       1,
+		"Gap":          1,
+		"References":   1,
+	}
+	if hasTitle {
+		offset = 1
+		expectedCount["Report"] = 1
+	}
+	for _, name := range []string{"Report", "Introduction", "Detail", "Gap", "References"} {
+		if got := len(levels[name]); got != expectedCount[name] {
+			return fmt.Errorf("heading %q count=%d, want %d", name, got, expectedCount[name])
+		}
+	}
+	expectedLevel := map[string]int{
+		"Introduction": offset,
+		"Detail":       offset + 1,
+		"Gap":          offset + 3,
+		"References":   offset,
+	}
+	if hasTitle {
+		expectedLevel["Report"] = 0
+	}
+	for name, want := range expectedLevel {
+		if got := levels[name][0]; got != strconv.Itoa(want) {
+			return fmt.Errorf("heading %q outline=%q, want %d", name, got, want)
+		}
+	}
+	return nil
+}
+
 func TestWordTableAuthoredHeadingBaseIgnoresCanonicalReferences(t *testing.T) {
 	for _, title := range []string{"", "# Report\n\n"} {
 		doc, err := BuildCited(title+"### Introduction\n\nLead\n\n#### Detail\n\nBody\n\n###### Gap\n\nMore", []citation.Row{{Citation: citation.Presentation{Runs: []citation.Run{{Text: "Entry"}}}}}, Options{})
@@ -754,15 +790,28 @@ func TestWordTableAuthoredHeadingBaseIgnoresCanonicalReferences(t *testing.T) {
 		parts := wordParts(t, data)
 		tree := readWordNode(t, parts["word/document.xml"])
 		styles := readWordNode(t, parts["word/styles.xml"])
-		offset := 0
-		if title != "" {
-			offset = 1
-		}
+		levels := map[string][]string{}
 		for _, p := range tree.all(testWordNS, "p") {
-			want, ok := map[string]int{"Introduction": offset, "Detail": offset + 1, "Gap": offset + 3, "References": offset}[p.content()]
-			if ok && resolvedWordProps(t, styles, p, nil, "pPr")["outlineLvl/val"] != strconv.Itoa(want) {
-				t.Errorf("%q outline differs from authored base", p.content())
+			name := p.content()
+			switch name {
+			case "Report", "Introduction", "Detail", "Gap", "References":
+				levels[name] = append(levels[name], resolvedWordProps(t, styles, p, nil, "pPr")["outlineLvl/val"])
 			}
+		}
+		if err := wordHeadingContractError(levels, title != ""); err != nil {
+			t.Fatal(err)
+		}
+
+		missing := make(map[string][]string, len(levels))
+		duplicate := make(map[string][]string, len(levels))
+		for name, values := range levels {
+			missing[name] = append([]string(nil), values...)
+			duplicate[name] = append([]string(nil), values...)
+		}
+		delete(missing, "Detail")
+		duplicate["Gap"] = append(duplicate["Gap"], duplicate["Gap"][0])
+		if wordHeadingContractError(missing, title != "") == nil || wordHeadingContractError(duplicate, title != "") == nil {
+			t.Fatal("heading multiplicity oracle accepted missing or duplicate headings")
 		}
 	}
 }

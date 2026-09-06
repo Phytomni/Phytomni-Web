@@ -135,7 +135,7 @@ func pubMedURL(raw string) string {
 
 func safeHTTPURL(raw string) string {
 	value := strings.TrimSpace(raw)
-	if value == "" || hasControl(value) {
+	if value == "" || strings.ContainsAny(value, `\"<>`) || strings.IndexFunc(value, unicode.IsSpace) >= 0 || hasControl(value) {
 		return ""
 	}
 	parsed, err := url.Parse(value)
@@ -373,6 +373,9 @@ func escapeMarkdownInline(value string) string {
 		"`", "\\`",
 		"*", "\\*",
 		"_", "\\_",
+		"~", "\\~",
+		"|", "\\|",
+		"$", "\\$",
 		"[", "\\[",
 		"]", "\\]",
 		"(", "\\(",

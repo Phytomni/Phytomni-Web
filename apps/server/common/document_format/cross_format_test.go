@@ -9,12 +9,15 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf16"
+
+	"github.com/jung-kurt/gofpdf"
 )
 
 type contractEmphasis struct {
@@ -248,18 +251,26 @@ func checkContractWord(t *testing.T, body []byte, f citedContract) {
 }
 
 type contractPDFText struct {
-	text, font string
-	size, x, y float64
+	text, font, page string
+	size, x, y       float64
 }
 
 // This narrow inspector reads only this writer's Flate text streams and font resources.
 func contractPDFPaint(t *testing.T, data []byte) []contractPDFText {
 	t.Helper()
+	objectPattern := regexp.MustCompile(`(?s)(\d+) 0 obj\s*(.*?)endobj`)
+	objectMatches := objectPattern.FindAllSubmatch(data, -1)
 	objects := map[string]string{}
 	fonts := map[string]string{}
-	for _, m := range regexp.MustCompile(`(?s)(\d+) 0 obj\s*(.*?)endobj`).FindAllSubmatch(data, -1) {
+	pageByStream := map[string]string{}
+	for _, m := range objectMatches {
 		if n := regexp.MustCompile(`/BaseFont /([^\s]+)`).FindSubmatch(m[2]); n != nil {
 			objects[string(m[1])] = string(n[1])
+		}
+		if regexp.MustCompile(`/Type /Page(?:\s|/)`).Match(m[2]) {
+			if contents := regexp.MustCompile(`/Contents (\d+) 0 R`).FindSubmatch(m[2]); contents != nil {
+				pageByStream[string(contents[1])] = string(m[1])
+			}
 		}
 	}
 	for _, m := range regexp.MustCompile(`/([^ /\s]+) (\d+) 0 R`).FindAllSubmatch(data, -1) {
@@ -269,7 +280,12 @@ func contractPDFPaint(t *testing.T, data []byte) []contractPDFText {
 	}
 	var out []contractPDFText
 	pattern := regexp.MustCompile(`(?s)/([^ /]+) ([0-9.]+) Tf|BT ([0-9.-]+) ([0-9.-]+) Td \(((?:\\.|[^\\)])*)\) Tj`)
-	for _, m := range regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`).FindAllSubmatch(data, -1) {
+	streamPattern := regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`)
+	for _, object := range objectMatches {
+		m := streamPattern.FindSubmatch(object[2])
+		if m == nil {
+			continue
+		}
 		r, err := zlib.NewReader(bytes.NewReader(m[1]))
 		if err != nil {
 			continue
@@ -314,13 +330,44 @@ func contractPDFPaint(t *testing.T, data []byte) []contractPDFText {
 			}
 			x, _ := strconv.ParseFloat(m[3], 64)
 			y, _ := strconv.ParseFloat(m[4], 64)
-			out = append(out, contractPDFText{value, font, size, x, y})
+			out = append(out, contractPDFText{text: value, font: font, page: pageByStream[string(object[1])], size: size, x: x, y: y})
 		}
 	}
 	if len(out) == 0 {
 		t.Fatal("no actual PDF text")
 	}
 	return out
+}
+
+func contractPDFMarkerWidthPoints(t *testing.T, text string) float64 {
+	t.Helper()
+	metrics, err := gofpdf.TtfParse(filepath.Join(requiredAcademicFontDir(t), "times.ttf"))
+	if err != nil || metrics.UnitsPerEm == 0 {
+		t.Fatalf("read independent Times New Roman metrics: %v", err)
+	}
+	width := 0.0
+	for _, character := range text {
+		glyph, ok := metrics.Chars[uint16(character)]
+		if !ok || int(glyph) >= len(metrics.Widths) {
+			t.Fatalf("marker glyph %q absent from independent font metrics", character)
+		}
+		width += float64(metrics.Widths[glyph]) / float64(metrics.UnitsPerEm) * 8
+	}
+	return width
+}
+
+func contractPDFDestinationMatches(reference contractPDFText, targetPage string, destinationY float64) bool {
+	return reference.page != "" && targetPage == reference.page && math.Abs(destinationY-reference.y-12) < .02
+}
+
+func TestContractPDFDestinationPageOracleRejectsMatchingYOnWrongPage(t *testing.T) {
+	reference := contractPDFText{text: "1.", page: "17", y: 100}
+	if contractPDFDestinationMatches(reference, "18", 112) {
+		t.Fatal("matching destination y accepted the wrong target page")
+	}
+	if !contractPDFDestinationMatches(reference, "17", 112) {
+		t.Fatal("matching target page and y were rejected")
+	}
 }
 
 func checkContractPDF(t *testing.T, data []byte, f citedContract) {
@@ -441,13 +488,18 @@ func checkContractPDF(t *testing.T, data []byte, f citedContract) {
 		coords := strings.Fields(string(ann[1]))
 		x, _ := strconv.ParseFloat(coords[0], 64)
 		y, _ := strconv.ParseFloat(coords[1], 64)
-		if math.Abs(x-marks[i].x) > .02 || math.Abs(y-marks[i].y-8) > .02 {
+		right, _ := strconv.ParseFloat(coords[2], 64)
+		bottom, _ := strconv.ParseFloat(coords[3], 64)
+		expectedWidth := contractPDFMarkerWidthPoints(t, mark.Text)
+		if len(coords) != 4 || math.Abs(x-marks[i].x) > .02 || math.Abs(y-marks[i].y-8) > .02 ||
+			math.Abs(right-marks[i].x-expectedWidth) > .02 || math.Abs(bottom-marks[i].y+1.6) > .02 {
 			t.Fatal("PDF link not attached to complete citation marker")
 		}
 		dest, _ := strconv.ParseFloat(string(ann[3]), 64)
+		targetPage := string(ann[2])
 		found := false
 		for _, p := range paint {
-			if p.text == fmt.Sprintf("%d.", mark.Indices[0]) && math.Abs(dest-p.y-12) < .02 {
+			if p.text == fmt.Sprintf("%d.", mark.Indices[0]) && contractPDFDestinationMatches(p, targetPage, dest) {
 				found = true
 			}
 		}

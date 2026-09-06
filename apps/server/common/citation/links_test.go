@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 func TestCitationLinksNormalizeKnownIdentifiers(t *testing.T) {
@@ -123,6 +124,43 @@ func TestCitationLinksRejectUnsafeDestinations(t *testing.T) {
 	}
 }
 
+func TestCitationLinksRejectRawQueryBackslashWithoutDroppingSiblingLinks(t *testing.T) {
+	got := Format(Source{
+		Title: "Useful source",
+		DL:    `https://example.org/article?q=a\b`,
+		PM:    "21914492",
+	})
+	want := []Link{
+		{Label: "PubMed", Href: "https://pubmed.ncbi.nlm.nih.gov/21914492/"},
+		{Label: "Google Scholar", Href: "https://scholar.google.com/scholar?q=Useful+source"},
+	}
+	if PlainText(got) != "Useful source." || !reflect.DeepEqual(got.Links, want) {
+		t.Fatalf("rejected Article invalidated useful citation/siblings: text=%q links=%#v", PlainText(got), got.Links)
+	}
+	for _, raw := range []string{
+		`https://example.org/article?q=a\b`,
+		`https://example.org/article?q=a"b`,
+		`https://example.org/article?q=a<b`,
+		`https://example.org/article?q=a>b`,
+		`https://example.org/article?q=a b`,
+	} {
+		if got := safeHTTPURL(raw); got != "" {
+			t.Fatalf("raw noncanonical query URL admitted as %q", got)
+		}
+	}
+	for _, encoded := range []string{
+		`https://example.org/article?q=a%5Cb&next=%2Fvalid`,
+		`https://example.org/article?q=a%22b`,
+		`https://example.org/article?q=a%3Cb`,
+		`https://example.org/article?q=a%3Eb`,
+		`https://example.org/article?q=a%20b`,
+	} {
+		if got := safeHTTPURL(encoded); got != encoded {
+			t.Fatalf("encoded query URL = %q, want %q", got, encoded)
+		}
+	}
+}
+
 func TestCitationLinksUseFixedOrder(t *testing.T) {
 	imported := []Link{
 		{Label: "ADS", Href: "https://ui.adsabs.harvard.edu/abs/1"},
@@ -175,6 +213,28 @@ func TestCitationMarkdownRoundTripsRunsAndLinks(t *testing.T) {
 	}
 	if err := goldmark.New().Convert([]byte(raw), discardWriter{}); err != nil {
 		t.Fatalf("generated Markdown did not parse: %v", err)
+	}
+}
+
+func TestCitationMarkdownPreservesLiteralGFMSyntaxAndSemanticEmphasis(t *testing.T) {
+	p := Presentation{Runs: []Run{
+		{Text: "研究 ~~literal~~ $x^2$ | "},
+		{Text: "real italic", Italic: true},
+		{Text: " and "},
+		{Text: "real bold", Bold: true},
+	}}
+	markdown := Markdown(p)
+	var rendered bytes.Buffer
+	parser := goldmark.New(goldmark.WithExtensions(extension.GFM))
+	if err := parser.Convert([]byte(markdown), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	html := rendered.String()
+	if strings.Contains(html, "<del>") || !strings.Contains(html, "研究 ~~literal~~ $x^2$ | ") {
+		t.Fatalf("literal GFM delimiters changed: Markdown %q HTML %q", markdown, html)
+	}
+	if !strings.Contains(html, "<em>real italic</em>") || !strings.Contains(html, "<strong>real bold</strong>") {
+		t.Fatalf("semantic emphasis changed: Markdown %q HTML %q", markdown, html)
 	}
 }
 

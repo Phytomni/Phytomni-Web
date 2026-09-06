@@ -270,6 +270,25 @@ describe("canonical citation presentation", () => {
     );
     wrapper.unmount();
   });
+  it("preserves cross-language GFM and scientific delimiters while keeping semantic emphasis", async () => {
+    const markdown = citationMarkdown({
+      runs: [
+        { text: "研究 ~~literal~~ $x^2$ | " },
+        { text: "real italic", italic: true },
+        { text: " and " },
+        { text: "real bold", bold: true },
+      ],
+      links: [],
+    });
+    const wrapper = await render(markdown);
+    expect(wrapper.get("p").element.textContent).toBe(
+      "研究 ~~literal~~ $x^2$ | real italic and real bold"
+    );
+    expect(wrapper.find("del, .katex, table").exists()).toBe(false);
+    expect(wrapper.get("em").text()).toBe("real italic");
+    expect(wrapper.get("strong").text()).toBe("real bold");
+    wrapper.unmount();
+  });
   it("protects Markdown block syntax split across canonical runs", async () => {
     const wrapper = await render(
       citationMarkdown({
