@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
 import { mountWithApp } from "../../helpers/test-app-context";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import {
@@ -10,6 +12,8 @@ import {
   referenceListMarkdown,
 } from "@/utils/citation-presentation";
 import { decodeCitationDocuments } from "@/views/chat/utils/format";
+import { transformScientificCitations } from "@/utils/scientific-markdown/citations";
+import type { ScientificMarkdownNode } from "@/utils/scientific-markdown/types";
 
 const p = {
   runs: [
@@ -30,6 +34,77 @@ async function render(source: string) {
 }
 
 describe("canonical citation presentation", () => {
+  it("validates and preserves the canonical vertical enum without merging unlike runs", async () => {
+    const presentation = {
+      runs: [
+        { text: "H" },
+        { text: "2", vertical: "subscript" as const },
+        { text: "O and " },
+        {
+          text: "[2]",
+          vertical: "superscript" as const,
+          italic: true,
+          bold: true,
+        },
+      ],
+      links: [],
+    };
+    expect(decodeCitationPresentation(presentation)).toEqual(presentation);
+    const wrapper = await render(citationMarkdown(presentation));
+    expect(wrapper.get("sub").text()).toBe("2");
+    expect(wrapper.get("sup strong").text()).toBe("[2]");
+    expect(wrapper.get("sup em").text()).toBe("[2]");
+    expect(wrapper.text()).toBe("H2O and [2]");
+    expect(wrapper.findAll(".scientific-citation, a")).toHaveLength(0);
+    wrapper.unmount();
+  });
+  it.each(["baseline", "super", "SUP", "<img>", "", null, 1, {}])(
+    "rejects invalid public vertical state %s",
+    (vertical) => {
+      expect(
+        decodeCitationPresentation({
+          runs: [{ text: "Title", vertical }],
+          links: [],
+        })
+      ).toBeNull();
+    }
+  );
+  it.each(["2\n3", "2\r3", "2\r\n3", "&lt;sub&gt;2", " *[2]_ "])(
+    "serializes vertical text on one physical source line: %s",
+    async (text) => {
+      const presentation = {
+        runs: [{ text, vertical: "superscript" as const, italic: true }],
+        links: [],
+      };
+      const markdown = citationMarkdown(presentation);
+      expect(markdown).not.toMatch(/[\r\n]/);
+      if (text.includes("\r")) expect(markdown).toContain("&#13;");
+      if (text.includes("\n")) expect(markdown).toContain("&#10;");
+      const tree = unified()
+        .use(remarkParse)
+        .parse(markdown) as unknown as ScientificMarkdownNode;
+      transformScientificCitations(
+        tree,
+        { namespace: "", referenceCount: 0 },
+        markdown
+      );
+      const scripts: ScientificMarkdownNode[] = [];
+      const collect = (node: ScientificMarkdownNode): string => {
+        if (node.data?.scientificVertical) scripts.push(node);
+        return node.value ?? (node.children ?? []).map(collect).join("");
+      };
+      expect(collect(tree)).toBe(text);
+      expect(scripts).toHaveLength(1);
+      expect(scripts[0].data?.scientificVertical).toBe("superscript");
+      const wrapper = await render(markdown);
+      expect(wrapper.get("sup em").element.textContent).toBe(
+        text.replace(/\r\n?/g, "\n")
+      );
+      expect(wrapper.findAll("sub, .scientific-citation, a")).toHaveLength(0);
+      expect(citationPlainText(presentation)).toBe(text);
+      wrapper.unmount();
+    }
+  );
   it("serializes the same emphasis and external target", () => {
     expect(citationPlainText(p)).toBe("Journal 12");
     expect(citationMarkdown(p)).toBe(
@@ -239,6 +314,24 @@ describe("canonical citation presentation", () => {
       { citation: p },
     ]);
     expect(decodeCitationDocuments(null)).toBeUndefined();
+  });
+  it("retains scientific styles through history decoding and keeps invalid slots numbered", () => {
+    const citation = {
+      runs: [
+        { text: "FLC", italic: true },
+        { text: "2", vertical: "superscript" as const },
+      ],
+      links: [],
+    };
+    expect(
+      decodeCitationDocuments([
+        { citation },
+        {
+          citation: { runs: [{ text: "Bad", vertical: "unknown" }], links: [] },
+        },
+        { citation },
+      ])
+    ).toEqual([{ citation }, { citation: null }, { citation }]);
   });
   it("serializes numbered rows and fixed link labels without dropping rejected positions", () => {
     const rows = [

@@ -193,7 +193,7 @@ func BuildCited(src string, rows []citation.Row, opts Options) (Document, error)
 		for i, row := range rows {
 			entry := block{kind: blockParagraph, role: roleReference, referenceIndex: i + 1}
 			for _, run := range row.Citation.Runs {
-				entry.inlines = append(entry.inlines, inline{kind: inlineText, text: run.Text, style: style{bold: run.Bold, italic: run.Italic}})
+				entry.inlines = append(entry.inlines, inline{kind: inlineText, text: run.Text, style: style{bold: run.Bold, italic: run.Italic, vertical: verticalPosition(run.Vertical)}})
 			}
 			blocks = append(blocks, entry)
 			if len(row.Citation.Links) > 0 {

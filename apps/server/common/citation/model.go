@@ -1,9 +1,17 @@
 package citation
 
+type Vertical string
+
+const (
+	VerticalSuperscript Vertical = "superscript"
+	VerticalSubscript   Vertical = "subscript"
+)
+
 type Run struct {
-	Text   string `json:"text"`
-	Bold   bool   `json:"bold,omitempty"`
-	Italic bool   `json:"italic,omitempty"`
+	Text     string   `json:"text"`
+	Bold     bool     `json:"bold,omitempty"`
+	Italic   bool     `json:"italic,omitempty"`
+	Vertical Vertical `json:"vertical,omitempty"`
 }
 
 type Link struct {

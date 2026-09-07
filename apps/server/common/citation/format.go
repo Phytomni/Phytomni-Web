@@ -2,6 +2,7 @@ package citation
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -107,6 +108,10 @@ func trimRuns(runs []Run) []Run {
 	trimmed := make([]Run, len(runs))
 	copy(trimmed, runs)
 	for len(trimmed) > 0 {
+		// Whitespace inside an accepted script belongs to its scientific text.
+		if trimmed[0].Vertical != "" {
+			break
+		}
 		trimmed[0].Text = strings.TrimLeft(trimmed[0].Text, " \t\r\n")
 		if trimmed[0].Text != "" {
 			break
@@ -115,6 +120,9 @@ func trimRuns(runs []Run) []Run {
 	}
 	for len(trimmed) > 0 {
 		last := len(trimmed) - 1
+		if trimmed[last].Vertical != "" {
+			break
+		}
 		trimmed[last].Text = strings.TrimRight(trimmed[last].Text, " \t\r\n")
 		if trimmed[last].Text != "" {
 			break
@@ -125,7 +133,8 @@ func trimRuns(runs []Run) []Run {
 }
 
 func transferTitleEmphasis(presentation *Presentation, source Source, imported Presentation) {
-	title := strings.TrimSpace(PlainText(importCitation(selectedTitle(source))))
+	selected := PlainText(importCitation(selectedTitle(source)))
+	title := strings.TrimSpace(selected)
 	if title == "" {
 		return
 	}
@@ -137,7 +146,7 @@ func transferTitleEmphasis(presentation *Presentation, source Source, imported P
 	titleRuns := sliceRuns(imported.Runs, start, start+len(title))
 	styled := false
 	for _, run := range titleRuns {
-		styled = styled || run.Bold || run.Italic
+		styled = styled || run.Bold || run.Italic || run.Vertical != ""
 	}
 	if !styled {
 		return
@@ -151,6 +160,9 @@ func transferTitleEmphasis(presentation *Presentation, source Source, imported P
 		}
 		structuredStart++
 	}
+	// Match trimmed title text without replacing source-authored script-edge
+	// whitespace or beginning a byte slice inside a multibyte character.
+	structuredStart += len(selected) - len(strings.TrimLeftFunc(selected, unicode.IsSpace))
 	presentation.Runs = replaceRunRange(presentation.Runs, structuredStart, structuredStart+len(title), titleRuns)
 }
 
@@ -162,7 +174,8 @@ func sliceRuns(runs []Run, start, end int) []Run {
 		if runEnd > start && offset < end {
 			from := max(start-offset, 0)
 			to := min(end-offset, len(run.Text))
-			appendRunToSlice(&out, Run{Text: run.Text[from:to], Bold: run.Bold, Italic: run.Italic})
+			run.Text = run.Text[from:to]
+			appendRunToSlice(&out, run)
 		}
 		offset = runEnd
 	}
@@ -186,7 +199,7 @@ func appendRunToSlice(runs *[]Run, run Run) {
 		return
 	}
 	last := len(*runs) - 1
-	if last >= 0 && (*runs)[last].Bold == run.Bold && (*runs)[last].Italic == run.Italic {
+	if last >= 0 && (*runs)[last].Bold == run.Bold && (*runs)[last].Italic == run.Italic && (*runs)[last].Vertical == run.Vertical {
 		(*runs)[last].Text += run.Text
 		return
 	}

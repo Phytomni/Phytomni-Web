@@ -7,11 +7,23 @@
           ><template
             v-for="(run, position) in presentation.runs"
             :key="position"
-            ><strong v-if="run.bold"
-              ><em v-if="run.italic">{{ run.text }}</em
-              ><template v-else>{{ run.text }}</template></strong
-            ><em v-else-if="run.italic">{{ run.text }}</em
-            ><template v-else>{{ run.text }}</template></template
+            ><component
+              :is="
+                run.vertical === 'superscript'
+                  ? 'sup'
+                  : run.vertical === 'subscript'
+                    ? 'sub'
+                    : 'span'
+              "
+              :class="
+                run.vertical ? `scientific-inline--${run.vertical}` : undefined
+              "
+              ><strong v-if="run.bold"
+                ><em v-if="run.italic">{{ run.text }}</em
+                ><template v-else>{{ run.text }}</template></strong
+              ><em v-else-if="run.italic">{{ run.text }}</em
+              ><template v-else>{{ run.text }}</template></component
+            ></template
           ></span
         >
         <div

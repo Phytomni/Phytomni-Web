@@ -6,6 +6,7 @@ export interface CitationRun {
   text: string;
   bold?: boolean;
   italic?: boolean;
+  vertical?: "superscript" | "subscript";
 }
 
 export interface CitationLink {
@@ -69,13 +70,17 @@ export function decodeCitationPresentation(
       !isRecord(run) ||
       typeof run.text !== "string" ||
       (run.bold !== undefined && typeof run.bold !== "boolean") ||
-      (run.italic !== undefined && typeof run.italic !== "boolean")
+      (run.italic !== undefined && typeof run.italic !== "boolean") ||
+      (run.vertical !== undefined &&
+        run.vertical !== "superscript" &&
+        run.vertical !== "subscript")
     )
       return null;
     runs.push({
       text: run.text,
       ...(run.bold !== undefined ? { bold: run.bold } : {}),
       ...(run.italic !== undefined ? { italic: run.italic } : {}),
+      ...(run.vertical !== undefined ? { vertical: run.vertical } : {}),
     });
   }
   if (!runs.some((run) => run.text.trim())) return null;
@@ -107,7 +112,8 @@ export function citationMarkdown(presentation: CitationPresentation): string {
     if (
       previous &&
       Boolean(previous.bold) === Boolean(run.bold) &&
-      Boolean(previous.italic) === Boolean(run.italic)
+      Boolean(previous.italic) === Boolean(run.italic) &&
+      previous.vertical === run.vertical
     )
       previous.text += run.text;
     else runs.push({ ...run });
@@ -135,15 +141,47 @@ export function citationMarkdown(presentation: CitationPresentation): string {
         return escaped;
       })
       .join("\n");
-  const fragments: { text: string; marker: string }[] = [];
-  const append = (text: string, strength = 0) => {
+  const fragments: {
+    text: string;
+    marker: string;
+    vertical?: CitationRun["vertical"];
+  }[] = [];
+  const append = (
+    text: string,
+    strength = 0,
+    vertical?: CitationRun["vertical"]
+  ) => {
     if (!text) return;
     const previous = fragments[fragments.length - 1];
     // Different adjacent styles must not merge into one delimiter run.
     const delimiter = previous?.marker.startsWith("*") ? "_" : "*";
-    fragments.push({ text: escape(text), marker: delimiter.repeat(strength) });
+    let escaped = escape(text);
+    if (vertical) {
+      escaped = escaped.replace(/\r/g, "&#13;").replace(/\n/g, "&#10;");
+      if (strength)
+        escaped = escaped.replace(/^\s+|\s+$/g, (space) =>
+          Array.from(
+            space,
+            (character) => `&#${character.codePointAt(0)};`
+          ).join("")
+        );
+      lineStart = false;
+    }
+    fragments.push({
+      text: escaped,
+      marker: delimiter.repeat(strength),
+      ...(vertical ? { vertical } : {}),
+    });
   };
   for (const run of runs) {
+    if (run.vertical) {
+      append(
+        run.text,
+        run.bold && run.italic ? 3 : run.bold ? 2 : run.italic ? 1 : 0,
+        run.vertical
+      );
+      continue;
+    }
     if (!run.bold && !run.italic) {
       append(run.text);
       continue;
@@ -163,12 +201,12 @@ export function citationMarkdown(presentation: CitationPresentation): string {
   const ordinary = (char: string) => char && !/[\s\p{P}\p{S}]/u.test(char);
   for (let index = 0; index < fragments.length; index++) {
     const fragment = fragments[index];
-    if (!fragment.marker) continue;
+    if (!fragment.marker || fragment.vertical) continue;
     // CommonMark flanking uses source characters, before entity decoding.
     // Encode the outside letter when a punctuation edge would stop emphasis.
     for (const side of [-1, 1]) {
       const neighbor = fragments[index + side];
-      if (!neighbor || neighbor.marker) continue;
+      if (!neighbor || neighbor.marker || neighbor.vertical) continue;
       const chars = Array.from(neighbor.text);
       const offset = side < 0 ? chars.length - 1 : 0;
       const content = Array.from(fragment.text);
@@ -189,7 +227,12 @@ export function citationMarkdown(presentation: CitationPresentation): string {
     }
   }
   const sentence = fragments
-    .map(({ text, marker }) => marker + text + marker)
+    .map(({ text, marker, vertical }) => {
+      const content = marker + text + marker;
+      if (!vertical) return content;
+      const tag = vertical === "superscript" ? "sup" : "sub";
+      return `<${tag}>${content}</${tag}>`;
+    })
     .join("");
   const links = presentation.links
     .map((link) => {

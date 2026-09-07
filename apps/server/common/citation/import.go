@@ -1,18 +1,25 @@
 package citation
 
 import (
+	stdhtml "html"
+	"regexp"
 	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"golang.org/x/net/html"
 )
 
 type importStyle struct {
-	bold   bool
-	italic bool
+	bold       bool
+	italic     bool
+	vertical   Vertical
+	literal    bool
+	literalEnd int
+	protected  bool
 }
 
 type citationImporter struct {
@@ -31,6 +38,7 @@ func importCitation(raw string) Presentation {
 
 	source := []byte(raw)
 	markdown := goldmark.New()
+	markdown.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(&importedMathParser{}, 150), util.Prioritized(&importedScriptSourceParser{}, 150)))
 	document := markdown.Parser().Parse(text.NewReader(source))
 	importer := citationImporter{source: source, runs: []Run{}, links: []Link{}}
 	for node := document.FirstChild(); node != nil; node = node.NextSibling() {
@@ -83,7 +91,9 @@ func (importer *citationImporter) collect(node ast.Node, inherited importStyle) 
 		return
 	case *ast.Link:
 		label := plainNodeText(current, importer.source)
-		importer.appendText(label, importer.style(inherited))
+		bold, italic := importer.htmlBold, importer.htmlItalic
+		importer.collectChildren(current, inherited)
+		importer.htmlBold, importer.htmlItalic = bold, italic
 		importer.appendLink(label, string(current.Destination))
 		return
 	case *ast.AutoLink:
@@ -95,7 +105,13 @@ func (importer *citationImporter) collect(node ast.Node, inherited importStyle) 
 		importer.appendText(plainNodeText(current, importer.source), importer.style(inherited))
 		return
 	case *ast.RawHTML:
-		importer.applyHTMLTag(rawHTMLSource(current, importer.source))
+		raw := rawHTMLSource(current, importer.source)
+		name, _ := importedScriptTag(raw)
+		if inherited.literal || name != "" {
+			importer.appendText(raw, importer.style(inherited))
+		} else {
+			importer.applyHTMLTag(raw)
+		}
 		return
 	case *ast.HTMLBlock:
 		importer.collectHTMLBlock(htmlBlockSource(current, importer.source), inherited)
@@ -123,6 +139,9 @@ func htmlBlockSource(node *ast.HTMLBlock, source []byte) string {
 }
 
 func (importer *citationImporter) collectHTMLBlock(raw string, inherited importStyle) {
+	if importer.collectScientificHTMLBlock(raw, inherited) {
+		return
+	}
 	document, err := html.Parse(strings.NewReader(raw))
 	if err != nil {
 		return
@@ -178,20 +197,22 @@ func htmlNodeText(node *html.Node) string {
 }
 
 func (importer *citationImporter) collectChildren(node ast.Node, inherited importStyle) {
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		importer.collect(child, inherited)
-	}
+	importer.collectInlineChildren(node, inherited)
 }
 
 func (importer *citationImporter) style(inherited importStyle) importStyle {
 	return importStyle{
-		bold:   inherited.bold || importer.htmlBold > 0,
-		italic: inherited.italic || importer.htmlItalic > 0,
+		bold:       inherited.bold || importer.htmlBold > 0,
+		italic:     inherited.italic || importer.htmlItalic > 0,
+		vertical:   inherited.vertical,
+		literal:    inherited.literal,
+		literalEnd: inherited.literalEnd,
+		protected:  inherited.protected,
 	}
 }
 
 func (importer *citationImporter) appendText(value string, style importStyle) {
-	appendRunToSlice(&importer.runs, Run{Text: value, Bold: style.bold, Italic: style.italic})
+	appendRunToSlice(&importer.runs, Run{Text: value, Bold: style.bold, Italic: style.italic, Vertical: style.vertical})
 }
 
 func (importer *citationImporter) appendLink(label, destination string) {
@@ -269,10 +290,34 @@ func codeSpanText(node *ast.CodeSpan, source []byte) string {
 }
 
 func decodedText(value []byte) string {
-	value = util.UnescapePunctuations(value)
-	value = util.ResolveNumericReferences(value)
-	value = util.ResolveEntityNames(value)
-	return string(value)
+	// Escaped punctuation and decoded entities are separate source operations:
+	// neither can create new syntax or receive a second entity decode.
+	var out strings.Builder
+	start := 0
+	for i := 0; i+1 < len(value); i++ {
+		if value[i] == '\\' && util.IsPunct(value[i+1]) {
+			out.WriteString(decodeImportedEntities(value[start:i]))
+			out.WriteByte(value[i+1])
+			i++
+			start = i + 1
+		}
+	}
+	out.WriteString(decodeImportedEntities(value[start:]))
+	return out.String()
+}
+
+var importedEntityPattern = regexp.MustCompile(`&(?:#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6}|[A-Za-z][A-Za-z0-9]*);`)
+
+func decodeImportedEntities(source []byte) string {
+	return importedEntityPattern.ReplaceAllStringFunc(string(source), func(reference string) string {
+		if reference[1] == '#' {
+			return stdhtml.UnescapeString(reference)
+		}
+		if entity, ok := util.LookUpHTML5EntityByName(reference[1 : len(reference)-1]); ok {
+			return string(entity.Characters)
+		}
+		return reference
+	})
 }
 
 func blockText(node ast.Node, source []byte) string {

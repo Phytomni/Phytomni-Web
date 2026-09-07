@@ -221,14 +221,14 @@ func Markdown(presentation Presentation) string {
 	}
 	for index := range fragments {
 		fragment := &fragments[index]
-		if fragment.marker == "" {
+		if fragment.marker == "" || fragment.vertical != "" {
 			continue
 		}
 		// Flanking uses source characters before entity decoding. Encode outside
 		// letters where punctuation would prevent an emphasis delimiter opening.
 		for _, side := range []int{-1, 1} {
 			adjacent := index + side
-			if adjacent < 0 || adjacent >= len(fragments) || fragments[adjacent].marker != "" {
+			if adjacent < 0 || adjacent >= len(fragments) || fragments[adjacent].marker != "" || fragments[adjacent].vertical != "" {
 				continue
 			}
 			neighbor := &fragments[adjacent]
@@ -248,7 +248,20 @@ func Markdown(presentation Presentation) string {
 		}
 	}
 	for _, fragment := range fragments {
+		tag := ""
+		switch fragment.vertical {
+		case VerticalSuperscript:
+			tag = "sup"
+		case VerticalSubscript:
+			tag = "sub"
+		}
+		if tag != "" {
+			out.WriteString("<" + tag + ">")
+		}
 		out.WriteString(fragment.marker + fragment.text + fragment.marker)
+		if tag != "" {
+			out.WriteString("</" + tag + ">")
+		}
 	}
 
 	links := citationLinks(Source{}, presentation.Links)
@@ -266,6 +279,7 @@ func Markdown(presentation Presentation) string {
 
 type markdownFragment struct {
 	text, marker string
+	vertical     Vertical
 }
 
 func markdownOrdinary(character rune) bool {
@@ -277,6 +291,38 @@ func markdownEntity(character rune) string {
 }
 
 func appendMarkdownRun(fragments *[]markdownFragment, escaper *markdownEscaper, run Run) {
+	if run.Vertical == VerticalSuperscript || run.Vertical == VerticalSubscript {
+		if run.Text == "" {
+			return
+		}
+		strength := 0
+		if run.Italic {
+			strength++
+		}
+		if run.Bold {
+			strength += 2
+		}
+		value := escapeMarkdownInline(run.Text)
+		value = strings.NewReplacer("\r", "&#13;", "\n", "&#10;").Replace(value)
+		if strength > 0 {
+			// Entity syntax is not whitespace for delimiter flanking; decoding
+			// restores the original styled whitespace only after parsing.
+			leading := len(value) - len(strings.TrimLeftFunc(value, unicode.IsSpace))
+			trailing := len(strings.TrimRightFunc(value, unicode.IsSpace))
+			var escaped strings.Builder
+			for offset, ch := range value {
+				if offset < leading || offset >= trailing {
+					escaped.WriteString(markdownEntity(ch))
+				} else {
+					escaped.WriteRune(ch)
+				}
+			}
+			value = escaped.String()
+		}
+		*fragments = append(*fragments, markdownFragment{text: value, marker: strings.Repeat("*", strength), vertical: run.Vertical})
+		escaper.lineStart = false
+		return
+	}
 	appendText := func(text string, strength int) {
 		if text == "" {
 			return
@@ -285,7 +331,7 @@ func appendMarkdownRun(fragments *[]markdownFragment, escaper *markdownEscaper, 
 		if count := len(*fragments); count > 0 && strings.HasPrefix((*fragments)[count-1].marker, "*") {
 			delimiter = "_"
 		}
-		*fragments = append(*fragments, markdownFragment{escaper.escape(text), strings.Repeat(delimiter, strength)})
+		*fragments = append(*fragments, markdownFragment{text: escaper.escape(text), marker: strings.Repeat(delimiter, strength)})
 	}
 	if !run.Bold && !run.Italic {
 		appendText(run.Text, 0)

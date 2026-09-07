@@ -7,6 +7,39 @@ import zhCN from "@/locales/langs/zh-CN";
 import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 
 describe("CitationReferenceRow", () => {
+  it("renders canonical scripts and emphasis as inert semantic nodes", () => {
+    const wrapper = mountWithApp(CitationReferenceRow, {
+      props: {
+        index: 4,
+        citation: {
+          runs: [
+            { text: "H" },
+            { text: "2", vertical: "subscript" as const },
+            { text: "O " },
+            {
+              text: "[2]<img>",
+              vertical: "superscript" as const,
+              bold: true,
+              italic: true,
+            },
+          ],
+          links: [{ label: "Article", href: "https://example.org/paper" }],
+        },
+      },
+    });
+    expect(wrapper.get("sub").text()).toBe("2");
+    expect(wrapper.get("sup strong em").text()).toBe("[2]<img>");
+    expect(wrapper.get(".citation-reference-row__sentence").text()).toBe(
+      "H2O [2]<img>"
+    );
+    expect(
+      wrapper.findAll("img, .scientific-citation, sup a, sub a, sup[tabindex]")
+    ).toHaveLength(0);
+    expect(wrapper.get("a").attributes("href")).toBe(
+      "https://example.org/paper"
+    );
+    wrapper.unmount();
+  });
   it("localizes rejected slots but does not translate a valid canonical neutral sentence", () => {
     const context = createTestAppContext({ locale: "zh-CN" });
     const rejected = context.mount(CitationReferenceRow, {
