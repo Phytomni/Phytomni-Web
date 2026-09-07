@@ -23,11 +23,20 @@ const (
 )
 
 type style struct {
-	bold   bool
-	italic bool
-	code   bool
-	strike bool
+	bold     bool
+	italic   bool
+	code     bool
+	strike   bool
+	vertical verticalPosition
 }
+
+type verticalPosition string
+
+const (
+	verticalBaseline    verticalPosition = ""
+	verticalSuperscript verticalPosition = "superscript"
+	verticalSubscript   verticalPosition = "subscript"
+)
 
 type inline struct {
 	kind     inlineKind

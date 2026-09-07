@@ -172,41 +172,49 @@
     ],
     "citations": [
       {
+        "before": "Evidence ",
         "text": "1",
         "indices": [1],
         "active": true
       },
       {
+        "before": "paired evidence ",
         "text": "2,4",
         "indices": [2, 4],
         "active": true
       },
       {
+        "before": "Repeated evidence ",
         "text": "1",
         "indices": [1],
         "active": true
       },
       {
+        "before": "Retained neutral evidence ",
         "text": "3",
         "indices": [3],
         "active": true
       },
       {
+        "before": "A mixed invalid group ",
         "text": "2,3,99",
         "indices": [2, 3, 99],
         "active": false
       },
       {
+        "before": "A valid range ",
         "text": "5–6",
         "indices": [5, 6],
         "active": true
       },
       {
+        "before": "Structured precedence ",
         "text": "7",
         "indices": [7],
         "active": true
       },
       {
+        "before": "Duplicate bibliography entry ",
         "text": "8",
         "indices": [8],
         "active": true

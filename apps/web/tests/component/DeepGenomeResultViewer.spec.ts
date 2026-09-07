@@ -242,7 +242,15 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(
       wrapper.findAll(".scientific-citation").map((node) => node.text())
-    ).toEqual(["1–3", "1", "1–3"]);
+    ).toEqual(["1–3"]);
+    expect(
+      wrapper
+        .findAll(".scientific-inline--superscript")
+        .map((node) => node.text())
+    ).toEqual(["1", "[1-3]"]);
+    expect(wrapper.findAll(".scientific-inline--superscript a")).toHaveLength(
+      0
+    );
   });
 
   it("keeps hostile raw HTML inert while leaving only controlled resource nodes active", async () => {

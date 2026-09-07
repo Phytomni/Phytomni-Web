@@ -13,7 +13,7 @@
       :sanitize-options="sanitizeOptions"
       :need-view-code-btn="false"
       :secure-view-code="true"
-      :remark-plugins="remarkPlugins"
+      :remark-plugins-ahead="remarkPlugins"
       :rehype-plugins="rehypePlugins"
     >
       <template #a="slotProps">
@@ -233,6 +233,8 @@ const sanitizeOptions: SanitizeOptions = {
       h5: ["id"],
       h6: ["id"],
       sup: ["className"],
+      sub: ["className"],
+      em: ["className"],
       span: ["className", "ariaHidden", "style"],
       math: ["xmlns", "display"],
       annotation: ["encoding"],

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 
 	"github.com/gomutex/godocx"
 	"github.com/gomutex/godocx/docx"
@@ -259,6 +260,7 @@ func (w *academicWordWriter) listParagraph(id, depth int) (*docx.Paragraph, int)
 // Keep breaks and tabs as Word elements within the same direct run; coordinates
 // are therefore independent of literal newlines and tab characters in content.
 func academicWordText(p *docx.Paragraph, text string) *docx.Run {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 	r := p.AddText("")
 	ct := p.GetCT().Children[len(p.GetCT().Children)-1].Run
 	ct.Children = nil
@@ -320,6 +322,13 @@ func (w *academicWordWriter) writeInlinesWithin(p *docx.Paragraph, ordinal int, 
 			r.Size(academicCodeFontSizePt)
 			p.GetCT().Children[index].Run.Property.Fonts = academicWordFonts(academicCodeDOCXFamily)
 		}
+		if in.style.vertical != verticalBaseline {
+			ct := p.GetCT().Children[index].Run
+			if ct.Property == nil {
+				ct.Property = &ctypes.RunProperty{}
+			}
+			ct.Property.VertAlign = ctypes.NewGenSingleStrVal(stypes.VerticalAlignRun(in.style.vertical))
+		}
 		if in.citation != nil {
 			// Word applies native superscript scaling to the 12 pt body-size base.
 			size := uint64(academicLayout(roleBody).sizePt)
@@ -330,9 +339,7 @@ func (w *academicWordWriter) writeInlinesWithin(p *docx.Paragraph, ordinal int, 
 			continue
 		}
 		if validWordLink(in.href) {
-			size := uint64(academicLayout(roleReferenceLinks).sizePt)
-			r.Color("0563C1").Underline(stypes.UnderlineSingle).Size(size)
-			p.GetCT().Children[index].Run.Property.SizeCs = ctypes.NewFontSizeCS(size * 2)
+			r.Color("0563C1").Underline(stypes.UnderlineSingle)
 			patch := wordLinkPatch{ordinal, index, 1, in.href}
 			n := len(w.plan.links)
 			if n > 0 {

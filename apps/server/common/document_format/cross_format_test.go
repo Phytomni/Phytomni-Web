@@ -32,9 +32,15 @@ type contractLink struct {
 	Href  string `json:"href"`
 }
 type contractCitation struct {
+	Before  string `json:"before"`
 	Text    string `json:"text"`
 	Indices []int  `json:"indices"`
 	Active  bool   `json:"active"`
+}
+type contractScript struct {
+	Before   string `json:"before"`
+	Text     string `json:"text"`
+	Vertical string `json:"vertical"`
 }
 type citedContract struct {
 	Content    string          `json:"content"`
@@ -44,7 +50,53 @@ type citedContract struct {
 		Emphasis  []contractEmphasis `json:"emphasis"`
 		Links     []contractLink     `json:"links"`
 		Citations []contractCitation `json:"citations"`
+		Scripts   []contractScript   `json:"scripts,omitempty"`
 	} `json:"expected"`
+}
+
+func TestCrossFormatOrdinaryScriptsAreNotCitationMarkers(t *testing.T) {
+	data, err := os.ReadFile("testdata/cited-contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture citedContract
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	fixture.Content += "\n\nScientific upper<sup>2</sup>, lower<sub>2</sub>, then explicit [2]."
+	fixture.Expected.Scripts = []contractScript{
+		{Before: "Scientific upper", Text: "2", Vertical: "superscript"},
+		{Before: ", lower", Text: "2", Vertical: "subscript"},
+	}
+	fixture.Expected.Citations = append(fixture.Expected.Citations, contractCitation{Before: "then explicit ", Text: "2", Indices: []int{2}, Active: true})
+	answer, err := json.Marshal(citedEnvelope{fixture.Content, fixture.References})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"KnowledgeAgent", "ReviewAgent", "BriefGeneAgent", "DeepGenomeAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			agent, err := NewAgentWithOptions(tool, AgentOptions{FontDir: requiredAcademicFontDir(t)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, format := range []string{"Word", "PDF", "Markdown"} {
+				t.Run(format, func(t *testing.T) {
+					body, _, err := agent.Download(format, string(answer))
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch format {
+					case "Word":
+						checkContractWord(t, body, fixture)
+					case "PDF":
+						checkContractPDF(t, body, fixture)
+					case "Markdown":
+						checkContractMarkdown(t, string(body), fixture)
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestCrossFormatReviewedContract(t *testing.T) {
@@ -139,12 +191,31 @@ type contractWordRun struct {
 		Vertical *struct {
 			Val string `xml:"val,attr"`
 		} `xml:"vertAlign"`
+		Size *struct {
+			Val string `xml:"val,attr"`
+		} `xml:"sz"`
 	} `xml:"rPr"`
 	Text []string `xml:"t"`
 }
 
 func checkContractWord(t *testing.T, body []byte, f citedContract) {
 	t.Helper()
+	var styles struct {
+		Rows []struct {
+			ID   string `xml:"styleId,attr"`
+			Size struct {
+				Val string `xml:"val,attr"`
+			} `xml:"rPr>sz"`
+		} `xml:"style"`
+	}
+	if err := xml.Unmarshal([]byte(wordPackagePart(t, body, "word/styles.xml")), &styles); err != nil {
+		t.Fatal(err)
+	}
+	styleSizes := map[string]string{}
+	for _, style := range styles.Rows {
+		styleSizes[style.ID] = style.Size.Val
+	}
+	paragraphStyle := ""
 	var relationships struct {
 		Rows []struct {
 			ID     string `xml:"Id,attr"`
@@ -166,6 +237,8 @@ func checkContractWord(t *testing.T, body []byte, f citedContract) {
 	var emphasis []contractEmphasis
 	var links []contractLink
 	var citations []string
+	var bodyText strings.Builder
+	scripts := 0
 	bodyFaces := map[string][2]bool{}
 	index := 0
 	referenceParagraph := false
@@ -188,6 +261,20 @@ func checkContractWord(t *testing.T, body []byte, f citedContract) {
 		start, ok := token.(xml.StartElement)
 		if !ok {
 			continue
+		}
+		if start.Name.Local == "p" {
+			paragraphStyle = ""
+		}
+		if start.Name.Local == "pPr" {
+			var properties struct {
+				Style struct {
+					Val string `xml:"val,attr"`
+				} `xml:"pStyle"`
+			}
+			if err := decoder.DecodeElement(&properties, &start); err != nil {
+				t.Fatal(err)
+			}
+			paragraphStyle = properties.Style.Val
 		}
 		if start.Name.Local == "hyperlink" {
 			id := ""
@@ -234,9 +321,35 @@ func checkContractWord(t *testing.T, body []byte, f citedContract) {
 				emphasis = append(emphasis, contractEmphasis{index, value, bold, italic})
 			}
 		}
-		if index == 0 && run.Properties.Vertical != nil && run.Properties.Vertical.Val == "superscript" {
-			citations = append(citations, value)
+		if index == 0 {
+			before := bodyText.String()
+			for _, mark := range f.Expected.Citations {
+				if mark.Before != "" && strings.HasSuffix(before, mark.Before) && value == mark.Text {
+					if run.Properties.Vertical == nil || run.Properties.Vertical.Val != "superscript" || run.Properties.Size == nil || run.Properties.Size.Val != "24" {
+						t.Fatalf("DOCX explicit citation %q lost its 12 pt native superscript", mark.Before)
+					}
+					citations = append(citations, value)
+				}
+			}
+			for _, script := range f.Expected.Scripts {
+				if script.Before != "" && strings.HasSuffix(before, script.Before) && value == script.Text {
+					// Ordinary scripts inherit the paragraph role unless explicitly
+					// overridden; native Word scaling must not be applied twice.
+					size := styleSizes[paragraphStyle]
+					if run.Properties.Size != nil {
+						size = run.Properties.Size.Val
+					}
+					if run.Properties.Vertical == nil || run.Properties.Vertical.Val != script.Vertical || size != "24" {
+						t.Fatalf("DOCX ordinary script %q lost its base size or native vertical position", script.Before)
+					}
+					scripts++
+				}
+			}
+			bodyText.WriteString(value)
 		}
+	}
+	if scripts != len(f.Expected.Scripts) {
+		t.Fatalf("DOCX ordinary script count: got %d want %d", scripts, len(f.Expected.Scripts))
 	}
 	var marks []string
 	if !reflect.DeepEqual(bodyFaces, map[string][2]bool{"bold": {true, false}, "italic": {false, true}, "combined": {true, true}}) {
@@ -385,14 +498,39 @@ func checkContractPDF(t *testing.T, data []byte, f citedContract) {
 	var full strings.Builder
 	var fontBytes []string
 	var marks []contractPDFText
-	for _, p := range paint {
+	scripts := 0
+	for i, p := range paint {
+		// Source-context expectations distinguish typography from citations even
+		// when both paint as the same 8 pt raised digit. Font size is a checked
+		// property, never the classifier.
+		before := full.String()
+		for _, mark := range f.Expected.Citations {
+			if mark.Before != "" && strings.HasSuffix(before, mark.Before) && p.text == mark.Text {
+				if p.size != 8 {
+					t.Fatalf("PDF explicit citation %q lost its 8 pt size", mark.Before)
+				}
+				marks = append(marks, p)
+			}
+		}
+		for _, script := range f.Expected.Scripts {
+			if script.Before != "" && strings.HasSuffix(before, script.Before) && p.text == script.Text {
+				rise := 3.0
+				if script.Vertical == "subscript" {
+					rise = -3
+				}
+				if i == 0 || p.page != paint[i-1].page || p.size != 8 || math.Abs(p.y-paint[i-1].y-rise) > .02 {
+					t.Fatalf("PDF ordinary script %q lost its 8 pt size or signed rise", script.Before)
+				}
+				scripts++
+			}
+		}
 		full.WriteString(p.text)
 		for range []byte(p.text) {
 			fontBytes = append(fontBytes, p.font)
 		}
-		if p.size == 8 {
-			marks = append(marks, p)
-		}
+	}
+	if scripts != len(f.Expected.Scripts) {
+		t.Fatalf("PDF ordinary script count: got %d want %d", scripts, len(f.Expected.Scripts))
 	}
 	text := full.String()
 	offset := strings.Index(text, "References")

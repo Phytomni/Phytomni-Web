@@ -221,13 +221,22 @@ func (w *academicPDFWriter) fragments(inlines []inline, layout paragraphLayout) 
 		if !utf8.ValidString(in.text) {
 			return nil, errAcademicPDFGlyph
 		}
-		f := pdfFragment{text: in.text, style: in.style, sizePt: layout.sizePt}
+		value := strings.ReplaceAll(strings.ReplaceAll(in.text, "\r\n", "\n"), "\r", "\n")
+		f := pdfFragment{text: value, style: in.style, sizePt: layout.sizePt}
 		f.style.bold = f.style.bold || layout.bold
 		if in.style.code {
 			f.sizePt = academicCodeFontSizePt
 		}
 		if validWordLink(in.href) {
 			f.href = in.href
+		}
+		if in.style.vertical != verticalBaseline {
+			base := f.sizePt
+			f.sizePt = base * 2 / 3
+			f.risePt = base / 4
+			if in.style.vertical == verticalSubscript {
+				f.risePt = -f.risePt
+			}
 		}
 		if in.citation != nil {
 			f.sizePt = academicCitationFontSizePt
@@ -385,12 +394,11 @@ func (w *academicPDFWriter) keepNextHeight(blocks []block, depth int) (float64, 
 			if err != nil {
 				return 0, err
 			}
-			lineHeight := p.layout.sizePt * p.layout.lineMultiple * pdfPtMM
 			height += p.layout.beforePt * pdfPtMM
 			if !p.layout.keepNext {
-				return height + float64(min(2, len(p.lines)))*lineHeight, nil
+				return height + pdfLinesHeight(p.lines[:min(2, len(p.lines))], p.layout), nil
 			}
-			height += float64(len(p.lines))*lineHeight + p.layout.afterPt*pdfPtMM
+			height += pdfLinesHeight(p.lines, p.layout) + p.layout.afterPt*pdfPtMM
 		}
 	}
 	return height, nil
@@ -431,23 +439,22 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 	if err != nil {
 		return err
 	}
-	lineHeight := p.layout.sizePt * p.layout.lineMultiple * pdfPtMM
 	before := p.layout.beforePt * pdfPtMM
-	reserve := before + lineHeight
+	reserve := before + pdfLinesHeight(p.lines[:min(1, len(p.lines))], p.layout)
 	linkKeepHeight := 0.0
 	if b.role == roleReference && next != nil && next.role == roleReferenceLinks && next.referenceIndex == b.referenceIndex {
 		q, e := w.plan(*next, depth)
 		if e != nil {
 			return e
 		}
-		linkKeepHeight = float64(min(2, len(q.lines))) * q.layout.sizePt * q.layout.lineMultiple * pdfPtMM
+		linkKeepHeight = pdfLinesHeight(q.lines[:min(2, len(q.lines))], q.layout)
 	}
 	if p.layout.keepNext && next != nil {
 		nextHeight, e := w.keepNextHeight(following, depth)
 		if e != nil {
 			return e
 		}
-		candidate := before + float64(len(p.lines))*lineHeight + p.layout.afterPt*pdfPtMM + nextHeight
+		candidate := before + pdfLinesHeight(p.lines, p.layout) + p.layout.afterPt*pdfPtMM + nextHeight
 		if candidate <= academicPageHeightMM-2*academicPageMarginMM {
 			reserve = candidate
 		}
@@ -455,10 +462,11 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 	w.reserve(reserve)
 	w.y += before
 	for i, line := range p.lines {
+		baseline, lineHeight := pdfLineGeometry(line, p.layout)
 		height := lineHeight
 		// Avoid a lone first/last paragraph line when two lines fit on a fresh page.
 		if i == 0 && len(p.lines) > 1 || len(p.lines)-i == 2 {
-			height = 2 * lineHeight
+			height = pdfLinesHeight(p.lines[i:min(i+2, len(p.lines))], p.layout)
 		}
 		if i == len(p.lines)-1 {
 			height += linkKeepHeight
@@ -476,7 +484,7 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 			w.pdf.Bookmark(plainText(b.inlines), level, w.y)
 		}
 		if i == 0 && w.marker != nil {
-			w.paintMarker(w.y + p.layout.sizePt*pdfPtMM)
+			w.paintMarker(w.y + baseline)
 		}
 		if i == 0 && b.role == roleReference {
 			if id := w.links[b.referenceIndex]; id > 0 {
@@ -484,7 +492,7 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 			}
 			w.pdf.SetFont(academicPDFTNR, "", p.layout.sizePt)
 			w.pdf.SetTextColor(0, 0, 0)
-			w.pdf.Text(academicPageMarginMM+float64(depth)*7.5, w.y+p.layout.sizePt*pdfPtMM, fmt.Sprintf("%d.", b.referenceIndex))
+			w.pdf.Text(academicPageMarginMM+float64(depth)*7.5, w.y+baseline, fmt.Sprintf("%d.", b.referenceIndex))
 		}
 		x, width := p.x, p.width
 		if i == 0 {
@@ -499,7 +507,7 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 		if p.layout.alignment == alignRight {
 			x += width - line.widthMM
 		}
-		if err := w.paint(line, x, w.y+p.layout.sizePt*pdfPtMM); err != nil {
+		if err := w.paint(line, x, w.y+baseline); err != nil {
 			return err
 		}
 		w.y += lineHeight

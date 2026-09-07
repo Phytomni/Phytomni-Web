@@ -116,9 +116,10 @@ func parseNumericCitation(source string, count int) *citationMark {
 // This parser sees source syntax before Goldmark resolves escapes and labels.
 // Existing code/link parsers retain ownership of their protected constructs.
 type numericCitationParser struct {
-	count     int
-	rawTags   map[ast.Node][]string
-	protected []text.Segment
+	count      int
+	rawTags    map[ast.Node][]string
+	protected  []text.Segment
+	scientific *scientificInlinePlan
 }
 
 func (p *numericCitationParser) Trigger() []byte { return []byte{'[', '<', '$'} }
@@ -126,6 +127,12 @@ func (p *numericCitationParser) Parse(parent ast.Node, reader text.Reader, _ par
 	line, segment := reader.PeekLine()
 	if len(line) == 0 {
 		return nil
+	}
+	if p.scientific != nil {
+		if boundary, ok := p.scientific.boundaries[segment.Start]; ok {
+			reader.Advance(boundary.length)
+			return &boundary
+		}
 	}
 	for _, span := range p.protected {
 		if segment.Start >= span.Start && segment.Start < span.Stop {
@@ -142,15 +149,11 @@ func (p *numericCitationParser) Parse(parent ast.Node, reader text.Reader, _ par
 		if length == 0 {
 			return nil
 		}
-		if len(tags) == 0 && tag == "<sup>" {
-			content, _ := reader.PeekLine()
-			if end := bytes.Index(content, []byte("</sup>")); end >= 0 {
-				decoded := decodeCitationCharacterReferences(content[:end])
-				if mark := parseNumericCitation(decoded, p.count); mark != nil {
-					reader.Advance(end + len("</sup>"))
-					return &numericCitationNode{mark: *mark}
-				}
+		if p.scientific != nil && withinScientificSpan(segment.Start, p.scientific.scopes) {
+			if expected := p.scientific.rawClosers[segment.Start]; closing && expected == name && len(tags) > 0 && tags[len(tags)-1] == name {
+				p.rawTags[parent] = tags[:len(tags)-1]
 			}
+			return &citationLiteralNode{value: tag}
 		}
 		if closing {
 			if len(tags) > 0 && tags[len(tags)-1] == name {
@@ -168,12 +171,15 @@ func (p *numericCitationParser) Parse(parent ast.Node, reader text.Reader, _ par
 	if len(tags) > 0 {
 		return nil
 	}
+	if p.scientific != nil && withinScientificSpan(segment.Start, p.scientific.protected) {
+		return nil
+	}
 	end := bytes.IndexByte(line, ']')
 	if end < 0 {
 		return nil
 	}
 	candidate := string(line[:end+1])
-	// Raw bracket tokens do not inherit the decoded <sup> body's edge trimming.
+	// Explicit bracket tokens require their existing source-syntax boundaries.
 	if !numericToken.MatchString(normalizeCitationWhitespace(candidate)) {
 		return nil
 	}

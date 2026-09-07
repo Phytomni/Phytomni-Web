@@ -8,6 +8,100 @@ import citationGrammar from "../../../server/common/document_format/testdata/cit
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ScientificMarkdown", () => {
+  it("renders ordinary scripts and composed italics without inferred citations", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source:
+          "x<sup>2</sup> H<sub>2</sub>O <sup>[2]</sup> <i>FLC</i> <sup>*n*</sup> [2]",
+        citationNamespace: "ordinary",
+        referenceCount: 3,
+      },
+    });
+    await vi.dynamicImportSettled();
+    expect(
+      wrapper
+        .findAll(".scientific-inline--superscript")
+        .map((node) => node.text())
+    ).toEqual(["2", "[2]", "n"]);
+    expect(wrapper.get(".scientific-inline--subscript").text()).toBe("2");
+    expect(wrapper.findAll("em").map((node) => node.text())).toEqual([
+      "FLC",
+      "n",
+    ]);
+    expect(
+      wrapper.findAll(".scientific-citation__link").map((node) => node.text())
+    ).toEqual(["2"]);
+    expect(
+      wrapper.findAll(
+        ".scientific-inline--superscript a, .scientific-inline--subscript a, .scientific-inline--superscript[tabindex]"
+      )
+    ).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("keeps entity newlines styled but recovers citations after a physical newline", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source:
+          "<sup>2&#10;3</sup> <sub>4&#13;5</sub>\n\n<sup>2 [2]\nOutside [3]",
+        citationNamespace: "ordinary",
+        referenceCount: 3,
+      },
+    });
+    await vi.dynamicImportSettled();
+    expect(wrapper.get(".scientific-inline--superscript").text()).toBe("2\n3");
+    // The DOM normalizes CR to LF; the semantic grammar test preserves CR itself.
+    expect(wrapper.get(".scientific-inline--subscript").text()).toBe("4\n5");
+    expect(wrapper.text()).toContain("<sup>2 [2]");
+    expect(
+      wrapper.findAll(".scientific-citation__link").map((node) => node.text())
+    ).toEqual(["3"]);
+    wrapper.unmount();
+  });
+
+  it("preserves ordinary script link labels without creating nested references", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source:
+          "[H<sub>2</sub>O [2]](https://example.org) <em>Evidence [2]</em>",
+        citationNamespace: "ordinary",
+        referenceCount: 3,
+      },
+    });
+    await vi.dynamicImportSettled();
+    const link = wrapper.get('a[href="https://example.org"]');
+    expect(link.get("sub").text()).toBe("2");
+    expect(link.text()).toBe("H2O [2]");
+    expect(wrapper.findAll("a a")).toHaveLength(0);
+    expect(wrapper.get("em .scientific-citation__link").text()).toBe("2");
+    wrapper.unmount();
+  });
+
+  it("keeps every unfinished script prefix inert and activates only a completed pair", async () => {
+    const source = "<sup>[2]</sup>";
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: { source: "", streaming: false },
+    });
+    for (let end = 1; end < source.length; end += 1) {
+      const prefix = source.slice(0, end);
+      await wrapper.setProps({ source: prefix });
+      await vi.dynamicImportSettled();
+      expect(wrapper.text()).toBe(prefix);
+      expect(
+        wrapper.findAll("sup, sub, .scientific-citation, a, [tabindex]")
+      ).toHaveLength(0);
+    }
+    await wrapper.setProps({ source });
+    expect(wrapper.get(".scientific-inline--superscript").text()).toBe("[2]");
+    await wrapper.setProps({ citationNamespace: "late", referenceCount: 2 });
+    expect(wrapper.get(".scientific-inline--superscript").text()).toBe("[2]");
+    expect(wrapper.findAll(".scientific-citation__link")).toHaveLength(0);
+    await wrapper.setProps({ source: "<sub>incomplete", streaming: false });
+    expect(wrapper.text()).toBe("<sub>incomplete");
+    expect(wrapper.findAll("sup, sub")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
   it.each(citationGrammar)(
     "shares source-context citation grammar: $name",
     async (fixture) => {
@@ -113,9 +207,14 @@ describe("ScientificMarkdown", () => {
     );
     expect(
       wrapper.findAll(".scientific-citation").map((citation) => citation.text())
-    ).toEqual(["1", "1–4"]);
+    ).toEqual([]);
+    expect(
+      wrapper
+        .findAll(".scientific-inline--superscript")
+        .map((node) => node.text())
+    ).toEqual(["1", "[1-4]", "1"]);
     expect(wrapper.text()).toContain('<sup class="not-a-citation">1</sup>');
-    expect(wrapper.text()).toContain("<sup><em>1</em></sup>");
+    expect(wrapper.get(".scientific-inline--superscript em").text()).toBe("1");
     expect(wrapper.text()).toContain("<sup>1</sub>");
     expect(wrapper.text()).toContain("graph TD; A-->B");
     expect(wrapper.find("code.language-mermaid").exists()).toBe(true);

@@ -374,8 +374,14 @@ claim backend completion, persistence, or measured transfer progress.
 `ScientificMarkdown` is the only renderer for agent report bodies, including
 cited answers, Chat blocks, DeepGenome documents, research reports, and the
 streaming typewriter. It passes `allow-html=false` and `sanitize=true` to
-XMarkdown, accepts only the citation-only `<sup>` grammar, and owns local table,
+XMarkdown, accepts exact lowercase attribute-free `<sup>`, `<sub>`, `<i>` and
+`<em>` pairs within one source line and inline container, and owns local table,
 code, math, and link overflow; report bodies must not add a `v-html` sink.
+Scripts are ordinary typography, never inferred citations; explicit `[N]`
+outside script/protected spans retains citation behavior. Typed formatting may
+compose with Markdown emphasis or safe authored link labels; nested scripts,
+invalid pairs and other raw HTML remain inert. Code, math, destinations and
+image alt text are protected, and escaped tags are never reinterpreted.
 
 Structured images, CIF files, Markdown attachments, and citation rows are
 separate authorized resources. A caller passes owner-authorized resource

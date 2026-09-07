@@ -70,22 +70,30 @@ func planPDFTableRows(rows [][][]pdfFragment, alignments []tableAlignment, width
 }
 
 func pdfTableRowHeight(row pdfTableRow) float64 {
-	lines := 0
+	height := 0.0
 	for _, cell := range row.cells {
-		lines = max(lines, len(cell.lines))
+		height = math.Max(height, pdfLinesHeight(cell.lines, academicLayout(roleCaption)))
 	}
-	if lines == 0 {
+	if height == 0 {
 		return 0
 	}
-	return float64(lines)*pdfTableLineHeight() + 2*pdfTablePaddingMM
+	return height + 2*pdfTablePaddingMM
 }
 
-func splitPDFTableRow(row pdfTableRow, budget int) (pdfTableRow, pdfTableRow) {
+func splitPDFTableRow(row pdfTableRow, heightMM float64) (pdfTableRow, pdfTableRow) {
 	head, tail := row, row
 	head.cells = make([]pdfTableCell, len(row.cells))
 	tail.cells = make([]pdfTableCell, len(row.cells))
 	for i, cell := range row.cells {
-		n := min(budget, len(cell.lines))
+		n, height := 0, 2*pdfTablePaddingMM
+		for _, line := range cell.lines {
+			_, next := pdfLineGeometry(line, academicLayout(roleCaption))
+			if height+next > heightMM+1e-9 {
+				break
+			}
+			height += next
+			n++
+		}
 		for _, img := range cell.images {
 			if img.startLine < n && img.startLine+img.lineCount > n {
 				n = img.startLine
@@ -161,7 +169,7 @@ func (w *academicPDFWriter) planTable(b block, depth int) ([]pdfTableRow, float6
 				if e != nil {
 					return nil, 0, 0, e
 				}
-				imageHeight = float64(pdfTableLineBudget(usable-compactHeight-float64(len(note.lines))*pdfTableLineHeight())) * pdfTableLineHeight()
+				imageHeight = float64(pdfTableLineBudget(usable-compactHeight-pdfLinesHeight(note.lines, note.layout))) * pdfTableLineHeight()
 			}
 			planned[i].cells[j], err = w.planTableImageCell(cell, planned[i].cells[j].alignment, contentWidth, imageHeight)
 			if err != nil {
@@ -246,12 +254,13 @@ func (w *academicPDFWriter) paintTableRow(row pdfTableRow, x, width float64) err
 			if validWordLink(img.in.href) {
 				href = img.in.href
 			}
-			w.pdf.ImageOptions(name, start, w.y+pdfTablePaddingMM+float64(img.startLine)*pdfTableLineHeight(), img.widthMM, img.heightMM, false, opt, 0, href)
+			w.pdf.ImageOptions(name, start, w.y+pdfTablePaddingMM+pdfLinesHeight(cell.lines[:img.startLine], academicLayout(roleCaption)), img.widthMM, img.heightMM, false, opt, 0, href)
 			if w.pdf.Error() != nil {
 				return errAcademicPDF
 			}
 		}
-		for i, line := range cell.lines {
+		lineY := w.y + pdfTablePaddingMM
+		for _, line := range cell.lines {
 			start := left + pdfTablePaddingMM
 			if cell.alignment == alignCenter {
 				start += (columnWidth - 2*pdfTablePaddingMM - line.widthMM) / 2
@@ -259,10 +268,11 @@ func (w *academicPDFWriter) paintTableRow(row pdfTableRow, x, width float64) err
 			if cell.alignment == alignRight {
 				start += columnWidth - 2*pdfTablePaddingMM - line.widthMM
 			}
-			baseline := w.y + pdfTablePaddingMM + float64(i)*pdfTableLineHeight() + academicLayout(roleCaption).sizePt*pdfPtMM
-			if err := w.paint(line, start, baseline); err != nil {
+			baseline, height := pdfLineGeometry(line, academicLayout(roleCaption))
+			if err := w.paint(line, start, lineY+baseline); err != nil {
 				return err
 			}
+			lineY += height
 		}
 	}
 	if w.marker != nil {
@@ -290,19 +300,19 @@ func (w *academicPDFWriter) tableFirstHeight(rows []pdfTableRow, width float64, 
 		if err != nil {
 			return 0, err
 		}
-		first, _ := splitPDFTableRow(rows[0], firstPDFTableBudget(rows[0]))
-		return float64(len(note.lines))*pdfTableLineHeight() + compact.heightMM + first.heightMM, nil
+		first, _ := splitPDFTableRow(rows[0], firstPDFTableHeight(rows[0]))
+		return pdfLinesHeight(note.lines, note.layout) + compact.heightMM + first.heightMM, nil
 	}
 	if len(rows) == 1 {
 		return header, nil
 	}
-	budget := pdfTableLineBudget(usable - header)
-	if budget < 1 {
+	budget := usable - header
+	if budget < firstPDFTableHeight(rows[1]) {
 		return 0, errPDFLayout
 	}
 	first, _ := splitPDFTableRow(rows[1], budget)
 	if rows[1].heightMM > usable-header {
-		first, _ = splitPDFTableRow(rows[1], firstPDFTableBudget(rows[1]))
+		first, _ = splitPDFTableRow(rows[1], firstPDFTableHeight(rows[1]))
 	}
 	return header + first.heightMM, nil
 }
@@ -334,8 +344,8 @@ func (w *academicPDFWriter) compactTableHeader(header pdfTableRow, width float64
 	return compact[0], nil
 }
 
-func firstPDFTableBudget(row pdfTableRow) int {
-	budget := int(^uint(0) >> 1)
+func firstPDFTableHeight(row pdfTableRow) float64 {
+	height := math.Inf(1)
 	for _, cell := range row.cells {
 		if len(cell.lines) == 0 {
 			continue
@@ -344,32 +354,32 @@ func firstPDFTableBudget(row pdfTableRow) int {
 		if len(cell.images) > 0 && cell.images[0].startLine == 0 {
 			n = cell.images[0].lineCount
 		}
-		budget = min(budget, n)
+		height = math.Min(height, pdfLinesHeight(cell.lines[:n], academicLayout(roleCaption))+2*pdfTablePaddingMM)
 	}
-	return budget
+	return height
 }
 
-// Every split consumes a common positive line budget. There is no retry cap:
+// Every split consumes measured whole lines or image slots. There is no retry cap:
 // fresh-page geometry is proved before any continuation page can be created.
 func (w *academicPDFWriter) writeTableRows(rows []pdfTableRow, header pdfTableRow, x, width float64) error {
 	bottom := float64(academicPageHeightMM - academicPageMarginMM)
 	fresh := bottom - academicPageMarginMM - header.heightMM
-	if len(rows) > 0 && pdfTableLineBudget(fresh) < 1 {
+	if len(rows) > 0 && fresh < firstPDFTableHeight(rows[0]) {
 		return errPDFLayout
 	}
 	for _, row := range rows {
 		for row.heightMM > 0 {
 			available := bottom - w.y
-			if row.heightMM <= fresh && row.heightMM > available+1e-9 || pdfTableLineBudget(available) < 1 {
+			if row.heightMM <= fresh && row.heightMM > available+1e-9 || available < firstPDFTableHeight(row) {
 				w.newPage()
 				if err := w.paintTableRow(header, x, width); err != nil {
 					return err
 				}
 				available = bottom - w.y
 			}
-			part, rest := splitPDFTableRow(row, pdfTableLineBudget(available))
+			part, rest := splitPDFTableRow(row, available)
 			if part.heightMM == 0 {
-				part, rest = splitPDFTableRow(row, pdfTableLineBudget(fresh))
+				part, rest = splitPDFTableRow(row, fresh)
 				if part.heightMM == 0 || part.heightMM > fresh+1e-9 {
 					return errPDFLayout
 				}

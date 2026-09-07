@@ -26,6 +26,8 @@ func collectBlocks(n ast.Node, src []byte, fetch ImageFetcher, budget *imageBudg
 	var out []block
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch t := c.(type) {
+		case *scientificLiteralBlock:
+			out = append(out, block{kind: blockParagraph, inlines: []inline{{kind: inlineText, text: t.value}}})
 		case *ast.Heading:
 			out = append(out, block{
 				kind:    blockHeading,
@@ -99,8 +101,26 @@ func collectTable(n ast.Node, src []byte, fetch ImageFetcher, budget *imageBudge
 
 func collectInlines(n ast.Node, src []byte, st style, fetch ImageFetcher, budget *imageBudget) []inline {
 	var out []inline
+	var stack []style
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch t := c.(type) {
+		case *scientificBoundaryNode:
+			if t.closing {
+				if len(stack) > 0 {
+					st = stack[len(stack)-1]
+					stack = stack[:len(stack)-1]
+				}
+			} else {
+				stack = append(stack, st)
+				switch t.name {
+				case "sup":
+					st.vertical = verticalSuperscript
+				case "sub":
+					st.vertical = verticalSubscript
+				case "i", "em":
+					st.italic = true
+				}
+			}
 		case *numericCitationNode:
 			out = append(out, inline{kind: inlineText, text: t.mark.text, style: st, citation: &t.mark})
 		case *citationLiteralNode:

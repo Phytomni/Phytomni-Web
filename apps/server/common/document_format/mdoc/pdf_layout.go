@@ -19,9 +19,10 @@ type pdfPlacedFragment struct {
 	xMM, widthMM float64
 }
 type pdfMeasuredLine struct {
-	fragments []pdfPlacedFragment
-	widthMM   float64
-	last      bool
+	fragments           []pdfPlacedFragment
+	widthMM             float64
+	ascentPt, descentPt float64
+	last                bool
 }
 type pdfMeasure func(text string, st style, sizePt float64) float64
 
@@ -92,6 +93,12 @@ func wrapPDFRuns(runs []pdfFragment, firstWidthMM, nextWidthMM float64, measure 
 	appendFragment := func(f pdfFragment, w float64) {
 		line.fragments = append(line.fragments, pdfPlacedFragment{f, line.widthMM, w})
 		line.widthMM += w
+		line.ascentPt = math.Max(line.ascentPt, f.sizePt+f.risePt)
+		// Baseline text keeps the established role leading (reference-link rows
+		// intentionally use 1.0). Scripts may extend beyond that existing box.
+		if f.risePt != 0 {
+			line.descentPt = math.Max(line.descentPt, f.sizePt*.2-f.risePt)
+		}
 	}
 	for _, token := range pdfTokens(runs) {
 		if token[0].text == "\n" {
@@ -172,6 +179,23 @@ func wrapPDFRuns(runs []pdfFragment, firstWidthMM, nextWidthMM float64, measure 
 		lines[len(lines)-1].last = true
 	}
 	return lines, nil
+}
+
+// The baseline and consumed height enclose the same signed fragment bounds used
+// for annotations. Keep the established role leading unless a script needs more.
+func pdfLineGeometry(line pdfMeasuredLine, layout paragraphLayout) (baselineMM, heightMM float64) {
+	ascent := math.Max(layout.sizePt, line.ascentPt)
+	descent := math.Max(layout.sizePt*(layout.lineMultiple-1), line.descentPt)
+	return ascent * pdfPtMM, (ascent + descent) * pdfPtMM
+}
+
+func pdfLinesHeight(lines []pdfMeasuredLine, layout paragraphLayout) float64 {
+	height := 0.0
+	for _, line := range lines {
+		_, value := pdfLineGeometry(line, layout)
+		height += value
+	}
+	return height
 }
 
 // Expand only inter-word whitespace. Text and hit regions use these exact offsets;

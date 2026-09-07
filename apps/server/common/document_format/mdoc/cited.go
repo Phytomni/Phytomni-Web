@@ -179,9 +179,13 @@ func BuildCited(src string, rows []citation.Row, opts Options) (Document, error)
 	raw := []byte(body)
 	// Resolve actual links once with Goldmark, retaining source spans rather than
 	// guessing from following punctuation (which also occurs in ordinary prose).
-	protected := citationLinkSpans(reportMarkdown().Parser().Parse(text.NewReader(raw)))
-	md.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(&numericCitationParser{count: len(rows), protected: protected}, 150)))
+	original := scientificSourceTree(raw)
+	protected := citationLinkSpans(original)
+	formatting := planScientificInlines(original, raw)
+	md.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(&numericCitationParser{count: len(rows), protected: protected, scientific: formatting}, 150)))
 	tree := md.Parser().Parse(text.NewReader(raw))
+	preserveScientificBlocks(tree, raw)
+	decodeCitedText(tree, raw)
 	blocks := collectBlocks(tree, raw, opts.FetchImage, &imageBudget{})
 	assignRoles(blocks, selectedTitle(tree, blocks) != nil)
 	if len(rows) > 0 {

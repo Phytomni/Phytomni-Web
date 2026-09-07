@@ -501,6 +501,10 @@
   overflow-x: auto;
 }
 
+.phy-markdown :is(th, td) {
+  min-width: 10ch;
+}
+
 .phy-markdown .scientific-citation {
   vertical-align: super;
   font-size: 0.78em;
@@ -509,6 +513,24 @@
 
 .phy-markdown .scientific-citation__link {
   color: var(--phy-color-action-text);
+}
+
+.phy-markdown .scientific-inline--superscript,
+.phy-markdown .scientific-inline--subscript,
+.citation-reference-row .scientific-inline--superscript,
+.citation-reference-row .scientific-inline--subscript {
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+.phy-markdown .scientific-inline--superscript,
+.citation-reference-row .scientific-inline--superscript {
+  vertical-align: super;
+}
+
+.phy-markdown .scientific-inline--subscript,
+.citation-reference-row .scientific-inline--subscript {
+  vertical-align: sub;
 }
 
 .phy-markdown .katex-display {
