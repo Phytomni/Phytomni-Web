@@ -243,7 +243,24 @@ func patchWordPackage(data []byte, plan wordPackagePlan) ([]byte, error) {
 		if e != nil {
 			return nil, e
 		}
-		changed["[Content_Types].xml"], err = applyWordXMLEdits(parts["[Content_Types].xml"], []wordXMLEdit{{cts.closeStart, cts.closeStart, `<Override xmlns="` + wordContentTypeNS + `" PartName="/word/` + name + `" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`}})
+		var contentTypeEdits []wordXMLEdit
+		defaults := map[string]string{}
+		// godocx adds a Default for every picture, but OPC permits only one per
+		// extension. Keep the first declaration and all image parts untouched.
+		for _, entry := range cts.childrenNamed(wordContentTypeNS, "Default") {
+			extension := strings.ToLower(entry.attr("", "Extension"))
+			contentType := entry.attr("", "ContentType")
+			if previous, exists := defaults[extension]; exists {
+				if previous != contentType {
+					return nil, errors.New("conflicting generated word content types")
+				}
+				contentTypeEdits = append(contentTypeEdits, wordXMLEdit{entry.start, entry.end, ""})
+			} else {
+				defaults[extension] = contentType
+			}
+		}
+		contentTypeEdits = append(contentTypeEdits, wordXMLEdit{cts.closeStart, cts.closeStart, `<Override xmlns="` + wordContentTypeNS + `" PartName="/word/` + name + `" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`})
+		changed["[Content_Types].xml"], err = applyWordXMLEdits(parts["[Content_Types].xml"], contentTypeEdits)
 		if err != nil {
 			return nil, err
 		}
