@@ -16,6 +16,15 @@ does not make authenticated API calls and is not a replacement for the live
 authenticated `/chat` → Artifact workflow; it is the deterministic real-content
 lane for responsive Artifact geometry and copy review.
 
+`case=scientific` mounts the hand-authored scientific-formatting contract from
+the Go testdata directory and its Go-normalized reference fixture. It exercises
+ordinary scripts, italics, mixed tables and reference titles without a live agent
+or remote resource request. Menu actions in this isolated harness are recorded
+only; actual copy/download and history acceptance needs the development product.
+The fixture supplies the bounded artifact height normally owned by its product
+host so the real shell, rather than a hidden overflowing fixture root, owns
+scrolling. `theme=system` uses the existing theme store for media emulation checks.
+
 ## Responsive viewport matrix
 
 The capture matrix uses one representative viewport per device category. The

@@ -250,6 +250,34 @@ afterEach(async () => {
 });
 
 describe("stream family copy", () => {
+  it("copies authored scientific Markdown without inferring citations or stripping scripts", async () => {
+    const source =
+      "*FLC* regulates H<sub>2</sub>O and x<sup>2</sup>; <sup>[2]</sup> remains literal.";
+    await copyAssistant([
+      { role: "user", content: "Synthetic scientific formatting" },
+      streamAssistant("KnowledgeAgent", source, {
+        doc_list: [
+          {
+            citation: {
+              runs: [
+                { text: "A. " },
+                { text: "FLC", italic: true },
+                { text: "2", vertical: "superscript" },
+                { text: " study." },
+              ],
+              links: [
+                { label: "Article", href: "https://example.org/scientific" },
+              ],
+            },
+          },
+        ],
+      }),
+    ]);
+    expect(testState.copiedText).toHaveBeenCalledWith(
+      source +
+        "\nReferences:\n1. A. FLC2 study.\nArticle: https://example.org/scientific"
+    );
+  });
   it("writes every reviewed sentence and ordered link to the actual clipboard boundary", async () => {
     await copyAssistant([
       { role: "user", content: "Synthetic citation contract" },

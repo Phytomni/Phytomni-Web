@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"phytomni-server/common/citation"
@@ -18,8 +19,12 @@ import (
 const citationAnswerFixture = `{"content":"body [1]","extra":{"keep":true},"doc_list":[{"title":"T","ar":"e123","formatted_citation":"Rich *citation*."},null]}`
 
 func reviewedCitationFixture(t *testing.T) (string, json.RawMessage, json.RawMessage) {
+	return citationContractFixture(t, "cited-contract")
+}
+
+func citationContractFixture(t *testing.T, name string) (string, json.RawMessage, json.RawMessage) {
 	t.Helper()
-	data, err := os.ReadFile("../../common/document_format/testdata/cited-contract.json")
+	data, err := os.ReadFile("../../common/document_format/testdata/" + name + ".json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +35,7 @@ func reviewedCitationFixture(t *testing.T) (string, json.RawMessage, json.RawMes
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	canonical, err := os.ReadFile("../../../web/tests/fixtures/cited-contract.generated.json")
+	canonical, err := os.ReadFile("../../../web/tests/fixtures/" + name + ".generated.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +53,22 @@ func reviewedAnswerFixture(t *testing.T) string {
 }
 
 func assertReviewedAnswer(t *testing.T, answer string) {
+	assertContractAnswer(t, answer, "cited-contract")
+}
+
+func scientificAnswerFixture(t *testing.T) string {
 	t.Helper()
-	content, _, canonical := reviewedCitationFixture(t)
+	content, refs, _ := citationContractFixture(t, "scientific-formatting-contract")
+	data, err := json.Marshal(map[string]any{"content": content, "doc_list": refs, "extra": json.RawMessage(`{"keep":9007199254740993}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func assertContractAnswer(t *testing.T, answer, name string) {
+	t.Helper()
+	content, _, canonical := citationContractFixture(t, name)
 	var got struct {
 		Content string
 		DocList json.RawMessage `json:"doc_list"`
@@ -127,8 +146,16 @@ func TestCitationProjectionReadSeparatesOwnedBodyWithoutSaving(t *testing.T) {
 func assertCitationProjection(t *testing.T, answer string) {
 	t.Helper()
 	var shape struct {
+		Content string            `json:"content"`
 		DocList []json.RawMessage `json:"doc_list"`
 		Extra   json.RawMessage   `json:"extra"`
+	}
+	if err := json.Unmarshal([]byte(answer), &shape); err == nil && strings.HasPrefix(shape.Content, "# Scientific formatting validation:") {
+		assertContractAnswer(t, answer, "scientific-formatting-contract")
+		if string(shape.Extra) != `{"keep":9007199254740993}` {
+			t.Fatal("unrelated scientific envelope metadata changed")
+		}
+		return
 	}
 	if err := json.Unmarshal([]byte(answer), &shape); err == nil && len(shape.DocList) == 8 {
 		assertReviewedAnswer(t, answer)
@@ -157,7 +184,7 @@ func assertCitationProjection(t *testing.T, answer string) {
 }
 
 func TestCitationProjectionReadCopies(t *testing.T) {
-	for _, source := range []string{citationAnswerFixture, reviewedAnswerFixture(t)} {
+	for _, source := range []string{citationAnswerFixture, reviewedAnswerFixture(t), scientificAnswerFixture(t)} {
 		for _, tool := range []string{"KnowledgeAgent", "ReviewAgent", "BriefGeneAgent", "DeepGenomeAgent"} {
 			t.Run(tool, func(t *testing.T) {
 				gdb := setupTestDB(t)
@@ -232,6 +259,33 @@ func TestCitationProjectionMatchingReview(t *testing.T) {
 	_, stored := readStatusAnswer(t, gdb, 1)
 	if stored != citationAnswerFixture {
 		t.Fatal("projection read rewrote source")
+	}
+}
+
+func TestCitationProjectionScientificMatchingReview(t *testing.T) {
+	gdb := setupTestDB(t)
+	old := rxBot.BotConfig
+	rxBot.BotConfig = nil
+	t.Cleanup(func() { rxBot.BotConfig = old })
+	source := scientificAnswerFixture(t)
+	content, _, _ := citationContractFixture(t, "scientific-formatting-contract")
+	row := model.QuestionAgentLog{Id: 1, UserName: "alice", DialogueId: "dlg", ToolName: "ReviewAgent", Answer: source, Status: "SUCCEEDED", BotRunId: "run"}
+	if err := gdb.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveBotRunProjection(context.Background(), "alice", 1, BotRunProjection{RunID: "run", Agent: "review", Status: "SUCCEEDED", FinalReport: content, ReportRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []HistoryReadMode{HistoryReadModeLegacy, HistoryReadModeDual, HistoryReadModeProjection} {
+		result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg", mode)
+		if err != nil || len(result.Rows) != 1 {
+			t.Fatalf("scientific history rows: %v", err)
+		}
+		assertCitationProjection(t, result.Rows[0].Answer)
+	}
+	_, stored := readStatusAnswer(t, gdb, 1)
+	if stored != source {
+		t.Fatal("scientific projection read rewrote source")
 	}
 }
 
@@ -393,7 +447,7 @@ func TestCitationProjectionPersistedBodySplitRequiresEquivalentIdentity(t *testi
 }
 
 func TestCitationProjectionStoredReplay(t *testing.T) {
-	for _, raw := range []string{citationAnswerFixture, reviewedAnswerFixture(t), `{"doc_list":{"bad":"private-source"}}`} {
+	for _, raw := range []string{citationAnswerFixture, reviewedAnswerFixture(t), scientificAnswerFixture(t), `{"doc_list":{"bad":"private-source"}}`} {
 		t.Run(raw, func(t *testing.T) {
 			gdb := setupTestDB(t)
 			row := model.QuestionAgentLog{Id: 1, UserName: "alice", ToolName: "ReviewAgent", Answer: raw, Status: "SUCCEEDED"}

@@ -7,6 +7,13 @@ export {
 import authorizedFigureUrl from "./fixtures/authorized-figure.svg?url&no-inline";
 import authorizedStructureUrl from "./fixtures/authorized-structure.cif?url";
 import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
+import scientificSource from "../../../../server/common/document_format/testdata/scientific-formatting-contract.json";
+import scientificReferences from "../../fixtures/scientific-formatting-contract.generated.json";
+import { decodeCitationDocuments } from "@/views/chat/utils/format";
+
+export const SCIENTIFIC_FORMATTING_MARKDOWN = scientificSource.content;
+export const SCIENTIFIC_FORMATTING_REFERENCES =
+  decodeCitationDocuments(scientificReferences) ?? [];
 
 export const CONTRACT_DEEP_GENOME_MARKDOWN = [
   "# Scientific rendering contract",

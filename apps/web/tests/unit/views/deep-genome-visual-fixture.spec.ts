@@ -20,6 +20,8 @@ import {
   REAL_DEEP_GENOME_MARKDOWN,
   REAL_DEEP_GENOME_REFERENCES,
   REAL_DEEP_GENOME_RESOURCES,
+  SCIENTIFIC_FORMATTING_MARKDOWN,
+  SCIENTIFIC_FORMATTING_REFERENCES,
 } from "../../visual/research/fixture-data";
 
 const WEB_ROOT = resolve(__dirname, "../../..");
@@ -59,6 +61,20 @@ const MARKDOWN_CSS_SOURCE = readFileSync(
   resolve(WEB_ROOT, "src/styles/markdown.css"),
   "utf8"
 );
+
+describe("Scientific formatting fixture host", () => {
+  it("supplies the bounded artifact height required by the production shell", () => {
+    expect(VISUAL_FIXTURE_SOURCE).toMatch(
+      /\.deep-genome-visual-fixture > :deep\(\.deep-genome-artifact\)\s*\{\s*height: 100%;/
+    );
+  });
+
+  it("allows the actual theme store to follow emulated system appearance", () => {
+    expect(FIXTURE_ENTRY_SOURCE).toContain('params.get("theme") === "system"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain('"system"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain("useThemeStore().setTheme(theme)");
+  });
+});
 
 const EXPECTED_MEDIA = [
   "Os01g0177400_tree.png",
@@ -232,6 +248,24 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(CONTRACT_DEEP_GENOME_RESOURCES).toHaveLength(2);
     expect(VISUAL_FIXTURE_SOURCE).toContain('get("case") === "contract"');
     expect(VISUAL_FIXTURE_SOURCE).toContain(':resources="resources"');
+  });
+
+  it("exposes the shared scientific source and Go-normalized references only in the fixture", () => {
+    expect(SCIENTIFIC_FORMATTING_MARKDOWN).toContain(
+      "This is synthetic layout evidence, not a scientific report."
+    );
+    expect(SCIENTIFIC_FORMATTING_MARKDOWN).toContain("<sup>[2]</sup>");
+    expect(SCIENTIFIC_FORMATTING_REFERENCES).toHaveLength(2);
+    expect(
+      SCIENTIFIC_FORMATTING_REFERENCES.map((row) =>
+        row.citation?.runs
+          .filter((run) => run.vertical)
+          .map((run) => run.vertical)
+      )
+    ).toEqual([["subscript"], ["superscript"]]);
+    expect(VISUAL_FIXTURE_SOURCE).toContain('get("case") === "scientific"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(':references="references"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain('fixtureCase === "scientific"');
   });
 
   it("serves the authorized visual fixture image from a browser-safe URL", () => {

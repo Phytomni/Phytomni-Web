@@ -8,7 +8,7 @@
       :metadata="metadata"
       :status="status"
       :markdown="markdown"
-      :references="DEEP_GENOME_CASE_REFERENCES"
+      :references="references"
       :resources="resources"
       ns="deep-genome-visual"
       artifact-id="deep-genome-visual-artifact"
@@ -45,21 +45,36 @@ import {
 import {
   CONTRACT_DEEP_GENOME_MARKDOWN,
   CONTRACT_DEEP_GENOME_RESOURCES,
+  SCIENTIFIC_FORMATTING_MARKDOWN,
+  SCIENTIFIC_FORMATTING_REFERENCES,
 } from "./fixture-data";
 
 const { t } = useI18n();
 const action = ref("idle");
-const title = "Os01g0177400 functional analysis";
-const metadata = ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"];
+const isScientific =
+  new URLSearchParams(window.location.search).get("case") === "scientific";
+const title = isScientific
+  ? "Scientific formatting validation"
+  : "Os01g0177400 functional analysis";
+const metadata = isScientific
+  ? ["Synthetic report", "No live agent run"]
+  : ["Deep Genome Agent", "Oryza sativa", "Os01g0177400"];
 const status = computed(() => t("common.finished"));
 const isContract =
   new URLSearchParams(window.location.search).get("case") === "contract";
-const markdown = isContract
-  ? CONTRACT_DEEP_GENOME_MARKDOWN
-  : DEEP_GENOME_CASE_MARKDOWN;
-const resources = isContract
-  ? CONTRACT_DEEP_GENOME_RESOURCES
-  : DEEP_GENOME_CASE_RESOURCES;
+const markdown = isScientific
+  ? SCIENTIFIC_FORMATTING_MARKDOWN
+  : isContract
+    ? CONTRACT_DEEP_GENOME_MARKDOWN
+    : DEEP_GENOME_CASE_MARKDOWN;
+const references = isScientific
+  ? SCIENTIFIC_FORMATTING_REFERENCES
+  : DEEP_GENOME_CASE_REFERENCES;
+const resources = isScientific
+  ? []
+  : isContract
+    ? CONTRACT_DEEP_GENOME_RESOURCES
+    : DEEP_GENOME_CASE_RESOURCES;
 const tabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
@@ -69,7 +84,7 @@ const tabLabels = computed(() => ({
 const chrome = computed(() =>
   artifactChrome({
     tool: "DeepGenomeAgent",
-    referenceCount: DEEP_GENOME_CASE_REFERENCES.length,
+    referenceCount: references.length,
     hasAttachments: false,
     runComplete: true,
     surface: "client",
@@ -92,6 +107,10 @@ function recordAction(nextAction: string): void {
   min-height: 0;
   overflow: hidden;
   background: var(--phy-color-bg-elevated);
+}
+
+.deep-genome-visual-fixture > :deep(.deep-genome-artifact) {
+  height: 100%;
 }
 
 .sr-only {

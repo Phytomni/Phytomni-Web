@@ -15,8 +15,18 @@ import "@/assets/main.css";
 
 const params = new URLSearchParams(window.location.search);
 const locale = params.get("locale") === "zh-CN" ? "zh-CN" : "en-US";
-const theme = params.get("theme") === "dark" ? "dark" : "light";
-const fixtureCase = params.get("case") === "contract" ? "contract" : "real";
+const theme =
+  params.get("theme") === "dark"
+    ? "dark"
+    : params.get("theme") === "system"
+      ? "system"
+      : "light";
+const fixtureCase =
+  params.get("case") === "scientific"
+    ? "scientific"
+    : params.get("case") === "contract"
+      ? "contract"
+      : "real";
 const VISUAL_READINESS_TIMEOUT_MS = 5_000;
 
 declare global {
@@ -249,6 +259,14 @@ function waitForVisualReadiness(root: HTMLElement): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = performance.now() + VISUAL_READINESS_TIMEOUT_MS;
     const check = () => {
+      if (
+        fixtureCase === "scientific" &&
+        root.querySelector(".scientific-inline--subscript") &&
+        root.querySelector("table tbody tr")
+      ) {
+        resolve();
+        return;
+      }
       const image = root.querySelector<HTMLImageElement>(
         ".scientific-image__thumbnail"
       );

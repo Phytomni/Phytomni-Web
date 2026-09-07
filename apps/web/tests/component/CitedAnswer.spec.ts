@@ -7,6 +7,14 @@ import { mountWithApp } from "../helpers/test-app-context";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import contractReferences from "../fixtures/cited-contract.generated.json";
 import contract from "../../../server/common/document_format/testdata/cited-contract.json";
+import scientificReferences from "../fixtures/scientific-formatting-contract.generated.json";
+import scientificContract from "../../../server/common/document_format/testdata/scientific-formatting-contract.json";
+import { decodeCitationDocuments } from "@/views/chat/utils/format";
+import {
+  citationMarkdown,
+  decodeCitationPresentation,
+} from "@/utils/citation-presentation";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 
 const CITED_ANSWER_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/CitedAnswer.vue"),
@@ -41,6 +49,76 @@ const mountCited = (props: Record<string, unknown>) =>
   });
 
 describe("CitedAnswer", () => {
+  it("preserves actual Go-produced scientific references through hydration, rows and Markdown", async () => {
+    const references = decodeCitationDocuments(scientificReferences);
+    expect(references?.map((row) => row.citation?.runs)).toEqual(
+      scientificContract.expected.reference_runs
+    );
+    const wrapper = mountWithApp(CitedAnswer, {
+      props: {
+        ns: "scientific-cited",
+        content: scientificContract.content,
+        references,
+      },
+      attachTo: document.body,
+    });
+    try {
+      await vi.dynamicImportSettled();
+      await nextTick();
+      const rows = wrapper.findAll(".doc-list-item");
+      expect(rows).toHaveLength(2);
+      expect(
+        rows.map((row) => row.get(".citation-reference-row__sentence").text())
+      ).toEqual(
+        scientificContract.expected.reference_runs.map((runs) =>
+          runs.map((run) => run.text).join("")
+        )
+      );
+      expect(rows[0].get("sub").text()).toBe("2");
+      expect(rows[1].get("sup").text()).toBe("3+");
+      expect(
+        wrapper.findAll(
+          ".scientific-inline--superscript a, .scientific-inline--subscript a"
+        )
+      ).toHaveLength(
+        scientificContract.expected.ordinary_script_citation_links
+      );
+      const links = wrapper.findAll(".scientific-citation__link");
+      expect(links.map((link) => link.attributes("href"))).toEqual(
+        scientificContract.expected.citation_indices.map(
+          (indices) => `#scientific-cited-ref-${indices[0]}`
+        )
+      );
+      await links[1].trigger("click");
+      expect(document.activeElement).toBe(rows[1].element);
+      for (const [index, row] of scientificReferences.entries()) {
+        const citation = decodeCitationPresentation(row.citation);
+        if (!citation) throw new Error("Go canonical fixture was rejected");
+        const markdown = mountWithApp(ScientificMarkdown, {
+          props: { source: citationMarkdown(citation) },
+        });
+        try {
+          await vi.dynamicImportSettled();
+          expect(markdown.findAll("p")[0].text()).toBe(
+            scientificContract.expected.reference_runs[index]
+              .map((run) => run.text)
+              .join("")
+          );
+          expect(markdown.get(index === 0 ? "sub" : "sup").text()).toBe(
+            index === 0 ? "2" : "3+"
+          );
+          expect(markdown.findAll(".scientific-citation")).toHaveLength(0);
+          expect(
+            markdown.findAll("a").map((link) => link.attributes("href"))
+          ).toEqual(citation.links.map((link) => link.href));
+        } finally {
+          markdown.unmount();
+        }
+      }
+    } finally {
+      wrapper.unmount();
+    }
+  });
   it("renders the reviewed contract with real Markdown, rows, and namespace-local group navigation", async () => {
     const wrappers = ["contract-a", "contract-b"].map((ns) =>
       mountWithApp(CitedAnswer, {
