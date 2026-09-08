@@ -163,8 +163,10 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
-    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("<sup>5</sup>");
-    expect(REAL_DEEP_GENOME_MARKDOWN).not.toMatch(/\[document\s*:/i);
+    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("[document:5]");
+    expect(REAL_DEEP_GENOME_MARKDOWN.match(/\[document:\d+\]/g)).toHaveLength(
+      94
+    );
     expect(REAL_DEEP_GENOME_MARKDOWN).not.toContain("## Reference:");
     expect(REAL_DEEP_GENOME_MARKDOWN).not.toContain(
       "[256] Physiological and Transcriptome Analyses"
@@ -216,14 +218,30 @@ describe("Deep Genome real-content visual fixture", () => {
   });
 
   it("authorizes the real-case figures from public attachments", () => {
-    expect(REAL_DEEP_GENOME_RESOURCES).toHaveLength(14);
+    expect(REAL_DEEP_GENOME_RESOURCES).toHaveLength(15);
+    const media = REAL_DEEP_GENOME_RESOURCES.filter(
+      (resource) => resource.kind !== "markdown"
+    );
+    expect(media).toHaveLength(14);
     expect(
-      REAL_DEEP_GENOME_RESOURCES.every(
+      media.every(
         (resource) =>
           typeof resource.displayUrl === "string" &&
           resource.displayUrl.startsWith("/attachments/Os01g0177400/")
       )
     ).toBe(true);
+    expect(
+      REAL_DEEP_GENOME_RESOURCES.filter(
+        (resource) => resource.kind === "markdown"
+      )
+    ).toEqual([
+      {
+        id: "deep-genome-case-protocol",
+        name: "Os01g0177400_result-experiments.md",
+        kind: "markdown",
+        markdownHref: "./Os01g0177400_result-experiments.md",
+      },
+    ]);
     expect(VISUAL_FIXTURE_SOURCE).toContain("DEEP_GENOME_CASE_RESOURCES");
   });
 

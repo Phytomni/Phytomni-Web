@@ -1009,6 +1009,15 @@ export default {
       imageViewerTitle: "图片查看",
       references: "参考文献",
       noReferences: "暂无参考文献。",
+      material: {
+        back: "返回报告",
+        download: "下载原文件",
+        excerpt: "查看来源摘录",
+        excerptTitle: "来源摘录 · 参考文献 {index}",
+        loading: "正在打开材料…",
+        unavailable: "当前报告暂无法查看这份材料。",
+        failed: "材料打开失败，请重试。",
+      },
     },
     geneNetwork: {
       title: "基因网络智能体",

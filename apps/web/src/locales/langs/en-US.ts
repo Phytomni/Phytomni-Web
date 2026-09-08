@@ -1040,6 +1040,15 @@ export default {
       imageViewerTitle: "Image Viewer",
       references: "References",
       noReferences: "No references available.",
+      material: {
+        back: "Back to report",
+        download: "Download original",
+        excerpt: "View source excerpt",
+        excerptTitle: "Source excerpt · Reference {index}",
+        loading: "Opening material…",
+        unavailable: "This material is not available for this report.",
+        failed: "This material could not be opened. Please try again.",
+      },
     },
     geneNetwork: {
       title: "Gene Network Agent",

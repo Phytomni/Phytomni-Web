@@ -369,6 +369,52 @@ claim backend completion, persistence, or measured transfer progress.
 
 ## Artifact and citation behavior
 
+### Deep Genome report and material ownership
+
+Case and database reports use `DeepGenomeArtifact` and the same canonical
+citation presentation. The database detail API supplies the body, ordered
+canonical `references`, explicit `resources`, `reference_materials`, and an
+original-byte SHA256 `report_revision`; the frontend does not parse a second
+`DOC TITLES` bibliography. Empty or invalid reference slots retain their numbers.
+
+The report owns its table-of-contents layout: below 900 CSS pixels of actual
+report width, the existing disclosure becomes compact, including desktop split
+panels. Window width is not a substitute for the available report width. A hidden
+parent's zero-width observation must not reset the user's disclosure state.
+
+Source excerpts are separate from bibliography formatting. Their one-based
+`referenceIndex` binds to the original source slot, not a title match. The Case
+projection is generated at build time from the frozen source JSON and contains
+only `referenceIndex`, `excerpt`, and `resourceIds`; never import the raw search
+metadata into a runtime bundle. Check both generated outputs with:
+
+```sh
+cd apps/server
+go run ./tools/citation-fixtures \
+  -source ../web/src/views/agent-cases/citations/sources.json \
+  -output ../web/src/views/agent-cases/citations/generated.json \
+  -material-source ../web/src/assets/agentOut/round1-references.json \
+  -material-output ../web/src/views/agent-cases/citations/deep-genome-materials.generated.json \
+  -check
+```
+
+Registered Markdown opens inside the current report panel. Back restores the
+report tab, scroll position and focus; the retained parent is hidden and inert.
+The detail shares `ScientificMarkdown`, but excerpts have no parent citation
+namespace. Downloads preserve original Markdown bytes, not rendered HTML.
+Loading, retry and cancellation are scoped to the dialogue, report identity and
+selected resource. Unknown local document links cannot navigate to a guessed
+route. Existing registered live-chat downloads without a preview reader retain
+their download action.
+
+The database registers only verified same-gene curated PNG links today. Its
+protected resource endpoint revalidates the report-bound ID on every read;
+public curated PNG delivery and report exports share the same bounded reader.
+Database protocol/CIF/source-original associations require an actual verified
+storage contract. Do not borrow another gene's Case materials or advertise empty
+material arrays as recovered source content. Opening the frozen experiment
+protocol is not scientific validation of its applicability.
+
 ### One scientific Markdown engine
 
 `ScientificMarkdown` is the only renderer for agent report bodies, including
@@ -402,6 +448,10 @@ Artifact selection is keyed by a stable stream/message/run identity and isolated
 per dialogue. Hydrated and background reports are marked handled without taking
 focus; a new foreground identity may auto-open once, while manual View always
 opens an eligible report and downloads still require a durable row id.
+
+Frozen Deep Genome Cases use a separate runtime-only `casePresentationKey`;
+they never masquerade as server message rows. Their PDF/Markdown exports are
+client-side and include the same canonical bibliography once.
 
 ### Citation and HTML safety
 

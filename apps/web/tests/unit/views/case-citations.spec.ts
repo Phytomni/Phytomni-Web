@@ -69,13 +69,42 @@ describe("canonical offline Case citations", () => {
         "bacfbb0a4f7eced5cec602ff2c9041dc8cf6084e26085428f152c4067fd1a14d"
       );
       expect(sha256(deepGenome.DEEP_GENOME_CASE_MARKDOWN)).toBe(
+        "e7055c9e8d68796f141f20e41ba94736337f29d6b53a8a7b5456e45bc2bae972"
+      );
+      // Only restoring citation tokens changes the already-polished report.
+      expect(
+        sha256(
+          deepGenome.DEEP_GENOME_CASE_MARKDOWN.replace(
+            /\[document:(\d+)\]/g,
+            "<sup>$1</sup>"
+          )
+        )
+      ).toBe(
         "68f75dc6197c6de9b99eba22fcbaf67a4c68e18ac7395d01fdf8090d591e7901"
       );
       expect(
-        sha256(JSON.stringify(deepGenome.DEEP_GENOME_CASE_RESOURCES))
+        sha256(
+          JSON.stringify(
+            deepGenome.DEEP_GENOME_CASE_RESOURCES.filter(
+              (resource) => resource.kind !== "markdown"
+            )
+          )
+        )
       ).toBe(
         "87d6b97c7593e650377da481e145ed4e80d2ad20b3ab9e53dff26dec7a72f47e"
       );
+      expect(
+        deepGenome.DEEP_GENOME_CASE_RESOURCES.filter(
+          (resource) => resource.kind === "markdown"
+        )
+      ).toEqual([
+        {
+          id: "deep-genome-case-protocol",
+          name: "Os01g0177400_result-experiments.md",
+          kind: "markdown",
+          markdownHref: "./Os01g0177400_result-experiments.md",
+        },
+      ]);
 
       expect(knowledge.KNOWLEDGE_CASE.references).toEqual(
         generated.knowledge.references

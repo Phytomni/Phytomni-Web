@@ -100,15 +100,18 @@ describe("agent case demo catalog", () => {
       fixtureForDemoKey("deep-genome")?.messages[1].content
     );
     expect(deepGenomeAnswer).toContain("Os01g0177400");
-    expect(deepGenomeAnswer).toContain("<sup>5</sup>");
-    expect(deepGenomeAnswer).not.toMatch(/\[document\s*:/i);
+    expect(deepGenomeAnswer).toContain("[document:5]");
+    expect(deepGenomeAnswer.match(/\[document:\d+\]/g)).toHaveLength(94);
     expect(deepGenomeAnswer).not.toContain("## Reference:");
     expect(fixtureForDemoKey("deep-genome")?.messages[1].doc_list).toHaveLength(
       256
     );
     expect(
       fixtureForDemoKey("deep-genome")?.messages[1].resources
-    ).toHaveLength(14);
+    ).toHaveLength(15);
+    expect(
+      fixtureForDemoKey("deep-genome")?.messages[1].referenceMaterials
+    ).toHaveLength(256);
   });
 
   it("freezes Network and Design as a question plus a downloadable sample", () => {

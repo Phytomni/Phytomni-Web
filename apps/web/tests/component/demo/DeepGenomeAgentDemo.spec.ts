@@ -83,7 +83,17 @@ describe("Deep Genome Agent static demonstration", () => {
     const artifact = wrapper.get("[data-test=deep-genome-artifact]");
     expect(artifact.attributes("data-ns")).toBe("deep-genome-demo");
     expect(artifact.attributes("data-reference-count")).toBe("256");
-    expect(artifact.attributes("data-resource-count")).toBe("14");
+    expect(artifact.attributes("data-resource-count")).toBe("15");
+    expect(
+      wrapper.getComponent(DeepGenomeArtifactStub).props("resources")
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "markdown",
+          markdownHref: "./Os01g0177400_result-experiments.md",
+        }),
+      ])
+    );
     expect(artifact.attributes("data-markdown")).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
@@ -93,7 +103,10 @@ describe("Deep Genome Agent static demonstration", () => {
     expect(artifact.attributes("data-markdown")).toContain(
       "Os01t0177400-01_seed_101_sample_0.cif"
     );
-    expect(artifact.attributes("data-markdown")).toContain("<sup>5</sup>");
+    expect(artifact.attributes("data-markdown")).toContain("[document:5]");
+    expect(
+      artifact.attributes("data-markdown").match(/\[document:\d+\]/g)
+    ).toHaveLength(94);
     expect(artifact.attributes("data-markdown")).not.toContain(
       "[256] Physiological and Transcriptome Analyses"
     );

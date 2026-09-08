@@ -12,6 +12,7 @@ const threeDMolMock = vi.hoisted(() => {
     addModel: vi.fn(),
     setStyle: vi.fn(),
     zoomTo: vi.fn(),
+    zoom: vi.fn(),
     render: vi.fn(),
     animate: vi.fn(),
     stopAnimate: vi.fn(),
@@ -88,6 +89,100 @@ async function settleMarkdown(): Promise<void> {
 }
 
 describe("DeepGenomeResultViewer — shared document boundary", () => {
+  it("collapses the TOC from report width rather than the window and releases its observer", async () => {
+    let notifyResize: ResizeObserverCallback | undefined;
+    const frames = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    const requestFrame = vi.fn((callback: FrameRequestCallback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    });
+    vi.stubGlobal("requestAnimationFrame", requestFrame);
+    const cancelFrame = vi.fn((id: number) => frames.delete(id));
+    vi.stubGlobal("cancelAnimationFrame", cancelFrame);
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notifyResize = callback;
+        }
+        observe = observe;
+        disconnect = disconnect;
+      }
+    );
+    const bounds = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function () {
+        return this.dataset.testid === "deep-genome-viewer"
+          ? new DOMRect(0, 0, 537, 600)
+          : bounds.call(this);
+      }
+    );
+    const wrapper = render("# Report\n\n## Evidence\n\nBody");
+    await settleMarkdown();
+    const root = wrapper.get("[data-testid=deep-genome-viewer]");
+    const details = wrapper.get("details");
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeUndefined();
+    expect(observe).toHaveBeenCalledWith(root.element);
+    const resize = async (width: number) => {
+      if (!notifyResize)
+        throw new Error("Report ResizeObserver was not installed");
+      notifyResize(
+        [
+          { target: root.element, contentRect: { width } },
+        ] as ResizeObserverEntry[],
+        {} as ResizeObserver
+      );
+      await nextTick();
+    };
+    const flushFrames = async () => {
+      const queued = [...frames.values()];
+      frames.clear();
+      queued.forEach((callback) => callback(0));
+      await nextTick();
+    };
+    await resize(900);
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(frames.size).toBe(1);
+    await flushFrames();
+    expect(root.classes()).not.toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeDefined();
+    await resize(899);
+    expect(root.classes()).not.toContain("deep-genome-viewer--compact");
+    await flushFrames();
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeUndefined();
+    (details.element as HTMLDetailsElement).open = true;
+    await details.trigger("toggle");
+    await resize(540);
+    await flushFrames();
+    expect(details.attributes("open")).toBeDefined();
+    await resize(0);
+    expect(frames.size).toBe(0);
+    expect(details.attributes("open")).toBeDefined();
+    await resize(540);
+    await flushFrames();
+    expect(details.attributes("open")).toBeDefined();
+    const requestsBeforeBurst = requestFrame.mock.calls.length;
+    await resize(900);
+    await resize(899);
+    await resize(0);
+    expect(frames.size).toBe(1);
+    expect(requestFrame).toHaveBeenCalledTimes(requestsBeforeBurst + 1);
+    await flushFrames();
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeDefined();
+    await resize(900);
+    expect(frames.size).toBe(1);
+    wrapper.unmount();
+    mountedViewers.splice(mountedViewers.indexOf(wrapper), 1);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(frames.size).toBe(0);
+    expect(cancelFrame).toHaveBeenCalled();
+  });
   it("renders canonical references and retains rejected slots without interpreting HTML", () => {
     const wrapper = render("# Report", {
       references: [

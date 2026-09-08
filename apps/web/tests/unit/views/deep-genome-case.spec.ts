@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import generated from "@/views/agent-cases/citations/generated.json";
 import {
   DEEP_GENOME_CASE_MARKDOWN,
   DEEP_GENOME_CASE_QUESTION,
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_RESOURCES,
+  readDeepGenomeCaseResource,
 } from "@/views/deep-genome-agent/deep-genome-case";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("Deep Genome case tape", () => {
   it("keeps the rice gene question and report body", () => {
@@ -25,11 +29,14 @@ describe("Deep Genome case tape", () => {
     expect(DEEP_GENOME_CASE_MARKDOWN).toContain("![Single-cell Umap Image]");
   });
 
-  it("uses superscript citation numbers instead of [document:N] tokens", () => {
-    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("<sup>5</sup>");
-    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("<sup>14</sup>");
-    expect(DEEP_GENOME_CASE_MARKDOWN).toContain("<sup>18</sup>");
-    expect(DEEP_GENOME_CASE_MARKDOWN).not.toMatch(/\[document\s*:/i);
+  it("preserves all explicit citation tokens for the shared renderer", () => {
+    const originalTokens =
+      generated.deep_genome.body.match(/\[document:[^\]]+\]/g);
+    expect(originalTokens).toHaveLength(94);
+    expect(DEEP_GENOME_CASE_MARKDOWN.match(/\[document:[^\]]+\]/g)).toEqual(
+      originalTokens
+    );
+    expect(DEEP_GENOME_CASE_MARKDOWN).not.toMatch(/<sup>\d+<\/sup>/);
   });
 
   it("does not repeat the Reference list in the report body", () => {
@@ -44,7 +51,7 @@ describe("Deep Genome case tape", () => {
   });
 
   it("authorizes every case figure against the public attachment files", () => {
-    expect(DEEP_GENOME_CASE_RESOURCES).toHaveLength(14);
+    expect(DEEP_GENOME_CASE_RESOURCES).toHaveLength(15);
     expect(
       DEEP_GENOME_CASE_RESOURCES.filter(({ kind }) => kind === "image")
     ).toHaveLength(13);
@@ -74,7 +81,35 @@ describe("Deep Genome case tape", () => {
     const hrefs = DEEP_GENOME_CASE_RESOURCES.map(
       ({ markdownHref }) => markdownHref
     );
-    expect(new Set(ids).size).toBe(14);
-    expect(new Set(hrefs).size).toBe(14);
+    expect(new Set(ids).size).toBe(15);
+    expect(new Set(hrefs).size).toBe(15);
+  });
+
+  it("opens the registered protocol with the exact existing source bytes", async () => {
+    const resource = DEEP_GENOME_CASE_RESOURCES.find(
+      ({ kind }) => kind === "markdown"
+    );
+    expect(resource?.markdownHref).toBe("./Os01g0177400_result-experiments.md");
+    if (!resource) throw new Error("Case protocol resource is missing");
+    const result = await readDeepGenomeCaseResource(
+      resource.id,
+      new AbortController().signal
+    );
+    const source = readFileSync(
+      resolve(
+        __dirname,
+        "../../../src/assets/agentOut/Os01g0177400_result-experiments.md"
+      )
+    );
+    expect(result.bytes).toEqual(new Uint8Array(source));
+    expect(result.text).toBe(source.toString("utf8"));
+    await expect(
+      readDeepGenomeCaseResource("arbitrary.md", new AbortController().signal)
+    ).rejects.toThrow();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      readDeepGenomeCaseResource(resource.id, controller.signal)
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
 });

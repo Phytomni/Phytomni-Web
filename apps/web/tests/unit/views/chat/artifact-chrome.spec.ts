@@ -179,6 +179,28 @@ describe("artifactChrome", () => {
 });
 
 describe("artifactChromeFromMessage", () => {
+  it("offers only local formats for a static Deep Genome Case while retaining live Word export", () => {
+    const frozenCase: ChatMessage = {
+      role: "assistant",
+      tool_name: "DeepGenomeAgent",
+      content: "Static report",
+      status: "SUCCEEDED",
+      casePresentationKey: "deep-genome-os01g0177400",
+    };
+    expect(artifactChromeFromMessage(frozenCase).exportFormats).toEqual([
+      "PDF",
+      "Markdown",
+    ]);
+    expect(
+      artifactChromeFromMessage({
+        role: "assistant",
+        tool_name: "DeepGenomeAgent",
+        content: "Live report",
+        status: "SUCCEEDED",
+        id: "42",
+      }).exportFormats
+    ).toEqual(["PDF", "Markdown", "Word"]);
+  });
   const review: ChatMessage = {
     role: "assistant",
     id: "11",

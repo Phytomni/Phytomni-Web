@@ -19,6 +19,7 @@ export interface DeepGenomeDownloadsOpts {
   };
   mainContentRef: Ref<DeepGenomeMainContentValue>;
   displayReferences: ComputedRef<DisplayReference[]>;
+  printReferencesRoot?: () => HTMLElement | null;
 }
 
 function resolveRenderingFileId(value: unknown): string {
@@ -90,6 +91,71 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       contentInsideElMain.appendChild(childClone);
     }
 
+    // DOM cloning does not copy canvas pixels. Keep the current 3D view as a
+    // decoded PNG in the print copy without touching the interactive viewer.
+    try {
+      const structures = originalElMain.querySelectorAll<HTMLElement>(
+        ".scientific-cif-viewer"
+      );
+      const copies = contentInsideElMain.querySelectorAll(
+        ".scientific-cif-viewer"
+      );
+      const snapshots = Array.from(structures, (structure, index) => {
+        const canvas = structure.querySelector("canvas");
+        const copy = copies[index]?.querySelector("canvas");
+        if (
+          structure.dataset.scientificCifReady !== "true" ||
+          !canvas ||
+          !copy ||
+          canvas.width === 0 ||
+          canvas.height === 0
+        )
+          throw new Error("Structure is not ready to print");
+        const image = document.createElement("img");
+        image.src = canvas.toDataURL("image/png");
+        if (!image.src.startsWith("data:image/png;base64,")) {
+          throw new Error("Structure snapshot is unavailable");
+        }
+        image.alt = structure.getAttribute("aria-label") ?? "";
+        image.width = canvas.width;
+        image.height = canvas.height;
+        image.style.maxWidth = "100%";
+        image.style.height = "auto";
+        copy.replaceWith(image);
+        return image;
+      });
+      if (snapshots.length > 0) {
+        await Promise.all(snapshots.map((image) => image.decode()));
+      }
+    } catch {
+      ElMessage.error(i18n.global.t("chat.printFailed"));
+      return;
+    }
+
+    // Embedded reports display their canonical bibliography in a separate tab.
+    // Copy that rendered bibliography, not its material actions, into the print.
+    if (!contentInsideElMain.querySelector(".deep-genome-references")) {
+      const references = opts.printReferencesRoot?.()?.cloneNode(true);
+      if (references instanceof HTMLElement) {
+        references
+          .querySelectorAll("button, input, select, textarea, [aria-live]")
+          .forEach((node) => node.remove());
+        references
+          .querySelectorAll<HTMLElement>(
+            "[tabindex], [aria-current], .is-citation-target"
+          )
+          .forEach((node) => {
+            node.removeAttribute("tabindex");
+            node.removeAttribute("aria-current");
+            node.classList.remove(
+              "is-citation-target",
+              "research-evidence-panel__item--active"
+            );
+          });
+        contentInsideElMain.appendChild(references);
+      }
+    }
+
     // remove the download button group via its semantic shell hook
     const downloadButtonGroup = contentInsideElMain.querySelector(
       ".deep-genome-toolbar"
@@ -140,9 +206,19 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       #print-container a,
       #print-container strong,
       #print-container em,
+      #print-container sup,
+      #print-container sub,
       #print-container code,
       #print-container b {
         display: inline !important;
+      }
+
+      #print-container .citation-reference-row {
+        display: grid !important;
+      }
+
+      #print-container .citation-reference-row__links {
+        display: flex !important;
       }
 
       /* fix table display - ensure correct table layout */

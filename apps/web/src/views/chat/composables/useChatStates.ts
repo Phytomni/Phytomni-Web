@@ -42,6 +42,7 @@ function createDefaultChatUIState(): ChatUIState {
     artifactTab: "content",
     handledArtifactIdentities: [],
     archiveRetryingByMessageId: {},
+    materialDetailsByArtifact: {},
   };
 }
 

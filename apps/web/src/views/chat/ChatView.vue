@@ -530,6 +530,7 @@ export function releaseDialogueUploads(
 
       <template #artifact>
         <DeepGenomeArtifact
+          ref="deepGenomeArtifactRef"
           v-if="
             currentArtifactMessage &&
             currentArtifactMessage.tool_name === 'DeepGenomeAgent'
@@ -544,6 +545,12 @@ export function releaseDialogueUploads(
           "
           :references="currentArtifactMessage.doc_list"
           :resources="currentArtifactResources"
+          :reference-materials="currentArtifactMessage.referenceMaterials"
+          :detail-state="currentArtifactMaterialState"
+          :report-key="currentArtifactMaterialReportKey"
+          :read-resource="
+            demoKey === 'deep-genome' ? readDeepGenomeCaseResource : undefined
+          "
           :rendering-file-id="currentArtifactMessage.id"
           :ns="artifactNamespace"
           :tab="artifactTab"
@@ -709,6 +716,8 @@ import {
   computed,
 } from "vue";
 import Sidebar from "./ChatSidebar.vue";
+import { createDeepGenomeMaterialDetailState } from "@/components/research/deep-genome-report";
+import type { DeepGenomeViewerHandle } from "@/components/research/deep-genome-types";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import TransferProgress from "@/components/TransferProgress.vue";
@@ -1337,6 +1346,28 @@ const artifactId = computed(() => {
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const deepGenomeArtifactRef = ref<DeepGenomeViewerHandle | null>(null);
+const currentArtifactMaterialState = computed(() => {
+  const states = getChatState(currentChatId.value).materialDetailsByArtifact;
+  const identity = activeArtifactIdentity.value || "none";
+  return (
+    states[identity] ??
+    (states[identity] = createDeepGenomeMaterialDetailState())
+  );
+});
+const currentArtifactMaterialReportKey = computed(
+  () =>
+    `${currentChatId.value}:${activeArtifactIdentity.value}:${currentArtifactMessage.value?.botProjection?.reportRevision ?? 0}`
+);
+async function readDeepGenomeCaseResource(
+  resourceId: string,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted();
+  const reader = await import("@/views/deep-genome-agent/deep-genome-case");
+  signal.throwIfAborted();
+  return reader.readDeepGenomeCaseResource(resourceId, signal);
+}
 const evidencePanelRef = ref<{
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);
@@ -2489,13 +2520,21 @@ const handleMessageCopy = (message: ChatMessage, index: number) => {
   copyMessageWithDocs(message, index);
 };
 
-const onArtifactMenu = (command: string) => {
+const onArtifactMenu = async (command: string) => {
   if (command === "close") {
     closeArtifact();
     return;
   }
   const format = artifactDownloadFormat(command);
   if (format) {
+    if (demoKey.value === "deep-genome") {
+      if (format === "PDF" || format === "Markdown") {
+        await deepGenomeArtifactRef.value?.download(
+          format === "PDF" ? "pdf" : "markdown"
+        );
+      }
+      return;
+    }
     const message = currentArtifactMessage.value;
     if (message?.id) getFileDownUrl(message.id, format);
     return;

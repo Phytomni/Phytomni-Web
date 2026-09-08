@@ -31,6 +31,20 @@
         :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
       >
         <CitationReferenceRow :index="ref.index" :citation="ref.citation" />
+        <button
+          v-if="materialFor(ref.index)?.excerpt"
+          type="button"
+          class="research-evidence-panel__material"
+          data-testid="material-excerpt"
+          @click="
+            emit('material-activate', {
+              kind: 'excerpt',
+              referenceIndex: ref.index,
+            })
+          "
+        >
+          {{ $t("agents.deepGenome.material.excerpt") }}
+        </button>
       </div>
     </div>
     <p v-else class="research-evidence-panel__empty">
@@ -52,12 +66,25 @@ import { useI18n } from "vue-i18n";
 import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
+import type {
+  DeepGenomeMaterialSelection,
+  DeepGenomeReferenceMaterial,
+} from "./deep-genome-report";
 
 // Parent rows own namespace, focus and grouped highlighting; content is typed.
 const props = defineProps<{
   references?: readonly unknown[];
   ns: string;
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
 }>();
+const emit = defineEmits<{
+  "material-activate": [selection: DeepGenomeMaterialSelection];
+}>();
+function materialFor(index: number) {
+  return props.referenceMaterials?.find(
+    (material) => material.referenceIndex === index
+  );
+}
 
 const displayReferences = computed(() =>
   buildDisplayReferences(props.references || [], props.ns)
@@ -153,6 +180,22 @@ defineExpose({ focusReferences });
 .research-evidence-panel__empty {
   margin: 0;
   color: var(--phy-color-text-muted);
+}
+
+.research-evidence-panel__material {
+  min-height: var(--phy-control-height-default);
+  margin-block-start: var(--phy-space-8);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+  font: inherit;
+  cursor: pointer;
+}
+.research-evidence-panel__material:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 :deep(a) {

@@ -19,6 +19,10 @@ import type {
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ResumableUploadItem } from "./upload/types";
 import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
+import type {
+  DeepGenomeMaterialDetailState,
+  DeepGenomeReferenceMaterial,
+} from "@/components/research/deep-genome-report";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
 
@@ -115,6 +119,8 @@ export interface ChatMessage {
    * FormData, reactions, Artifact eligibility, or A2UI run identity.
    */
   streamPresentationKey?: string;
+  /** Runtime-only static Case identity; never a persisted row or Bot run. */
+  casePresentationKey?: string;
   /** Runtime-only reason that stream-origin content is terminal UI copy. */
   streamTerminalFailure?: StreamTerminalFailure;
   /** Runtime-only A2UI context sourced exclusively from stream response headers. */
@@ -126,6 +132,7 @@ export interface ChatMessage {
   artifacts?: readonly ConversationArtifactLink[];
   /** Preauthorized report figures; demo tapes set this, live Chat signs artifacts. */
   resources?: readonly AuthorizedScientificResource[];
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
   delivery?: AgentResultDelivery;
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
@@ -294,6 +301,8 @@ export interface ChatUIState {
   handledArtifactIdentities: string[];
   /** Retry state remains isolated to the owning dialogue and message. */
   archiveRetryingByMessageId: Record<string, boolean>;
+  /** Transient material detail data, never persisted as message/history content. */
+  materialDetailsByArtifact: Record<string, DeepGenomeMaterialDetailState>;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

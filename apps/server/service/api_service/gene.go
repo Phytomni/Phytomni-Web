@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 
+	"phytomni-server/common"
 	"phytomni-server/common/document_format"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -175,7 +175,18 @@ func parseGeneFile(filename string) *model.GeneExample {
 		// Id, CreatedAt, UpdatedAt, Content, DeleteAt are intentionally omitted.
 	}
 }
-func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
+func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*common.GeneDetailResponse, error) {
+	bundle, err := loadGeneReportBundle(ctx, fileName)
+	if err != nil {
+		return nil, err
+	}
+	return bundle.report, nil
+}
+
+func loadGeneReportBundle(ctx context.Context, fileName string) (*geneReportBundle, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	safeName, err := utils.CleanUploadFilename(fileName)
 	if err != nil {
 		return nil, err
@@ -186,28 +197,34 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 		return nil, errors.New("invalid gene file format")
 	}
 
-	var content []byte
-	if mount := geneObsfsDir(); mount != "" {
-		content, err = os.ReadFile(filepath.Join(mount, geneObsSubMd, safeName))
-		if err != nil {
-			return nil, err
+	bundle := &geneReportBundle{source: geneObjectSource{mount: geneObsfsDir()}}
+	reader, size, err := bundle.source.open(ctx, "md", safeName, geneCuratedID.MatchString(item.GeneId))
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
-	} else {
-		rc, _, rerr := rxBot.NewClient().GetObsObjectStream(ctx, geneRelayRoot+geneObsSubMd+safeName)
-		if rerr != nil {
-			return nil, friendlyRelayErr(rerr)
+		if errors.Is(err, ErrGeneResourceNotFound) {
+			return nil, ErrGeneResourceNotFound
 		}
-		defer rc.Close()
-		content, err = io.ReadAll(rc)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errGeneReportUnavailable
+	}
+	defer reader.Close()
+	content, err := readGeneReportText(ctx, reader, size)
+	if err != nil {
+		return nil, err
 	}
 
-	// The md already carries /api/v1/gene-images/<GENE>/<file> URLs, which the
-	// frontend pipeline passes through untouched — no backend image rewrite.
-	item.Content = string(content)
-	return item, nil
+	bundle.report, err = buildGeneReport(item, content)
+	if err != nil {
+		return nil, err
+	}
+	if err := bundle.loadManifest(ctx); err != nil {
+		return nil, err
+	}
+	if len(bundle.report.Resources) > maxGeneReferenceIndex {
+		return nil, ErrGeneManifestConflict
+	}
+	return bundle, nil
 }
 
 // friendlyRelayErr translates a Bot relay rejection for an out-of-prefix or

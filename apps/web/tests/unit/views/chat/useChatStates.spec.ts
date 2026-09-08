@@ -152,6 +152,7 @@ describe("useChatStates parallel chat state", () => {
       artifactTab: "content",
       handledArtifactIdentities: [],
       archiveRetryingByMessageId: {},
+      materialDetailsByArtifact: {},
     });
     expect(state).not.toHaveProperty("uploadPurpose");
     expect(s).not.toHaveProperty("uploadPurpose");
@@ -159,6 +160,16 @@ describe("useChatStates parallel chat state", () => {
     expect(s).not.toHaveProperty("datasetDescription");
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
+  });
+
+  it("owns material selection separately for every dialogue and artifact", () => {
+    const state = useChatStates();
+    const first = state.getChatState("A");
+    const second = state.getChatState("B");
+    expect(first.materialDetailsByArtifact).toEqual({});
+    expect(first.materialDetailsByArtifact).not.toBe(
+      second.materialDetailsByArtifact
+    );
   });
 
   it("isolates logErrorKinds and log activity keys per dialogue", () => {

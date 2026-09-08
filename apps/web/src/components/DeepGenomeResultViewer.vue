@@ -1,9 +1,15 @@
 <template>
-  <div class="deep-genome-viewer" data-testid="deep-genome-viewer">
+  <div
+    ref="reportRoot"
+    class="deep-genome-viewer"
+    :class="{ 'deep-genome-viewer--compact': compactToc }"
+    data-testid="deep-genome-viewer"
+  >
     <DeepGenomeToc
       :nested-headings="nestedHeadings"
       :active-heading-id="activeHeadingId"
       :title="$t('help.tableOfContents')"
+      :compact="compactToc"
       @select="handleNavSelect"
     />
 
@@ -45,6 +51,7 @@
           :citation-namespace="citationNamespace"
           :reference-count="referenceRows.length"
           :resources="props.resources"
+          :registered-resources-only="props.registeredResourcesOnly"
           @headings="handleHeadings"
           @citation-activate="activateCitation"
           @resource-activate="emit('resource-activate', $event)"
@@ -125,15 +132,18 @@ const props = withDefaults(
     references?: readonly unknown[] | null;
     ns: string;
     resources?: readonly AuthorizedScientificResource[];
+    registeredResourcesOnly?: boolean;
     embedded?: boolean;
     showActions?: boolean;
     showReferences?: boolean;
     renderingFileId?: string;
+    printReferencesRoot?: () => HTMLElement | null;
   }>(),
   {
     markdown: "",
     references: () => [],
     resources: () => [],
+    registeredResourcesOnly: false,
     embedded: false,
     showActions: true,
     showReferences: true,
@@ -149,7 +159,28 @@ const headings = ref<ScientificHeading[]>([]);
 const nestedHeadings = ref<NestedScientificHeading[]>([]);
 const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
+const reportRoot = ref<HTMLElement | null>(null);
+const compactToc = ref(true);
+let layoutObserver: ResizeObserver | null = null;
+let layoutUpdateFrame: number | null = null;
+let latestLayoutWidth = 0;
 let observerSetupTimer: number | null = null;
+
+function updateTocLayout(width: number): void {
+  // Hidden material parents report zero width; retain their disclosure state.
+  if (width > 0) compactToc.value = width < 900;
+}
+
+function scheduleTocLayout(width: number): void {
+  if (width <= 0) return;
+  latestLayoutWidth = width;
+  if (layoutUpdateFrame !== null) return;
+  // Disclosure changes resize this observed root; leave the delivery phase first.
+  layoutUpdateFrame = requestAnimationFrame(() => {
+    layoutUpdateFrame = null;
+    updateTocLayout(latestLayoutWidth);
+  });
+}
 
 // Keep the canonical citation array positions separate from report Markdown.
 const referenceRows = computed<readonly unknown[]>(
@@ -194,6 +225,7 @@ const { downloadPDF, downloadMarkdown } = useDeepGenomeDownloads({
   props,
   mainContentRef: documentRef,
   displayReferences,
+  printReferencesRoot: () => props.printReferencesRoot?.() ?? null,
 });
 
 const download: DeepGenomeViewerHandle["download"] = async (
@@ -214,12 +246,25 @@ const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
   useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
 
 onMounted(() => {
+  if (reportRoot.value) {
+    updateTocLayout(reportRoot.value.getBoundingClientRect().width);
+    layoutObserver = new ResizeObserver((entries) => {
+      const entry = entries.find((item) => item.target === reportRoot.value);
+      if (entry) scheduleTocLayout(entry.contentRect.width);
+    });
+    layoutObserver.observe(reportRoot.value);
+  }
   observerSetupTimer = window.setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
 });
 
 onBeforeUnmount(() => {
+  layoutObserver?.disconnect();
+  if (layoutUpdateFrame !== null) {
+    cancelAnimationFrame(layoutUpdateFrame);
+    layoutUpdateFrame = null;
+  }
   if (observerSetupTimer !== null) {
     window.clearTimeout(observerSetupTimer);
     observerSetupTimer = null;
@@ -282,21 +327,19 @@ onBeforeUnmount(() => {
   background: var(--phy-color-fill-subtle);
 }
 
-@media (max-width: 899px) {
-  .deep-genome-viewer {
-    flex-direction: column;
-    gap: var(--phy-space-20);
-  }
+.deep-genome-viewer--compact {
+  flex-direction: column;
+  gap: var(--phy-space-20);
+}
 
-  .deep-genome-main {
-    width: 100%;
-    flex: 1 1 auto;
-    padding: 0;
-  }
+.deep-genome-viewer--compact .deep-genome-main {
+  width: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+}
 
-  .deep-genome-toolbar {
-    justify-content: flex-start;
-  }
+.deep-genome-viewer--compact .deep-genome-toolbar {
+  justify-content: flex-start;
 }
 
 .deep-genome-document {

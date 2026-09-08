@@ -63,6 +63,21 @@ const artifactByTool: Record<
 };
 
 describe("artifact policy", () => {
+  it("uses a runtime-only Case identity without a persisted row or stream identity", () => {
+    const message = {
+      role: "assistant",
+      tool_name: "DeepGenomeAgent",
+      content:
+        "# Deep Genome report\n\nA substantive gene analysis with evidence.",
+      casePresentationKey: "deep-genome-os01g0177400",
+    };
+    expect(artifactIdentityForMessage(message)).toBe(
+      "case:deep-genome-os01g0177400"
+    );
+    expect(artifactPresentationForMessage(message)?.kind).toBe("deep-genome");
+    expect(message).not.toHaveProperty("id");
+    expect(message).not.toHaveProperty("streamPresentationKey");
+  });
   const reportTools = [
     "KnowledgeAgent",
     "BriefGeneAgent",

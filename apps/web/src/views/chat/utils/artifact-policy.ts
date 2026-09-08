@@ -108,6 +108,7 @@ export type ArtifactPolicyMessage = Pick<
   | "artifacts"
   | "delivery"
   | "streamPresentationKey"
+  | "casePresentationKey"
   | "streamTerminalFailure"
   | "botLifecycle"
   | "botProjection"
@@ -135,6 +136,8 @@ function normalizeIdentity(value: unknown): string | null {
 export function artifactIdentityForMessage(
   message: ArtifactPolicyMessage
 ): string | null {
+  const caseKey = normalizeIdentity(message.casePresentationKey);
+  if (caseKey) return `case:${caseKey}`;
   const stream = normalizeIdentity(message.streamPresentationKey);
   if (stream) return `stream:${stream}`;
 

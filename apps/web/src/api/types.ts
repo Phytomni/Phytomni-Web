@@ -11,6 +11,11 @@ import {
   type GatewayErrorDetail,
 } from "@/api/contracts";
 import type { BotInteropPayload } from "@/views/chat/botProjection";
+import type { CitationDocument } from "@/views/chat/messageTypes";
+import type { DeepGenomeReferenceMaterial } from "@/components/research/deep-genome-report";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
+import { decodeCitationPresentation } from "@/utils/citation-presentation";
+import { indexScientificResources } from "@/utils/scientific-markdown/resources";
 
 export type ApiDetail = GatewayErrorDetail | string | null;
 
@@ -231,11 +236,6 @@ export interface GeneRecord {
   updated_at?: string;
 }
 
-export interface GeneReference {
-  title: string;
-  [key: string]: unknown;
-}
-
 export interface DecodedQueryData extends QueryData {
   id: string;
   answer: string;
@@ -243,7 +243,11 @@ export interface DecodedQueryData extends QueryData {
 }
 
 export interface GeneDetail extends GeneRecord {
-  references?: GeneReference[];
+  content: string;
+  references: CitationDocument[];
+  resources: AuthorizedScientificResource[];
+  reference_materials: DeepGenomeReferenceMaterial[];
+  report_revision: string;
 }
 
 export interface GeneListResponse {
@@ -1500,19 +1504,91 @@ export function decodeGeneListResponse(value: unknown): GeneListResponse {
 }
 
 export function decodeGeneDetailResponse(value: unknown): GeneDetail {
-  const record = decodeGeneRecord(value, "gene detail response");
-  if (!isRecord(value)) invalid("gene detail response");
-  const result: GeneDetail = { ...record };
-  if (hasOwn(value, "references")) {
-    if (!Array.isArray(value.references)) invalid("gene detail response");
-    result.references = value.references.map((reference) => {
-      if (!isRecord(reference)) invalid("gene detail response");
+  const label = "gene detail response";
+  const record = decodeGeneRecord(value, label);
+  if (!isRecord(value)) invalid(label);
+  const content = optionalStringField(value, "content", label);
+  if (content === undefined) invalid(label);
+  const revision = requiredString(value, "report_revision", label);
+  if (
+    !/^[a-f0-9]{64}$/.test(revision) ||
+    new TextEncoder().encode(content).length > 8 * 1024 * 1024 ||
+    !Array.isArray(value.references) ||
+    value.references.length > 999 ||
+    !Array.isArray(value.resources) ||
+    value.resources.length > 999 ||
+    !Array.isArray(value.reference_materials) ||
+    value.reference_materials.length > value.references.length
+  )
+    invalid(label);
+
+  const references: CitationDocument[] = value.references.map((row) => {
+    if (!isRecord(row)) return { citation: null };
+    return {
+      ...(typeof row.title === "string" ? { title: row.title } : {}),
+      citation: decodeCitationPresentation(row.citation),
+    };
+  });
+  const resources: AuthorizedScientificResource[] = value.resources.map(
+    (row) => {
+      if (
+        !isRecord(row) ||
+        hasOwn(row, "renderSource") ||
+        typeof row.kind !== "string" ||
+        !["image", "cif", "attachment", "markdown"].includes(row.kind)
+      )
+        invalid(label);
       return {
-        title: requiredString(reference, "title", "gene detail response"),
+        id: requiredString(row, "id", label),
+        name: requiredString(row, "name", label),
+        kind: row.kind as AuthorizedScientificResource["kind"],
+        markdownHref: requiredString(row, "markdownHref", label),
+        ...(row.displayUrl !== undefined
+          ? { displayUrl: requiredString(row, "displayUrl", label) }
+          : {}),
+      };
+    }
+  );
+  if (indexScientificResources(resources).size !== resources.length)
+    invalid(label);
+  const ids = new Set(resources.map((resource) => resource.id));
+  const indices = new Set<number>();
+  let totalExcerptBytes = 0;
+  const referenceMaterials: DeepGenomeReferenceMaterial[] =
+    value.reference_materials.map((row) => {
+      if (
+        !isRecord(row) ||
+        !Number.isInteger(row.referenceIndex) ||
+        typeof row.referenceIndex !== "number" ||
+        row.referenceIndex < 1 ||
+        row.referenceIndex > references.length ||
+        indices.has(row.referenceIndex) ||
+        !Array.isArray(row.resourceIds) ||
+        row.resourceIds.length > resources.length ||
+        row.resourceIds.some((id) => typeof id !== "string" || !ids.has(id)) ||
+        new Set(row.resourceIds).size !== row.resourceIds.length
+      )
+        invalid(label);
+      const excerpt = optionalStringField(row, "excerpt", label);
+      const bytes = new TextEncoder().encode(excerpt ?? "").length;
+      totalExcerptBytes += bytes;
+      if (bytes > 64 * 1024 || totalExcerptBytes > 4 * 1024 * 1024)
+        invalid(label);
+      indices.add(row.referenceIndex);
+      return {
+        referenceIndex: row.referenceIndex,
+        ...(excerpt !== undefined ? { excerpt } : {}),
+        resourceIds: [...row.resourceIds] as string[],
       };
     });
-  }
-  return result;
+  return {
+    ...record,
+    content,
+    references,
+    resources,
+    reference_materials: referenceMaterials,
+    report_revision: revision,
+  };
 }
 
 function decodeAsyncTaskRecord(value: unknown): AsyncTaskRecord {

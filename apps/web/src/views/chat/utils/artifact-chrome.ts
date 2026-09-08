@@ -118,6 +118,7 @@ export function artifactChromeFromMessage(
     | "delivery"
     | "botLifecycle"
     | "botProjection"
+    | "casePresentationKey"
   >
 ): ArtifactChrome {
   const tool = message.tool_name ?? "";
@@ -139,7 +140,7 @@ export function artifactChromeFromMessage(
         message.botProjection?.delivery,
     }),
     runComplete: isRunComplete(status, message.streaming),
-    surface: "chat",
+    surface: message.casePresentationKey ? "client" : "chat",
   });
   if (message.streaming === true) {
     return { ...chrome, exportFormats: [] };

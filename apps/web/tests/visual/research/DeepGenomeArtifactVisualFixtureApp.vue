@@ -10,6 +10,11 @@
       :markdown="markdown"
       :references="references"
       :resources="resources"
+      :reference-materials="
+        isScientific || isContract ? [] : referenceMaterials
+      "
+      :read-resource="readResource"
+      report-key="deep-genome-frozen-case"
       ns="deep-genome-visual"
       artifact-id="deep-genome-visual-artifact"
       :tab-labels="tabLabels"
@@ -41,7 +46,10 @@ import {
   DEEP_GENOME_CASE_REFERENCES,
   DEEP_GENOME_CASE_MARKDOWN,
   DEEP_GENOME_CASE_RESOURCES,
+  readDeepGenomeCaseResource,
 } from "@/views/deep-genome-agent/deep-genome-case";
+import referenceMaterials from "@/views/agent-cases/citations/deep-genome-materials.generated.json";
+import type { DeepGenomeResourceReader } from "@/components/research/deep-genome-report";
 import {
   CONTRACT_DEEP_GENOME_MARKDOWN,
   CONTRACT_DEEP_GENOME_RESOURCES,
@@ -51,6 +59,23 @@ import {
 
 const { t } = useI18n();
 const action = ref("idle");
+const materialState = new URLSearchParams(window.location.search).get(
+  "material-state"
+);
+let materialAttempts = 0;
+const readResource: DeepGenomeResourceReader = (resourceId, signal) => {
+  if (materialState === "loading") {
+    return new Promise((_, reject) => {
+      const abort = () => reject(new DOMException("Aborted", "AbortError"));
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+  if (materialState === "error" && materialAttempts++ === 0) {
+    return Promise.reject(new Error("Synthetic visual fixture failure"));
+  }
+  return readDeepGenomeCaseResource(resourceId, signal);
+};
 const isScientific =
   new URLSearchParams(window.location.search).get("case") === "scientific";
 const title = isScientific
