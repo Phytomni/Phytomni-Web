@@ -18,6 +18,18 @@ type fixtureCase struct {
 	References json.RawMessage `json:"references"`
 }
 
+type generatorOptions struct {
+	SourcePath, OutputPath                 string
+	MaterialSourcePath, MaterialOutputPath string
+	Check                                  bool
+}
+
+type generatedArtifact struct {
+	path    string
+	content []byte
+	label   string
+}
+
 func generate(source []byte) ([]byte, error) {
 	var sources map[string]fixtureCase
 	if err := json.Unmarshal(source, &sources); err != nil || sources == nil {
@@ -60,8 +72,11 @@ func generate(source []byte) ([]byte, error) {
 	return append(artifact, '\n'), nil
 }
 
-func run(sourcePath, outputPath string, check bool) error {
-	source, err := os.ReadFile(sourcePath)
+func run(opts generatorOptions) error {
+	if (opts.MaterialSourcePath == "") != (opts.MaterialOutputPath == "") {
+		return errors.New("-material-source and -material-output must be supplied together")
+	}
+	source, err := os.ReadFile(opts.SourcePath)
 	if err != nil {
 		return err
 	}
@@ -69,29 +84,52 @@ func run(sourcePath, outputPath string, check bool) error {
 	if err != nil {
 		return err
 	}
-	if check {
-		current, readErr := os.ReadFile(outputPath)
+	outputs := []generatedArtifact{{opts.OutputPath, generated, "citation fixtures"}}
+	if opts.MaterialSourcePath != "" {
+		materialSource, readErr := os.ReadFile(opts.MaterialSourcePath)
 		if readErr != nil {
 			return readErr
 		}
-		if !bytes.Equal(current, generated) {
-			return errors.New("generated citation fixtures are out of date")
+		materials, generateErr := generateMaterials(source, materialSource)
+		if generateErr != nil {
+			return generateErr
 		}
-		return nil
+		outputs = append(outputs, generatedArtifact{opts.MaterialOutputPath, materials, "deep genome material fixtures"})
 	}
-	return os.WriteFile(outputPath, generated, 0o644)
+	for _, output := range outputs {
+		if !opts.Check {
+			if err := os.WriteFile(output.path, output.content, 0o644); err != nil {
+				return err
+			}
+			continue
+		}
+		current, readErr := os.ReadFile(output.path)
+		if readErr != nil {
+			return readErr
+		}
+		if !bytes.Equal(current, output.content) {
+			return fmt.Errorf("generated %s are out of date", output.label)
+		}
+	}
+	return nil
 }
 
 func main() {
 	sourcePath := flag.String("source", "", "source JSON path")
 	outputPath := flag.String("output", "", "generated JSON path")
+	materialSourcePath := flag.String("material-source", "", "DeepGenome source material JSON path (requires -material-output)")
+	materialOutputPath := flag.String("material-output", "", "sanitized DeepGenome material JSON path (requires -material-source)")
 	check := flag.Bool("check", false, "compare generated output without writing")
 	flag.Parse()
 	if *sourcePath == "" || *outputPath == "" {
 		fmt.Fprintln(os.Stderr, "-source and -output are required")
 		os.Exit(2)
 	}
-	if err := run(*sourcePath, *outputPath, *check); err != nil {
+	if err := run(generatorOptions{
+		SourcePath: *sourcePath, OutputPath: *outputPath,
+		MaterialSourcePath: *materialSourcePath, MaterialOutputPath: *materialOutputPath,
+		Check: *check,
+	}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

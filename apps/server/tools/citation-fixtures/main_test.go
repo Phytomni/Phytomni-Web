@@ -103,7 +103,7 @@ func TestCheckDetectsChangedReferenceWithoutRewriting(t *testing.T) {
 	if err := os.WriteFile(sourcePath, initial, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(sourcePath, outputPath, false); err != nil {
+	if err := run(generatorOptions{SourcePath: sourcePath, OutputPath: outputPath}); err != nil {
 		t.Fatal(err)
 	}
 	wantUnchanged, err := os.ReadFile(outputPath)
@@ -115,7 +115,7 @@ func TestCheckDetectsChangedReferenceWithoutRewriting(t *testing.T) {
 	if err := os.WriteFile(sourcePath, changed, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(sourcePath, outputPath, true); err == nil {
+	if err := run(generatorOptions{SourcePath: sourcePath, OutputPath: outputPath, Check: true}); err == nil {
 		t.Fatal("check accepted stale generated references")
 	} else if err.Error() != "generated citation fixtures are out of date" {
 		t.Fatalf("unexpected check error: %v", err)
