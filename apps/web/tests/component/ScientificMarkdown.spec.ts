@@ -1,13 +1,61 @@
 import { defineComponent, h, nextTick } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mountWithApp } from "../helpers/test-app-context";
 
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 import citationGrammar from "../../../server/common/document_format/testdata/citation-grammar.json";
+const markdownStyles = readFileSync(
+  resolve(__dirname, "../../src/styles/markdown.css"),
+  "utf8"
+);
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ScientificMarkdown", () => {
+  it("separates adjacent citation groups without changing targets or ordinary scripts", async () => {
+    const wrapper = mountWithApp(ScientificMarkdown, {
+      props: {
+        source:
+          "Adjacent [document:5][document:14][document:18]. Separate [1] then [2]. Spaced [3] [4]. [6]<sup>2</sup><sub>3</sub>[7].",
+        citationNamespace: "adjacent",
+        referenceCount: 18,
+      },
+    });
+    await vi.dynamicImportSettled();
+    expect(
+      wrapper
+        .findAll(".scientific-citation--adjacent")
+        .map((node) => node.text())
+    ).toEqual(["14", "18"]);
+    expect(
+      wrapper
+        .findAll(".scientific-citation__link")
+        .map((node) => node.attributes("href"))
+    ).toEqual([
+      "#adjacent-ref-5",
+      "#adjacent-ref-14",
+      "#adjacent-ref-18",
+      "#adjacent-ref-1",
+      "#adjacent-ref-2",
+      "#adjacent-ref-3",
+      "#adjacent-ref-4",
+      "#adjacent-ref-6",
+      "#adjacent-ref-7",
+    ]);
+    expect(
+      wrapper
+        .findAll(
+          ".scientific-inline--superscript, .scientific-inline--subscript"
+        )
+        .map((node) => node.text())
+    ).toEqual(["2", "3"]);
+    expect(markdownStyles).toMatch(
+      /\.scientific-citation--adjacent::before\s*\{\s*content:\s*["'],["'];/
+    );
+    wrapper.unmount();
+  });
   it("renders ordinary scripts and composed italics without inferred citations", async () => {
     const wrapper = mountWithApp(ScientificMarkdown, {
       props: {

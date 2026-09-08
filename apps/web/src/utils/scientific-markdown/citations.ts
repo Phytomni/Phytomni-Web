@@ -104,7 +104,8 @@ function isInteractiveCitation(
 
 function citationNode(
   parsed: ParsedCitation,
-  options: CitationOptions
+  options: CitationOptions,
+  adjacent: boolean
 ): MdNode {
   const display = parsed.display.replace(/-/g, "–");
   const interactive = isInteractiveCitation(parsed, options);
@@ -127,7 +128,12 @@ function citationNode(
     type: "scientificCitation",
     data: {
       hName: "sup",
-      hProperties: { className: ["scientific-citation"] },
+      hProperties: {
+        className: [
+          "scientific-citation",
+          ...(adjacent ? ["scientific-citation--adjacent"] : []),
+        ],
+      },
       hChildren,
     },
   };
@@ -206,7 +212,10 @@ function rewriteTextCitations(
           value: node.value.slice(offset, matchIndex),
         });
       }
-      parts.push(citationNode(parsed, options));
+      const previous = parts.at(-1) ?? parent.children[index - 1];
+      parts.push(
+        citationNode(parsed, options, previous?.type === "scientificCitation")
+      );
       offset = matchIndex + match[0].length;
     }
     if (!parts.length) continue;

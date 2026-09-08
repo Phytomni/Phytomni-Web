@@ -4,6 +4,8 @@ import type {
   ScientificResourceKind,
 } from "./types";
 
+export const MAX_SCIENTIFIC_TEXT_BYTES = 8 * 1024 * 1024;
+
 export function indexScientificResources(
   resources: readonly AuthorizedScientificResource[]
 ): ReadonlyMap<string, AuthorizedScientificResource> {
@@ -28,7 +30,12 @@ export function indexScientificResources(
       idCounts.get(id) !== 1 ||
       hrefCounts.get(href) !== 1 ||
       safeHrefValue(href) === null ||
-      (resource.displayUrl && safeHrefValue(resource.displayUrl) === null)
+      (resource.displayUrl && safeHrefValue(resource.displayUrl) === null) ||
+      (resource.renderSource !== undefined &&
+        (resource.kind !== "cif" ||
+          resource.displayUrl !== undefined ||
+          resource.renderSource?.kind !== "cif-text" ||
+          typeof resource.renderSource.read !== "function"))
     ) {
       continue;
     }

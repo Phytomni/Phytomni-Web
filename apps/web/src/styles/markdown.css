@@ -511,6 +511,10 @@
   line-height: 0;
 }
 
+.phy-markdown .scientific-citation--adjacent::before {
+  content: ",";
+}
+
 .phy-markdown .scientific-citation__link {
   color: var(--phy-color-action-text);
 }

@@ -26,12 +26,19 @@ export interface ScientificHeading {
 export type ScientificResourceKind =
   "image" | "cif" | "attachment" | "markdown";
 
+export interface ScientificCifTextSource {
+  kind: "cif-text";
+  read: (signal: AbortSignal) => Promise<string>;
+}
+
 export interface AuthorizedScientificResource {
   id: string;
   name: string;
   kind: ScientificResourceKind;
   markdownHref: string;
   displayUrl?: string;
+  /** Runtime-only adapter; never accepted from a wire resource manifest. */
+  renderSource?: ScientificCifTextSource;
 }
 
 export interface ScientificResourceActivation {

@@ -6,6 +6,7 @@ const createViewer = vi.fn(() => ({
   addModel: vi.fn(),
   setStyle: vi.fn(),
   zoomTo: vi.fn(),
+  zoom: vi.fn(),
   resize: vi.fn(),
   render: vi.fn(),
   animate: vi.fn(),
@@ -171,6 +172,10 @@ describe("ScientificMarkdown resources", () => {
     const viewer = createViewer.mock.results.at(-1)?.value;
     viewer.resize.mockClear();
     viewer.render.mockClear();
+    Object.defineProperties(wrapper.get(".scientific-cif-viewer").element, {
+      offsetWidth: { value: 800 },
+      offsetHeight: { value: 600 },
+    });
 
     resizeObservers.at(-1)?.trigger();
 

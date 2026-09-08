@@ -5,6 +5,33 @@ import {
 } from "@/utils/scientific-markdown/resources";
 
 describe("scientific Markdown resources", () => {
+  it("accepts runtime CIF readers only as an exclusive CIF render source", () => {
+    const source = {
+      kind: "cif-text" as const,
+      read: async () => "data_model",
+    };
+    const resource = {
+      id: "structure",
+      name: "Structure",
+      kind: "cif" as const,
+      markdownHref: "./model.cif",
+      renderSource: source,
+    };
+    expect(
+      resourceFor(indexScientificResources([resource]), "./model.cif", "cif")
+        ?.renderSource
+    ).toBe(source);
+    for (const invalid of [
+      { ...resource, displayUrl: "/public/model.cif" },
+      { ...resource, displayUrl: "blob:https://example.test/id" },
+      { ...resource, kind: "image" as const },
+      { ...resource, renderSource: { kind: "cif-text", read: "data_model" } },
+    ]) {
+      expect(indexScientificResources([invalid as typeof resource]).size).toBe(
+        0
+      );
+    }
+  });
   it("indexes only exact unambiguous authorized resources", () => {
     const resources = indexScientificResources([
       {
