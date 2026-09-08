@@ -291,4 +291,16 @@ describe("ResearchArtifactShell", () => {
   it("contains rejected roving-focus scheduling", () => {
     expect(SHELL_SOURCE).toContain("}).catch(() => undefined);");
   });
+
+  it("retains a selected-tab border when forced colors replace background fills", () => {
+    const forcedColors =
+      SHELL_SOURCE.match(
+        /@media\s*\(forced-colors:\s*active\)\s*\{([\s\S]*?)\n\}/
+      )?.[1] ?? "";
+
+    expect(forcedColors).toMatch(
+      /\.research-artifact-shell__tab\.is-active::after\s*\{[^}]*border-block-end:\s*2px solid Highlight;/
+    );
+    expect(forcedColors).not.toMatch(/forced-color-adjust:\s*none/);
+  });
 });
