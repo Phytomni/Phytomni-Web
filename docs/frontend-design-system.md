@@ -453,6 +453,51 @@ Frozen Deep Genome Cases use a separate runtime-only `casePresentationKey`;
 they never masquerade as server message rows. Their PDF/Markdown exports are
 client-side and include the same canonical bibliography once.
 
+### Shared molecular structure viewer
+
+Authorized CIF resources use one `ScientificCifViewer` through the shared
+scientific Markdown renderer in Chat, Cases and Database reports. Its light
+scientific canvas is independent of the application theme: a pale blue cartoon,
+translucent mint SES surface and restrained outline use the fixed
+`--phy-scientific-cif-*` tokens. These are decorative brand colors, not confidence,
+charge, binding-site or other scientific annotations. Source coordinates are
+unchanged; native 3Dmol lighting is not patched.
+
+Surface visibility, reset and enlarge controls stay outside the canvas and use
+ordinary theme tokens. Resizing preserves the user's orientation, pan and zoom,
+with relative aspect compensation; reset fits the complete structure in the
+current container. Pointer/touch controls remain native. A focused viewport also
+supports arrow-key rotation, Shift+arrow panning and plus/minus zoom, with localized
+instructions. Those shortcuts do not capture events from the surrounding report.
+
+Enlargement moves the same viewport into a report-local Element Plus dialog,
+without another model, surface task or WebGL context. The canvas remains within
+its report's `.scientific-cif-block`; closing restores the opener and report scroll.
+Inside a fullscreen artifact, Escape closes the structure dialog before the
+parent artifact. Chrome follows dark/system appearance, while scientific canvas
+colors remain fixed-light.
+
+The parent artifact leaves nested-modal Tab handling to that modal and respects
+already handled keys. The structure dialog supplements only its Close/viewport
+Tab boundaries; ordinary Tab events still bubble to Element Plus so its input
+modality tracking receives keyboard events after a pointer interaction.
+
+Loading source data and building the SES surface are distinct honest states,
+without invented percentages. `data-scientific-cif-ready` becomes `true` only
+after the current native surface completes and renders. Source replacement aborts
+the read and detaches obsolete presentation immediately; native surface work is
+not abortable, so its captured viewer is cleared once after it settles. The
+installed 3Dmol release has no public API to remove its constructor's global event
+listeners or internal resize observer; geometry cleanup must not be described as
+complete library disposal.
+
+Client-side Case printing replaces each complete structure block with its decoded
+current canvas PNG, including the user's orientation and surface-off state. It
+does not clone toolbars or retained dialogs, and an unfinished/failed structure
+prevents printing until an explicit later retry. The print-only page background
+is white without changing table shading or scientific canvas pixels. This contract does not imply
+that a server-generated PDF or DOCX is re-rendered by the browser.
+
 ### Citation and HTML safety
 
 Citation links emit typed activation events to the owning reference list and
