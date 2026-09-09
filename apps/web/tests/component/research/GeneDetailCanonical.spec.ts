@@ -18,19 +18,35 @@ vi.mock("@/api/gene-display", () => ({
   getGeneResourceCif: mocks.getGeneResourceCif,
   getGeneResourceMarkdown: mocks.getGeneResourceMarkdown,
 }));
-vi.mock("@/utils/3dmol", () => ({
+vi.mock("@/utils/3dmol", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/3dmol")>()),
   load3DMol: async () => ({
-    createViewer: () => ({
-      addModel: mocks.addModel,
-      clear: mocks.clear,
-      setStyle: vi.fn(),
-      zoomTo: vi.fn(),
-      zoom: vi.fn(),
-      resize: vi.fn(),
-      render: vi.fn(),
-      animate: vi.fn(),
-      stopAnimate: vi.fn(),
-    }),
+    createViewer: (target: HTMLElement) => {
+      target.append(document.createElement("canvas"));
+      return {
+        addModel: mocks.addModel,
+        selectedAtoms: vi.fn(() => [{ x: 0, y: 0, z: 0 }]),
+        modelToScreen: vi.fn(
+          (points: Array<{ x: number; y: number; z: number }>) =>
+            points.map(({ x, y }) => ({ x, y }))
+        ),
+        getView: vi.fn(() => [0, 0, 0, -20, 0, 0, 0, 1]),
+        addSurface: vi.fn(() =>
+          Object.assign(Promise.resolve(7), { surfid: 7 })
+        ),
+        clear: mocks.clear,
+        setStyle: vi.fn(),
+        setProjection: vi.fn(),
+        setViewStyle: vi.fn(),
+        rotate: vi.fn(),
+        zoomTo: vi.fn(),
+        zoom: vi.fn(),
+        resize: vi.fn(),
+        render: vi.fn(),
+        animate: vi.fn(),
+        stopAnimate: vi.fn(),
+      };
+    },
   }),
 }));
 vi.mock("vue-router", () => ({
@@ -93,6 +109,11 @@ describe("GeneDetail canonical route integration", () => {
       expect.any(AbortSignal)
     );
     expect(mocks.addModel).toHaveBeenCalledWith("data_protected", "cif");
+    expect(
+      wrapper
+        .get(".scientific-cif-viewer")
+        .attributes("data-scientific-cif-ready")
+    ).toBe("true");
     const protocol = wrapper
       .findAll("button")
       .find((button) => button.text() === "Protocol");
@@ -139,7 +160,9 @@ describe("GeneDetail canonical route integration", () => {
         });
       })
       .mockResolvedValueOnce("data_new_gene");
-    mountWithApp(GeneDetailView, { attachTo: document.body });
+    const wrapper = mountWithApp(GeneDetailView, {
+      attachTo: document.body,
+    });
     await flushPromises();
     await vi.dynamicImportSettled();
     await flushPromises();
@@ -150,6 +173,11 @@ describe("GeneDetail canonical route integration", () => {
     resolveOld("data_old_gene");
     await flushPromises();
     expect(mocks.addModel.mock.calls).toEqual([["data_new_gene", "cif"]]);
+    expect(
+      wrapper
+        .get(".scientific-cif-viewer")
+        .attributes("data-scientific-cif-ready")
+    ).toBe("true");
     expect(mocks.getGeneResourceCif).toHaveBeenLastCalledWith(
       "Os02_result.md",
       cifId,

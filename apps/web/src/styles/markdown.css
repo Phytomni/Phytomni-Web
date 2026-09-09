@@ -606,22 +606,6 @@
   height: auto;
 }
 
-.phy-markdown .scientific-cif-viewer {
-  position: relative;
-  width: 100%;
-  height: var(--phy-layout-scientific-media-max-height);
-  margin: var(--phy-space-12) 0;
-  overflow: hidden;
-  border: 1px solid var(--phy-color-border-subtle);
-  border-radius: var(--phy-radius-sm);
-  background: var(--phy-color-fill-subtle);
-}
-
-.phy-markdown .scientific-cif-viewer > canvas {
-  max-width: 100%;
-  max-height: 100%;
-}
-
 /* The static renderer preserves source newlines as <br>. As on Chat, CSS owns
    block-boundary rhythm without changing the generated safe HTML. */
 :is(.phy-markdown--artifact, .phy-markdown--document) .markdown-content br {

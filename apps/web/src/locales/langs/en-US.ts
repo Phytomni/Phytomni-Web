@@ -1,5 +1,21 @@
 // English language pack.
 export default {
+  scientificCif: {
+    title: "Protein structure",
+    surface: "Surface",
+    on: "On",
+    off: "Off",
+    reset: "Reset view",
+    enlarge: "Enlarge",
+    close: "Close structure view",
+    keyboardHelp:
+      "Use arrow keys to rotate, Shift and arrow keys to pan, and plus or minus to zoom while the structure is focused.",
+    label: "Interactive protein structure",
+    loadingSource: "Loading structure",
+    buildingSurface: "Building molecular surface",
+    error: "Structure unavailable",
+    unavailable: "Resource unavailable",
+  },
   // Common parts
   common: {
     confirm: "Confirm",

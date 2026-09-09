@@ -322,6 +322,52 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
     printSpy.mockRestore();
   });
 
+  it("gives printed page roots a white background without changing screen or table backgrounds", async () => {
+    const theme = document.createElement("style");
+    theme.textContent = "html, body { background: rgb(247, 249, 252); }";
+    document.head.append(theme);
+    const fakeEl = document.createElement("div");
+    fakeEl.appendChild(document.createElement("p"));
+    let printRules: CSSRule[] = [];
+    let screenBackground = "";
+    const originalStyleCount = document.head.querySelectorAll("style").length;
+    const printSpy = spyOnPrint().mockImplementation(() => {
+      const styles = document.head.querySelectorAll("style");
+      printRules = Array.from(styles[styles.length - 1].sheet?.cssRules ?? []);
+      screenBackground = getComputedStyle(document.body).backgroundColor;
+    });
+    const { downloadPDF } = useDeepGenomeDownloads({
+      props: { markdown: "# PDF test", filename: "report.md" },
+      mainContentRef: ref({ $el: fakeEl }),
+      displayReferences: computed(() => []),
+    });
+    try {
+      await downloadPDF();
+      expect(printSpy).toHaveBeenCalledOnce();
+      expect(printRules).toHaveLength(1);
+      const printMedia = printRules[0] as CSSMediaRule;
+      expect(printMedia.conditionText).toBe("print");
+      const rules = Array.from(printMedia.cssRules) as CSSStyleRule[];
+      const paper = rules.find((rule) => rule.selectorText === "html, body");
+      expect(paper?.style.getPropertyValue("background")).toBe("#fff");
+      expect(paper?.style.getPropertyPriority("background")).toBe("important");
+      const tableHeader = rules.find(
+        (rule) => rule.selectorText === "#print-container th"
+      );
+      expect(tableHeader?.style.backgroundColor).toBe("#f5f5f5");
+      expect(screenBackground).toBe("rgb(247, 249, 252)");
+      expect(getComputedStyle(document.body).backgroundColor).toBe(
+        "rgb(247, 249, 252)"
+      );
+      expect(document.head.querySelectorAll("style")).toHaveLength(
+        originalStyleCount
+      );
+    } finally {
+      printSpy.mockRestore();
+      theme.remove();
+    }
+  });
+
   it("cleans up the temporary print surface when native print throws", async () => {
     const fakeEl = document.createElement("div");
     fakeEl.appendChild(document.createElement("p"));
@@ -408,8 +454,22 @@ describe("useDeepGenomeDownloads — downloadPDF smoke", () => {
 });
 
 describe("useDeepGenomeDownloads — CIF print snapshots", () => {
-  function reportWithStructure(state = "true") {
+  function reportWithStructure(
+    state = "true",
+    placement: "inline" | "enlarged" | "retained closed" = "inline"
+  ) {
     const main = document.createElement("main");
+    const block = document.createElement("section");
+    block.className = "scientific-cif-block";
+    const toolbar = document.createElement("div");
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.innerHTML =
+      '<button aria-pressed="true">Surface on</button><button>Reset view</button><button>Enlarge</button>';
+    const status = document.createElement("p");
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    status.textContent = "Structure controls status";
+    const inlineHost = document.createElement("div");
     const structure = document.createElement("div");
     structure.className = "scientific-cif-viewer";
     structure.dataset.scientificCifReady = state;
@@ -418,8 +478,27 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
     canvas.width = 1480;
     canvas.height = 600;
     structure.appendChild(canvas);
-    main.appendChild(structure);
-    return { main, structure, canvas };
+    inlineHost.appendChild(structure);
+    block.append(toolbar, status, inlineHost);
+    if (placement !== "inline") {
+      const dialog = document.createElement("div");
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.style.position = "fixed";
+      dialog.style.inset = "0";
+      const close = document.createElement("button");
+      close.textContent = "Close structure";
+      dialog.appendChild(close);
+      if (placement === "enlarged") dialog.appendChild(structure);
+      else {
+        dialog.hidden = true;
+        dialog.style.display = "none";
+        dialog.appendChild(document.createElement("div"));
+      }
+      block.appendChild(dialog);
+    }
+    main.appendChild(block);
+    return { main, block, structure, canvas, toolbar };
   }
 
   function downloads(main: HTMLElement) {
@@ -434,12 +513,71 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
     vi.mocked(ElMessage.error).mockClear();
   });
 
+  it.each(["inline", "enlarged", "retained closed"] as const)(
+    "normalizes the entire %s CIF block to one PNG without toolbar, status or dialog markup",
+    async (placement) => {
+      const { main, block, structure, canvas } = reportWithStructure(
+        "true",
+        placement
+      );
+      vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+        "data:image/png;base64,c25hcHNob3Q="
+      );
+      const decode = vi
+        .spyOn(HTMLImageElement.prototype, "decode")
+        .mockResolvedValue(undefined);
+      const liveMarkup = main.innerHTML;
+      let printed: Element | null = null;
+      const print = vi.spyOn(window, "print").mockImplementation(() => {
+        printed = document
+          .querySelector("#print-container")
+          ?.cloneNode(true) as Element;
+      });
+
+      await downloads(main).downloadPDF();
+
+      const copy = mustGet(printed, "CIF print copy");
+      expect(
+        copy.querySelectorAll("button, [role=status], [role=dialog]")
+      ).toHaveLength(0);
+      expect(
+        copy.querySelectorAll(".scientific-cif-print-snapshot")
+      ).toHaveLength(1);
+      expect(
+        copy.querySelectorAll(
+          ".scientific-cif-block, .scientific-cif-viewer, canvas, button, [role=toolbar], [role=status], [role=dialog], [aria-modal], [hidden]"
+        )
+      ).toHaveLength(0);
+      expect(copy.textContent).not.toContain("Surface on");
+      expect(copy.textContent).not.toContain("Structure controls status");
+      const snapshot = mustGet(
+        copy.querySelector("img"),
+        "Printed CIF snapshot"
+      );
+      expect(snapshot.getAttribute("src")).toBe(
+        "data:image/png;base64,c25hcHNob3Q="
+      );
+      expect(snapshot.getAttribute("alt")).toBe("Scientific structure viewer");
+      expect(snapshot.getAttribute("width")).toBe("1480");
+      expect(snapshot.getAttribute("height")).toBe("600");
+      expect(snapshot.style.height).toBe("auto");
+      expect(snapshot.style.maxWidth).toBe("100%");
+      expect(decode).toHaveBeenCalledOnce();
+      expect(print).toHaveBeenCalledOnce();
+      expect(main.innerHTML).toBe(liveMarkup);
+      expect(block.contains(structure)).toBe(true);
+      expect(structure.firstElementChild).toBe(canvas);
+      expect(ElMessage.error).not.toHaveBeenCalled();
+    }
+  );
+
   it("prints decoded PNG snapshots in source order without altering live canvases or ordinary images", async () => {
     const first = reportWithStructure();
-    const second = reportWithStructure();
+    const second = reportWithStructure("true", "enlarged");
     second.canvas.width = 400;
     second.canvas.height = 800;
-    first.main.appendChild(second.structure);
+    second.structure.setAttribute("aria-label", "Second structure view");
+    first.main.appendChild(second.block);
     const ordinaryImage = document.createElement("img");
     ordinaryImage.src = "/case-figure.png";
     first.main.appendChild(ordinaryImage);
@@ -461,7 +599,7 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
       );
       const snapshots = [
         ...printed.querySelectorAll<HTMLImageElement>(
-          ".scientific-cif-viewer img"
+          ".scientific-cif-print-snapshot"
         ),
       ];
       expect(snapshots.map((item) => item.src)).toEqual([
@@ -472,14 +610,17 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
         [1480, 600],
         [400, 800],
       ]);
-      expect(
-        snapshots.every((item) => item.alt === "Scientific structure viewer")
-      ).toBe(true);
+      expect(snapshots.map((item) => item.alt)).toEqual([
+        "Scientific structure viewer",
+        "Second structure view",
+      ]);
       expect(snapshots.every((item) => item.style.height === "auto")).toBe(
         true
       );
       expect(
-        printed.querySelectorAll(".scientific-cif-viewer canvas")
+        printed.querySelectorAll(
+          ".scientific-cif-block, .scientific-cif-viewer"
+        )
       ).toHaveLength(0);
       expect(printed.querySelectorAll("canvas")).toHaveLength(1);
       expect(
@@ -525,9 +666,15 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
   });
 
   it.each([
-    "pending",
+    "pending source",
+    "pending surface",
+    "failed surface",
+    "missing viewer",
+    "multiple viewers",
     "missing canvas",
-    "zero size",
+    "multiple canvases",
+    "zero width",
+    "zero height",
     "empty snapshot",
     "capture throws",
     "decode rejects",
@@ -541,10 +688,21 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
       const decode = vi
         .spyOn(HTMLImageElement.prototype, "decode")
         .mockResolvedValue(undefined);
-      if (failure === "pending")
-        structure.dataset.scientificCifReady = "pending";
+      if (
+        failure === "pending source" ||
+        failure === "pending surface" ||
+        failure === "failed surface"
+      )
+        structure.dataset.scientificCifReady = "false";
+      if (failure === "missing viewer") structure.remove();
+      if (failure === "multiple viewers") {
+        structure.parentElement?.appendChild(structure.cloneNode(true));
+      }
       if (failure === "missing canvas") canvas.remove();
-      if (failure === "zero size") canvas.width = 0;
+      if (failure === "multiple canvases")
+        structure.appendChild(document.createElement("canvas"));
+      if (failure === "zero width") canvas.width = 0;
+      if (failure === "zero height") canvas.height = 0;
       if (failure === "empty snapshot") capture.mockReturnValue("data:,");
       if (failure === "capture throws")
         capture.mockImplementation(() => {
@@ -568,6 +726,66 @@ describe("useDeepGenomeDownloads — CIF print snapshots", () => {
       expect(document.head.querySelectorAll("style")).toHaveLength(styleCount);
     }
   );
+
+  it("prints a ready surface-off view from its current canvas without replaying controls", async () => {
+    const { main, toolbar, canvas } = reportWithStructure();
+    const toggle = mustGet(toolbar.querySelector("button"), "Surface toggle");
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.textContent = "Surface off";
+    const capture = vi
+      .spyOn(canvas, "toDataURL")
+      .mockReturnValue("data:image/png;base64,c3VyZmFjZS1vZmY=");
+    vi.spyOn(HTMLImageElement.prototype, "decode").mockResolvedValue(undefined);
+    let printedSource = "";
+    let printedText = "";
+    const print = vi.spyOn(window, "print").mockImplementation(() => {
+      const copy = mustGet(
+        document.querySelector("#print-container"),
+        "Print root"
+      );
+      printedSource =
+        copy.querySelector<HTMLImageElement>(".scientific-cif-print-snapshot")
+          ?.src ?? "";
+      printedText = copy.textContent ?? "";
+    });
+
+    await downloads(main).downloadPDF();
+
+    expect(print).toHaveBeenCalledOnce();
+    expect(printedSource).toBe("data:image/png;base64,c3VyZmFjZS1vZmY=");
+    expect(printedText).not.toContain("Surface off");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(capture).toHaveBeenCalledOnce();
+    expect(ElMessage.error).not.toHaveBeenCalled();
+  });
+
+  it("rejects the whole print when another block is pending and permits an explicit ready retry", async () => {
+    const first = reportWithStructure();
+    const second = reportWithStructure("false", "enlarged");
+    first.main.appendChild(second.block);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,c25hcHNob3Q="
+    );
+    vi.spyOn(HTMLImageElement.prototype, "decode").mockResolvedValue(undefined);
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const download = downloads(first.main).downloadPDF;
+    const before = first.main.innerHTML;
+
+    await download();
+
+    expect(print).not.toHaveBeenCalled();
+    expect(ElMessage.error).toHaveBeenCalledOnce();
+    expect(document.querySelector("#print-container")).toBeNull();
+    expect(first.main.innerHTML).toBe(before);
+    second.structure.dataset.scientificCifReady = "true";
+    await nextTick();
+    expect(print).not.toHaveBeenCalled();
+
+    await download();
+
+    expect(print).toHaveBeenCalledOnce();
+    expect(ElMessage.error).toHaveBeenCalledOnce();
+  });
 });
 
 describe("useDeepGenomeDownloads — downloadPDF rendering-file", () => {
@@ -607,6 +825,10 @@ describe("useDeepGenomeDownloads — downloadPDF rendering-file", () => {
     );
     const printSpy = spyOnPrint();
     const capture = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL");
+    const main = document.createElement("main");
+    main.innerHTML =
+      '<section class="scientific-cif-block"><div class="scientific-cif-viewer" data-scientific-cif-ready="false"><canvas></canvas></div><button>Retry structure</button></section>';
+    const originalMarkup = main.innerHTML;
 
     const { downloadPDF } = useDeepGenomeDownloads({
       props: {
@@ -614,7 +836,7 @@ describe("useDeepGenomeDownloads — downloadPDF rendering-file", () => {
         filename: "report.md",
         renderingFileId: "42",
       },
-      mainContentRef: ref(null),
+      mainContentRef: ref(main),
       displayReferences: computed(() => []),
     });
 
@@ -622,6 +844,7 @@ describe("useDeepGenomeDownloads — downloadPDF rendering-file", () => {
 
     expect(printSpy).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
+    expect(main.innerHTML).toBe(originalMarkup);
     expect(mockGetFileDownUrlApi).toHaveBeenCalledOnce();
     const [data] = mustGet(
       mockGetFileDownUrlApi.mock.calls[0],

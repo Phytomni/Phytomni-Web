@@ -111,7 +111,7 @@ function restoreArtifactFocus(): void {
 }
 
 function handleArtifactKeydown(event: KeyboardEvent): void {
-  if (!props.artifactFullscreen) return;
+  if (!props.artifactFullscreen || event.defaultPrevented) return;
 
   if (event.key === "Escape") {
     event.preventDefault();
@@ -124,6 +124,11 @@ function handleArtifactKeydown(event: KeyboardEvent): void {
 
   if (event.key !== "Tab") return;
   const artifact = getArtifactSection();
+  if (
+    event.target instanceof Element &&
+    event.target.closest('[role="dialog"][aria-modal="true"]') !== artifact
+  )
+    return;
   const focusables = getArtifactFocusables();
   if (!artifact || focusables.length === 0) {
     event.preventDefault();

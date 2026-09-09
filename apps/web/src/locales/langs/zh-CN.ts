@@ -6,6 +6,22 @@
  * 既往不恋！当下不杂！！未来不迎！！！
  */
 export default {
+  scientificCif: {
+    title: "蛋白质结构",
+    surface: "分子表面",
+    on: "开启",
+    off: "关闭",
+    reset: "重置视角",
+    enlarge: "放大",
+    close: "关闭结构视图",
+    keyboardHelp:
+      "聚焦结构后，方向键旋转，Shift 加方向键平移，加号或减号缩放。",
+    label: "交互式蛋白质结构",
+    loadingSource: "正在读取结构",
+    buildingSurface: "正在构建分子表面",
+    error: "结构暂不可用",
+    unavailable: "资源暂不可用",
+  },
   // 通用部分
   common: {
     confirm: "确认",

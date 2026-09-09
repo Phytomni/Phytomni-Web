@@ -91,19 +91,27 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       contentInsideElMain.appendChild(childClone);
     }
 
-    // DOM cloning does not copy canvas pixels. Keep the current 3D view as a
-    // decoded PNG in the print copy without touching the interactive viewer.
+    // Normalize each complete widget to its current decoded canvas image. The
+    // print stylesheet must never expose toolbar or retained dialog markup.
     try {
-      const structures = originalElMain.querySelectorAll<HTMLElement>(
-        ".scientific-cif-viewer"
+      const blocks = originalElMain.querySelectorAll<HTMLElement>(
+        ".scientific-cif-block"
       );
       const copies = contentInsideElMain.querySelectorAll(
-        ".scientific-cif-viewer"
+        ".scientific-cif-block"
       );
-      const snapshots = Array.from(structures, (structure, index) => {
-        const canvas = structure.querySelector("canvas");
-        const copy = copies[index]?.querySelector("canvas");
+      const snapshots = Array.from(blocks, (block, index) => {
+        const viewers = block.querySelectorAll<HTMLElement>(
+          ".scientific-cif-viewer"
+        );
+        const structure = viewers[0];
+        const canvases = structure?.querySelectorAll("canvas");
+        const canvas = canvases?.[0];
+        const copy = copies[index];
         if (
+          viewers.length !== 1 ||
+          !structure ||
+          canvases?.length !== 1 ||
           structure.dataset.scientificCifReady !== "true" ||
           !canvas ||
           !copy ||
@@ -112,6 +120,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
         )
           throw new Error("Structure is not ready to print");
         const image = document.createElement("img");
+        image.className = "scientific-cif-print-snapshot";
         image.src = canvas.toDataURL("image/png");
         if (!image.src.startsWith("data:image/png;base64,")) {
           throw new Error("Structure snapshot is unavailable");
@@ -193,6 +202,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     style.innerHTML = `
     @media print {
       /* basic print setup */
+      html, body { background: #fff !important; }
       body * { display: none; }
       #print-container { display: block !important; position: static !important; }
 

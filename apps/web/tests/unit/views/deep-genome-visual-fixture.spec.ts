@@ -360,23 +360,24 @@ describe("Deep Genome real-content visual fixture", () => {
     }, 20_000);
   });
 
-  it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {
+  it("keeps XMarkdown foreground in the shared skin and CIF geometry in its component", () => {
     const xMarkdownBlock = MARKDOWN_CSS_SOURCE.match(
       /\.phy-markdown \.elx-xmarkdown-container\s*\{([^}]*)\}/
     )?.[1];
-    const cifBlock = MARKDOWN_CSS_SOURCE.match(
-      /\.phy-markdown \.scientific-cif-viewer\s*\{([^}]*)\}/
+    const cifBlock = SCIENTIFIC_CIF_SOURCE.match(
+      /\.scientific-cif-block__host :deep\(\.scientific-cif-viewer\)\s*\{([^}]*)\}/
     )?.[1];
     expect(xMarkdownBlock).toContain("color: inherit;");
     expect(cifBlock).toContain("position: relative;");
     expect(cifBlock).toContain(
-      "height: var(--phy-layout-scientific-media-max-height);"
+      "height: clamp(min(280px, 60dvh), 62cqi, min(920px, 76dvh));"
     );
+    expect(MARKDOWN_CSS_SOURCE).not.toContain(".scientific-cif-viewer");
     expect(MARKDOWN_CSS_SOURCE).toMatch(
       /\.elx-xmarkdown-container tbody tr:nth-child\(2n\)\s*\{[^}]*background-color: var\(--phy-color-bg-elevated\);/
     );
-    expect(MARKDOWN_CSS_SOURCE).toMatch(
-      /\.scientific-cif-viewer > canvas\s*\{[^}]*max-width: 100%;[^}]*max-height: 100%;/
+    expect(SCIENTIFIC_CIF_SOURCE).toMatch(
+      /\.scientific-cif-viewer > canvas\)\s*\{[^}]*max-width: 100%;[^}]*max-height: 100%;/
     );
   });
 });

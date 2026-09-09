@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { flushPromises } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -10,15 +11,28 @@ import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
 const threeDMolMock = vi.hoisted(() => {
   const viewer = {
     addModel: vi.fn(),
+    selectedAtoms: vi.fn(() => [{ x: 0, y: 0, z: 0 }]),
+    modelToScreen: vi.fn((points: Array<{ x: number; y: number; z: number }>) =>
+      points.map(({ x, y }) => ({ x, y }))
+    ),
+    addSurface: vi.fn(() => Object.assign(Promise.resolve(7), { surfid: 7 })),
+    getView: vi.fn(() => [0, 0, 0, -20, 0, 0, 0, 1]),
     setStyle: vi.fn(),
+    setProjection: vi.fn(),
+    setViewStyle: vi.fn(),
+    rotate: vi.fn(),
     zoomTo: vi.fn(),
     zoom: vi.fn(),
+    resize: vi.fn(),
     render: vi.fn(),
     animate: vi.fn(),
     stopAnimate: vi.fn(),
     clear: vi.fn(),
   };
-  const createViewer = vi.fn(() => viewer);
+  const createViewer = vi.fn((target: HTMLElement) => {
+    target.append(document.createElement("canvas"));
+    return viewer;
+  });
   return {
     viewer,
     createViewer,
@@ -26,7 +40,8 @@ const threeDMolMock = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/utils/3dmol", () => ({
+vi.mock("@/utils/3dmol", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/3dmol")>()),
   load3DMol: threeDMolMock.load3DMol,
 }));
 
@@ -427,6 +442,12 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
       1
     );
     expect(wrapper.find(".scientific-cif-viewer").exists()).toBe(true);
+    await flushPromises();
+    expect(
+      wrapper
+        .get(".scientific-cif-viewer")
+        .attributes("data-scientific-cif-ready")
+    ).toBe("true");
   });
 
   it("relays the shared citation activation without root anchor delegation", async () => {

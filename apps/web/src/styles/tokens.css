@@ -1,3 +1,11 @@
+:root {
+  /* Fixed-light scientific decoration, independent of the application theme. */
+  --phy-scientific-cif-background: #fbfcfe;
+  --phy-scientific-cif-cartoon: #87b4ed;
+  --phy-scientific-cif-surface: #66bf99;
+  --phy-scientific-cif-outline: #8dafc1;
+}
+
 :root,
 .theme-light {
   /* Semantic light mode */
