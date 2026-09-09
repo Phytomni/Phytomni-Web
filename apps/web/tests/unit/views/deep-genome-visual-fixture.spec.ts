@@ -44,6 +44,10 @@ const FIXTURE_ENTRY_SOURCE = readFileSync(
   resolve(WEB_ROOT, "tests/visual/research/main.ts"),
   "utf8"
 );
+const CIF_READINESS_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "tests/visual/research/cif-readiness.ts"),
+  "utf8"
+);
 const CAPTURE_RUNNER_PATH = resolve(
   WEB_ROOT,
   "tests/visual/research/capture-contract.sh"
@@ -63,6 +67,19 @@ const MARKDOWN_CSS_SOURCE = readFileSync(
 );
 
 describe("Scientific formatting fixture host", () => {
+  it("uses the original authorized CIF for the focused viewer lane", () => {
+    expect(VISUAL_FIXTURE_SOURCE).toContain('params.get("case") === "cif"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain('resource.kind === "cif"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(
+      'DEEP_GENOME_CASE_MARKDOWN.split("\\n")'
+    );
+    expect(VISUAL_FIXTURE_SOURCE).toContain('kind: "cif-text"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(
+      'artifactRef.value?.download("pdf")'
+    );
+    expect(FIXTURE_ENTRY_SOURCE).toContain('fixtureCase === "cif"');
+  });
+
   it("supplies the bounded artifact height required by the production shell", () => {
     expect(VISUAL_FIXTURE_SOURCE).toMatch(
       /\.deep-genome-visual-fixture > :deep\(\.deep-genome-artifact\)\s*\{\s*height: 100%;/
@@ -307,7 +324,8 @@ describe("Deep Genome real-content visual fixture", () => {
       "__scientificMarkdownHostileImageExecuted"
     );
     expect(FIXTURE_ENTRY_SOURCE).toContain("VISUAL_READINESS_TIMEOUT_MS");
-    expect(FIXTURE_ENTRY_SOURCE).toContain("scientificCifReady");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("hasReadyCifViewers(");
+    expect(CIF_READINESS_SOURCE).toContain("scientificCifReady");
     expect(SCIENTIFIC_CIF_SOURCE).toContain("data-scientific-cif-ready");
     expect(FIXTURE_ENTRY_SOURCE).toContain("canvas.offsetParent !== viewer");
     expect(FIXTURE_ENTRY_SOURCE).toContain(

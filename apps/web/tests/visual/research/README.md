@@ -19,11 +19,21 @@ lane for responsive Artifact geometry and copy review.
 `case=scientific` mounts the hand-authored scientific-formatting contract from
 the Go testdata directory and its Go-normalized reference fixture. It exercises
 ordinary scripts, italics, mixed tables and reference titles without a live agent
-or remote resource request. Menu actions in this isolated harness are recorded
-only; actual copy/download and history acceptance needs the development product.
+or remote resource request. Menu actions are recorded, and PDF/Markdown download
+actions delegate to the actual artifact's client-side exporter. Authentication,
+server-generated files, copy and history acceptance still need the development product.
 The fixture supplies the bounded artifact height normally owned by its product
 host so the real shell, rather than a hidden overflowing fixture root, owns
 scrolling. `theme=system` uses the existing theme store for media emulation checks.
+
+`case=cif` isolates the original report's CIF marker and authorized public resource
+without changing either source file. It uses the actual report renderer and native
+3Dmol, with a bounded 30-second readiness deadline for SES generation. Optional
+parameters exercise `host=chat` (shared inline renderer), `host=nested` (the actual
+fullscreen adaptive shell), `narrow=1` (440px host inside a wide viewport), and
+`multiple=1` (image and link forms of the same original CIF). `source=reader` uses
+the runtime-only CIF text seam with that public fixture resource; it is explicitly
+labelled synthetic and does not establish authenticated Database acceptance.
 
 ## Responsive viewport matrix
 
