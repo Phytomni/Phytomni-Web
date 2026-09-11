@@ -112,7 +112,7 @@ func academicPDFText(t *testing.T, data []byte) []pdfTextEvidence {
 		}
 	}
 	re := regexp.MustCompile(`(?s)/([^ /]+) ([0-9.]+) Tf|BT ([0-9.-]+) ([0-9.-]+) Td \(((?:\\.|[^\\)])*)\) Tj`)
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		if !bytes.Contains(stream, []byte(" Tj")) {
 			continue
 		}
@@ -264,7 +264,7 @@ func TestCitedPDFFooterDoesNotInheritLinkColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range pdfDecodedStreams(data) {
+	for _, s := range pdfDecodedStreams(t, data) {
 		lines := strings.Split(string(s), "\n")
 		last := ""
 		for _, line := range lines {
@@ -366,7 +366,7 @@ func TestCitedPDFJustifiesMeasuredWordsOnlyOnNonfinalLines(t *testing.T) {
 	if line[2].x-first.x <= 25.992+3.001 {
 		t.Fatal("multibyte words not justified")
 	}
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		for _, m := range regexp.MustCompile(`([0-9.-]+) Tw`).FindAllSubmatch(stream, -1) {
 			v, _ := strconv.ParseFloat(string(m[1]), 64)
 			if v != 0 {
@@ -408,7 +408,7 @@ func TestCitedPDFMixedScriptsCodeAndUnsupportedGlyphs(t *testing.T) {
 		t.Fatal("CJK span was not isolated")
 	}
 	var streams []byte
-	for _, s := range pdfDecodedStreams(data) {
+	for _, s := range pdfDecodedStreams(t, data) {
 		streams = append(streams, s...)
 	}
 	if !bytes.Contains(streams, []byte{0xe9}) || !bytes.Contains(streams, []byte{0x80}) {
@@ -588,7 +588,7 @@ func TestCitedPDFEmbedsGenuineFourFaces(t *testing.T) {
 		t.Fatal("four styles did not select distinct font resources")
 	}
 	names := map[string]bool{}
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		if len(stream) > 4 && bytes.Equal(stream[:4], []byte{0, 1, 0, 0}) {
 			record, err := parseAcademicTTF(stream)
 			if err != nil {

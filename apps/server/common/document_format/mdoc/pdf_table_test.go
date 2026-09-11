@@ -106,7 +106,7 @@ func TestPDFTableStaggeredImagesStayIndivisibleAndInOrder(t *testing.T) {
 		t.Fatalf("staggered image continuation did not progress: %+v %+v", first, second)
 	}
 	count := 0
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		for _, m := range regexp.MustCompile(`q ([0-9.]+) 0 0 ([0-9.]+) ([0-9.]+) ([0-9.]+) cm /I[^ ]+ Do Q`).FindAllStringSubmatch(string(stream), -1) {
 			count++
 			values := make([]float64, 4)
@@ -378,7 +378,7 @@ func TestPDFTableRejectsHeaderLeavingNoBodyLine(t *testing.T) {
 func assertPDFTableRectangles(t *testing.T, data []byte, leftMM float64) {
 	t.Helper()
 	count := 0
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		for _, m := range regexp.MustCompile(`([0-9.-]+) ([0-9.-]+) ([0-9.-]+) ([0-9.-]+) re S`).FindAllStringSubmatch(string(stream), -1) {
 			count++
 			v := make([]float64, 4)
@@ -451,7 +451,7 @@ func TestPDFTableExceptionalHeaderImageKeepsHeadingAndMakesProgress(t *testing.T
 	firstImagePage := 0
 	page := 0
 	count := 0
-	for _, stream := range pdfDecodedStreams(out.Bytes()) {
+	for _, stream := range pdfDecodedStreams(t, out.Bytes()) {
 		if !bytes.Contains(stream, []byte(" Tj")) {
 			continue
 		}
@@ -479,7 +479,7 @@ func TestPDFTableExceptionalHeaderTallImageFitsWithMappingNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, stream := range pdfDecodedStreams(data) {
+	for _, stream := range pdfDecodedStreams(t, data) {
 		if bytes.Contains(stream, []byte(" Tj")) {
 			if !bytes.Contains(stream, []byte(" Do Q")) {
 				t.Fatal("mapping note page consumes no source header image")

@@ -116,6 +116,27 @@ runtime `document_export.font_dir` setting. Genuine-font tests fail when this
 resource is absent or invalid rather than skipping or substituting another
 font.
 
+The Ubuntu 22.04 `server-runtime` CI job provisions its test fonts through
+[`ttf-mscorefonts-installer` version `3.8ubuntu2`](https://packages.ubuntu.com/jammy/ttf-mscorefonts-installer).
+The workflow explicitly accepts the accompanying Microsoft TrueType Core Fonts
+for the Web EULA before installation. The installer downloads the original
+archives and checks their packaged SHA-256 values; the Times archive is
+`times32.exe`. Font binaries are not committed or uploaded as CI artifacts.
+
+CI sets `PHYTOMNI_REPORT_FONT_DIR` to
+`/usr/share/fonts/truetype/msttcorefonts`, checks that all four required files are
+readable, and runs the existing genuine-font identity and glyph-coverage tests
+before the complete Go and race suites. These checks are necessary because an
+installer package can be present without usable fonts. Download or validation
+failure keeps the job failing. This provisioning requires no repository secrets
+and also applies to fork pull requests.
+
+To reproduce the CI font edition locally, install the same package under its
+applicable EULA and use that directory with the test command above or
+`./scripts/validate_web_local.sh` from the repository root. CI font provisioning
+does not configure production exports or replace the production font-source
+and license responsibilities described above.
+
 ### `auth` — public self-registration gate (default ON)
 
 ```yaml

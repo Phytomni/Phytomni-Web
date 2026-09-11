@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -160,6 +162,104 @@ def test_ci_caches_pinned_quality_tools_and_requests_server_race() -> None:
         "\n  contracts:\n", 1
     )[0]
     assert 'PHYTOMNI_RUN_RACE: "1"' in server_runtime
+
+
+def _ci_server_runtime() -> str:
+    return WORKFLOW.read_text(encoding="utf-8").split(
+        "\n  server-runtime:\n", 1
+    )[1].split("\n  contracts:\n", 1)[0]
+
+
+def _ci_font_step(name: str) -> str:
+    marker = f"      - name: {name}\n"
+    runtime = _ci_server_runtime()
+    assert marker in runtime, f"Missing CI font step: {name}"
+    return runtime.split(marker, 1)[1].split("\n      - name:", 1)[0]
+
+
+def test_ci_prepares_genuine_report_fonts_only_for_server_runtime() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    runtime = _ci_server_runtime()
+    env_line = (
+        "      PHYTOMNI_REPORT_FONT_DIR: /usr/share/fonts/truetype/msttcorefonts\n"
+    )
+    assert env_line in runtime.split("    steps:\n", 1)[0]
+    assert text.count("PHYTOMNI_REPORT_FONT_DIR:") == 1
+
+    install_name = "Install genuine Times New Roman report fonts"
+    verify_name = "Verify genuine report font resources"
+    install = _ci_font_step(install_name)
+    assert (
+        "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula boolean true"
+        in install
+    )
+    assert "sudo debconf-set-selections" in install
+    assert "ttf-mscorefonts-installer=3.8ubuntu2" in install
+    assert text.count("ttf-mscorefonts-installer=3.8ubuntu2") == 1
+    assert install.index("sudo debconf-set-selections") < install.index("apt-get install")
+    assert "        working-directory: apps/server\n" in _ci_font_step(verify_name)
+    assert runtime.index(install_name) < runtime.index(verify_name)
+    assert runtime.index(verify_name) < runtime.index("Run shared server runtime gate")
+
+
+@pytest.mark.parametrize(
+    ("missing_face", "go_exit"),
+    [
+        ("times.ttf", 0),
+        ("timesbd.ttf", 0),
+        ("timesi.ttf", 0),
+        ("timesbi.ttf", 0),
+        (None, 0),
+        (None, 37),
+    ],
+)
+def test_ci_report_font_preflight_fails_before_go_or_propagates_go_result(
+    tmp_path: Path, missing_face: str | None, go_exit: int
+) -> None:
+    step = _ci_font_step("Verify genuine report font resources")
+    script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+    font_dir = tmp_path / "fonts"
+    font_dir.mkdir()
+    for face in ("times.ttf", "timesbd.ttf", "timesi.ttf", "timesbi.ttf"):
+        if face != missing_face:
+            (font_dir / face).write_bytes(b"font preflight fixture")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_go = fake_bin / "go"
+    fake_go.write_text(
+        '#!/bin/sh\nprintf "go-invoked\\n"\nprintf "%s\\n" "$@"\n'
+        'exit "$GO_TEST_EXIT_CODE"\n',
+        encoding="utf-8",
+    )
+    fake_go.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+        cwd=ROOT / "apps" / "server",
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "PHYTOMNI_REPORT_FONT_DIR": str(font_dir),
+            "GO_TEST_EXIT_CODE": str(go_exit),
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if missing_face:
+        assert result.returncode != 0
+        assert missing_face in result.stderr
+        assert "go-invoked" not in result.stdout
+    else:
+        assert result.returncode == go_exit
+        assert result.stdout.splitlines() == [
+            "go-invoked",
+            "test",
+            "./common/document_format/mdoc",
+            "-run",
+            "^TestFontLoaderGenuine(TimesNewRomanRoles|GlyphCoverage)$",
+            "-count=1",
+        ]
 
 
 def test_public_docs_match_quality_gate_entrypoints() -> None:
