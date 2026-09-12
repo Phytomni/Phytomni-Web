@@ -83,6 +83,60 @@ export const convertToTableData = (
   });
 };
 
+const TABLE_HEADER_ACRONYMS = new Set([
+  "aa",
+  "bp",
+  "cds",
+  "dna",
+  "fpkm",
+  "go",
+  "gwas",
+  "id",
+  "ids",
+  "kb",
+  "kegg",
+  "lncrna",
+  "mb",
+  "mirna",
+  "mrna",
+  "ncbi",
+  "ncrna",
+  "orf",
+  "pdb",
+  "qtl",
+  "rna",
+  "snp",
+  "tpm",
+]);
+
+function formatTableHeaderToken(token: string, isFirst: boolean): string {
+  const lower = token.toLowerCase();
+  if (TABLE_HEADER_ACRONYMS.has(lower)) {
+    if (lower === "id") return "ID";
+    if (lower === "ids") return "IDs";
+    return lower.toUpperCase();
+  }
+  if (isFirst) {
+    return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+  }
+  return lower;
+}
+
+/** Turn machine column names into scanable labels. Leaves phrases with spaces. */
+export function humanizeTableHeaderLabel(label: string): string {
+  const trimmed = label.trim().replace(/\s+/g, " ");
+  if (!trimmed) return trimmed;
+  if (/\s/u.test(trimmed)) return trimmed;
+
+  const stripped = trimmed.replace(/_t\d+$/iu, "");
+  const tokens = stripped.split(/_+/u).filter(Boolean);
+  if (tokens.length === 0) return trimmed;
+
+  return tokens
+    .map((token, index) => formatTableHeaderToken(token, index === 0))
+    .join(" ");
+}
+
 export const formatFileSize = (size: number) => {
   if (size < 1024) {
     return size + " B";

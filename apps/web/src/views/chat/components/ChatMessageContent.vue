@@ -284,19 +284,24 @@
     v-else-if="!isWaitOnlyBody && message.tableHeaders"
     class="table-response"
   >
-    <el-table
-      :data="chatContentToRows(message.content)"
-      border
-      style="width: 100%"
-    >
-      <el-table-column
-        v-for="header in message.tableHeaders"
-        :key="header.prop"
-        :prop="header.prop"
-        :label="header.label"
-        align="center"
-      />
-    </el-table>
+    <PhyTableFrame>
+      <el-table
+        :data="tableRows"
+        border
+        class="chat-data-table"
+        header-cell-class-name="chat-table-header-cell"
+        max-height="min(24rem, 55vh)"
+        style="width: 100%"
+      >
+        <el-table-column
+          v-for="header in message.tableHeaders"
+          :key="header.prop"
+          :prop="header.prop"
+          :label="humanizeTableHeaderLabel(header.label)"
+          min-width="140"
+        />
+      </el-table>
+    </PhyTableFrame>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
   <div v-else-if="!isWaitOnlyBody" class="ai-response">
@@ -353,6 +358,7 @@ import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
 import BotReportWarnings from "@/components/research/BotReportWarnings.vue";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
+import { PhyTableFrame } from "@/components/shell";
 import StreamMessage from "./StreamMessage.vue";
 import SendProgress from "./SendProgress.vue";
 import { computed } from "vue";
@@ -373,6 +379,7 @@ import {
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
+import { humanizeTableHeaderLabel } from "../utils/format";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import {
   artifactPresentationForMessage,
@@ -417,6 +424,8 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
+
+const tableRows = computed(() => chatContentToRows(props.message.content));
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
@@ -759,6 +768,24 @@ const shouldShowSpecializedNoData = computed(() => {
   max-width: 100%;
   overflow-x: auto;
   box-sizing: border-box;
+  --el-table-header-bg-color: var(--phy-color-fill-subtle);
+  --el-table-header-text-color: var(--phy-color-text);
+  --el-table-tr-bg-color: var(--phy-color-bg-elevated);
+  --el-table-text-color: var(--phy-color-text);
+
+  :deep(th.chat-table-header-cell) {
+    background-color: var(--phy-color-fill-subtle) !important;
+    color: var(--phy-color-text);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 -1px 0 var(--phy-color-border-control);
+  }
+
+  :deep(.chat-data-table td.el-table__cell) {
+    color: var(--phy-color-text);
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 .gene-network-images {

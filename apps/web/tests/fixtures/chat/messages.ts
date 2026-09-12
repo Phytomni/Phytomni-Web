@@ -141,10 +141,25 @@ export const MESSAGE_DEEP_GENOME: ChatMessage = {
 export const MESSAGE_TABLE: ChatMessage = {
   id: "fixture-msg-table",
   role: "assistant",
-  content: [{ gene: "Os01g01010", trait: "yield" }],
+  content: [
+    {
+      query_gene_id_t1: "Os04g0269100",
+      query_protein_t1: "A0A0N7KIR0",
+      interact_gene_id_t1: "Os01g0899425",
+      interact_protein_t1: "A0A0P0VBL9",
+    },
+    {
+      query_gene_id_t1: "Os04g0269100",
+      query_protein_t1: "A0A0N7KIR0",
+      interact_gene_id_t1: "Os07g0639100",
+      interact_protein_t1: "Q8GVF9",
+    },
+  ],
   tableHeaders: [
-    { prop: "gene", label: "Gene" },
-    { prop: "trait", label: "Trait" },
+    { prop: "query_gene_id_t1", label: "query_gene_id_t1" },
+    { prop: "query_protein_t1", label: "query_protein_t1" },
+    { prop: "interact_gene_id_t1", label: "interact_gene_id_t1" },
+    { prop: "interact_protein_t1", label: "interact_protein_t1" },
   ],
   tool_name: "DataAgent",
 };

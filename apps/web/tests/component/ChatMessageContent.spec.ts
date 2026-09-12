@@ -1414,6 +1414,22 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     );
   });
 
+  it("frames Data Agent tables with a distinct header row", () => {
+    const wrapper = mountContent(MESSAGE_TABLE);
+
+    expect(wrapper.find(".table-response .phy-table-frame").exists()).toBe(
+      true
+    );
+    expect(CONTENT_SOURCE).toContain("humanizeTableHeaderLabel");
+    expect(CONTENT_SOURCE).toContain("chat-table-header-cell");
+    expect(CONTENT_SOURCE).toContain('max-height="min(24rem, 55vh)"');
+    expect(contentStyles).toContain("--el-table-header-bg-color");
+    expect(contentStyles).toContain("font-weight: 650");
+    expect(contentStyles).toContain(
+      "box-shadow: inset 0 -1px 0 var(--phy-color-border-control)"
+    );
+  });
+
   it("uses locale-reactive result image alt with one-based index", () => {
     expect(CONTENT_SOURCE).toMatch(
       /\$t\(\s*["']chat\.resultImageAlt["']\s*,\s*\{\s*index:\s*imgIndex\s*\+\s*1\s*\}\s*\)/
