@@ -957,9 +957,9 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
   it.each([
     ["SUCCEEDED", "Report ready", "complete", true],
-    ["FAILED", "Failed", "failed", false],
-    ["CANCELLED", "Cancelled", "failed", false],
-    ["TIMED_OUT", "Timed out", "failed", false],
+    ["FAILED", "Partial report available", "degraded", false],
+    ["CANCELLED", "Partial report available", "degraded", false],
+    ["TIMED_OUT", "Partial report available", "degraded", false],
   ] as const)(
     "uses a live %s Research snapshot for the report body and downloads",
     async (snapshotPhase, label, reportState, successful) => {
@@ -984,19 +984,18 @@ describe("RemoteAnalysisAgentWorkspace", () => {
       const report = wrapper.get(".bot-report-state");
       expect(report.attributes("data-report-status")).toBe(reportState);
       expect(report.find('[data-test="bot-report-content"]').exists()).toBe(
-        successful
+        true
       );
-      expect(wrapper.find(".bot-artifact-list").exists()).toBe(successful);
+      expect(wrapper.find(".bot-artifact-list").exists()).toBe(true);
       expect(
         wrapper.findAll('button[data-test="bot-artifact-download"]')
-      ).toHaveLength(successful ? 1 : 0);
-      if (successful) {
-        expect(report.text()).toContain(
-          `Live ${snapshotPhase} Research report`
-        );
-      } else {
-        expect(report.text()).not.toContain(
-          `Live ${snapshotPhase} Research report`
+      ).toHaveLength(1);
+      expect(report.get('[data-test="bot-report-content"]').text()).toContain(
+        `Live ${snapshotPhase} Research report`
+      );
+      if (!successful) {
+        expect(report.find('[data-test="bot-report-warnings"]').exists()).toBe(
+          true
         );
         expect(wrapper.text()).not.toContain("Report ready");
         expect(wrapper.text()).not.toContain("Finished");
@@ -1243,7 +1242,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
   it.each([
     ["succeeded", "SUCCEEDED", "Report ready"],
-    ["failed", "FAILED", "Failed"],
+    ["failed", "FAILED", "Report generation failed"],
     ["cancelled", "CANCELLED", "Cancelled"],
   ] as const)(
     "keeps committed Research %s ahead of a stale TIMED_OUT snapshot",
@@ -1258,6 +1257,11 @@ describe("RemoteAnalysisAgentWorkspace", () => {
         status: status === "CANCELLED" ? "FAILED" : status,
       };
       mocks.lifecycleSnapshot.value = lifecycle("TIMED_OUT");
+      if (status === "SUCCEEDED")
+        setReportMaterial({
+          finalReport: "# Valid final science",
+          reportStage: "final",
+        });
       const wrapper = mountWorkspace("InSilicoResearchAgent", {
         realArtifactShell: true,
         realBotReportState: true,
@@ -1272,7 +1276,7 @@ describe("RemoteAnalysisAgentWorkspace", () => {
 
   it.each([
     ["succeeded", "SUCCEEDED", "Report ready"],
-    ["failed", "FAILED", "Failed"],
+    ["failed", "FAILED", "Report generation failed"],
   ] as const)(
     "keeps committed Research %s ahead of a stale CANCELLED snapshot",
     async (phase, status, label) => {
@@ -1286,6 +1290,11 @@ describe("RemoteAnalysisAgentWorkspace", () => {
         status,
       };
       mocks.lifecycleSnapshot.value = lifecycle("CANCELLED");
+      if (status === "SUCCEEDED")
+        setReportMaterial({
+          finalReport: "# Valid final science",
+          reportStage: "final",
+        });
       const wrapper = mountWorkspace("InSilicoResearchAgent", {
         realArtifactShell: true,
         realBotReportState: true,
@@ -1318,14 +1327,9 @@ describe("RemoteAnalysisAgentWorkspace", () => {
   });
 
   it.each([
-    ["succeeded", "SUCCEEDED", false, "Report ready"],
-    ["failed", "FAILED", false, "Failed"],
-    [
-      "running",
-      "RUNNING",
-      true,
-      "The report is partial because some analysis was unavailable.",
-    ],
+    ["succeeded", "SUCCEEDED", false, "Scientific report unavailable"],
+    ["failed", "FAILED", false, "Report generation failed"],
+    ["running", "RUNNING", true, "Finalizing"],
   ] as const)(
     "preserves the Research %s terminal or degraded status",
     async (phase, status, degraded, label) => {

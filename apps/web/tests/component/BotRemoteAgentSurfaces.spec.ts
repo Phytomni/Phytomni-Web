@@ -495,6 +495,58 @@ function mountSurface(
 }
 
 describe("Bot remote-agent surface matrix", () => {
+  it.each(Object.keys(surfaces) as Array<keyof typeof surfaces>)(
+    "preserves %s ready archives without report text and partial reports despite failed synthesis",
+    async (surface) => {
+      const base = syntheticArchiveState(surface);
+      const state = {
+        ...base,
+        visibleReport: "",
+        finalReport: "",
+        intermediateReport: "",
+        report: {
+          state: "degraded" as const,
+          degraded: true,
+          sourceArtifactCount: 2,
+        },
+        reportWarningCodes: ["report_synthesis_failed" as const],
+      };
+      const wrapper = mountSurface(surface, state);
+      expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+        "Scientific report unavailable"
+      );
+      expect(
+        wrapper
+          .find('.bot-report-state [data-test="bot-report-content"]')
+          .exists()
+      ).toBe(false);
+      expect(
+        wrapper.findAll('[data-test="result-archive-download"]')
+      ).toHaveLength(1);
+      await wrapper.setProps({
+        state: {
+          ...state,
+          phase: "failed",
+          status: "FAILED",
+          intermediateReport: "# Retained science [1]",
+          visibleReport: "# Retained science [1]",
+        },
+      });
+      expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+        "Partial report available"
+      );
+      expect(
+        wrapper.get('.bot-report-state [data-test="bot-report-content"]').text()
+      ).toBe("# Retained science [1]");
+      expect(wrapper.get('[data-test="bot-report-warnings"]').text()).toContain(
+        "Execution failed"
+      );
+      expect(
+        wrapper.findAll('[data-test="result-archive-download"]')
+      ).toHaveLength(1);
+      wrapper.unmount();
+    }
+  );
   beforeEach(() => {
     vi.clearAllMocks();
     Object.values(products).forEach((product) => {

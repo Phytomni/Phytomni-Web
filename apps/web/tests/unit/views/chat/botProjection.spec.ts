@@ -14,6 +14,64 @@ import {
 } from "@/views/chat/botProjection";
 
 describe("parseBotProjection", () => {
+  it("does not classify an answer as final from SUCCEEDED alone", () => {
+    const projection = parseBotProjection({
+      agent: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      answer: "# Retained science",
+    });
+    expect(projection.finalReport).toBe("");
+    expect(visibleBotReport(projection)).toBe("# Retained science");
+  });
+  it("retains bounded report facts and only recognized warning codes", () => {
+    const parsed = parseBotProjection({
+      report: {
+        state: "degraded",
+        degraded: true,
+        source_artifact_count: 1e9,
+        private: "secret",
+      },
+      report_warning_codes: [
+        "report_synthesis_failed",
+        "private provider text",
+        "report_synthesis_failed",
+      ],
+    });
+    expect(parsed.report).toEqual({
+      state: "degraded",
+      degraded: true,
+      sourceArtifactCount: 1e9,
+    });
+    expect(parsed.reportWarningCodes).toEqual(["report_synthesis_failed"]);
+    expect(JSON.stringify(parsed)).not.toContain("private");
+    expect(parseBotProjection(parsed).report).toEqual(parsed.report);
+    expect(parseBotProjection({}).reportWarningCodes).toBeUndefined();
+    expect(
+      parseBotProjection({ report_warning_codes: [] }).reportWarningCodes
+    ).toEqual([]);
+  });
+
+  it.each([
+    { state: "complete", degraded: false, source_artifact_count: 0 },
+    { state: "final", degraded: "false", source_artifact_count: 0 },
+    { state: "final", degraded: false, source_artifact_count: -1 },
+    { state: "final", degraded: false, source_artifact_count: 1e9 + 1 },
+    { state: "final", degraded: false, source_artifact_count: 1.5 },
+  ])("rejects malformed report descriptor %j", (report) => {
+    expect(() => parseBotProjection({ report })).toThrow(/report/);
+  });
+
+  it("rejects malformed or excessive warning lists", () => {
+    for (const report_warning_codes of [
+      "report_synthesis_failed",
+      [3],
+      Array(65).fill("report_synthesis_failed"),
+    ]) {
+      expect(() => parseBotProjection({ report_warning_codes })).toThrow(
+        /report_warning_codes/
+      );
+    }
+  });
   it.each([
     "input_resolution",
     "planning",
@@ -357,8 +415,8 @@ describe("parseBotProjection", () => {
     expect(projection).toEqual(
       expect.objectContaining({
         runId: "run-safe",
-        finalReport: "# Safe",
-        intermediateReport: "",
+        finalReport: "",
+        intermediateReport: "# Safe",
       })
     );
     expect(JSON.stringify(projection)).not.toContain("phytomni_state");
@@ -379,7 +437,7 @@ describe("parseBotProjection", () => {
     expect(visibleBotReport(projection)).toBe("");
   });
 
-  it("keeps analyst-class answer fallback as report compatibility", () => {
+  it("preserves unclassified analyst-class answer text without claiming a final report", () => {
     const projection = parseBotProjection({
       agent: "InSilicoResearchAgent",
       status: "SUCCEEDED",
@@ -387,7 +445,8 @@ describe("parseBotProjection", () => {
     });
 
     expect(projection.reportPresentation).toBe(true);
-    expect(projection.finalReport).toBe("# Compatibility report");
+    expect(projection.finalReport).toBe("");
+    expect(projection.intermediateReport).toBe("# Compatibility report");
   });
 
   it("treats an explicit final report as report presentation", () => {

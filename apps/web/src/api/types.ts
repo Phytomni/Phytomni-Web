@@ -10,7 +10,11 @@ import {
   type Decoder,
   type GatewayErrorDetail,
 } from "@/api/contracts";
-import type { BotInteropPayload } from "@/views/chat/botProjection";
+import {
+  parseBotProjection,
+  type BotInteropPayload,
+  type BotRunProjection,
+} from "@/views/chat/botProjection";
 import type { CitationDocument } from "@/views/chat/messageTypes";
 import type { DeepGenomeReferenceMaterial } from "@/components/research/deep-genome-report";
 import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
@@ -185,6 +189,7 @@ export interface QueryData extends ConversationContextNotice {
   bot_run_id?: string | null;
   tracking_degraded?: boolean;
   report_revision?: number;
+  projection?: BotRunProjection;
   request_id?: string | null;
   degraded_interop?: boolean;
   interop?: BotInteropPayload | null;
@@ -1320,6 +1325,22 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     "chat response"
   );
   if (reportRevision !== undefined) result.report_revision = reportRevision;
+  if (hasOwn(value, "projection")) {
+    if (!isRecord(value.projection)) invalid("chat projection");
+    const projectionInput: Record<string, unknown> = {
+      tool_name: result.tool_name,
+      projection: value.projection,
+    };
+    for (const key of [
+      "bot_run_id",
+      "report_revision",
+      "result_archive_v1",
+      "delivery",
+    ] as const) {
+      if (result[key] !== undefined) projectionInput[key] = result[key];
+    }
+    result.projection = parseBotProjection(projectionInput);
+  }
   if (hasOwn(value, "request_id")) {
     if (value.request_id !== null && typeof value.request_id !== "string") {
       invalid("chat response");

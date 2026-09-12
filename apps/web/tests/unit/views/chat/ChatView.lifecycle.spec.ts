@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { flushPromises } from "@vue/test-utils";
+import { AxiosHeaders } from "axios";
 import { nextTick } from "vue";
 import { expectLifecyclePhase } from "../../../helpers/lifecycle-phase";
 
@@ -33,6 +35,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
   return {
     ...actual,
     getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
+    getFileDownUrlApi: vi.fn(),
   };
 });
 
@@ -74,8 +77,191 @@ import ChatView, {
 } from "@/views/chat/ChatView.vue";
 import { buildChat } from "../../../helpers/chatBuilders";
 import { createTestAppContext } from "../../../helpers/test-app-context";
+import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { parseBotProjection } from "@/views/chat/botProjection";
+import { decodeChatHistory } from "@/api/types";
+import { getFileDownUrlApi } from "@/api/chat";
+import { historyAssistantMetadata } from "@/views/chat/composables/useSelectChat";
+import {
+  decodeCitationDocuments,
+  parseAgentAnswer,
+} from "@/views/chat/utils/format";
+import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
+import golden from "../../../fixtures/report-integrity/public-projection.json";
 
 describe("ChatView lifecycle cleanup", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  it("reconciles cached complete report state in the mounted preview and View panel", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const wrapper = createTestAppContext({ locale: "en-US" }).mount(ChatView, {
+      global: {
+        stubs: {
+          RouterLink: { props: ["to"], template: '<a :href="to"><slot /></a>' },
+          ScientificMarkdown: {
+            props: ["source"],
+            template: "<article>{{ source }}</article>",
+          },
+          ChatComposer: {
+            setup(
+              _props: unknown,
+              { expose }: { expose: (value: Record<string, unknown>) => void }
+            ) {
+              expose({
+                openHeader: vi.fn(),
+                closeHeader: vi.fn(),
+                popoverVisible: false,
+              });
+              return {};
+            },
+            template: "<div />",
+          },
+          ChatMessageActions: {
+            emits: ["copy"],
+            template:
+              '<button data-test="report-copy" @click="$emit(\'copy\')">Copy</button>',
+          },
+          ChatSidebarNav: true,
+          ChatHistoryList: true,
+          FollowUpQuestions: true,
+          ChatActivity: true,
+          ChatAnalystLog: true,
+          StreamMessage: true,
+          TransferProgress: true,
+          ElTour: true,
+          ElTourStep: true,
+          ElBacktop: true,
+          ElDialog: true,
+        },
+      },
+    });
+    const state = testState.chatStates;
+    if (!state) throw new Error("Chat state capture was not initialized");
+    const message = {
+      role: "assistant",
+      id: "4000",
+      tool_name: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      content: "",
+      botLifecycle: {
+        ...initBotLifecycleState(),
+        status: "SUCCEEDED" as const,
+        reportRevision: 2,
+        finalReport: "# Retained scientific result [1]",
+        visibleReport: "# Retained scientific result [1]",
+      },
+      botProjection: parseBotProjection({
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        report_revision: 3,
+        report: { state: "degraded", degraded: true, source_artifact_count: 2 },
+        report_warning_codes: ["report_synthesis_failed"],
+      }),
+    };
+    state.getChatState("report-integrity").renderedChat = {
+      dialogue_id: "report-integrity",
+      messages: [message],
+    };
+    state.currentChatId.value = "report-integrity";
+    await nextTick();
+    await nextTick();
+    expect(wrapper.get(".research-artifact-preview__title").text()).toBe(
+      "Partial report available"
+    );
+    expect(
+      wrapper
+        .get(".research-artifact-preview")
+        .element.closest(".phy-bubble-assistant")
+    ).toBeNull();
+    await wrapper.get('[data-test="report-copy"]').trigger("click");
+    expect(writeText).toHaveBeenCalledWith("# Retained scientific result [1]");
+    await wrapper.get(".research-artifact-preview button").trigger("click");
+    await nextTick();
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      "Partial report available"
+    );
+    expect(
+      wrapper.get('.bot-report-state [data-test="bot-report-content"]').text()
+    ).toContain("Retained scientific result");
+    expect(wrapper.find('[data-test="bot-report-warnings"]').exists()).toBe(
+      true
+    );
+
+    const fixture = golden.cases.find(
+      (entry) => entry.id === "partial-failed-deep-genome"
+    );
+    if (!fixture) throw new Error("Partial golden is missing");
+    const [row] = decodeChatHistory([fixture.history]);
+    if (!row?.projection) throw new Error("Partial projection is missing");
+    const answer = parseAgentAnswer(row.answer);
+    state.getChatState("report-integrity").renderedChat = {
+      dialogue_id: "report-integrity",
+      messages: [
+        {
+          ...historyAssistantMetadata(row),
+          role: "assistant",
+          id: row.id,
+          tool_name: row.tool_name,
+          status: row.status,
+          content: String(answer.content),
+          doc_list: decodeCitationDocuments(answer.doc_list),
+        },
+      ],
+    };
+    await nextTick();
+    await nextTick();
+    const expectedCopy =
+      row.projection.intermediateReport +
+      "\nReferences:\n1. Synthetic evidence.\nGoogle Scholar: https://scholar.google.com/scholar?q=Synthetic+evidence";
+    await wrapper.get('[data-test="report-copy"]').trigger("click");
+    expect(writeText).toHaveBeenLastCalledWith(expectedCopy);
+    await wrapper.get(".research-artifact-preview button").trigger("click");
+    const artifact = wrapper.getComponent(DeepGenomeArtifact);
+    expect(artifact.props("markdown")).toBe(row.projection.intermediateReport);
+    artifact.vm.$emit("action", "copy");
+    await nextTick();
+    expect(writeText).toHaveBeenLastCalledWith(expectedCopy);
+
+    const createURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:partial-report");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    vi.mocked(getFileDownUrlApi).mockResolvedValue({
+      data: new Blob([row.projection.intermediateReport], {
+        type: "text/markdown",
+      }),
+      status: 200,
+      statusText: "OK",
+      headers: {
+        "content-type": "text/markdown",
+        "content-disposition": 'attachment; filename="partial.md"',
+      },
+      config: { headers: new AxiosHeaders() },
+    });
+    artifact.vm.$emit("action", "download:Markdown");
+    await flushPromises();
+    const [form, options] =
+      vi.mocked(getFileDownUrlApi).mock.calls.at(-1) ?? [];
+    expect(form).toBeInstanceOf(FormData);
+    expect((form as FormData).get("id")).toBe(row.id);
+    expect((form as FormData).get("document_format")).toBe("Markdown");
+    expect(options).toMatchObject({ suppressErrorToast: true });
+    expect(click).toHaveBeenCalledOnce();
+    const downloaded = createURL.mock.calls[0]?.[0];
+    expect(downloaded).toBeInstanceOf(Blob);
+    expect(await (downloaded as Blob).text()).toBe(
+      row.projection.intermediateReport
+    );
+    wrapper.unmount();
+    vi.unstubAllGlobals();
+  });
   it("removes the deleted dialogue state and poller ownership through the ChatView deletion path", () => {
     const deleted = buildChat({ id: 1, dialogue_id: "deleted-dialogue" });
     const retained = buildChat({ id: 2, dialogue_id: "retained-dialogue" });

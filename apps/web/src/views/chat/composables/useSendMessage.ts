@@ -235,6 +235,7 @@ function commitSuccessfulTurn(
 }
 
 function parseBlockingProjection(data: QueryData) {
+  if (data.projection) return data.projection;
   const payload =
     data.answer === undefined && data.final_answer !== undefined
       ? { ...data, answer: data.final_answer }

@@ -109,11 +109,43 @@ export function isApprovedReportText(
   if (typeof value !== "string") return false;
   const normalized = value.trim();
   if (normalized === "") return false;
+  if (isFailureOnlyReport(normalized)) return false;
   if (matchesReportPlaceholder(normalized, GENERIC_REPORT_PLACEHOLDERS)) {
     return false;
   }
   const toolRules = TOOL_REPORT_PLACEHOLDERS[toolName];
   return !toolRules || !matchesReportPlaceholder(normalized, toolRules);
+}
+
+// Historical terminal_report.py templates, not arbitrary scientific failure prose.
+const NO_TEXT_REPORTS = [
+  "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.",
+  "\u5206\u6790\u5df2\u5230\u8fbe\u7ec8\u6001\uff0c\u4f46\u6ca1\u6709\u53ef\u7528\u4e8e\u7efc\u5408\u7684\u5df2\u9a8c\u8bc1\u79d1\u5b66\u6587\u672c\u4ea7\u7269\u3002\u5728\u5f62\u6210\u7ed3\u8bba\u524d\uff0c\u8bf7\u7ed3\u5408\u53ef\u4e0b\u8f7d\u7684\u79d1\u5b66\u4ea7\u7269\u548c\u6267\u884c\u8b66\u544a\u8fdb\u884c\u5ba1\u9605\u3002",
+];
+const SYNTHESIS_FAILURE_REPORTS = [
+  {
+    base: "The analysis reached a terminal outcome, but scientific report synthesis was unavailable. The validated scientific artifacts remain available for review before drawing conclusions.",
+    scope:
+      /^The terminal outcome covered [0-9]+ tasks, with [0-9]+ successful\.$/iu,
+  },
+  {
+    base: "\u5206\u6790\u5df2\u5230\u8fbe\u7ec8\u6001\uff0c\u4f46\u79d1\u5b66\u62a5\u544a\u7efc\u5408\u4e0d\u53ef\u7528\u3002\u5728\u5f62\u6210\u7ed3\u8bba\u524d\uff0c\u4ecd\u53ef\u5ba1\u9605\u5df2\u9a8c\u8bc1\u7684\u79d1\u5b66\u4ea7\u7269\u3002",
+    scope:
+      /^\u672c\u6b21\u7ec8\u6001\u5305\u542b [0-9]+ \u4e2a\u4efb\u52a1\uff0c\u5176\u4e2d [0-9]+ \u4e2a\u4efb\u52a1\u6210\u529f\u3002$/u,
+  },
+];
+
+function isFailureOnlyReport(text: string): boolean {
+  const normalized = text.toUpperCase();
+  if (NO_TEXT_REPORTS.some((template) => normalized === template.toUpperCase()))
+    return true;
+  return SYNTHESIS_FAILURE_REPORTS.some(({ base, scope }) => {
+    if (normalized === base.toUpperCase()) return true;
+    return (
+      normalized.startsWith(`${base.toUpperCase()} `) &&
+      scope.test(text.slice(base.length + 1))
+    );
+  });
 }
 
 export function isDeepGenomeLedgerPlaceholder(

@@ -143,6 +143,31 @@ describe("useSelectChat", () => {
     });
   }
 
+  it("hydrates an empty scientific answer with its public report warnings and archive", async () => {
+    const { default: golden } =
+      await import("../../../fixtures/report-integrity/public-projection.json");
+    const { decodeChatHistory } = await import("@/api/types");
+    const fixture = golden.cases.find(
+      (entry) => entry.id === "no-science-archive-design"
+    );
+    if (!fixture) throw new Error("Archive golden is missing");
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: decodeChatHistory([{ ...fixture.history, dialogue_id: "d1" }]),
+    });
+    await makeComposable().selectChat("d1");
+    const assistant = stateFor("d1").renderedChat?.messages.find(
+      (entry) => entry.role === "assistant"
+    );
+    expect(assistant).toBeDefined();
+    expect(assistant?.content).toBe("");
+    expect(assistant?.botProjection?.reportWarningCodes).toEqual(
+      fixture.history.projection.report_warning_codes
+    );
+    expect(assistant?.delivery).toEqual(fixture.history.delivery);
+    expect(assistant?.artifacts).toEqual(fixture.history.artifacts);
+  });
+
   function attachmentStore(
     records: Array<{
       assetId: string;

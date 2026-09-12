@@ -202,8 +202,15 @@ describe("Bot lifecycle locale contract", () => {
   });
 
   it("wires Bot-owned artifact states to the stable render-time keys", () => {
+    const policySource = readFileSync(
+      resolve(
+        __dirname,
+        "../../../../src/views/chat/utils/report-presentation.ts"
+      ),
+      "utf8"
+    );
     for (const key of REQUIRED_BOT_LIFECYCLE_KEYS) {
-      expect(CHAT_SOURCE).toContain(key);
+      expect(CHAT_SOURCE + policySource).toContain(key);
     }
     expect(CHAT_SOURCE).toContain(':labels="currentArtifactBotReportLabels"');
     expect(CHAT_SOURCE).toContain(
@@ -224,7 +231,13 @@ describe("Bot lifecycle locale contract", () => {
     "renders %s copy in both locales without raw lifecycle values",
     (_name, status, reportStage, degraded, key) => {
       for (const locale of ["en-US", "zh-CN"] as const) {
-        const state = lifecycle({ status, reportStage, degraded });
+        const state = lifecycle({
+          status,
+          reportStage,
+          degraded,
+          finalReport:
+            status === "SUCCEEDED" ? "# Valid scientific report" : "",
+        });
         const wrapper = mountReport(locale, state);
         const expected = valueAt(
           localePack(locale),

@@ -126,20 +126,25 @@ export type ChatReloadResult = "applied" | "failed" | "superseded";
 export function historyAssistantMetadata(
   item: Pick<
     ChatResponse,
-    "artifacts" | "delivery" | "context_rebuilt" | "context_degraded"
+    | "artifacts"
+    | "delivery"
+    | "projection"
+    | "context_rebuilt"
+    | "context_degraded"
   > & { created_at?: string }
 ): Pick<
   ChatMessage,
-  "artifacts" | "delivery" | "contextNotice" | "created_at"
+  "artifacts" | "delivery" | "botProjection" | "contextNotice" | "created_at"
 > {
   const metadata: Pick<
     ChatMessage,
-    "artifacts" | "delivery" | "contextNotice" | "created_at"
+    "artifacts" | "delivery" | "botProjection" | "contextNotice" | "created_at"
   > = {};
   if (Array.isArray(item.artifacts)) {
     metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
   }
   if (item.delivery) metadata.delivery = { ...item.delivery };
+  if (item.projection) metadata.botProjection = item.projection;
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
   if (typeof item.created_at === "string" && item.created_at.trim()) {
@@ -194,7 +199,12 @@ function isSuccessfulHistoryStatus(status: unknown): boolean {
 
 function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.answer !== "string" || item.answer.trim()) return false;
-  if (isSuccessfulHistoryStatus(item.status)) return false;
+  if (
+    isSuccessfulHistoryStatus(item.status) &&
+    !item.projection &&
+    !item.delivery
+  )
+    return false;
   if (!isPollableWaitTool(item.tool_name)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");

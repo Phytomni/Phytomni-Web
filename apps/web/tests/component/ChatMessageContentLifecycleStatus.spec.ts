@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { nextTick } from "vue";
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
+import SendProgress from "@/views/chat/components/SendProgress.vue";
+import { parseBotProjection } from "@/views/chat/botProjection";
+import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import type { AgentTaskLifecycle } from "@/api/types";
 import type { ChatMessage } from "@/views/chat/types";
 import { expectLifecyclePhase } from "../helpers/lifecycle-phase";
@@ -90,6 +93,69 @@ function mountContent(
 }
 
 describe("ChatMessageContent lifecycle status", () => {
+  it("removes waiting on a terminal projection even while cached row status is running", async () => {
+    const wrapper = mountContent(
+      {
+        tool_name: "DeepGenomeAgent",
+        content: "",
+        status: "RUNNING",
+        botLifecycle: initBotLifecycleState(),
+      },
+      lifecycle("RUNNING")
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    await wrapper.setProps({
+      message: {
+        ...wrapper.props("message"),
+        botProjection: parseBotProjection({
+          agent: "DeepGenomeAgent",
+          status: "FAILED",
+          report_revision: 2,
+        }),
+      },
+    });
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expectLifecyclePhase(wrapper, "Failed");
+    wrapper.unmount();
+  });
+  it.each(["DigitalDesignAgent", "DeepGenomeAgent"])(
+    "removes %s waiting at every live terminal transition, including late flush",
+    async (tool_name) => {
+      for (const phase of [
+        "SUCCEEDED",
+        "FAILED",
+        "TIMED_OUT",
+        "CANCELLED",
+      ] as const) {
+        const wrapper = mountContent(
+          { tool_name, content: "", status: "RUNNING" },
+          lifecycle("RUNNING")
+        );
+        const progress = wrapper.getComponent(SendProgress);
+        expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+        await wrapper.setProps({
+          message: {
+            id: "message-1",
+            role: "assistant",
+            tool_name,
+            status: phase,
+            content: "# Retained science",
+          },
+          lifecycle: lifecycle(phase),
+        });
+        expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(
+          false
+        );
+        progress.vm.$emit("flushed");
+        await nextTick();
+        expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(
+          false
+        );
+        expect(wrapper.text()).not.toContain("ETA");
+        wrapper.unmount();
+      }
+    }
+  );
   afterEach(() => {
     vi.useRealTimers();
     resetProgressStartedAtForTests();
@@ -323,7 +389,7 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     expect(wrapper.text()).not.toContain("Failed");
   });
 
-  it("flushes remaining DeepGenome CoT before showing a cached file that just succeeded", async () => {
+  it("shows the cached DeepGenome file immediately when execution succeeds", async () => {
     vi.useFakeTimers();
     resetProgressStartedAtForTests();
     const startedAt = Date.now();
@@ -359,10 +425,10 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     });
     await nextTick();
     expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(false);
     expect(
       wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
-    ).toBe(false);
+    ).toBe(true);
 
     vi.advanceTimersByTime(90 * 19);
     await nextTick();
@@ -370,9 +436,10 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
       wrapper.findComponent({ name: "ResearchArtifactPreview" }).exists()
     ).toBe(true);
     expect(wrapper.text()).not.toContain("Smoc Analysis");
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
   });
 
-  it("flushes remaining CoT before showing the official result", async () => {
+  it("shows the official result without retaining terminal CoT or ETA", async () => {
     vi.useFakeTimers();
     resetProgressStartedAtForTests();
     const startedAt = Date.now();
@@ -396,17 +463,17 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     });
     await nextTick();
     expect(wrapper.find('[data-test="scientific-markdown"]').exists()).toBe(
-      false
+      true
     );
     expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(true);
-    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(1);
+    expect(wrapper.find('[data-test="agent-wait-flush"]').exists()).toBe(false);
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(0);
 
     vi.advanceTimersByTime(90 * 16);
     await nextTick();
     expect(wrapper.get('[data-test="scientific-markdown"]').text()).toContain(
       "Synthetic result."
     );
-    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(16);
+    expect(wrapper.findAll(".send-progress__cot-item")).toHaveLength(0);
   });
 });

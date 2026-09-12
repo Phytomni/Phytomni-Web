@@ -177,6 +177,7 @@ export function normalizeChatContextNotice(
 export type ContentBlock = StreamContentBlock;
 
 export interface ChatResponse extends ConversationContextNotice {
+  projection?: BotRunProjection;
   query: string;
   answer: string;
   id?: string;

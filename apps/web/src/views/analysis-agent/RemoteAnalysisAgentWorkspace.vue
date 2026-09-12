@@ -275,11 +275,7 @@
           <template #downloads>
             <template v-if="showReportArtifacts">
               <ResultArchiveDelivery
-                v-if="
-                  isResultArchiveV1 &&
-                  (tool !== 'InSilicoResearchAgent' ||
-                    researchTerminalPhase === 'SUCCEEDED')
-                "
+                v-if="isResultArchiveV1"
                 :delivery="displayedState.delivery"
                 :artifacts="displayedState.artifactLinks"
                 :retrying="archiveRetrying"
@@ -348,6 +344,7 @@ import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgent
 import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
 import { queryWithinLimit } from "@/views/chat/utils/research-input-policy";
 import type {
   AgentRunPhase,
@@ -656,52 +653,27 @@ const reportComponentState = computed<BotRemoteAgentRunState>(() => {
   }
   return {
     ...state,
-    status: terminalPhase === "TIMED_OUT" ? "TIMED_OUT" : "FAILED",
-    visibleReport: "",
-    intermediateReport: "",
-    finalReport: "",
+    status: terminalPhase,
   };
 });
-const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
-  () => {
-    if (researchTerminalPhase.value) {
-      return researchTerminalPhase.value === "SUCCEEDED"
-        ? "complete"
-        : "failed";
-    }
-    if (
-      displayedState.value.phase === "failed" ||
-      displayedState.value.phase === "cancelled"
-    ) {
-      return "failed";
-    }
-    if (displayedState.value.degraded) return "degraded";
-    if (displayedState.value.phase === "succeeded") return "complete";
-    return "loading";
-  }
+const reportPresentation = computed(() =>
+  reportPresentationFor(reportComponentState.value, undefined, props.tool)
 );
+const reportStatus = computed(() => reportPresentation.value.state);
 const showReportArtifacts = computed(
   () =>
     props.tool !== "InSilicoResearchAgent" ||
     researchTerminalPhase.value !== null
 );
 const reportArtifacts = computed(() =>
-  props.tool === "InSilicoResearchAgent" &&
-  researchTerminalPhase.value !== "SUCCEEDED"
+  props.tool === "InSilicoResearchAgent" && researchTerminalPhase.value === null
     ? []
     : displayedState.value.artifacts
 );
 const reportStatusLabel = computed(() => {
-  switch (reportStatus.value) {
-    case "complete":
-      return t(`${props.localePrefix}.complete`);
-    case "degraded":
-      return t(`${props.localePrefix}.degraded`);
-    case "failed":
-      return t("common.failed");
-    default:
-      return t(`${props.localePrefix}.progress`);
-  }
+  return reportPresentation.value.active
+    ? t(`${props.localePrefix}.progress`)
+    : t(reportPresentation.value.labelKey);
 });
 const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   if (props.tool !== "InSilicoResearchAgent") return null;
@@ -737,10 +709,10 @@ const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
   return null;
 });
 const workspaceStatusLabel = computed(() => {
-  if (isResearchCancellation.value) {
+  if (isResearchCancellation.value && !reportPresentation.value.reportText) {
     return t("chat.lifecycle.cancelled");
   }
-  if (isResearchTimeout.value) {
+  if (isResearchTimeout.value && !reportPresentation.value.reportText) {
     return t("chat.lifecycle.timed_out");
   }
   if (

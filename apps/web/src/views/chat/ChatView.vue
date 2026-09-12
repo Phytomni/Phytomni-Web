@@ -247,6 +247,16 @@ export function releaseDialogueUploads(
                         "
                         :lifecycle="agentRunLifecycleForMessage(message)"
                         :progress-started-at="progressHintForMessage(message)"
+                        :archive-retrying="
+                          Boolean(
+                            getChatState(currentChatId)
+                              .archiveRetryingByMessageId[message.id || '']
+                          )
+                        "
+                        @download-result-archive="
+                          downloadMessageArchive(message, $event)
+                        "
+                        @retry-result-archive="retryMessageArchive(message)"
                         @finish="() => handleMarkdownFinish(index)"
                         @open-artifact="openArtifactForMessage(message)"
                         @update:activity-expanded="
@@ -538,6 +548,7 @@ export function releaseDialogueUploads(
           :title="chatHeaderTitle"
           :metadata="artifactAgentLabel(currentArtifactMessage)"
           :status="currentArtifactStatusLabel"
+          :report-state="currentArtifactLifecycle ?? undefined"
           :markdown="
             currentArtifactPresentation?.kind === 'deep-genome'
               ? currentArtifactPresentation.report
@@ -601,6 +612,7 @@ export function releaseDialogueUploads(
                   ? currentArtifactPresentation.report
                   : null
               "
+              :report-source="currentArtifactPresentation?.source"
               :progress="currentArtifactProjection?.progress"
               :updated-at="currentArtifactProjection?.reportUpdatedAt"
               :labels="currentArtifactBotReportLabels"
@@ -832,8 +844,9 @@ import {
   artifactIdentityForMessage,
   artifactPresentationForMessage,
   artifactPreviewTitleKey,
-  researchRowLifecycleStatus,
 } from "./utils/artifact-policy";
+import { useResultArchiveDelivery } from "./composables/useResultArchiveDelivery";
+import type { ConversationArtifactLink } from "@/api/types";
 import {
   artifactChromeFromMessage,
   artifactDownloadFormat,
@@ -852,10 +865,11 @@ import type {
   ScientificResourceActivation,
 } from "@/utils/scientific-markdown/types";
 import type { BotRunProjection } from "./botProjection";
+import { type BotLifecycleState } from "./streaming/botLifecycleReducer";
 import {
-  cloneBotInterop,
-  type BotLifecycleState,
-} from "./streaming/botLifecycleReducer";
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "./utils/report-presentation";
 
 function messageAttachments(
   message: ChatMessage
@@ -1429,80 +1443,14 @@ function lifecycleFromMessage(
     !message.botLifecycle &&
     projection &&
     projection.reportPresentation !== true &&
+    !projection.report &&
     presentation?.kind !== "research"
   ) {
     return null;
   }
-  if (message.botLifecycle) {
-    if (!projection) {
-      return {
-        ...message.botLifecycle,
-        degradedInterop: message.botLifecycle.degradedInterop === true,
-        interop: cloneBotInterop(message.botLifecycle.interop),
-      };
-    }
-    return {
-      ...message.botLifecycle,
-      degradedInterop: projection.degradedInterop === true,
-      interop: cloneBotInterop(projection.interop),
-      reportStage: projection.reportStage,
-      reportUpdatedAt: projection.reportUpdatedAt,
-      progress: projection.progress,
-    };
-  }
-  if (!projection) {
-    if (presentation?.kind !== "research") return null;
-    const status = researchRowLifecycleStatus(String(message.status ?? ""));
-    return {
-      runId: null,
-      status,
-      reportRevision: 0,
-      visibleReport: "",
-      intermediateReport: "",
-      finalReport: "",
-      degraded: false,
-      failures: [],
-      artifacts: [],
-    };
-  }
-
-  let status: BotLifecycleState["status"] = "RUNNING";
-  switch (projection.status) {
-    case "INPUT_REQUIRED":
-      status = "INPUT_REQUIRED";
-      break;
-    case "SUCCEEDED":
-      status = "SUCCEEDED";
-      break;
-    case "FAILED":
-      status = "FAILED";
-      break;
-    case "CANCELLED":
-      status = "CANCELLED";
-      break;
-    case "TIMED_OUT":
-      status = "TIMED_OUT";
-      break;
-  }
-
-  const intermediateReport = projection.intermediateReport || "";
-  const finalReport = projection.finalReport || "";
-  return {
-    runId: projection.runId,
-    status,
-    reportRevision: projection.reportRevision,
-    visibleReport: finalReport.trim() ? finalReport : intermediateReport,
-    intermediateReport,
-    finalReport,
-    degraded: projection.degraded || projection.trackingDegraded,
-    degradedInterop: projection.degradedInterop === true,
-    interop: cloneBotInterop(projection.interop),
-    failures: projection.failures,
-    artifacts: projection.artifacts,
-    reportStage: projection.reportStage,
-    reportUpdatedAt: projection.reportUpdatedAt,
-    progress: projection.progress,
-  };
+  if (!projection && !message.botLifecycle && presentation?.kind !== "research")
+    return null;
+  return reportLifecycleForMessage(message);
 }
 
 const currentArtifactLifecycle = computed(() => {
@@ -1516,6 +1464,38 @@ const currentArtifactDelivery = computed(
     currentArtifactLifecycle.value?.delivery ??
     currentArtifactProjection.value?.delivery
 );
+const messageArchives = useResultArchiveDelivery({ getChatState });
+function downloadMessageArchive(
+  message: ChatMessage,
+  artifact: ConversationArtifactLink
+): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.downloadResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    artifact,
+  });
+}
+function retryMessageArchive(message: ChatMessage): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.retryResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    onPending: (delivery) => {
+      message.delivery = { ...delivery };
+      if (message.botProjection)
+        message.botProjection = {
+          ...message.botProjection,
+          delivery: { ...delivery },
+        };
+      if (message.botLifecycle)
+        message.botLifecycle = {
+          ...message.botLifecycle,
+          delivery: { ...delivery },
+        };
+    },
+  });
+}
 
 const currentArtifactRetrying = computed(() => {
   const messageId = currentArtifactMessage.value?.id;
@@ -1538,7 +1518,6 @@ function retryCurrentResultArchive(): void {
     if (matches.length !== 1) return;
     const [message] = matches;
     message.delivery = { ...delivery };
-    message.status = "FINALIZING";
     if (message.botProjection) {
       message.botProjection = {
         ...message.botProjection,
@@ -1557,26 +1536,10 @@ function retryCurrentResultArchive(): void {
 function reportStatusForArtifact(
   state: BotLifecycleState
 ): ChatArtifactReportStatus {
-  const stage = (
-    state as BotLifecycleState & {
-      reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
-    }
-  ).reportStage;
-  if (state.status === "FAILED" || state.status === "TIMED_OUT") {
-    return "failed";
-  }
-  if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
-    return "loading";
-  }
-  if (state.degraded || stage === "intermediate") return "degraded";
-  if (
-    state.status === "SUCCEEDED" ||
-    stage === "final" ||
-    state.finalReport.trim() !== ""
-  ) {
-    return "complete";
-  }
-  return "loading";
+  return reportPresentationFor(
+    state,
+    currentArtifactPresentation.value ?? undefined
+  ).state;
 }
 
 const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
@@ -1589,46 +1552,30 @@ const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
 );
 
 function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
-  const stage = state.reportStage;
-  if (state.status === "TIMED_OUT") return t("chat.lifecycle.timed_out");
-  if (state.status === "FAILED") return t("chat.botReport.failed");
-  if (state.status === "CANCELLED") return t("chat.lifecycle.cancelled");
-  if (state.status === "INPUT_REQUIRED") {
-    return t("chat.botReport.inputRequired");
-  }
-  if (stage === "waiting_for_brief_gene") {
-    return t("chat.botReport.waiting");
-  }
-  if (state.degraded) return t("chat.botReport.degraded");
-  if (stage === "intermediate") return t("chat.botReport.partial");
-  if (state.status === "RUNNING") return t("chat.botReport.waiting");
-  return t("chat.botReport.complete");
+  return t(
+    reportPresentationFor(state, currentArtifactPresentation.value ?? undefined)
+      .labelKey
+  );
 }
 
 function reportStatusForRow(message: ChatMessage): ChatArtifactReportStatus {
   if (message.streaming === true) return "loading";
-  const status = researchRowLifecycleStatus(String(message.status ?? ""));
-  if (status === "FAILED" || status === "TIMED_OUT" || status === "CANCELLED") {
-    return "failed";
-  }
-  if (status === "SUCCEEDED") return "complete";
-  return "loading";
+  return reportPresentationFor(
+    reportLifecycleForMessage(message),
+    artifactPresentationForMessage(message) ?? undefined,
+    message.tool_name
+  ).state;
 }
 
 function artifactStatusLabelForMessage(message: ChatMessage): string {
   if (message.streaming === true) return t("chat.botReport.waiting");
-  const status = researchRowLifecycleStatus(String(message.status ?? ""));
-  return botReportLabelForLifecycle({
-    runId: null,
-    status,
-    reportRevision: 0,
-    visibleReport: "",
-    intermediateReport: "",
-    finalReport: "",
-    degraded: false,
-    failures: [],
-    artifacts: [],
-  });
+  return t(
+    reportPresentationFor(
+      reportLifecycleForMessage(message),
+      artifactPresentationForMessage(message) ?? undefined,
+      message.tool_name
+    ).labelKey
+  );
 }
 
 const currentArtifactBotReportLabels = computed(() => {
@@ -2502,7 +2449,8 @@ const copyMessageWithDocs = (message: ChatMessage, index: number) => {
         )
       : "";
   const text =
-    messagePlainText(message) +
+    (artifactPresentationForMessage(message)?.report ??
+      messagePlainText(message)) +
     (docs && docs !== "" ? "\nReferences:\n" : "") +
     docs;
   fallbackCopyText(text, index + 1);

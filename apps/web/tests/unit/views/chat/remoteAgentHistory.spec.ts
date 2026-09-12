@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { findRemoteAgentHistorySnapshot } from "@/views/chat/composables/remoteAgentHistory";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
+import publicProjection from "../../../fixtures/report-integrity/public-projection.json";
 
 const baseRow = {
   id: 19,
@@ -15,6 +17,106 @@ const baseRow = {
 };
 
 describe("findRemoteAgentHistorySnapshot", () => {
+  it("restores report warnings and the ready archive from the Go public history golden", () => {
+    const golden = publicProjection.cases.find(
+      (entry) => entry.id === "no-science-archive-design"
+    );
+    assert(golden, "Go archive golden must be present");
+    const { history } = golden;
+    const snapshot = findRemoteAgentHistorySnapshot(
+      [history],
+      "DigitalDesignAgent",
+      history.bot_run_id,
+      String(history.id),
+      history.dialogue_id
+    );
+
+    expect(snapshot?.projection).toMatchObject({
+      agent: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      reportRevision: history.projection.report_revision,
+      report: { state: "degraded", degraded: true, sourceArtifactCount: 0 },
+      reportWarningCodes: ["report_no_scientific_text"],
+      finalReport: "",
+      intermediateReport: "",
+    });
+    expect(snapshot?.delivery).toEqual(history.delivery);
+    expect(snapshot?.artifactLinks).toEqual(history.artifacts);
+    assert(snapshot, "Go archive history must restore");
+    expect(reportPresentationFor(snapshot.projection)).toMatchObject({
+      state: "degraded",
+      reportText: "",
+      active: false,
+    });
+  });
+
+  it("retains a failed partial projection and explicit warning clears on workspace refresh", () => {
+    const golden = publicProjection.cases.find(
+      (entry) => entry.id === "partial-failed-deep-genome"
+    );
+    assert(golden, "Go partial-report golden must be present");
+    const { history } = golden;
+    // Direct workspaces use remote-agent identities, not DeepGenomeAgent.
+    const row = {
+      ...history,
+      tool_name: "InSilicoResearchAgent",
+      projection: { ...history.projection, agent: "research" },
+    };
+    const restore = (value: unknown) =>
+      findRemoteAgentHistorySnapshot(
+        [value],
+        "InSilicoResearchAgent",
+        row.bot_run_id,
+        String(row.id),
+        row.dialogue_id
+      );
+    const snapshot = restore(row);
+
+    expect(snapshot?.projection).toMatchObject({
+      status: "FAILED",
+      reportRevision: 12,
+      intermediateReport: history.projection.intermediate_report,
+      finalReport: "",
+      report: {
+        state: "intermediate",
+        degraded: true,
+        sourceArtifactCount: 0,
+      },
+      reportWarningCodes: ["deep_genome_report_degraded"],
+      trackingDegraded: true,
+    });
+    assert(snapshot, "Partial report history must restore");
+    expect(reportPresentationFor(snapshot.projection)).toMatchObject({
+      state: "degraded",
+      reportText: history.projection.intermediate_report,
+      source: "intermediate",
+      active: false,
+    });
+    expect(
+      restore({
+        ...row,
+        projection: {
+          ...row.projection,
+          report_revision: 18,
+          report: {
+            state: "intermediate",
+            degraded: false,
+            source_artifact_count: 12,
+          },
+          report_warning_codes: [],
+        },
+      })?.projection
+    ).toMatchObject({
+      reportRevision: 18,
+      report: {
+        state: "intermediate",
+        degraded: false,
+        sourceArtifactCount: 12,
+      },
+      reportWarningCodes: [],
+    });
+  });
+
   it("returns a bounded intermediate projection for the exact tool and run", () => {
     expect(
       findRemoteAgentHistorySnapshot(

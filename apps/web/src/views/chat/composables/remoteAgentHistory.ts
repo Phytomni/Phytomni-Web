@@ -119,6 +119,7 @@ function snapshotFromHistoryRow(
     ? { ...answerPayload }
     : {};
   for (const key of [
+    "projection",
     "status",
     "tool_name",
     "bot_run_id",

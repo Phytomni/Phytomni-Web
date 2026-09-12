@@ -7,6 +7,7 @@ import {
 import { citedMessages } from "./messages";
 import type { AgentCaseDemoFixture } from "./types";
 import referenceMaterials from "@/views/agent-cases/citations/deep-genome-materials.generated.json";
+import { parseBotProjection } from "../botProjection";
 
 export const DEEP_GENOME_CASE_FIXTURE: AgentCaseDemoFixture = {
   tool: "DeepGenomeAgent",
@@ -23,6 +24,12 @@ export const DEEP_GENOME_CASE_FIXTURE: AgentCaseDemoFixture = {
           ...message,
           casePresentationKey: "deep-genome-os01g0177400",
           status: "SUCCEEDED",
+          botProjection: parseBotProjection({
+            agent: "DeepGenomeAgent",
+            status: "SUCCEEDED",
+            report_stage: "final",
+            final_report: DEEP_GENOME_CASE_MARKDOWN,
+          }),
         }
       : message
   ),

@@ -1548,7 +1548,7 @@ describe("Chat artifact shell integration", () => {
     ],
     ["DeepGenomeAgent", deepGenomeMessage, false],
   ] as const)(
-    "shows Report ready for a completed %s row without Bot report lifecycle",
+    "preserves an unclassified completed %s report without claiming final readiness",
     async (_tool, message, usesCitedAnswer) => {
       const { wrapper } = await mountProductionChat(1440, {
         messagesA: [{ ...message }],
@@ -1557,7 +1557,7 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       expect(wrapper.get(".research-artifact-header__status").text()).toBe(
-        enUS.chat.botReport.complete
+        enUS.chat.botReport.partial
       );
       expect(wrapper.text()).not.toContain(enUS.chat.botReport.waiting);
       expect(wrapper.findComponent(BotReportState).exists()).toBe(false);
@@ -1722,7 +1722,8 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
     expect(CHAT_SOURCE).toContain("<template #artifact>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
-    expect(CHAT_SOURCE).toContain('message.status = "FINALIZING"');
+    expect(CHAT_SOURCE).not.toContain('message.status = "FINALIZING"');
+    expect(CHAT_SOURCE).toContain("message.delivery = { ...delivery }");
     expect(CHAT_SOURCE).not.toContain('message.status = "RUNNING"');
     expect(CHAT_SOURCE).toContain(
       ':rendering-file-id="currentArtifactMessage.id"'

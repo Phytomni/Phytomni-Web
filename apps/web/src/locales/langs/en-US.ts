@@ -500,6 +500,27 @@ export default {
       },
     },
     botReport: {
+      unavailable: "Scientific report unavailable",
+      executionFailed:
+        "Execution failed; the available partial report is retained.",
+      warnings: {
+        report_artifact_count_capped:
+          "Some scientific artifacts were not included in the report.",
+        report_context_truncated:
+          "Some scientific context was shortened for the report.",
+        report_artifact_size_exceeded:
+          "A scientific artifact exceeded the report size limit.",
+        report_artifact_read_failed:
+          "A scientific artifact could not be read for the report.",
+        report_artifact_empty:
+          "A scientific artifact contained no report text.",
+        report_no_scientific_text:
+          "No validated scientific text was available for synthesis.",
+        report_synthesis_failed:
+          "Final report synthesis was unavailable. Available scientific content and result files are retained.",
+        deep_genome_report_degraded:
+          "Some analyses were unavailable. Available scientific content is retained.",
+      },
       waiting: "Preparing the report",
       partial: "Partial report available",
       degraded: "Some analysis is unavailable",
@@ -813,6 +834,8 @@ export default {
     transferProgressText: "{phase}: {loaded} / {total} ({percent}%)",
     transferProgressIndeterminate: "{phase}: {loaded} transferred",
     downloadCancelled: "Download cancelled",
+    pdfFontsUnavailable:
+      "PDF export is temporarily unavailable. You can still download Word or Markdown.",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
     resultArchive: {

@@ -807,7 +807,7 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     }
   );
 
-  it("titles a succeeded Research preview Finished", () => {
+  it("does not promote an unclassified Research body to ready merely from success", () => {
     const message = {
       ...ELIGIBLE_MESSAGE,
       tool_name: "InSilicoResearchAgent",
@@ -816,6 +816,6 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     };
     expect(
       artifactPreviewTitleKey(message, { phase: "SUCCEEDED", terminal: true })
-    ).toBe("common.finished");
+    ).toBe("chat.botReport.partial");
   });
 });

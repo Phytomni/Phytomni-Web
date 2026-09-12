@@ -230,7 +230,7 @@ function researchAttachmentLimit(
 }
 
 function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
-  const lifecycle = owned.botLifecycle
+  const cached = owned.botLifecycle
     ? {
         ...owned.botLifecycle,
         degradedInterop: owned.botLifecycle.degradedInterop === true,
@@ -238,9 +238,10 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
       }
     : initBotLifecycleState();
   const projection = safeProjectionCopy(owned.botProjection);
-  const delivery =
-    safeDeliveryCopy(owned.botLifecycle?.delivery) ??
-    safeDeliveryCopy(projection?.delivery);
+  const lifecycle = projection
+    ? reduceBotProjection(cached, projection)
+    : cached;
+  const delivery = safeDeliveryCopy(lifecycle.delivery);
   return {
     ...lifecycle,
     ...(delivery ? { delivery } : {}),
@@ -536,6 +537,14 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       runId: state.value.runId,
       status: state.value.status,
       reportRevision: state.value.reportRevision,
+      report: state.value.report ? { ...state.value.report } : undefined,
+      reportWarningCodes: state.value.reportWarningCodes
+        ? [...state.value.reportWarningCodes]
+        : undefined,
+      reportStage: state.value.reportStage,
+      reportUpdatedAt: state.value.reportUpdatedAt,
+      progress: state.value.progress ? { ...state.value.progress } : undefined,
+      trackingDegraded: state.value.trackingDegraded,
       visibleReport: state.value.visibleReport,
       intermediateReport: state.value.intermediateReport,
       finalReport: state.value.finalReport,

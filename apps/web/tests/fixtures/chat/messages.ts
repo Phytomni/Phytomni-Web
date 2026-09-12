@@ -32,6 +32,7 @@ export function isPhase3BMessageKey(
 
 /** Shared synthetic reference row — reused by cited + DeepGenome fixtures. */
 export const FIXTURE_REFERENCE_DOC = {
+  citation: null,
   title: "Synthetic reference paper",
   au: "Synthetic Author",
   ti: "Plant genomics overview",

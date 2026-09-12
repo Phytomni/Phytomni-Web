@@ -7,6 +7,7 @@ import {
 } from "@/utils/download-transfers";
 
 let renderingFileDownloadSeq = 0;
+const MAX_ERROR_BODY_BYTES = 4096;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,6 +23,38 @@ function isCanceledRequest(error: unknown): boolean {
   return err?.code === "ERR_CANCELED" || err?.name === "CanceledError";
 }
 
+function isJsonContentType(value: string | undefined): boolean {
+  const mime = value?.split(";", 1)[0].trim().toLowerCase() ?? "";
+  return (
+    mime === "application/json" || /^application\/[\w.+-]+\+json$/.test(mime)
+  );
+}
+
+async function renderingDownloadErrorKey(response: unknown): Promise<string> {
+  if (!isRecord(response) || response.status !== 503)
+    return "chat.downloadError";
+  let body: unknown = response.data;
+  const contentType =
+    readResponseHeader(response.headers, "content-type") ||
+    (body instanceof Blob ? body.type : undefined);
+  if (!isJsonContentType(contentType)) return "chat.downloadError";
+
+  if (body instanceof Blob) {
+    // Error bodies are bounded before reading; report bytes never enter JSON.parse.
+    if (body.size > MAX_ERROR_BODY_BYTES) return "chat.downloadError";
+    try {
+      body = JSON.parse(await body.text());
+    } catch {
+      return "chat.downloadError";
+    }
+  }
+  return isRecord(body) &&
+    body.code === 503 &&
+    body.reason === "academic_report_fonts_unavailable"
+    ? "chat.pdfFontsUnavailable"
+    : "chat.downloadError";
+}
+
 export async function downloadRenderingFile(
   id: string,
   format: string,
@@ -35,10 +68,20 @@ export async function downloadRenderingFile(
   try {
     const response = await getFileDownUrlApi(queryData, {
       requestId,
+      suppressErrorToast: true,
       onDownloadProgress: (event) => {
         upsertDownloadTransfer(tracker.update(event));
       },
     });
+    if (
+      !(response.data instanceof Blob) ||
+      !(response.status >= 200 && response.status < 300) ||
+      isJsonContentType(readResponseHeader(response.headers, "content-type")) ||
+      isJsonContentType(response.data.type)
+    ) {
+      ElMessage.error(t(await renderingDownloadErrorKey(response)));
+      return;
+    }
     const contentDisposition = readResponseHeader(
       response.headers,
       "content-disposition"
@@ -70,8 +113,8 @@ export async function downloadRenderingFile(
       ElMessage.info(t("chat.downloadCancelled"));
       return;
     }
-    console.error("File download failed:", error);
-    ElMessage.error(t("chat.downloadError"));
+    const response = isRecord(error) ? error.response : undefined;
+    ElMessage.error(t(await renderingDownloadErrorKey(response)));
   } finally {
     removeDownloadTransfer(requestId);
   }

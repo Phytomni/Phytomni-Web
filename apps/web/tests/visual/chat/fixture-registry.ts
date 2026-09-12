@@ -1,6 +1,7 @@
 /** Typed closed registry for the Chat visual fixture harness (test-only). */
 
 export const CHAT_VISUAL_FIXTURE_KEYS = [
+  "report-integrity",
   "instant-empty",
   "expert-auto-empty",
   "expert-selected-empty",
@@ -256,6 +257,20 @@ const agentLifecycleFixture = (
 });
 
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
+  "report-integrity": {
+    key: "report-integrity",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 1,
+  },
   "instant-empty": {
     key: "instant-empty",
     chatState: "empty",

@@ -14,18 +14,26 @@
   >
     {{ $t("chat.contextDegraded") }}
   </div>
+  <p
+    v-if="showReportUnavailable"
+    class="agent-lifecycle"
+    data-test="report-unavailable"
+    role="status"
+  >
+    {{ t(reportPresentation.labelKey) }}
+  </p>
+  <BotReportWarnings :warning-keys="reportPresentation.warningKeys" />
   <div
     v-if="showStandaloneCot"
     class="message-text phy-bubble-assistant agent-wait"
-    :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
+    data-test="agent-wait"
   >
     <div class="agent-lifecycle" role="status" aria-live="polite">
       <SendProgress
         :started-at="resolvedProgressStartedAt"
         :agent-name="progressAgentName"
-        :completing="isFlushingOfficialResult"
+        :completing="false"
         :wait-children="props.lifecycle?.children ?? []"
-        @flushed="onCotFlushed"
       />
     </div>
   </div>
@@ -34,7 +42,6 @@
     v-if="
       message.role === 'user' ||
       (!isWaitOnlyBody &&
-        !isFlushingOfficialResult &&
         (hasArtifactPresentation ||
           isDeepGenomeMessage ||
           isResearchNonterminal ||
@@ -44,7 +51,7 @@
       'message-text',
       message.role === 'user'
         ? 'phy-bubble-user has-user'
-        : 'phy-bubble-assistant',
+        : !showArtifactPreview && 'phy-bubble-assistant',
     ]"
   >
     <!-- Streaming assistant messages (AG-UI content blocks) render via
@@ -53,17 +60,12 @@
          assigns phyto.references → doc_list, the same blocks rerender to
          #m<index>-ref-N links. Live-session only — history reload does not
          invent persisted streaming references. -->
-    <div
-      v-if="showInlineCot"
-      class="agent-wait-inline"
-      :data-test="showWaitProgress ? 'agent-wait' : 'agent-wait-flush'"
-    >
+    <div v-if="showInlineCot" class="agent-wait-inline" data-test="agent-wait">
       <div class="agent-lifecycle" role="status" aria-live="polite">
         <SendProgress
           :started-at="resolvedProgressStartedAt"
           :agent-name="progressAgentName"
-          :completing="!showWaitProgress"
-          :force-last-stage="cotFlushed && !showWaitProgress"
+          :completing="false"
           :wait-children="props.lifecycle?.children ?? []"
         />
       </div>
@@ -279,9 +281,7 @@
   </div>
   <!-- Table data display -->
   <div
-    v-else-if="
-      !isWaitOnlyBody && !isFlushingOfficialResult && message.tableHeaders
-    "
+    v-else-if="!isWaitOnlyBody && message.tableHeaders"
     class="table-response"
   >
     <el-table
@@ -299,10 +299,7 @@
     </el-table>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
-  <div
-    v-else-if="!isWaitOnlyBody && !isFlushingOfficialResult"
-    class="ai-response"
-  >
+  <div v-else-if="!isWaitOnlyBody" class="ai-response">
     <!-- Reasoning steps -->
     <div v-if="message.steps && message.steps.length > 0">
       <div class="steps-title">{{ $t("chat.stepResult") }}:</div>
@@ -337,6 +334,14 @@
       />
     </div>
   </div>
+  <ResultArchiveDelivery
+    v-if="message.role === 'assistant' && archiveDelivery"
+    :delivery="archiveDelivery"
+    :artifacts="message.artifacts ?? []"
+    :retrying="archiveRetrying"
+    @download="emit('download-result-archive', $event)"
+    @retry="emit('retry-result-archive')"
+  />
 </template>
 
 <script setup lang="ts">
@@ -346,11 +351,13 @@ import ScientificMarkdownTypewriter from "@/components/ScientificMarkdownTypewri
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
+import BotReportWarnings from "@/components/research/BotReportWarnings.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
 import StreamMessage from "./StreamMessage.vue";
 import SendProgress from "./SendProgress.vue";
-import { computed, ref, watch } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { AgentTaskLifecycle } from "@/api/types";
+import type { AgentTaskLifecycle, ConversationArtifactLink } from "@/api/types";
 import type { ChatMessage } from "../types";
 import {
   isAgentWaitPhase,
@@ -373,6 +380,10 @@ import {
   isMeaningfulDeepGenomeReport,
 } from "../utils/artifact-policy";
 import { isApprovedReportText } from "../utils/valid-report-ledger";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "../utils/report-presentation";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -391,11 +402,14 @@ const props = defineProps<{
   digitalDesignImagesLoading: Record<string, boolean>;
   lifecycle?: AgentTaskLifecycle;
   progressStartedAt?: number | null;
+  archiveRetrying?: boolean;
 }>();
 
 const emit = defineEmits<{
   finish: [];
   "open-artifact": [];
+  "download-result-archive": [artifact: ConversationArtifactLink];
+  "retry-result-archive": [];
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
@@ -431,7 +445,7 @@ const routingNotice = computed(() => {
   if (reason === "ROUTER_SELECTED" || reason === "EXPLICIT_SELECTION") {
     return routedAgentLabel();
   }
-  if (showWaitProgress.value || isFlushingOfficialResult.value) {
+  if (showWaitProgress.value) {
     return routedAgentLabel();
   }
   return "";
@@ -450,6 +464,32 @@ const isResearchMessage = computed(
 );
 const artifactPresentation = computed(() =>
   artifactPresentationForMessage(props.message)
+);
+const reportLifecycle = computed(() =>
+  reportLifecycleForMessage(props.message)
+);
+const reportPresentation = computed(() =>
+  reportPresentationFor(
+    {
+      ...reportLifecycle.value,
+      status: effectiveLifecyclePhase.value ?? reportLifecycle.value.status,
+    },
+    artifactPresentation.value ?? undefined,
+    props.message.tool_name
+  )
+);
+const showReportUnavailable = computed(
+  () =>
+    props.message.role === "assistant" &&
+    Boolean(
+      reportLifecycle.value.report ||
+      reportLifecycle.value.reportWarningCodes?.length
+    ) &&
+    !reportPresentation.value.active &&
+    !reportPresentation.value.reportText
+);
+const archiveDelivery = computed(
+  () => props.message.delivery ?? reportLifecycle.value.delivery
 );
 const hasArtifactPresentation = computed(
   () => artifactPresentation.value !== null
@@ -503,9 +543,18 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   return null;
 }
 
-const effectiveLifecyclePhase = computed(
-  () => props.lifecycle?.phase ?? messageLifecyclePhase()
-);
+const effectiveLifecyclePhase = computed(() => {
+  const status = reportLifecycle.value.status;
+  if (
+    (props.message.botProjection || props.message.botLifecycle) &&
+    (status === "SUCCEEDED" ||
+      status === "FAILED" ||
+      status === "TIMED_OUT" ||
+      status === "CANCELLED")
+  )
+    return status;
+  return props.lifecycle?.phase ?? messageLifecyclePhase();
+});
 const isResearchNonterminal = computed(
   () =>
     isResearchMessage.value &&
@@ -545,26 +594,24 @@ const showLeadingLifecycleStatus = computed(
         !(props.message.blocks && props.message.blocks.length))) &&
     !isSpecializedImageAgent.value
 );
+const showArtifactPreview = computed(
+  () =>
+    hasArtifactPresentation.value &&
+    !!props.artifactPreview &&
+    !props.message.streaming &&
+    !props.message.blocks?.length
+);
 const streamWaitProgress = computed(() =>
   isStreamWaitProgressMessage(props.message)
 );
 const showWaitProgress = computed(
   () =>
     props.message.role === "assistant" &&
+    !["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(
+      effectiveLifecyclePhase.value ?? ""
+    ) &&
     (isAgentWaitPhase(effectiveLifecyclePhase.value) ||
       streamWaitProgress.value)
-);
-const sawActiveWait = ref(false);
-const cotFlushed = ref(false);
-watch(
-  showWaitProgress,
-  (active) => {
-    if (active) {
-      sawActiveWait.value = true;
-      cotFlushed.value = false;
-    }
-  },
-  { immediate: true }
 );
 const progressAgentName = computed(() =>
   typeof props.message.tool_name === "string" ? props.message.tool_name : ""
@@ -589,34 +636,19 @@ const isWaitOnlyBodyContent = computed(() => {
 const isWaitOnlyBody = computed(
   () => showWaitProgress.value && isWaitOnlyBodyContent.value
 );
-const isFlushingOfficialResult = computed(
-  () =>
-    sawActiveWait.value &&
-    !showWaitProgress.value &&
-    !cotFlushed.value &&
-    effectiveLifecyclePhase.value === "SUCCEEDED" &&
-    !isWaitOnlyBodyContent.value
-);
 const hideWaitPlaceholderBody = computed(
   () =>
     props.message.role === "assistant" &&
-    sawActiveWait.value &&
+    effectiveLifecyclePhase.value !== null &&
     !showWaitProgress.value &&
     isWaitOnlyBodyContent.value
 );
 const showStandaloneCot = computed(
-  () =>
-    (showWaitProgress.value && isWaitOnlyBody.value) ||
-    isFlushingOfficialResult.value
+  () => showWaitProgress.value && isWaitOnlyBody.value
 );
 const showInlineCot = computed(
-  () =>
-    (showWaitProgress.value && !isWaitOnlyBody.value) ||
-    (sawActiveWait.value && cotFlushed.value && !showStandaloneCot.value)
+  () => showWaitProgress.value && !isWaitOnlyBody.value
 );
-function onCotFlushed() {
-  cotFlushed.value = true;
-}
 const isTerminalLifecycle = computed(
   () =>
     effectiveLifecyclePhase.value === "FAILED" ||

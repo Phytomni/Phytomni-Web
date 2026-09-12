@@ -20,6 +20,7 @@
         :title="title"
         :metadata="metadata"
         :status="status"
+        :report-status="reportPresentation?.state"
         :tab="selectedTab"
         :tabs="visibleTabs"
         :tab-labels="tabLabels"
@@ -36,6 +37,9 @@
         @tab="handleTab"
       >
         <template #content>
+          <BotReportWarnings
+            :warning-keys="reportPresentation?.warningKeys ?? []"
+          />
           <DeepGenomeResultViewer
             ref="viewerRef"
             :markdown="markdown"
@@ -80,6 +84,9 @@ import type {
 } from "./deep-genome-types";
 import type { ArtifactOverflowItem } from "./artifact-overflow";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
+import BotReportWarnings from "./BotReportWarnings.vue";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
+import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { artifactChrome } from "@/views/chat/utils/artifact-chrome";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
 import DeepGenomeMaterialDetail from "./DeepGenomeMaterialDetail.vue";
@@ -114,6 +121,7 @@ const props = withDefaults(
     title: string;
     metadata?: string | string[];
     status?: string;
+    reportState?: BotLifecycleState;
     tab?: ArtifactTab;
     tabs?: readonly ArtifactTab[];
     tabLabels?: ArtifactTabLabels;
@@ -147,6 +155,21 @@ const emit = defineEmits<{
 }>();
 
 const viewerRef = ref<DeepGenomeViewerHandle | null>(null);
+const reportPresentation = computed(() =>
+  props.reportState
+    ? reportPresentationFor(
+        props.reportState,
+        {
+          report: props.markdown,
+          source:
+            props.markdown === props.reportState.finalReport
+              ? "final"
+              : "intermediate",
+        },
+        "DeepGenomeAgent"
+      )
+    : null
+);
 const { t } = useI18n();
 const parentReport = ref<HTMLElement | null>(null);
 let previousFocus: HTMLElement | null = null;

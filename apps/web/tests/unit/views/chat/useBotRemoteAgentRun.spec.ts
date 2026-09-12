@@ -726,6 +726,37 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.interop).not.toHaveProperty("credentials");
   });
 
+  it("reconciles cached report metadata on restore and carries explicit warning clears into owned state", () => {
+    const owned: RemoteAgentChatState = {
+      ...makeState(),
+      botLifecycle: initBotLifecycleState(),
+      botProjection: {
+        ...runProjection("FAILED", 4),
+        intermediateReport: "# Retained scientific report",
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      },
+    };
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "report-restore",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    expect(run.state.value.reportWarningCodes).toEqual([
+      "report_synthesis_failed",
+    ]);
+    expect(run.state.value.visibleReport).toBe("# Retained scientific report");
+    run.hydrate({
+      ...runProjection("FAILED", 5),
+      finalReport: "# Valid scientific revision",
+      report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+      reportWarningCodes: [],
+    });
+    expect(owned.botLifecycle?.reportWarningCodes).toEqual([]);
+    expect(owned.botLifecycle?.report?.state).toBe("final");
+  });
+
   it("hydrates a validated terminal projection and clears its identity on reset", async () => {
     mockQuery.mockResolvedValueOnce({
       data: {

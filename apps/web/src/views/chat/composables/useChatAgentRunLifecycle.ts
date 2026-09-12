@@ -263,7 +263,19 @@ export function useChatAgentRunLifecycle(options: {
       for (const message of state.renderedChat?.messages ?? []) {
         const rowId = isWatchableMessage(message);
         if (!rowId) continue;
-        const snapshot = state.agentRunLifecycles[rowId];
+        let snapshot: AgentTaskLifecycle | undefined =
+          state.agentRunLifecycles[rowId];
+        if (
+          snapshot?.terminal &&
+          message.delivery?.status === "pending" &&
+          message.delivery.revision > (snapshot.delivery?.revision ?? -1)
+        ) {
+          lifecycle.unwatchRow(rowId);
+          watchedRows.delete(rowId);
+          cancelReloadWork(rowId);
+          delete state.agentRunLifecycles[rowId];
+          snapshot = undefined;
+        }
         const reloadWork = reloadWorkByRow.get(rowId);
         if (
           snapshot?.terminal &&

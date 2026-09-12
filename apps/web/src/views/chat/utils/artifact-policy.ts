@@ -7,6 +7,10 @@ import {
   isApprovedReportText,
   isDeepGenomeLedgerPlaceholder,
 } from "./valid-report-ledger";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "./report-presentation";
 
 export type ReportSource = "final" | "intermediate" | "message";
 
@@ -29,12 +33,8 @@ const NON_TERMINAL_RUN_STATUSES = new Set([
 ]);
 
 function normalizedRunStatus(message: ArtifactPolicyMessage): string {
-  return String(
-    message.botLifecycle?.status ??
-      message.botProjection?.status ??
-      message.status ??
-      ""
-  )
+  if (message.botProjection) return reportLifecycleForMessage(message).status;
+  return String(message.botLifecycle?.status ?? message.status ?? "")
     .trim()
     .toUpperCase();
 }
@@ -72,22 +72,20 @@ export function artifactPreviewTitleKey(
   message: ArtifactPolicyMessage,
   lifecycle?: ArtifactPreviewLifecycle | null
 ): string | null {
-  if (artifactPresentationForMessage(message) === null) return null;
-  if (lifecycle && !lifecycle.terminal) {
-    return lifecycleTitleKey(lifecycle.phase);
-  }
+  const selected = artifactPresentationForMessage(message);
+  if (selected === null) return null;
   const status = normalizedRunStatus(message);
   if (NON_TERMINAL_RUN_STATUSES.has(status)) {
+    if (lifecycle && !lifecycle.terminal) {
+      return lifecycleTitleKey(lifecycle.phase);
+    }
     return lifecycleTitleKey(status);
   }
-  if (status === "FAILED") return "chat.botReport.failed";
-  if (status === "TIMED_OUT" || status === "TIMEOUT") {
-    return "chat.lifecycle.timed_out";
-  }
-  if (status === "CANCELLED" || status === "CANCELED") {
-    return "chat.lifecycle.cancelled";
-  }
-  return "common.finished";
+  return reportPresentationFor(
+    reportLifecycleForMessage(message),
+    selected,
+    message.tool_name
+  ).labelKey;
 }
 
 export interface ArtifactPresentation {
@@ -163,11 +161,10 @@ function isReportTextValid(toolName: string, value: unknown): value is string {
 function reportCandidates(
   message: ArtifactPolicyMessage
 ): readonly [ReportSource, unknown][] {
+  const lifecycle = reportLifecycleForMessage(message);
   const candidates: [ReportSource, unknown][] = [
-    ["final", message.botLifecycle?.finalReport],
-    ["final", message.botProjection?.finalReport],
-    ["intermediate", message.botLifecycle?.intermediateReport],
-    ["intermediate", message.botProjection?.intermediateReport],
+    ["final", lifecycle.finalReport],
+    ["intermediate", lifecycle.intermediateReport],
   ];
   if (message.streaming === true) return candidates;
 

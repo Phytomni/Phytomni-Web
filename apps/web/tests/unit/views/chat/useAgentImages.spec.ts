@@ -82,7 +82,7 @@ describe("useAgentImages", () => {
           id: "3676",
           status: "SUCCEEDED",
           content:
-            "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.",
+            "# Network analysis\n\nThe candidate network contains three connected modules.",
         }),
       ],
     };
@@ -90,6 +90,30 @@ describe("useAgentImages", () => {
     await flushPromises();
 
     expect(mockGetObsImages).not.toHaveBeenCalled();
+  });
+
+  it("GeneNetworkAgent: failure-only text retains the image gallery path", async () => {
+    mockGetObsImages.mockResolvedValue(
+      buildApiEnvelope(["http://obs/network.png"])
+    );
+    const currentChat = chatRef();
+    const { geneNetworkImages } = useAgentImages(currentChat);
+    currentChat.value = {
+      messages: [
+        message({
+          tool_name: "GeneNetworkAgent",
+          id: "3676",
+          status: "SUCCEEDED",
+          download_path:
+            "/obs/phytomni/agent_data/test/output/children/part-001",
+          content:
+            "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.",
+        }),
+      ],
+    };
+    await flushPromises();
+    expect(mockGetObsImages).toHaveBeenCalledOnce();
+    expect(geneNetworkImages["3676"]).toEqual(["http://obs/network.png"]);
   });
 
   it("DigitalDesignAgent: when download_path is a single string value, parses it then calls getObsImages", async () => {

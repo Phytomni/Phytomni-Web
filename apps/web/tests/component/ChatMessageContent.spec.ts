@@ -38,6 +38,8 @@ import { getSharedMessageFixture } from "../visual/chat/fixture-data";
 import { mountWithApp } from "../helpers/test-app-context";
 import { isCompletedDeepGenomeMessage } from "@/views/chat/utils/artifact-policy";
 import { resetProgressStartedAtForTests } from "@/views/chat/utils/agentProgress";
+import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { parseBotProjection } from "@/views/chat/botProjection";
 
 const CHAT_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/ChatView.vue"),
@@ -221,6 +223,87 @@ const block = (text = "hi"): ContentBlock => ({
 });
 
 describe("ChatMessageContent branch selection (truthiness gate)", () => {
+  it("opens a partial projection report despite an empty body and cached running lifecycle", async () => {
+    const wrapper = mountContent(
+      {
+        role: "assistant",
+        id: "42",
+        tool_name: "DeepGenomeAgent",
+        status: "FAILED",
+        content: "",
+        botLifecycle: initBotLifecycleState(),
+        botProjection: parseBotProjection({
+          agent: "DeepGenomeAgent",
+          status: "FAILED",
+          report_revision: 3,
+          final_report: "Server task created: synthetic",
+          intermediate_report: "# Retained science [1]",
+          report: {
+            state: "degraded",
+            degraded: true,
+            source_artifact_count: 2,
+          },
+          report_warning_codes: ["report_synthesis_failed"],
+        }),
+      },
+      {
+        artifactPreview: {
+          title: "Partial report available",
+          kind: "Deep Genome",
+          summary: "",
+          openLabel: "View",
+        },
+      }
+    );
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Partial report available");
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    await wrapper.get(".research-artifact-preview button").trigger("click");
+    expect(wrapper.emitted("open-artifact")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("mounts and downloads a ready archive with no scientific body or View card", async () => {
+    const artifact = {
+      id: "archive-synthetic",
+      name: "design-results.zip",
+      kind: "archive" as const,
+    };
+    const wrapper = mountContent({
+      role: "assistant",
+      id: "43",
+      tool_name: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      content: "",
+      artifacts: [artifact],
+      botProjection: parseBotProjection({
+        agent: "DigitalDesignAgent",
+        status: "SUCCEEDED",
+        report: { state: "degraded", degraded: true, source_artifact_count: 2 },
+        report_warning_codes: ["report_synthesis_failed"],
+        result_archive_v1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "ready",
+          revision: 1,
+          name: artifact.name,
+          size_bytes: 24,
+          error_code: null,
+          retryable: false,
+        },
+      }),
+    });
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    await wrapper.get('[data-test="result-archive-download"]').trigger("click");
+    expect(wrapper.emitted("download-result-archive")).toEqual([[artifact]]);
+    expect(wrapper.text()).toContain("Scientific report unavailable");
+    wrapper.unmount();
+  });
   const lifecycle = (
     phase: AgentTaskLifecycle["phase"]
   ): AgentTaskLifecycle => ({

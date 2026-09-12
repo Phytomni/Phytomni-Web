@@ -237,19 +237,33 @@ export function useRemoteAgentLifecycle(options: {
         options.run.state.value.messageId,
         options.run.state.value.phase,
         options.run.state.value.delivery?.status,
+        options.run.state.value.delivery?.revision,
         options.run.state.value.projection?.runId,
         options.run.state.value.dialogueId ?? options.dialogueId,
       ] as const,
-    ([messageId, phase, deliveryStatus, runId, dialogueId]) => {
+    ([
+      messageId,
+      phase,
+      deliveryStatus,
+      deliveryRevision,
+      runId,
+      dialogueId,
+    ]) => {
       const rowId = positiveRowId(messageId);
       if (!rowId) {
         stopTracking();
         return;
       }
+      const current = lifecycle.snapshots.value[rowId];
+      const archiveRetry =
+        current?.terminal &&
+        deliveryStatus === "pending" &&
+        (deliveryRevision ?? -1) > (current.delivery?.revision ?? -1);
       if (
         trackedRowId.value === rowId &&
         trackedRunId === (runId ?? null) &&
-        trackedDialogueId === dialogueId
+        trackedDialogueId === dialogueId &&
+        !archiveRetry
       ) {
         return;
       }

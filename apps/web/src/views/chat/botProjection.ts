@@ -11,6 +11,7 @@ import {
   decodeAgentResultDelivery,
   type AgentResultDelivery,
 } from "@/api/types";
+import { isApprovedReportText } from "./utils/valid-report-ledger";
 
 export const MAX_BOT_RUN_ID_LENGTH = 128;
 export const MAX_BOT_AGENT_LENGTH = 64;
@@ -31,6 +32,33 @@ export const MAX_BOT_INTEROP_STATUS_LENGTH = 16;
 export const MAX_BOT_INTEROP_TARGET_ID_LENGTH = 64;
 export const MAX_BOT_INTEROP_KIND_LENGTH = 8;
 export const MAX_BOT_INTEROP_CODE_LENGTH = 32;
+export const MAX_BOT_REPORT_WARNINGS = 64;
+
+export interface BotReport {
+  state: "none" | "intermediate" | "final" | "degraded";
+  degraded: boolean;
+  sourceArtifactCount: number;
+}
+
+export const BOT_REPORT_WARNING_CODES = [
+  "report_artifact_count_capped",
+  "report_context_truncated",
+  "report_artifact_size_exceeded",
+  "report_artifact_read_failed",
+  "report_artifact_empty",
+  "report_no_scientific_text",
+  "report_synthesis_failed",
+  "deep_genome_report_degraded",
+] as const;
+export type BotReportWarningCode = (typeof BOT_REPORT_WARNING_CODES)[number];
+export function isBotReportWarningCode(
+  value: unknown
+): value is BotReportWarningCode {
+  return (
+    typeof value === "string" &&
+    BOT_REPORT_WARNING_CODES.some((code) => code === value)
+  );
+}
 
 export type BotRunStatus =
   | "RUNNING"
@@ -107,6 +135,8 @@ export interface BotRunProjection {
   reportCompleteness: BotReportCompleteness;
   reportRevision: number;
   reportUpdatedAt: string | null;
+  report?: BotReport;
+  reportWarningCodes?: BotReportWarningCode[];
   intermediateReport: string;
   finalReport: string;
   progress: BotProgress;
@@ -428,6 +458,50 @@ function parseMarkdown(value: unknown, field: string): string {
       allowLineBreaks: true,
     }) ?? ""
   );
+}
+
+function parseReport(value: unknown): BotReport | undefined {
+  if (value === undefined) return undefined;
+  if (!isJsonRecord(value)) error("report", "must be an object");
+  const { state, degraded } = value;
+  if (
+    state !== "none" &&
+    state !== "intermediate" &&
+    state !== "final" &&
+    state !== "degraded"
+  ) {
+    error("report.state", "unsupported value");
+  }
+  if (typeof degraded !== "boolean")
+    error("report.degraded", "must be a boolean");
+  const count = readField(
+    [value],
+    ["source_artifact_count", "sourceArtifactCount"]
+  );
+  if (
+    typeof count !== "number" ||
+    !Number.isSafeInteger(count) ||
+    count < 0 ||
+    count > MAX_BOT_PROGRESS_COUNTER
+  ) {
+    error(
+      "report.source_artifact_count",
+      "must be a bounded non-negative integer"
+    );
+  }
+  return { state, degraded, sourceArtifactCount: count };
+}
+
+function parseReportWarningCodes(
+  value: unknown
+): BotReportWarningCode[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_BOT_REPORT_WARNINGS) {
+    error("report_warning_codes", "must be a bounded array");
+  }
+  if (value.some((entry) => typeof entry !== "string"))
+    error("report_warning_codes", "must contain strings");
+  return [...new Set(value.filter(isBotReportWarningCode))];
 }
 
 function parseUpdatedAt(value: unknown): string | null {
@@ -757,28 +831,41 @@ export function parseBotProjection(input: unknown): BotRunProjection {
     "agent",
     MAX_BOT_AGENT_LENGTH
   );
-  const intermediateValue = parseMarkdown(
+  const intermediateCandidate = parseMarkdown(
     readField(sources, ["intermediate_report", "intermediateReport"]),
     "intermediate_report"
   );
-  const finalValue = parseMarkdown(
+  const finalCandidate = parseMarkdown(
     readField(sources, ["final_report", "finalReport"]),
     "final_report"
   );
   const status = parseStatus(readField(sources, ["status"]));
-  const answer = parseMarkdown(readField(sources, ["answer"]), "answer");
+  const report = parseReport(readField(sources, ["report"]));
+  const reportStage = parseEnum(
+    readField(sources, ["report_stage", "reportStage"]),
+    "report_stage",
+    REPORT_STAGES
+  );
+  const answerIsFinal = report
+    ? report.state === "final"
+    : reportStage === "final";
+  const valid = (value: string) =>
+    isApprovedReportText(agentValue ?? "", value) ? value : "";
+  const intermediateValue = valid(intermediateCandidate);
+  const finalValue = valid(finalCandidate);
+  const answer = valid(parseMarkdown(readField(sources, ["answer"]), "answer"));
   const hasExplicitReport =
     intermediateValue.trim() !== "" || finalValue.trim() !== "";
   const reportPresentation =
     hasExplicitReport || ANSWER_REPORT_FALLBACK_AGENTS.has(agentValue ?? "");
   const intermediateReport = hasExplicitReport
     ? intermediateValue
-    : reportPresentation && status !== "SUCCEEDED"
+    : reportPresentation && !answerIsFinal
       ? answer
       : "";
   const finalReport = hasExplicitReport
     ? finalValue
-    : reportPresentation && status === "SUCCEEDED"
+    : reportPresentation && answerIsFinal
       ? answer
       : "";
   const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
@@ -808,11 +895,11 @@ export function parseBotProjection(input: unknown): BotRunProjection {
       WORK_STAGES
     ),
     reportPresentation,
-    reportStage: parseEnum(
-      readField(sources, ["report_stage", "reportStage"]),
-      "report_stage",
-      REPORT_STAGES
+    report,
+    reportWarningCodes: parseReportWarningCodes(
+      readField(sources, ["report_warning_codes", "reportWarningCodes"])
     ),
+    reportStage,
     reportCompleteness: parseEnum(
       readField(sources, ["report_completeness", "reportCompleteness"]),
       "report_completeness",
@@ -864,7 +951,9 @@ export function parseBotProjection(input: unknown): BotRunProjection {
 
 /** Return final Markdown when present, otherwise the latest intermediate text. */
 export function visibleBotReport(projection: BotRunProjection): string {
-  return projection.finalReport.trim() !== ""
+  return isApprovedReportText(projection.agent, projection.finalReport)
     ? projection.finalReport
-    : projection.intermediateReport;
+    : isApprovedReportText(projection.agent, projection.intermediateReport)
+      ? projection.intermediateReport
+      : "";
 }
