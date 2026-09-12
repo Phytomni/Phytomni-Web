@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -146,6 +147,50 @@ func TestShapeAnswer_DataObjectRows(t *testing.T) {
 	}
 	if len(parsed.Rows) != 1 || parsed.Rows[0][0] != "g1" {
 		t.Errorf("object rows not projected positionally: %s", got)
+	}
+}
+
+func TestShapeAnswer_DataTitle(t *testing.T) {
+	f := &Formatted{Tabular: json.RawMessage(`{"title":"Proteins interacting with Os04g0269100","headers":["gene"],"rows":[["g1"]]}`)}
+	got, err := ShapeAnswer("data", "1 row x 1 column", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Title   string          `json:"title"`
+		Headers []string        `json:"headers"`
+		Rows    [][]interface{} `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+	if parsed.Title != "Proteins interacting with Os04g0269100" {
+		t.Errorf("title = %q from %s", parsed.Title, got)
+	}
+	if len(parsed.Headers) != 1 || parsed.Rows[0][0] != "g1" {
+		t.Errorf("table body dropped: %s", got)
+	}
+}
+
+func TestShapeAnswer_DataBlankTitleOmitted(t *testing.T) {
+	f := &Formatted{Tabular: json.RawMessage(`{"title":"  ","headers":["gene"],"rows":[]}`)}
+	got, err := ShapeAnswer("data", "0 rows", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, `"title"`) {
+		t.Errorf("blank title leaked: %s", got)
+	}
+}
+
+func TestShapeAnswer_DataAnswerTextIsNotTitle(t *testing.T) {
+	f := &Formatted{Tabular: json.RawMessage(`{"headers":["gene"],"rows":[["g1"]]}`)}
+	got, err := ShapeAnswer("data", "1 row x 1 column", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, `"title"`) {
+		t.Errorf("count sentence leaked as title: %s", got)
 	}
 }
 

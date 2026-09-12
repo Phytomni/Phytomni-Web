@@ -9,8 +9,16 @@ import (
 )
 
 type TableData struct {
+	Title   string     `json:"title,omitempty"`
 	Headers []string   `json:"headers"`
 	Rows    [][]string `json:"rows"`
+}
+
+func tableExportTitle(data TableData) string {
+	if title := strings.TrimSpace(data.Title); title != "" {
+		return title
+	}
+	return "Data results"
 }
 
 func ExportToExcel(data TableData) ([]byte, error) {
@@ -25,8 +33,8 @@ func ExportToPdf(data TableData) ([]byte, error) {
 	pdf.AddPage()
 
 	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(40, 10, "Homology Gene Results")
-	pdf.Ln(12)
+	pdf.CellFormat(190, 10, tableExportTitle(data), "", 1, "L", false, 0, "")
+	pdf.Ln(2)
 
 	pdf.SetFont("Arial", "", 12)
 
@@ -56,7 +64,7 @@ func ExportToPdf(data TableData) ([]byte, error) {
 func ExportToMarkdown(data TableData) ([]byte, error) {
 	var builder strings.Builder
 
-	builder.WriteString("# Homology Gene Results\n\n")
+	builder.WriteString("# " + tableExportTitle(data) + "\n\n")
 
 	builder.WriteString("| " + strings.Join(data.Headers, " | ") + " |\n")
 

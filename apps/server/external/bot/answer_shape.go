@@ -58,27 +58,36 @@ func citedAnswer(answerText string, f *Formatted) (string, error) {
 	return NormalizeCitedAnswer(string(out))
 }
 
-// tableAnswer emits {"headers": [...], "rows": [[...]]}. The table lives in
-// Bot's formatted.tabular; rows are normalized to positional arrays aligned to
-// headers (the Web app indexes row[i] by header position). A missing or
-// undecodable tabular still yields valid JSON, because the Web app's Data history
-// branch has no try/catch and must never throw.
+// tableAnswer emits {"headers": [...], "rows": [[...]]} and, when Bot sends one,
+// an optional "title". The table lives in Bot's formatted.tabular; rows are
+// normalized to positional arrays aligned to headers (the Web app indexes
+// row[i] by header position). formatted.answer is a count sentence such as
+// "2 rows x 2 columns" and is not a caption. A missing or undecodable tabular
+// still yields valid JSON, because the Web app's Data history branch has no
+// try/catch and must never throw.
 func tableAnswer(f *Formatted) string {
 	headers := []string{}
 	rows := [][]interface{}{}
+	title := ""
 	if f != nil && len(f.Tabular) > 0 {
 		var tab struct {
+			Title   string          `json:"title"`
 			Headers []string        `json:"headers"`
 			Rows    json.RawMessage `json:"rows"`
 		}
 		if err := json.Unmarshal(f.Tabular, &tab); err == nil {
+			title = strings.TrimSpace(tab.Title)
 			if tab.Headers != nil {
 				headers = tab.Headers
 			}
 			rows = normalizeRows(tab.Rows, headers)
 		}
 	}
-	out, err := json.Marshal(map[string]interface{}{"headers": headers, "rows": rows})
+	payload := map[string]interface{}{"headers": headers, "rows": rows}
+	if title != "" {
+		payload["title"] = title
+	}
+	out, err := json.Marshal(payload)
 	if err != nil {
 		return `{"headers":[],"rows":[]}`
 	}
