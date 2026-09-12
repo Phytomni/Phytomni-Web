@@ -1430,6 +1430,19 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     );
   });
 
+  it("captions Data Agent tables from title or row count", () => {
+    const titled = mountContent({
+      ...MESSAGE_TABLE,
+      tableCaption: "Proteins interacting with Os04g0269100",
+    });
+    expect(titled.get("figcaption").text()).toBe(
+      "Proteins interacting with Os04g0269100"
+    );
+
+    const counted = mountContent({ ...MESSAGE_TABLE, tableCaption: "" });
+    expect(counted.get("figcaption").text()).toBe("2 rows");
+  });
+
   it("uses locale-reactive result image alt with one-based index", () => {
     expect(CONTENT_SOURCE).toMatch(
       /\$t\(\s*["']chat\.resultImageAlt["']\s*,\s*\{\s*index:\s*imgIndex\s*\+\s*1\s*\}\s*\)/

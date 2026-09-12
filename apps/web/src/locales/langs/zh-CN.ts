@@ -361,6 +361,7 @@ export default {
     useTool: "使用工具",
     stepResult: "步骤结果",
     resultImageAlt: "结果图 {index}",
+    tableRowCount: "{count} 条结果",
     sendFailed: "发送消息失败，请稍后重试。",
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     contextDegraded: "回答已保存。系统将在下一条消息时重建对话上下文。",

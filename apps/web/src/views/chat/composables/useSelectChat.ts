@@ -742,6 +742,7 @@ export function useSelectChat(opts: {
                       prop: header.replace(/\s+/g, "_").toLowerCase(),
                       label: header,
                     })),
+                    tableCaption: tableInput.title,
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
                     download_path: item?.download_path || "",

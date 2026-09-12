@@ -360,6 +360,7 @@ export default {
     useTool: "Use Tool",
     stepResult: "Step Result",
     resultImageAlt: "Result image {index}",
+    tableRowCount: "{count} rows",
     sendFailed: "Failed to send message, please try again later.",
     timeoutFailed:
       "The request timed out. Try narrowing your query or retry later.",

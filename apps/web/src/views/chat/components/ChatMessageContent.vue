@@ -284,24 +284,29 @@
     v-else-if="!isWaitOnlyBody && message.tableHeaders"
     class="table-response"
   >
-    <PhyTableFrame>
-      <el-table
-        :data="tableRows"
-        border
-        class="chat-data-table"
-        header-cell-class-name="chat-table-header-cell"
-        max-height="min(24rem, 55vh)"
-        style="width: 100%"
-      >
-        <el-table-column
-          v-for="header in message.tableHeaders"
-          :key="header.prop"
-          :prop="header.prop"
-          :label="humanizeTableHeaderLabel(header.label)"
-          min-width="140"
-        />
-      </el-table>
-    </PhyTableFrame>
+    <figure class="chat-data-figure">
+      <figcaption :id="'table-caption-' + index">
+        {{ tableCaptionText }}
+      </figcaption>
+      <PhyTableFrame>
+        <el-table
+          :data="tableRows"
+          border
+          class="chat-data-table"
+          header-cell-class-name="chat-table-header-cell"
+          max-height="min(24rem, 55vh)"
+          style="width: 100%"
+        >
+          <el-table-column
+            v-for="header in message.tableHeaders"
+            :key="header.prop"
+            :prop="header.prop"
+            :label="humanizeTableHeaderLabel(header.label)"
+            min-width="140"
+          />
+        </el-table>
+      </PhyTableFrame>
+    </figure>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
   <div v-else-if="!isWaitOnlyBody" class="ai-response">
@@ -426,6 +431,11 @@ const emit = defineEmits<{
 const { t, locale } = useI18n();
 
 const tableRows = computed(() => chatContentToRows(props.message.content));
+const tableCaptionText = computed(() => {
+  const titled = props.message.tableCaption?.trim();
+  if (titled) return titled;
+  return t("chat.tableRowCount", { count: tableRows.value.length });
+});
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
@@ -786,6 +796,20 @@ const shouldShowSpecializedNoData = computed(() => {
     color: var(--phy-color-text);
     font-variant-numeric: tabular-nums;
   }
+}
+
+.chat-data-figure {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-data-figure figcaption {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .gene-network-images {

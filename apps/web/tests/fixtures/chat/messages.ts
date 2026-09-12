@@ -161,6 +161,7 @@ export const MESSAGE_TABLE: ChatMessage = {
     { prop: "interact_gene_id_t1", label: "interact_gene_id_t1" },
     { prop: "interact_protein_t1", label: "interact_protein_t1" },
   ],
+  tableCaption: "Proteins interacting with Os04g0269100",
   tool_name: "DataAgent",
 };
 

@@ -47,6 +47,7 @@ export function decodeCitationDocuments(
 
 // Convert data into Element Plus Table format
 export interface TableDataInput {
+  title?: string;
   headers: readonly string[];
   rows: readonly unknown[][];
 }
@@ -63,7 +64,9 @@ export function decodeTableDataInput(value: unknown): TableDataInput {
   ) {
     return { headers: [], rows: [] };
   }
+  const title = optionalStringValue(value, "title")?.trim();
   return {
+    ...(title ? { title } : {}),
     headers,
     rows: rows.filter((item): item is unknown[] => Array.isArray(item)),
   };

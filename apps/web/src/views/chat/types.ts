@@ -89,6 +89,8 @@ export interface ChatMessage {
     prop: string;
     label: string;
   }>;
+  /** Optional Bot-provided table caption; row-count fallback is rendered in UI. */
+  tableCaption?: string;
   instantMessage?: boolean;
   /** Persisted row created_at; wait-card elapsed uses this after reload. */
   created_at?: string;
