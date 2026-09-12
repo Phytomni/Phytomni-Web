@@ -785,6 +785,17 @@ func (ps *Service) DownloadObsRenderingFile(ctx context.Context, username string
 	if err != nil {
 		return nil, "", err
 	}
+	if strings.TrimSpace(questionAgentLog.BotRunId) != "" {
+		projection, err := LoadBotRunProjection(ctx, username, questionAgentLog.Id)
+		if err != nil {
+			return nil, "", err
+		}
+		if projection.RunID == questionAgentLog.BotRunId {
+			if _, err := applyBotProjectionToHistoryRow(questionAgentLog, projection); err != nil {
+				return nil, "", err
+			}
+		}
+	}
 	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
 		FetchImage: newDocumentImageFetcher(ctx, questionAgentLog),
 		FontDir:    viper.GetString("document_export.font_dir"),

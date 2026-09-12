@@ -132,8 +132,8 @@ func TestMergeBotRunProjectionAcceptsUnversionedTerminalOverZeroRevision(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "...terminal outcome..." {
-		t.Fatalf("merged=%#v changed=%v, want SUCCEEDED with terminal report", merged, changed)
+	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != current.VisibleReport() {
+		t.Fatalf("merged=%#v changed=%v, want terminal status without unversioned science", merged, changed)
 	}
 	if merged.ReportRevision != 0 {
 		t.Fatalf("report revision=%d, want stored 0 (do not persist -1)", merged.ReportRevision)
@@ -168,8 +168,8 @@ func TestMergeBotRunProjectionAcceptsUnversionedTerminalOverPositiveRevision(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "final" || merged.ReportRevision != 5 {
-		t.Fatalf("merged=%#v changed=%v, want SUCCEEDED at stored revision 5", merged, changed)
+	if !changed || merged.Status != "SUCCEEDED" || merged.VisibleReport() != "partial" || merged.FinalReport != "" || merged.ReportRevision != 5 {
+		t.Fatalf("merged=%#v changed=%v, want SUCCEEDED retaining revision 5 science", merged, changed)
 	}
 }
 

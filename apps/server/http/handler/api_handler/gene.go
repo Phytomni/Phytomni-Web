@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path"
 	"phytomni-server/common"
+	"phytomni-server/common/document_format/mdoc"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
@@ -234,6 +235,14 @@ func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
 	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, username, id, format)
 	if errors.Is(err, api_service.ErrRenderingDownloadNotFound) {
 		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "conversation_artifact.not_found")})
+		return
+	}
+	if errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    http.StatusServiceUnavailable,
+			"message": i18n.T(ctx, "conversation_artifact.unavailable"),
+			"reason":  "academic_report_fonts_unavailable",
+		})
 		return
 	}
 	if err != nil {

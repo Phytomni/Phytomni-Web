@@ -40,6 +40,8 @@ type persistedProjection struct {
 	ReportUpdatedAt      *time.Time                    `json:"report_updated_at,omitempty"`
 	IntermediateReport   string                        `json:"intermediate_report,omitempty"`
 	FinalReport          string                        `json:"final_report,omitempty"`
+	Report               json.RawMessage               `json:"report,omitempty"`
+	ReportWarningCodes   *[]string                     `json:"report_warning_codes,omitempty"`
 	Progress             persistedProjectionProgress   `json:"progress,omitempty"`
 	Degraded             bool                          `json:"degraded,omitempty"`
 	DegradedReason       string                        `json:"degraded_reason,omitempty"`
@@ -98,6 +100,9 @@ type botProjectionRunRow struct {
 // fields never erase already-visible content. An unversioned terminal
 // snapshot may still close a non-terminal ledger.
 func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection, bool, error) {
+	original := current
+	current = normalizeProjectionReports(current)
+	incoming = normalizeProjectionReports(incoming)
 	if current.RunID != "" && incoming.RunID != "" && current.RunID != incoming.RunID {
 		return BotRunProjection{}, false, errors.New("bot projection run id mismatch")
 	}
@@ -148,11 +153,32 @@ func MergeBotRunProjection(current, incoming BotRunProjection) (BotRunProjection
 		if newer {
 			merged.ReportRevision = incoming.ReportRevision
 		}
+	} else if incoming.ReportRevision < 0 && isProjectionTerminalStatus(incoming.Status) {
+		// An unversioned execution outcome can settle status, but cannot
+		// replace scientific facts already bound to a numbered revision.
+		merged.Status = mergeProjectionStatus(merged.Status, incoming.Status)
 	}
 	if err := mergeProjectionDelivery(&merged, current, incoming); err != nil {
 		return BotRunProjection{}, false, err
 	}
-	return merged, !reflect.DeepEqual(merged, current), nil
+	if !reflect.DeepEqual(merged.Delivery, current.Delivery) ||
+		(!merged.ResultArchiveV1 && projectionMetadataMergeable(current, incoming)) {
+		// Roots belong to the accepted delivery transition, not the report's
+		// revision. Ignored delivery snapshots must not replace them.
+		if len(incoming.Artifacts.Directories) > 0 {
+			merged.Artifacts.Directories = append([]string(nil), incoming.Artifacts.Directories...)
+		}
+		if len(incoming.Artifacts.OutputDirs) > 0 {
+			merged.Artifacts.OutputDirs = append([]string(nil), incoming.Artifacts.OutputDirs...)
+		}
+		if len(incoming.Artifacts.Paths) > 0 {
+			merged.Artifacts.Paths = append([]string(nil), incoming.Artifacts.Paths...)
+		}
+		if incoming.OutputDirectoryCount > merged.OutputDirectoryCount {
+			merged.OutputDirectoryCount = incoming.OutputDirectoryCount
+		}
+	}
+	return merged, !reflect.DeepEqual(merged, original), nil
 }
 
 func mergeProjectionDelivery(dst *BotRunProjection, current, incoming BotRunProjection) error {
@@ -465,6 +491,12 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if strings.TrimSpace(incoming.FinalReport) != "" {
 		dst.FinalReport = incoming.FinalReport
 	}
+	if incoming.Report != nil {
+		dst.Report = cloneProjectionReport(incoming.Report)
+	}
+	if incoming.ReportWarningCodes != nil {
+		dst.ReportWarningCodes = cloneReportWarningCodes(incoming.ReportWarningCodes)
+	}
 	mergeProjectionProgress(&dst.Progress, incoming.Progress)
 	// A true degradation marker is sticky. A false value in a partial/older
 	// snapshot is a zero-value omission, not permission to erase the marker.
@@ -480,18 +512,6 @@ func mergeProjectionMetadata(dst *BotRunProjection, incoming BotRunProjection) {
 	if len(incoming.Failures) > 0 {
 		dst.Failures = append([]string(nil), incoming.Failures...)
 	}
-	if len(incoming.Artifacts.Directories) > 0 {
-		dst.Artifacts.Directories = append([]string(nil), incoming.Artifacts.Directories...)
-	}
-	if len(incoming.Artifacts.OutputDirs) > 0 {
-		dst.Artifacts.OutputDirs = append([]string(nil), incoming.Artifacts.OutputDirs...)
-	}
-	if len(incoming.Artifacts.Paths) > 0 {
-		dst.Artifacts.Paths = append([]string(nil), incoming.Artifacts.Paths...)
-	}
-	if incoming.OutputDirectoryCount > dst.OutputDirectoryCount {
-		dst.OutputDirectoryCount = incoming.OutputDirectoryCount
-	}
 }
 
 func isProjectionTerminalStatus(status string) bool {
@@ -503,17 +523,10 @@ func isProjectionTerminalStatus(status string) bool {
 	}
 }
 
-// projectionMetadataMergeable reports whether incoming may update status and
-// report text. Non-negative revisions stay monotonic. A missing revision (-1)
-// may still close an in-flight ledger when the snapshot is scientifically
-// terminal, without persisting -1 over a stored non-negative revision.
+// Scientific content and metadata share the report revision. Execution status
+// and delivery may settle independently of this ordering.
 func projectionMetadataMergeable(current, incoming BotRunProjection) bool {
-	if incoming.ReportRevision >= current.ReportRevision {
-		return true
-	}
-	return incoming.ReportRevision < 0 &&
-		!isProjectionTerminalStatus(current.Status) &&
-		isProjectionTerminalStatus(incoming.Status)
+	return incoming.ReportRevision >= current.ReportRevision
 }
 
 func isProjectionFailureStatus(status string) bool {
@@ -574,6 +587,8 @@ func cloneBotRunProjection(in BotRunProjection) BotRunProjection {
 	out.Artifacts.OutputDirs = append([]string(nil), in.Artifacts.OutputDirs...)
 	out.Artifacts.Paths = append([]string(nil), in.Artifacts.Paths...)
 	out.Delivery = cloneProjectionDelivery(in.Delivery)
+	out.Report = cloneProjectionReport(in.Report)
+	out.ReportWarningCodes = cloneReportWarningCodes(in.ReportWarningCodes)
 	out.RawPayload = append([]byte(nil), in.RawPayload...)
 	if in.InterOp != nil {
 		out.InterOp = interopProvenancePtr(*in.InterOp)
@@ -594,12 +609,23 @@ func marshalPersistedProjection(projection BotRunProjection) (string, error) {
 }
 
 func marshalPersistedProjectionWithContext(projection BotRunProjection, privateContext *persistedConversationContext) (string, error) {
-	projection = normalizeCompletedReviewProjection(projection)
+	projection = normalizeCompletedReviewProjection(normalizeProjectionReports(projection))
 	workStage, err := normalizeProjectionWorkStage(projection.WorkStage)
 	if err != nil {
 		return "", err
 	}
 	interop, err := normalizeInteropProvenance(projection.InterOp)
+	if err != nil {
+		return "", err
+	}
+	var reportJSON json.RawMessage
+	if projection.Report != nil {
+		reportJSON, err = json.Marshal(projection.Report)
+		if err != nil {
+			return "", err
+		}
+	}
+	metadata, err := decodeStoredReportMetadata(reportJSON, projection.ReportWarningCodes)
 	if err != nil {
 		return "", err
 	}
@@ -616,6 +642,8 @@ func marshalPersistedProjectionWithContext(projection BotRunProjection, privateC
 		ReportUpdatedAt:    cloneProjectionTime(projection.ReportUpdatedAt),
 		IntermediateReport: projection.IntermediateReport,
 		FinalReport:        projection.FinalReport,
+		Report:             reportJSON,
+		ReportWarningCodes: persistedReportWarningCodes(metadata.ReportWarningCodes),
 		Progress: persistedProjectionProgress{
 			Completed:       projection.Progress.Completed,
 			Total:           projection.Progress.Total,
@@ -653,6 +681,14 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
 		return BotRunProjection{}, nil, fmt.Errorf("decode bot projection: %w", err)
 	}
+	var codes []string
+	if stored.ReportWarningCodes != nil {
+		codes = *stored.ReportWarningCodes
+	}
+	metadata, err := decodeStoredReportMetadata(stored.Report, codes)
+	if err != nil {
+		return BotRunProjection{}, nil, err
+	}
 	interop, err := normalizeInteropProvenance(stored.InterOp)
 	if err != nil {
 		return BotRunProjection{}, nil, err
@@ -674,6 +710,8 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 		ReportUpdatedAt:    cloneProjectionTime(stored.ReportUpdatedAt),
 		IntermediateReport: stored.IntermediateReport,
 		FinalReport:        stored.FinalReport,
+		Report:             metadata.Report,
+		ReportWarningCodes: metadata.ReportWarningCodes,
 		Progress: ProjectionProgress{
 			Completed:       stored.Progress.Completed,
 			Total:           stored.Progress.Total,
@@ -696,7 +734,7 @@ func unmarshalPersistedProjectionWithContext(raw string) (BotRunProjection, *per
 		DegradedInterop:      stored.DegradedInterop,
 		InterOp:              interop,
 	}
-	return normalizeCompletedReviewProjection(projection), stored.ConversationContext, nil
+	return normalizeCompletedReviewProjection(normalizeProjectionReports(projection)), stored.ConversationContext, nil
 }
 
 func persistProjectionDelivery(in *ProjectionDelivery) *persistedProjectionDelivery {

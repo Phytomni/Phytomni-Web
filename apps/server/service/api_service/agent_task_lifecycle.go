@@ -290,7 +290,7 @@ func lifecycleArtifactSummary(row *model.QuestionAgentLog, projection BotRunProj
 	return AgentTaskArtifactSummaryDTO{
 		ImageCount:           imageCount,
 		OutputDirectoryCount: directoryCount,
-		HasReport:            strings.TrimSpace(projection.VisibleReport()) != "" || strings.TrimSpace(row.Answer) != "",
+		HasReport:            projection.VisibleReport() != "" || validStoredReportAnswer(projection.Agent, row.Answer),
 	}
 }
 

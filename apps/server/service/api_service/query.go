@@ -1988,6 +1988,7 @@ func IsDedicatedAgentProductTool(tool string) bool {
 // QueryData is the response payload the Web app reads off response.data. The
 // content fields are relayed from Bot; id/reaction are Web-owned.
 type QueryData struct {
+	Projection        map[string]interface{}     `json:"projection,omitempty"`
 	Id                int64                      `json:"id"`
 	ToolName          string                     `json:"tool_name"`
 	Answer            string                     `json:"answer"`
@@ -2033,6 +2034,8 @@ func (ps *Service) decorateConversationQueryData(
 	if projectionErr == nil {
 		out.ResultArchiveV1 = projection.ResultArchiveV1
 		out.Delivery = agentTaskDeliveryDTO(projection)
+		out.Projection = publicBotProjection(projection)
+		out.ReportRevision = projection.ReportRevision
 	} else if !errors.Is(projectionErr, ErrBotProjectionNotFound) {
 		return projectionErr
 	}
@@ -2859,7 +2862,7 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 			return nil, v1SubmissionError(ctx, username, submission, err)
 		}
 		routeRevision := metadataReportRevision(formattedMetadata(resp.Result.Formatted))
-		botSubmission.ReportRevision = responseReportRevisionOrDefault(-1, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
+		botSubmission.ReportRevision = responseReportRevisionOrDefault(botSubmission.ReportRevision, resp.ReportRevision, resp.Result.ReportRevision, routeRevision)
 		botSubmission.TrackingDegraded = botSubmission.TrackingDegraded || resp.DegradedTracking
 		submissionProjection = &botSubmission
 		contextStage = resp.ConversationContext
@@ -3089,7 +3092,7 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		out.BotRunID = botRunID
 		out.TrackingDegraded = resp.DegradedTracking
 		out.ReportRevision = responseReportRevision(resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
-		if interopAgent(slug) {
+		if interopAgent(slug) || slug == "deep_genome" {
 			botSubmission, projectionErr := DecodeAgentRunSubmission(resp)
 			if projectionErr != nil {
 				var fieldErr *ProjectionDecodeError
@@ -3098,7 +3101,8 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 				}
 				return nil, v1SubmissionError(ctx, username, submission, projectionErr)
 			}
-			botSubmission.ReportRevision = out.ReportRevision
+			botSubmission.ReportRevision = responseReportRevisionOrDefault(botSubmission.ReportRevision, resp.ReportRevision, resp.Result.ReportRevision, metadataReportRevision(formattedMetadata(resp.Result.Formatted)))
+			out.ReportRevision = botSubmission.ReportRevision
 			submissionProjection = &botSubmission
 			out.TrackingDegraded = botSubmission.TrackingDegraded
 		}
@@ -3343,6 +3347,14 @@ func (ps *Service) completeDurableTurn(ctx context.Context, turn durableQueryTur
 		if err := SaveBotRunProjection(ctx, username, id, *submissionProjection); err != nil {
 			return nil, err
 		}
+		storedProjection, err := LoadBotRunProjection(ctx, username, id)
+		if err != nil {
+			return nil, err
+		}
+		out.Projection = publicBotProjection(storedProjection)
+		out.ReportRevision = storedProjection.ReportRevision
+		out.ResultArchiveV1 = storedProjection.ResultArchiveV1
+		out.Delivery = agentTaskDeliveryDTO(storedProjection)
 	}
 	if err := persistConversationActiveA2UI(ctx, username, id, out); err != nil {
 		_ = failDetachedDurableTurn(ctx, username, id)
@@ -3885,6 +3897,25 @@ func (ps *Service) applyBotRunProjection(ctx context.Context, row *model.Questio
 		if err != nil {
 			return err
 		}
+		// Blank/stale snapshots may retain the winning body without supplying
+		// its references. Keep the bibliography already bound to that exact body.
+		formatted, _, _ := rxBot.ParseRunFormatted(rec.Result)
+		matchingSnapshot := projectionMetadataMergeable(storedProjection, projection) && projection.VisibleReport() == storedProjection.VisibleReport()
+		if isCitedReportAgent(storedProjection.Agent) && (!matchingSnapshot || formatted == nil || len(bytes.TrimSpace(formatted.References)) == 0 || bytes.Equal(bytes.TrimSpace(formatted.References), []byte("null"))) {
+			var durable model.QuestionAgentLog
+			read := model.DB(ctx).Select("answer, bot_run_id, bot_report_revision").
+				Where("id = ? AND user_name = ? AND bot_run_id = ?", row.Id, row.UserName, row.BotRunId).First(&durable)
+			if read.Error != nil {
+				return read.Error
+			}
+			if durable.BotReportRevision != storedProjection.ReportRevision {
+				continue
+			}
+			if _, err := applyBotProjectionToHistoryRow(&durable, storedProjection); err != nil {
+				return err
+			}
+			updates["answer"] = durable.Answer
+		}
 		if len(updates) == 0 {
 			return nil
 		}
@@ -3916,7 +3947,15 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 	}
 
 	visible := strings.TrimSpace(stored.VisibleReport())
-	if visible != "" {
+	if stored.Agent == "data" {
+		if projectionMetadataMergeable(stored, incoming) && hasFormattedTable(formatted) {
+			answer, err := rxBot.ShapeAnswer(stored.Agent, "", formatted)
+			if err != nil {
+				return nil, err
+			}
+			updates["answer"] = answer
+		}
+	} else if visible != "" {
 		if strings.TrimSpace(incoming.VisibleReport()) != visible {
 			hasFormatted = false
 		}
@@ -3931,9 +3970,9 @@ func botProjectionLegacyUpdates(incoming, stored BotRunProjection, rec *rxBot.Ru
 		if shaped != "" {
 			updates["answer"] = shaped
 		}
-		if hasFormatted && len(formatted.FollowUpQuestions) > 0 && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "" && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "null" {
-			updates["follow_up_questions"] = string(formatted.FollowUpQuestions)
-		}
+	}
+	if _, answerUpdated := updates["answer"]; answerUpdated && hasFormatted && len(formatted.FollowUpQuestions) > 0 && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "" && strings.TrimSpace(string(formatted.FollowUpQuestions)) != "null" {
+		updates["follow_up_questions"] = string(formatted.FollowUpQuestions)
 	}
 
 	if !stored.ResultArchiveV1 {

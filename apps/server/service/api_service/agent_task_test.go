@@ -1004,8 +1004,8 @@ func TestSyncBotRuns_UnversionedDesignSuccessClosesZeroRevisionLedger(t *testing
 	if status != "SUCCEEDED" {
 		t.Errorf("status = %q, want SUCCEEDED", status)
 	}
-	if !strings.Contains(answer, "...terminal outcome...") {
-		t.Errorf("answer = %q, want terminal report", answer)
+	if answer != "" {
+		t.Errorf("answer = %q, unversioned report must not replace numbered science", answer)
 	}
 	var revision int64
 	if err := gdb.Raw(`SELECT bot_report_revision FROM question_agent_logs WHERE id = 55`).Scan(&revision).Error; err != nil {

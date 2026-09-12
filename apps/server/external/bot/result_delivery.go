@@ -76,13 +76,15 @@ type RunDelivery struct {
 }
 
 // RunExecutionDelivery is the public subset retained from result.execution.
-// Other execution fields remain outside the Web projection.
+// Raw warnings and diagnostics remain outside the Web projection.
 type RunExecutionDelivery struct {
 	OutputDirs           []string
 	OutputDirectoryCount int
 	TrackingDegraded     bool
 	Delivery             *RunDelivery
 	ResultArchiveV1      bool
+	Report               *RunReport
+	ReportWarningCodes   []string
 }
 
 type runDeliveryWire struct {
@@ -107,7 +109,7 @@ type runArchiveWire struct {
 }
 
 // DecodeRunExecutionDelivery decodes only the canonical output roots, tracking
-// state, and delivery marker from result.execution.
+// state, delivery marker, and scientific report facts from result.execution.
 func DecodeRunExecutionDelivery(raw json.RawMessage, agent string) (RunExecutionDelivery, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -120,6 +122,8 @@ func DecodeRunExecutionDelivery(raw json.RawMessage, agent string) (RunExecution
 		OutputDirs json.RawMessage `json:"output_dirs"`
 		Tracking   json.RawMessage `json:"tracking"`
 		Delivery   json.RawMessage `json:"delivery"`
+		Report     json.RawMessage `json:"report"`
+		Warnings   json.RawMessage `json:"warnings"`
 	}
 	if err := json.Unmarshal(trimmed, &wire); err != nil {
 		return RunExecutionDelivery{}, fmt.Errorf("execution must be an object: %w", err)
@@ -132,10 +136,20 @@ func DecodeRunExecutionDelivery(raw json.RawMessage, agent string) (RunExecution
 	if err != nil {
 		return RunExecutionDelivery{}, err
 	}
+	report, err := decodeExecutionReport(wire.Report)
+	if err != nil {
+		return RunExecutionDelivery{}, err
+	}
+	warningCodes, err := decodeReportWarningCodes(wire.Warnings)
+	if err != nil {
+		return RunExecutionDelivery{}, err
+	}
 	projection := RunExecutionDelivery{
 		OutputDirs:           outputDirs,
 		OutputDirectoryCount: outputDirectoryCount,
 		TrackingDegraded:     trackingDegraded,
+		Report:               report,
+		ReportWarningCodes:   warningCodes,
 	}
 	deliveryRaw := bytes.TrimSpace(wire.Delivery)
 	if len(deliveryRaw) == 0 || bytes.Equal(deliveryRaw, []byte("null")) {

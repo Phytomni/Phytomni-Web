@@ -154,6 +154,7 @@ func (ps *Service) QueryList(ctx context.Context, username string) ([]*common.Qu
 
 type ConversationHistoryRow struct {
 	*model.QuestionAgentLog
+	Projection      map[string]interface{}     `json:"projection,omitempty"`
 	Artifacts       []ConversationArtifactLink `json:"artifacts,omitempty"`
 	Attachments     []rxBot.AssetAttachmentRef `json:"attachments,omitempty"`
 	ResultArchiveV1 bool                       `json:"result_archive_v1,omitempty"`
@@ -186,6 +187,7 @@ func (ps *Service) AnswerCheck(ctx context.Context, username string, dialogueId 
 			return nil, projectionErr
 		}
 		historyRow.ResultArchiveV1 = projection.ResultArchiveV1
+		historyRow.Projection = publicBotProjection(projection)
 		historyRow.Delivery = agentTaskDeliveryDTO(projection)
 		if projection.ResultArchiveV1 || len(projection.Artifacts.Paths) > 0 {
 			links, linkErr := ps.conversationArtifactLinks(ctx, username, dialogueId, row.Id)
@@ -610,9 +612,16 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 	if err := validateCitationReferencesForAgent(projection.Agent, formatted); err != nil {
 		return false, err
 	}
-	if report := projection.VisibleReport(); strings.TrimSpace(report) != "" {
-		citedAgent := projection.Agent == "knowledge" || projection.Agent == "review" ||
-			projection.Agent == "brief_gene" || projection.Agent == "deep_genome"
+	if projection.Agent == "data" {
+		if hasFormattedTable(formatted) {
+			answer, err := rxBot.ShapeAnswer(projection.Agent, "", formatted)
+			if err != nil {
+				return false, err
+			}
+			row.Answer = answer
+		}
+	} else if report := projection.VisibleReport(); strings.TrimSpace(report) != "" {
+		citedAgent := isCitedReportAgent(projection.Agent)
 		preserveDurableCited := false
 		if formatted == nil && citedAgent && strings.TrimSpace(row.BotRunId) == strings.TrimSpace(projection.RunID) &&
 			row.BotReportRevision == projection.ReportRevision {
@@ -623,12 +632,25 @@ func applyBotProjectionToHistoryRowWithFormatted(row *model.QuestionAgentLog, pr
 			}
 		}
 		if !preserveDurableCited {
+			// A same-revision historical placeholder may still own the report's
+			// bibliography. Recover only that binding, never a different body.
+			if formatted == nil && citedAgent && row.BotRunId == projection.RunID && row.BotReportRevision == projection.ReportRevision {
+				var previous struct {
+					Content *string         `json:"content"`
+					DocList json.RawMessage `json:"doc_list"`
+				}
+				if json.Unmarshal([]byte(row.Answer), &previous) == nil && previous.Content != nil && !validReportText(projection.Agent, *previous.Content) {
+					formatted = &rxBot.Formatted{References: previous.DocList}
+				}
+			}
 			answer, err := rxBot.ShapeAnswer(projection.Agent, report, formatted)
 			if err != nil {
 				return false, err
 			}
 			row.Answer = answer
 		}
+	} else if !validStoredReportAnswer(projection.Agent, row.Answer) {
+		row.Answer = ""
 	}
 	if strings.TrimSpace(projection.Status) != "" {
 		row.Status = projection.Status

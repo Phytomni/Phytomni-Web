@@ -1,0 +1,88 @@
+{
+  "execution": {
+    "artifacts": [],
+    "delivery": null,
+    "diagnostics": [
+      {
+        "code": "deep_genome_report_degraded",
+        "retryable": false,
+        "stage": "deep_genome"
+      },
+      {
+        "code": "run_not_succeeded",
+        "retryable": false,
+        "stage": "reconcile"
+      }
+    ],
+    "output_dirs": [],
+    "report": {
+      "degraded": true,
+      "source_artifact_count": 0,
+      "state": "intermediate"
+    },
+    "tasks": [
+      {
+        "accepted": true,
+        "id": "task-1",
+        "status": "failed"
+      }
+    ],
+    "tracking": {
+      "degraded": true
+    },
+    "warnings": [
+      {
+        "code": "deep_genome_report_degraded",
+        "retryable": false,
+        "stage": "deep_genome"
+      },
+      {
+        "code": "run_not_succeeded",
+        "retryable": false,
+        "stage": "reconcile"
+      }
+    ]
+  },
+  "formatted": {
+    "answer": "# DeepGenome Report\n\n## BriefGene\n\nBriefGene\n\n## Analysis Progress\n- Planning complete: true\n- BriefGene: succeeded\n- Total: 12\n- Planned: 0\n- Submitted: 0\n- Pending: 0\n- Running: 0\n- Succeeded: 12\n- Failed: 0\n- Cancelled: 0\n- Timed Out: 0\n\n## Evolution Analysis\n\nEvidence for evolution_analysis <sup>1</sup>.\n\n## Gene Expression Tissues\n\nEvidence for gene_expression_tissues <sup>1</sup>.\n\n## Gene Expression Cultivars\n\nEvidence for gene_expression_cultivars <sup>1</sup>.\n\n## Gene Expression Treatments\n\nEvidence for gene_expression_treatments <sup>1</sup>.\n\n## Gene Expression Genotypes\n\nEvidence for gene_expression_genotypes <sup>1</sup>.\n\n## Single Cell Analysis\n\nEvidence for single_cell_analysis <sup>1</sup>.\n\n## Promoter Analysis\n\nEvidence for promoter_analysis <sup>1</sup>.\n\n## Smep Analysis\n\nEvidence for smep_analysis <sup>1</sup>.\n\n## Smoc Analysis\n\nEvidence for smoc_analysis <sup>1</sup>.\n\n## Protein Structure Analysis\n\nEvidence for protein_structure_analysis <sup>1</sup>.\n\n## Digital Design\n\n### Promoter Design\n\nEvidence for promoter_design <sup>1</sup>.\n\n### Protein Design\n\nEvidence for protein_design <sup>1</sup>.",
+    "follow_up_questions": [],
+    "metadata": {
+      "deep_genome": {
+        "completeness": "partial",
+        "degraded": true,
+        "failure_count": 0,
+        "progress": {
+          "brief_gene_status": "succeeded",
+          "cancelled": 0,
+          "failed": 0,
+          "pending": 0,
+          "planned": 0,
+          "planning_complete": true,
+          "running": 0,
+          "submitted": 0,
+          "succeeded": 12,
+          "timed_out": 0,
+          "total": 12
+        },
+        "revision": 12,
+        "stage": "intermediate",
+        "updated_at": "2026-09-12T00:00:00Z"
+      },
+      "report": {
+        "degraded": true,
+        "source_artifact_count": 0,
+        "state": "intermediate"
+      }
+    },
+    "output_dirs": [],
+    "references": [
+      {
+        "doi_missing": true,
+        "file_id": "evidence",
+        "formatted_citation": "Synthetic evidence.",
+        "title": "Synthetic evidence"
+      }
+    ],
+    "tabular": null
+  }
+}
