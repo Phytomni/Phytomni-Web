@@ -304,6 +304,51 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
     expect(wrapper.text()).toContain("Scientific report unavailable");
     wrapper.unmount();
   });
+
+  it.each([
+    {
+      error_code: "artifact_listing_failed" as const,
+      retryable: true,
+      retryVisible: true,
+    },
+    {
+      error_code: "archive_inventory_limit_exceeded" as const,
+      retryable: false,
+      retryVisible: false,
+    },
+  ])(
+    "keeps the report visible while archive delivery is $error_code",
+    ({ error_code, retryable, retryVisible }) => {
+      const wrapper = mountContent({
+        role: "assistant",
+        id: `archive-failure-${error_code}`,
+        tool_name: "AnalystAgent",
+        status: "SUCCEEDED",
+        content: "# Valid analysis report\n\nThe report remains available.",
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "failed",
+          revision: 2,
+          name: null,
+          size_bytes: null,
+          error_code,
+          retryable,
+        },
+      });
+
+      expect(
+        wrapper.get('[data-testid="scientific-markdown"]').text()
+      ).toContain("Valid analysis report");
+      expect(
+        wrapper.find('[data-test="result-archive-download"]').exists()
+      ).toBe(false);
+      expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
+        retryVisible
+      );
+      wrapper.unmount();
+    }
+  );
   const lifecycle = (
     phase: AgentTaskLifecycle["phase"]
   ): AgentTaskLifecycle => ({

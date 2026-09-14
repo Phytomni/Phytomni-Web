@@ -52,6 +52,17 @@ const manifestInvalidFailure = {
   retryable: false,
 };
 
+const unavailableFailure = {
+  schema_version: 1 as const,
+  required: true as const,
+  status: "failed" as const,
+  revision: 1,
+  name: null,
+  size_bytes: null,
+  error_code: "archive_inventory_limit_exceeded" as const,
+  retryable: false,
+};
+
 function mount(props: Record<string, unknown> = {}, slots = {}) {
   return createTestAppContext().mount(ResultArchiveDelivery, {
     props: { activeV1: true, ...props },
@@ -125,6 +136,9 @@ describe("ResultArchiveDelivery", () => {
     const wrapper = mount({ delivery: retryableFailure });
     const button = wrapper.get('[data-test="result-archive-retry"]');
 
+    expect(
+      wrapper.get('[data-test="result-archive-delivery"]').text()
+    ).toContain("Result archive generation failed");
     expect(button.attributes("aria-label")).toContain("Retry");
     await button.trigger("click");
     expect(wrapper.emitted("retry")).toHaveLength(1);
@@ -145,6 +159,16 @@ describe("ResultArchiveDelivery", () => {
       false
     );
     expect(wrapper.find('[data-test="result-archive-download"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("shows an explicit unavailable state for a non-retryable delivery failure", () => {
+    const wrapper = mount({ delivery: unavailableFailure });
+    const delivery = wrapper.get('[data-test="result-archive-delivery"]');
+
+    expect(delivery.text()).toContain("Result archive is not available");
+    expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
       false
     );
   });
