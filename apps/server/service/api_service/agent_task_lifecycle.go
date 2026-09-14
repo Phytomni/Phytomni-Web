@@ -173,7 +173,9 @@ func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunPro
 }
 
 func deliveryFailureKeepsScientificSuccess(errorCode string) bool {
-	return errorCode == "no_user_deliverables" || errorCode == "artifact_manifest_invalid"
+	return errorCode == "no_user_deliverables" ||
+		errorCode == "artifact_manifest_invalid" ||
+		errorCode == "archive_inventory_limit_exceeded"
 }
 
 func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {

@@ -238,12 +238,25 @@ func mergeProjectionDelivery(dst *BotRunProjection, current, incoming BotRunProj
 		}
 	}
 
-	if currentDelivery.Status != "failed" || !currentDelivery.Retryable || incomingDelivery.Status != "pending" ||
-		currentDelivery.InventoryDigest == "" || incomingDelivery.InventoryDigest != currentDelivery.InventoryDigest {
+	legacyReconcile := isLegacyInventoryReconcile(currentDelivery)
+	if currentDelivery.Status != "failed" || (!currentDelivery.Retryable && !legacyReconcile) || incomingDelivery.Status != "pending" ||
+		incomingDelivery.InventoryDigest == "" || (!legacyReconcile && incomingDelivery.InventoryDigest != currentDelivery.InventoryDigest) {
 		return errors.New("invalid result archive retry transition")
 	}
 	dst.Delivery = cloneProjectionDelivery(incomingDelivery)
 	return nil
+}
+
+func isLegacyInventoryReconcile(delivery *ProjectionDelivery) bool {
+	if delivery == nil || delivery.Retryable || delivery.InventoryDigest != "" {
+		return false
+	}
+	switch delivery.ErrorCode {
+	case "artifact_manifest_invalid", "no_user_deliverables", "archive_inventory_limit_exceeded":
+		return true
+	default:
+		return false
+	}
 }
 
 // SaveBotRunProjection stores a projection only when the row still has the

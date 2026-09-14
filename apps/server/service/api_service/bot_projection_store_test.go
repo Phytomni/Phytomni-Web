@@ -376,6 +376,24 @@ func TestMergeBotRunProjectionAcceptsOnlyValidManualRetry(t *testing.T) {
 	}
 }
 
+func TestMergeBotRunProjectionAcceptsLegacyInventoryReconcile(t *testing.T) {
+	current := BotRunProjection{
+		RunID: "run-legacy-reconcile", Status: "SUCCEEDED", ReportRevision: 5, ResultArchiveV1: true,
+		Delivery: &ProjectionDelivery{
+			SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+			ErrorCode: "archive_inventory_limit_exceeded", Retryable: false,
+		},
+	}
+	incoming := BotRunProjection{
+		RunID: "run-legacy-reconcile", Status: "SUCCEEDED", ReportRevision: 5, ResultArchiveV1: true,
+		Delivery: testPendingDelivery(2, testProjectionDigestA),
+	}
+	merged, changed, err := MergeBotRunProjection(current, incoming)
+	if err != nil || !changed || merged.Delivery == nil || merged.Delivery.Status != "pending" || merged.Delivery.InventoryDigest != testProjectionDigestA {
+		t.Fatalf("merged=%#v changed=%v err=%v", merged, changed, err)
+	}
+}
+
 func TestMergeBotRunProjectionRejectsDeliveryDigestMutation(t *testing.T) {
 	current := BotRunProjection{
 		RunID: "run-digest", Status: "RUNNING", ReportRevision: 2, ResultArchiveV1: true,

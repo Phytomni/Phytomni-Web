@@ -344,6 +344,14 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 			},
 			wantPhase: "SUCCEEDED", wantTerminal: true,
 		},
+		{
+			name: "truncated inventory keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "archive_inventory_limit_exceeded", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
 	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -799,12 +807,100 @@ func TestProjectionHasFailedRequiredDeliveryOmitsEmptyArchive(t *testing.T) {
 	if projectionHasFailedRequiredDelivery(invalid) {
 		t.Fatal("invalid producer manifest treated as failed required delivery")
 	}
+	truncated := empty
+	truncated.Delivery = &ProjectionDelivery{
+		Required: true, Status: "failed", ErrorCode: "archive_inventory_limit_exceeded",
+	}
+	if projectionHasFailedRequiredDelivery(truncated) {
+		t.Fatal("truncated inventory treated as failed required delivery")
+	}
 	pack := empty
 	pack.Delivery = &ProjectionDelivery{
 		Required: true, Status: "failed", ErrorCode: "archive_publish_failed",
 	}
 	if !projectionHasFailedRequiredDelivery(pack) {
 		t.Fatal("pack failure ignored")
+	}
+}
+
+func TestPrivateReplacementKeepsReportAndArtifactsWhenArchiveInventoryIsTruncated(t *testing.T) {
+	gdb := setupTestDB(t)
+	private := persistedConversationContext{
+		Replacement: &persistedConversationReplacement{
+			ClientTurnID:         "replacement-turn",
+			RequestFingerprint:   strings.Repeat("a", 64),
+			Query:                "replacement query",
+			ToolName:             "AnalystAgent",
+			Mode:                 "expert",
+			ActiveStatus:         "RUNNING",
+			ActiveBotRunID:       "run-replacement",
+			ActiveReportRevision: 1,
+		},
+	}
+	projection, err := marshalPersistedProjectionWithContext(
+		BotRunProjection{RunID: "run-old", Agent: "analyst", Status: "SUCCEEDED", ReportRevision: 1, FinalReport: "old report"},
+		&private,
+	)
+	if err != nil {
+		t.Fatalf("marshal replacement projection: %v", err)
+	}
+	if err := gdb.Create(&model.QuestionAgentLog{
+		Id:                90,
+		UserName:          "alice",
+		Answer:            "old report",
+		ToolName:          "AnalystAgent",
+		Status:            "SUCCEEDED",
+		BotRunId:          "run-old",
+		BotProjectionJSON: projection,
+		BotReportRevision: 1,
+		DownloadPath:      "obs://bucket/old-output",
+		ImagePaths:        `["obs://bucket/old-output/plot.png"]`,
+	}).Error; err != nil {
+		t.Fatalf("seed replacement row: %v", err)
+	}
+	record := &rxBot.RunRecord{
+		RunID:  "run-replacement",
+		Agent:  "analyst",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"report_revision": 2,
+			"final_report": "# Replacement report",
+			"execution": {
+				"output_dirs": ["obs://bucket/replacement-output"],
+				"delivery": {
+					"schema_version": 1,
+					"required": true,
+					"status": "failed",
+					"revision": 1,
+					"inventory_digest": "",
+					"archive": null,
+					"error_code": "archive_inventory_limit_exceeded",
+					"retryable": false
+				}
+			}
+		}`),
+	}
+	if err := (&Service{}).applyPrivateReplacementRunProjection(
+		context.Background(), 90, "alice", "run-replacement", record, rxBot.ResponseMeta{},
+	); err != nil {
+		t.Fatalf("apply replacement projection: %v", err)
+	}
+	var row model.QuestionAgentLog
+	if err := gdb.Where("id = ? AND user_name = ?", 90, "alice").First(&row).Error; err != nil {
+		t.Fatalf("read replacement row: %v", err)
+	}
+	if row.Status != "SUCCEEDED" || !strings.Contains(row.Answer, "Replacement report") {
+		t.Fatalf("replacement row status=%q answer=%q, want successful report", row.Status, row.Answer)
+	}
+	stored, privateContext, err := unmarshalPersistedProjectionWithContext(row.BotProjectionJSON)
+	if err != nil {
+		t.Fatalf("decode promoted replacement: %v", err)
+	}
+	if privateContext.Replacement != nil {
+		t.Fatalf("replacement candidate was not promoted: %#v", privateContext.Replacement)
+	}
+	if stored.FinalReport != "# Replacement report" || len(stored.Artifacts.Directories) != 1 || stored.Artifacts.Directories[0] != "obs://bucket/replacement-output" {
+		t.Fatalf("promoted report/artifacts=%#v, want report and output directory", stored)
 	}
 }
 

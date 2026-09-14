@@ -37,7 +37,7 @@ func (ps *Service) RetryConversationResultArchive(
 	if delivery.Status == "pending" {
 		return *agentTaskDeliveryDTO(projection), nil
 	}
-	if delivery.Status != "failed" || !delivery.Retryable || strings.TrimSpace(row.BotRunId) == "" {
+	if delivery.Status != "failed" || (!delivery.Retryable && !isLegacyInventoryReconcile(delivery)) || strings.TrimSpace(row.BotRunId) == "" {
 		return AgentTaskDeliveryDTO{}, ErrConversationResultArchiveRetryConflict
 	}
 
@@ -151,11 +151,11 @@ func storedArchiveRetryInstalled(stored BotRunProjection, rowRunID string, retri
 
 func validArchiveRetryDelivery(current *ProjectionDelivery, retried *rxBot.RunDelivery) bool {
 	return current != nil && retried != nil &&
-		current.InventoryDigest != "" &&
 		retried.SchemaVersion == rxBot.ResultArchiveProtocolVersion &&
 		retried.Required &&
 		retried.Status == "pending" &&
 		retried.Revision > current.Revision &&
-		retried.InventoryDigest == current.InventoryDigest &&
+		retried.InventoryDigest != "" &&
+		(isLegacyInventoryReconcile(current) || retried.InventoryDigest == current.InventoryDigest) &&
 		retried.Archive == nil && retried.ErrorCode == "" && !retried.Retryable
 }
