@@ -163,14 +163,13 @@ describe("ResultArchiveDelivery", () => {
     );
   });
 
-  it("shows an explicit unavailable state for a non-retryable delivery failure", () => {
+  it("offers reconciliation for a truncated legacy inventory failure", async () => {
     const wrapper = mount({ delivery: unavailableFailure });
-    const delivery = wrapper.get('[data-test="result-archive-delivery"]');
+    const button = wrapper.get('[data-test="result-archive-retry"]');
 
-    expect(delivery.text()).toContain("Result archive is not available");
-    expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
-      false
-    );
+    expect(button.attributes("aria-label")).toContain("Retry");
+    await button.trigger("click");
+    expect(wrapper.emitted("retry")).toHaveLength(1);
   });
 
   it("shows incomplete packaging copy for an invalid producer manifest", () => {

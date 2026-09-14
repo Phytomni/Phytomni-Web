@@ -314,7 +314,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
     {
       error_code: "archive_inventory_limit_exceeded" as const,
       retryable: false,
-      retryVisible: false,
+      retryVisible: true,
     },
   ])(
     "keeps the report visible while archive delivery is $error_code",
