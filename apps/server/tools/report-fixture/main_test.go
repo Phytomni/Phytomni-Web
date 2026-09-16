@@ -147,18 +147,15 @@ func TestReportFixtureFailureWritesNothingAndAllowsUnrelatedNames(t *testing.T) 
 	}
 	var stderr bytes.Buffer
 	args := []string{"-source", sourcePath, "-output", dir, "-font-dir", t.TempDir()}
-	if run(args, &stderr) == 0 {
-		t.Fatal("missing fonts accepted")
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil || len(entries) != 1 {
-		t.Fatal("render failure left partial output")
-	}
-	args[len(args)-1] = os.Getenv("PHYTOMNI_REPORT_FONT_DIR")
-	if args[len(args)-1] == "" {
-		t.Fatal("genuine fonts required")
-	}
 	if run(args, &stderr) != 0 {
+		t.Fatalf("empty font dir blocked PDF fixture: %s", stderr.String())
+	}
+	keep, err := os.ReadFile(filepath.Join(dir, "unrelated"))
+	if err != nil || string(keep) != "keep" {
 		t.Fatal("unrelated output name refused")
+	}
+	pdf, err := os.ReadFile(filepath.Join(dir, "report.pdf"))
+	if err != nil || !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Fatal("empty font dir did not emit a PDF")
 	}
 }

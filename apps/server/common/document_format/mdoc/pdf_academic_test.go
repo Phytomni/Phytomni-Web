@@ -83,10 +83,11 @@ func TestLongReferenceActualPagesHangingLinksAndSingleFinalGap(t *testing.T) {
 }
 
 func TestCitedPDFFontsRequired(t *testing.T) {
-	data, err := RenderCitedPDF(Document{}, AcademicFonts{})
-	if !errors.Is(err, ErrAcademicFontsUnavailable) || data != nil {
-		t.Fatal("missing fonts accepted")
+	data, err := RenderCitedPDF(Document{blocks: []block{{kind: blockParagraph, role: roleLead, inlines: []inline{{text: "Fallback"}}}}}, AcademicFonts{})
+	if err != nil || len(data) == 0 || errors.Is(err, errAcademicPDFGlyph) {
+		t.Fatal("missing TNR faces blocked PDF")
 	}
+	findPDFText(t, academicPDFText(t, data), "Fallback")
 }
 
 type pdfTextEvidence struct {
@@ -167,6 +168,15 @@ func findPDFText(t *testing.T, items []pdfTextEvidence, text string) pdfTextEvid
 	}
 	t.Fatalf("missing painted text %q", text)
 	return pdfTextEvidence{}
+}
+
+func pdfPaintedContains(items []pdfTextEvidence, text string) bool {
+	for _, p := range items {
+		if strings.Contains(p.text, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCitedPDFPositionsStylesSuperscriptAndLinks(t *testing.T) {
@@ -414,11 +424,24 @@ func TestCitedPDFMixedScriptsCodeAndUnsupportedGlyphs(t *testing.T) {
 	if !bytes.Contains(streams, []byte{0xe9}) || !bytes.Contains(streams, []byte{0x80}) {
 		t.Fatal("Courier CP1252 encoded text lost")
 	}
-	for _, bad := range []string{"private-secret-😀", "\u0378", string([]byte{255})} {
-		data, err := RenderCitedPDF(Document{blocks: []block{{kind: blockParagraph, inlines: []inline{{text: bad}}}}}, fonts)
-		if err == nil || data != nil || strings.Contains(err.Error(), bad) {
-			t.Fatal("unsupported glyph did not produce safe error")
+	for _, tc := range []struct {
+		text, escape string
+	}{
+		{"private-secret-😀", `\u{1F600}`},
+		{"\u0378", `\u{0378}`},
+	} {
+		data, err := RenderCitedPDF(Document{blocks: []block{{kind: blockParagraph, inlines: []inline{{text: tc.text}}}}}, fonts)
+		if err != nil || len(data) == 0 || errors.Is(err, errAcademicPDFGlyph) {
+			t.Fatal("valid uncovered rune failed")
 		}
+		if !pdfPaintedContains(academicPDFText(t, data), tc.escape) {
+			t.Fatalf("missing lossless escape %q", tc.escape)
+		}
+	}
+	bad := string([]byte{255})
+	data, err = RenderCitedPDF(Document{blocks: []block{{kind: blockParagraph, inlines: []inline{{text: bad}}}}}, fonts)
+	if err == nil || data != nil || !errors.Is(err, errAcademicPDFGlyph) || strings.Contains(err.Error(), bad) {
+		t.Fatal("invalid UTF-8 did not produce safe error")
 	}
 }
 

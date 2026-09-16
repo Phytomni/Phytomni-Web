@@ -298,8 +298,11 @@ func TestPDFTableFixtureAllCellsStylesLinksAndBounds(t *testing.T) {
 func TestPDFTableUnsupportedGlyphReturnsControlledError(t *testing.T) {
 	doc := Document{blocks: []block{{kind: blockTable, rows: [][][]inline{{{{text: "\U0001f9ec"}}}}}}}
 	data, err := RenderCitedPDF(doc, requireAcademicFonts(t))
-	if data != nil || !errors.Is(err, errAcademicPDFGlyph) {
-		t.Fatal("unsupported table glyph silently substituted")
+	if err != nil || len(data) == 0 || errors.Is(err, errAcademicPDFGlyph) {
+		t.Fatal("valid uncovered table rune blocked PDF")
+	}
+	if !pdfPaintedContains(academicPDFText(t, data), `\u{1F9EC}`) {
+		t.Fatal("table supplementary rune not escaped")
 	}
 }
 

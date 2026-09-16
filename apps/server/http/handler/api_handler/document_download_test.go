@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"phytomni-server/common/document_format/mdoc"
 	"phytomni-server/common/i18n"
 	"phytomni-server/db"
 	"phytomni-server/service/api_service"
@@ -285,22 +284,19 @@ func TestRenderingDownloadHandlerMissingAcademicFonts(t *testing.T) {
 		}
 		t.Run(tool, func(t *testing.T) {
 			data, _, err := api_service.NewService().DownloadObsRenderingFile(context.Background(), "alice", id, "PDF")
-			if data != nil || !errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
-				t.Fatalf("missing-font error identity lost: bytes=%d err=%v", len(data), err)
+			if err != nil || !bytes.HasPrefix(data, []byte("%PDF")) {
+				t.Fatalf("cited PDF without fonts: bytes=%d err=%v", len(data), err)
 			}
-			w := renderingDownloadRequest("alice", strconv.Itoa(id), "PDF", "")
-			assertRenderingDownloadError(t, w, http.StatusServiceUnavailable, "artifact download unavailable")
-			var response map[string]any
-			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if response["reason"] != "academic_report_fonts_unavailable" || len(response) != 3 || strings.Contains(w.Body.String(), fontDir) {
-				t.Fatalf("missing-font response is unsafe or unclassified: %v", response)
-			}
-			for _, format := range []string{"Word", "Markdown"} {
+			for _, format := range []string{"PDF", "Word", "Markdown"} {
 				w := renderingDownloadRequest("alice", strconv.Itoa(id), format, "")
 				if w.Code != http.StatusOK || w.Header().Get("Content-Disposition") == "" || w.Body.Len() == 0 {
 					t.Fatalf("%s requires PDF fonts: status=%d bytes=%d", format, w.Code, w.Body.Len())
+				}
+				if strings.Contains(w.Body.String(), fontDir) {
+					t.Fatal("private font path leaked")
+				}
+				if format == "PDF" && !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF")) {
+					t.Fatal("PDF response is not a PDF")
 				}
 				if format == "Word" && !bytes.HasPrefix(w.Body.Bytes(), []byte("PK")) {
 					t.Fatal("Word response is not a DOCX archive")

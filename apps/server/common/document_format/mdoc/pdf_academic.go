@@ -14,12 +14,22 @@ import (
 )
 
 const academicPDFTNR = "academic-tnr"
+const academicPDFCJK = "academic-cjk"
+const academicPDFSymbol = "academic-symbol"
+const academicPDFHelvetica = "Helvetica"
 const pdfPtMM = 25.4 / 72
 
 var errAcademicPDF = errors.New("academic PDF could not be rendered")
 var errAcademicPDFGlyph = errors.New("academic PDF contains an unsupported glyph")
 
 var fixedPDFCJK struct {
+	sync.Once
+	data   []byte
+	glyphs map[uint16]uint16
+	err    error
+}
+
+var fixedPDFSymbol struct {
 	sync.Once
 	data   []byte
 	glyphs map[uint16]uint16
@@ -35,6 +45,9 @@ func RenderCitedPDF(doc Document, fonts AcademicFonts) (data []byte, err error) 
 			err = errAcademicPDF
 		}
 	}()
+	if academicPDFInvalidUTF8(doc) {
+		return nil, errAcademicPDFGlyph
+	}
 	doc = normalizeScientificDocument(doc)
 	w, err := newAcademicPDFWriter(fonts)
 	if err != nil {
@@ -62,14 +75,17 @@ func RenderCitedPDF(doc Document, fonts AcademicFonts) (data []byte, err error) 
 }
 
 type academicPDFWriter struct {
-	pdf                 *gofpdf.Fpdf
-	fonts               AcademicFonts
-	y                   float64
-	links               map[int]int
-	headingOffset, imgN int
-	cjkReady            bool
-	translate           func(string) string
-	marker              *pdfListMarker
+	pdf                       *gofpdf.Fpdf
+	fonts                     AcademicFonts
+	y                         float64
+	links                     map[int]int
+	headingOffset, imgN       int
+	cjkReady, cjkFailed       bool
+	symbolReady, symbolFailed bool
+	asciiFamily               string
+	tnrStyle                  map[string]bool
+	translate                 func(string) string
+	marker                    *pdfListMarker
 }
 
 type pdfListMarker struct {
@@ -81,26 +97,82 @@ func newAcademicPDFWriter(fonts AcademicFonts) (*academicPDFWriter, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(academicPageMarginMM, academicPageMarginMM, academicPageMarginMM)
 	pdf.SetAutoPageBreak(false, academicPageMarginMM)
+	w := &academicPDFWriter{
+		pdf:         pdf,
+		fonts:       fonts,
+		asciiFamily: academicPDFHelvetica,
+		tnrStyle:    map[string]bool{},
+		translate:   pdf.UnicodeTranslatorFromDescriptor(""),
+	}
 	faces := []academicFace{fonts.regular, fonts.bold, fonts.italic, fonts.boldItalic}
 	for i, st := range []string{"", "B", "I", "BI"} {
 		f := faces[i]
-		if len(f.glyphs) == 0 || f.postScriptName != academicFontSpecs[i].postScriptName || validateAcademicSFNT(f.data) != "" {
-			return nil, academicFontError(academicFontSpecs[i].role, "invalid_snapshot")
+		if !validAcademicTNRFace(f, academicFontSpecs[i]) {
+			continue
 		}
 		pdf.AddUTF8FontFromBytes(academicPDFTNR, st, bytes.Clone(f.data))
 		pdf.SetFont(academicPDFTNR, st, 12)
 		if pdf.Error() != nil {
-			return nil, academicFontError(academicFontSpecs[i].role, "registration")
+			pdf.ClearError()
+			continue
+		}
+		w.tnrStyle[st] = true
+	}
+	if len(w.tnrStyle) > 0 {
+		w.asciiFamily = academicPDFTNR
+	} else {
+		pdf.SetFont(academicPDFHelvetica, "", 12)
+		if pdf.Error() != nil {
+			return nil, errAcademicPDF
 		}
 	}
 	pdf.SetFooterFunc(func() {
 		pdf.SetWordSpacing(0)
 		pdf.SetTextColor(0, 0, 0)
-		pdf.SetFont(academicPDFTNR, "", academicFooterFontSizePt)
+		family, face := w.asciiFont(style{})
+		pdf.SetFont(family, face, academicFooterFontSizePt)
 		s := fmt.Sprint(pdf.PageNo())
 		pdf.Text((academicPageWidthMM-pdf.GetStringWidth(s))/2, academicPageHeightMM-academicPageMarginMM/2, s)
 	})
-	return &academicPDFWriter{pdf: pdf, fonts: fonts, translate: pdf.UnicodeTranslatorFromDescriptor("")}, nil
+	return w, nil
+}
+
+func validAcademicTNRFace(face academicFace, spec academicFontSpec) bool {
+	return len(face.glyphs) > 0 && face.postScriptName == spec.postScriptName && validateAcademicSFNT(face.data) == ""
+}
+
+func academicPDFInvalidUTF8(doc Document) bool {
+	return academicPDFBlocksInvalidUTF8(doc.blocks)
+}
+
+func academicPDFBlocksInvalidUTF8(blocks []block) bool {
+	for _, b := range blocks {
+		if academicPDFInlinesInvalidUTF8(b.inlines) || !utf8.ValidString(b.code) || academicPDFBlocksInvalidUTF8(b.children) {
+			return true
+		}
+		for _, item := range b.items {
+			if academicPDFBlocksInvalidUTF8(item) {
+				return true
+			}
+		}
+		for _, row := range b.rows {
+			for _, cell := range row {
+				if academicPDFInlinesInvalidUTF8(cell) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func academicPDFInlinesInvalidUTF8(inlines []inline) bool {
+	for _, in := range inlines {
+		if !utf8.ValidString(in.text) {
+			return true
+		}
+	}
+	return false
 }
 
 func pdfFontStyle(st style) string {
@@ -114,7 +186,7 @@ func pdfFontStyle(st style) string {
 	return s
 }
 
-func (w *academicPDFWriter) cjk() error {
+func loadFixedPDFCJK() error {
 	fixedPDFCJK.Do(func() {
 		fixedPDFCJK.data, fixedPDFCJK.err = external_format.CJKFontBytes()
 		if fixedPDFCJK.err != nil {
@@ -127,16 +199,56 @@ func (w *academicPDFWriter) cjk() error {
 	if fixedPDFCJK.err != nil {
 		return errAcademicPDF
 	}
-	if !w.cjkReady {
-		for _, st := range []string{"", "B"} {
-			w.pdf.AddUTF8FontFromBytes("academic-cjk", st, bytes.Clone(fixedPDFCJK.data))
-			w.pdf.SetFont("academic-cjk", st, 12)
-			if w.pdf.Error() != nil {
-				return errAcademicPDF
-			}
+	return nil
+}
+
+func loadFixedPDFSymbol() error {
+	fixedPDFSymbol.Do(func() {
+		fixedPDFSymbol.data, fixedPDFSymbol.err = external_format.ScientificSymbolFontBytes()
+		if fixedPDFSymbol.err != nil {
+			return
 		}
-		w.cjkReady = true
+		record, err := parseAcademicTTF(fixedPDFSymbol.data)
+		fixedPDFSymbol.err = err
+		fixedPDFSymbol.glyphs = record.Chars
+	})
+	if fixedPDFSymbol.err != nil {
+		return errAcademicPDF
 	}
+	return nil
+}
+
+func (w *academicPDFWriter) cjk() error {
+	if err := loadFixedPDFCJK(); err != nil {
+		return err
+	}
+	return w.registerFixedUTF8(academicPDFCJK, fixedPDFCJK.data, []string{"", "B"}, &w.cjkReady, &w.cjkFailed)
+}
+
+func (w *academicPDFWriter) symbol() error {
+	if err := loadFixedPDFSymbol(); err != nil {
+		return err
+	}
+	return w.registerFixedUTF8(academicPDFSymbol, fixedPDFSymbol.data, []string{"", "B"}, &w.symbolReady, &w.symbolFailed)
+}
+
+func (w *academicPDFWriter) registerFixedUTF8(family string, data []byte, styles []string, ready, failed *bool) error {
+	if *ready {
+		return nil
+	}
+	if *failed {
+		return errAcademicPDF
+	}
+	for _, st := range styles {
+		w.pdf.AddUTF8FontFromBytes(family, st, bytes.Clone(data))
+		w.pdf.SetFont(family, st, 12)
+		if w.pdf.Error() != nil {
+			w.pdf.ClearError()
+			*failed = true
+			return errAcademicPDF
+		}
+	}
+	*ready = true
 	return nil
 }
 
@@ -144,45 +256,129 @@ func pdfCourierRune(r rune) bool {
 	return r >= 32 && r <= 126 || r >= 160 && r <= 255 || strings.ContainsRune("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ", r)
 }
 
-func (w *academicPDFWriter) fontFor(r rune, st style) (family, face string, err error) {
-	if r == '\n' || r == '\t' {
-		r = ' '
+func pdfCoveredGlyph(glyphs map[uint16]uint16, r rune) bool {
+	return r >= 32 && r <= 0xffff && glyphs[uint16(r)] != 0
+}
+
+func pdfGlyphEscape(r rune) string {
+	return fmt.Sprintf("\\u{%04X}", r)
+}
+
+func pdfTNRStyleOrder(requested string) []string {
+	switch requested {
+	case "B":
+		return []string{"B", "BI", "", "I"}
+	case "I":
+		return []string{"I", "BI", "", "B"}
+	case "BI":
+		return []string{"BI", "B", "I", ""}
+	default:
+		return []string{"", "I", "B", "BI"}
 	}
-	if r > 0xffff || r < 32 || r == utf8.RuneError {
-		return "", "", errAcademicPDFGlyph
+}
+
+func (w *academicPDFWriter) tnrFace(style string) academicFace {
+	switch style {
+	case "B":
+		return w.fonts.bold
+	case "I":
+		return w.fonts.italic
+	case "BI":
+		return w.fonts.boldItalic
+	default:
+		return w.fonts.regular
 	}
-	face = pdfFontStyle(st)
-	if st.code {
-		if pdfCourierRune(r) {
-			return academicCodePDFFamily, face, nil
+}
+
+func (w *academicPDFWriter) closestTNRStyle(requested string) string {
+	for _, face := range pdfTNRStyleOrder(requested) {
+		if w.tnrStyle[face] {
+			return face
 		}
-	} else {
-		f := w.fonts.regular
-		switch face {
-		case "B":
-			f = w.fonts.bold
-		case "I":
-			f = w.fonts.italic
-		case "BI":
-			f = w.fonts.boldItalic
+	}
+	return ""
+}
+
+func (w *academicPDFWriter) asciiFont(st style) (family, face string) {
+	requested := pdfFontStyle(st)
+	if w.asciiFamily == academicPDFTNR {
+		return academicPDFTNR, w.closestTNRStyle(requested)
+	}
+	return academicPDFHelvetica, requested
+}
+
+func (w *academicPDFWriter) lookupASCII(r rune, st style) (family, face string, ok bool) {
+	requested := pdfFontStyle(st)
+	if len(w.tnrStyle) > 0 {
+		for _, face := range pdfTNRStyleOrder(requested) {
+			if !w.tnrStyle[face] {
+				continue
+			}
+			if pdfCoveredGlyph(w.tnrFace(face).glyphs, r) {
+				return academicPDFTNR, face, true
+			}
 		}
-		if f.glyphs[uint16(r)] != 0 {
-			return academicPDFTNR, face, nil
-		}
+		return "", "", false
 	}
-	if err = w.cjk(); err != nil {
-		return "", "", err
+	if pdfCourierRune(r) {
+		return academicPDFHelvetica, requested, true
 	}
-	if fixedPDFCJK.glyphs[uint16(r)] == 0 {
-		return "", "", errAcademicPDFGlyph
+	return "", "", false
+}
+
+func (w *academicPDFWriter) lookupFixed(r rune, st style, load, register func() error, glyphs *map[uint16]uint16, family string) (string, string, bool) {
+	if r < 32 || r > 0xffff || load() != nil || !pdfCoveredGlyph(*glyphs, r) || register() != nil {
+		return "", "", false
 	}
-	// Only the existing regular CJK resource is available; B is the established
-	// alias, not a claim of genuine bold/italic CJK font fidelity.
-	face = ""
+	// Only the existing regular resource is available; B is the established
+	// alias, not a claim of genuine bold/italic font fidelity.
+	face := ""
 	if st.bold {
 		face = "B"
 	}
-	return "academic-cjk", face, nil
+	return family, face, true
+}
+
+func (w *academicPDFWriter) lookupFont(r rune, st style) (family, face string, ok bool) {
+	if r == '\n' || r == '\t' {
+		r = ' '
+	}
+	if st.code {
+		if pdfCourierRune(r) {
+			return academicCodePDFFamily, pdfFontStyle(st), true
+		}
+	} else if family, face, ok = w.lookupASCII(r, st); ok {
+		return family, face, true
+	}
+	if family, face, ok = w.lookupFixed(r, st, loadFixedPDFCJK, w.cjk, &fixedPDFCJK.glyphs, academicPDFCJK); ok {
+		return family, face, true
+	}
+	return w.lookupFixed(r, st, loadFixedPDFSymbol, w.symbol, &fixedPDFSymbol.glyphs, academicPDFSymbol)
+}
+
+func (w *academicPDFWriter) fontFor(r rune, st style) (family, face string, err error) {
+	family, face, ok := w.lookupFont(r, st)
+	if !ok {
+		family, face = w.asciiFont(st)
+	}
+	return family, face, nil
+}
+
+func (w *academicPDFWriter) replaceUncovered(text string, st style) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		probe := r
+		if probe == '\n' || probe == '\t' {
+			probe = ' '
+		}
+		if _, _, ok := w.lookupFont(probe, st); ok {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(pdfGlyphEscape(r))
+	}
+	return b.String()
 }
 
 func (w *academicPDFWriter) selectText(text string, st style, size float64) (string, error) {
@@ -196,7 +392,7 @@ func (w *academicPDFWriter) selectText(text string, st style, size float64) (str
 		return "", errAcademicPDF
 	}
 	text = strings.ReplaceAll(text, "\t", "    ")
-	if family == academicCodePDFFamily {
+	if family == academicCodePDFFamily || family == academicPDFHelvetica {
 		text = w.translate(text)
 	}
 	return text, nil
@@ -225,6 +421,7 @@ func (w *academicPDFWriter) fragments(inlines []inline, layout paragraphLayout) 
 		value := strings.ReplaceAll(strings.ReplaceAll(in.text, "\r\n", "\n"), "\r", "\n")
 		f := pdfFragment{text: value, style: in.style, sizePt: layout.sizePt}
 		f.style.bold = f.style.bold || layout.bold
+		f.text = w.replaceUncovered(f.text, f.style)
 		if in.style.code {
 			f.sizePt = academicCodeFontSizePt
 		}
@@ -481,7 +678,8 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 			if b.role == roleSubsection {
 				level = max(1, b.level-sectionLevel) + w.headingOffset
 			}
-			w.pdf.SetFont(academicPDFTNR, "B", p.layout.sizePt)
+			family, face := w.asciiFont(style{bold: true})
+			w.pdf.SetFont(family, face, p.layout.sizePt)
 			w.pdf.Bookmark(plainText(b.inlines), level, w.y)
 		}
 		if i == 0 && w.marker != nil {
@@ -491,7 +689,8 @@ func (w *academicPDFWriter) writeParagraph(b block, depth int, after bool, follo
 			if id := w.links[b.referenceIndex]; id > 0 {
 				w.pdf.SetLink(id, w.y, w.pdf.PageNo())
 			}
-			w.pdf.SetFont(academicPDFTNR, "", p.layout.sizePt)
+			family, face := w.asciiFont(style{})
+			w.pdf.SetFont(family, face, p.layout.sizePt)
 			w.pdf.SetTextColor(0, 0, 0)
 			w.pdf.Text(academicPageMarginMM+float64(depth)*7.5, w.y+baseline, fmt.Sprintf("%d.", b.referenceIndex))
 		}
@@ -588,9 +787,14 @@ func (w *academicPDFWriter) list(b block, depth int) error {
 
 func (w *academicPDFWriter) paintMarker(baseline float64) {
 	m := w.marker
-	w.pdf.SetFont(academicPDFTNR, "", 12)
+	family, face := w.asciiFont(style{})
+	w.pdf.SetFont(family, face, 12)
 	w.pdf.SetTextColor(0, 0, 0)
-	w.pdf.Text(academicPageMarginMM+float64(m.depth)*7.5, baseline, m.text)
+	text := m.text
+	if family == academicPDFHelvetica {
+		text = w.translate(text)
+	}
+	w.pdf.Text(academicPageMarginMM+float64(m.depth)*7.5, baseline, text)
 	w.marker = nil
 }
 

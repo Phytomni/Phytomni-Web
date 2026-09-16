@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"phytomni-server/common/document_format/mdoc"
-
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
@@ -70,7 +68,7 @@ func TestDownloadObsRenderingFileMissingFontsAffectsOnlyCitedPDF(t *testing.T) {
 		}
 	}
 	data, _, err := service.DownloadObsRenderingFile(context.Background(), "alice", 1302, "PDF")
-	if data != nil || !errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
+	if err != nil || !bytes.HasPrefix(data, []byte("%PDF")) {
 		t.Fatalf("cited PDF without fonts: data=%d err=%v", len(data), err)
 	}
 	data, _, err = service.DownloadObsRenderingFile(context.Background(), "alice", 1303, "PDF")
