@@ -40,6 +40,7 @@ type academicFontSpec struct {
 }
 
 var academicFontCache sync.Map
+var academicFontBestEffortCache sync.Map
 
 var academicFontSpecs = []academicFontSpec{
 	{
@@ -78,51 +79,96 @@ func LoadAcademicFonts(dir string) (AcademicFonts, error) {
 	return cloneAcademicFonts(entry.fonts), nil
 }
 
+// LoadAcademicFontsBestEffort loads any individually valid Times New Roman faces.
+// Missing or invalid faces are skipped. Results are cached by directory until restart.
+func LoadAcademicFontsBestEffort(dir string) AcademicFonts {
+	if dir == "" {
+		return AcademicFonts{}
+	}
+	key := filepath.Clean(dir)
+	value, _ := academicFontBestEffortCache.LoadOrStore(key, &academicFontCacheEntry{})
+	entry := value.(*academicFontCacheEntry)
+	entry.once.Do(func() {
+		entry.fonts = loadAcademicFontsBestEffort(key)
+	})
+	return cloneAcademicFonts(entry.fonts)
+}
+
 func loadAcademicFonts(dir string) (AcademicFonts, error) {
 	var fonts AcademicFonts
 	seen := make(map[string]struct{}, len(academicFontSpecs))
 	for _, spec := range academicFontSpecs {
-		path := filepath.Join(dir, spec.filename)
-		data, err := os.ReadFile(path)
+		face, err := evaluateAcademicFace(dir, spec, seen)
 		if err != nil {
-			reason := "unreadable"
-			if errors.Is(err, os.ErrNotExist) {
-				reason = "missing"
-			}
-			return AcademicFonts{}, academicFontError(spec.role, reason)
+			return AcademicFonts{}, err
 		}
-		if reason := validateAcademicSFNT(data); reason != "" {
-			return AcademicFonts{}, academicFontError(spec.role, reason)
-		}
-
-		record, err := parseAcademicTTF(data)
-		if err != nil {
-			return AcademicFonts{}, academicFontError(spec.role, "parser")
-		}
-		if _, duplicate := seen[record.PostScriptName]; duplicate {
-			return AcademicFonts{}, academicFontError(spec.role, "duplicate_role")
-		}
-		if record.PostScriptName != spec.postScriptName {
-			return AcademicFonts{}, academicFontError(spec.role, "wrong_family")
-		}
-		if record.Bold != spec.bold || (record.ItalicAngle != 0) != spec.italic {
-			return AcademicFonts{}, academicFontError(spec.role, "role_mismatch")
-		}
-		if !record.Embeddable {
-			return AcademicFonts{}, academicFontError(spec.role, "embedding_rights")
-		}
-		if len(record.Chars) == 0 {
-			return AcademicFonts{}, academicFontError(spec.role, "missing_glyphs")
-		}
-
-		seen[record.PostScriptName] = struct{}{}
-		spec.assign(&fonts, academicFace{
-			postScriptName: record.PostScriptName,
-			data:           data,
-			glyphs:         cloneGlyphs(record.Chars),
-		})
+		seen[face.postScriptName] = struct{}{}
+		spec.assign(&fonts, face)
 	}
 	return fonts, nil
+}
+
+func loadAcademicFontsBestEffort(dir string) AcademicFonts {
+	var fonts AcademicFonts
+	seen := make(map[string]struct{}, len(academicFontSpecs))
+	for _, spec := range academicFontSpecs {
+		face, ok := loadAcademicFace(dir, spec, seen)
+		if !ok {
+			continue
+		}
+		spec.assign(&fonts, face)
+	}
+	return fonts
+}
+
+func loadAcademicFace(dir string, spec academicFontSpec, seen map[string]struct{}) (academicFace, bool) {
+	face, err := evaluateAcademicFace(dir, spec, seen)
+	if err != nil {
+		return academicFace{}, false
+	}
+	seen[face.postScriptName] = struct{}{}
+	return face, true
+}
+
+func evaluateAcademicFace(dir string, spec academicFontSpec, seen map[string]struct{}) (academicFace, error) {
+	path := filepath.Join(dir, spec.filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		reason := "unreadable"
+		if errors.Is(err, os.ErrNotExist) {
+			reason = "missing"
+		}
+		return academicFace{}, academicFontError(spec.role, reason)
+	}
+	if reason := validateAcademicSFNT(data); reason != "" {
+		return academicFace{}, academicFontError(spec.role, reason)
+	}
+
+	record, err := parseAcademicTTF(data)
+	if err != nil {
+		return academicFace{}, academicFontError(spec.role, "parser")
+	}
+	if _, duplicate := seen[record.PostScriptName]; duplicate {
+		return academicFace{}, academicFontError(spec.role, "duplicate_role")
+	}
+	if record.PostScriptName != spec.postScriptName {
+		return academicFace{}, academicFontError(spec.role, "wrong_family")
+	}
+	if record.Bold != spec.bold || (record.ItalicAngle != 0) != spec.italic {
+		return academicFace{}, academicFontError(spec.role, "role_mismatch")
+	}
+	if !record.Embeddable {
+		return academicFace{}, academicFontError(spec.role, "embedding_rights")
+	}
+	if len(record.Chars) == 0 {
+		return academicFace{}, academicFontError(spec.role, "missing_glyphs")
+	}
+
+	return academicFace{
+		postScriptName: record.PostScriptName,
+		data:           data,
+		glyphs:         cloneGlyphs(record.Chars),
+	}, nil
 }
 
 func academicFontError(role, reason string) error {

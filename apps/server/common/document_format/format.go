@@ -147,10 +147,7 @@ func (a *citedAgent) Download(format string, answer string) ([]byte, string, err
 		if err != nil {
 			return nil, filename, err
 		}
-		fonts, err := mdoc.LoadAcademicFonts(a.opts.FontDir)
-		if err != nil {
-			return nil, filename, err
-		}
+		fonts := mdoc.LoadAcademicFontsBestEffort(a.opts.FontDir)
 		content, err := mdoc.RenderCitedPDF(document, fonts)
 		return content, filename, err
 	case "Markdown":

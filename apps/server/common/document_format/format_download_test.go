@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -201,9 +202,8 @@ func TestCitedDownloadsUseCanonicalAcademicWriters(t *testing.T) {
 			}
 			assertWordReferenceEmphasis(t, xmlBody)
 
-			if data, _, err := withoutFonts.Download("PDF", citedDownloadAnswer); data != nil || !errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
-				t.Fatalf("PDF without fonts: data=%d err=%v", len(data), err)
-			}
+			data, filename, err := withoutFonts.Download("PDF", citedDownloadAnswer)
+			assertCitedPDFDispatchDoesNotRequireCompleteFontSet(t, data, filename, err)
 
 			withFonts, err := NewAgentWithOptions(fixture.name, AgentOptions{FontDir: fontDir})
 			if err != nil {
@@ -218,6 +218,36 @@ func TestCitedDownloadsUseCanonicalAcademicWriters(t *testing.T) {
 				t.Fatal("PDF payload is not a genuine outlined PDF")
 			}
 		})
+	}
+}
+
+func TestFormatDownloadCitedPDFDoesNotRequireCompleteFontSet(t *testing.T) {
+	sourceDir := requiredAcademicFontDir(t)
+	dir := t.TempDir()
+	copyDownloadTestFont(t, filepath.Join(sourceDir, "times.ttf"), filepath.Join(dir, "times.ttf"))
+	copyDownloadTestFont(t, filepath.Join(sourceDir, "timesbd.ttf"), filepath.Join(dir, "timesbd.ttf"))
+	copyDownloadTestFont(t, filepath.Join(sourceDir, "timesi.ttf"), filepath.Join(dir, "timesi.ttf"))
+
+	agent, err := NewAgentWithOptions("KnowledgeAgent", AgentOptions{FontDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, filename, err := agent.Download("PDF", citedDownloadAnswer)
+	assertCitedPDFDispatchDoesNotRequireCompleteFontSet(t, data, filename, err)
+}
+
+func TestFormatDownloadCitedPDFUsesLoadedTimesNewRomanFaces(t *testing.T) {
+	agent, err := NewAgentWithOptions("KnowledgeAgent", AgentOptions{FontDir: requiredAcademicFontDir(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, filename, err := agent.Download("PDF", citedDownloadAnswer)
+	if err != nil {
+		t.Fatalf("PDF with genuine fonts: %v", err)
+	}
+	assertDownloadFilename(t, filename, "knowledge_", ".pdf")
+	if !bytes.HasPrefix(data, []byte("%PDF")) || !bytes.Contains(data, []byte("/Outlines")) {
+		t.Fatal("PDF payload is not a genuine outlined PDF")
 	}
 }
 
@@ -253,6 +283,36 @@ func requiredAcademicFontDir(t *testing.T) string {
 		t.Fatal("PHYTOMNI_REPORT_FONT_DIR is required for genuine Times New Roman tests")
 	}
 	return dir
+}
+
+func copyDownloadTestFont(t *testing.T, src, dst string) {
+	t.Helper()
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read test font: %v", err)
+	}
+	if err := os.WriteFile(dst, raw, 0o600); err != nil {
+		t.Fatalf("write test font: %v", err)
+	}
+}
+
+func assertCitedPDFDispatchDoesNotRequireCompleteFontSet(t *testing.T, data []byte, filename string, err error) {
+	t.Helper()
+	if err != nil {
+		if strings.HasSuffix(err.Error(), "reason=missing") || strings.Contains(err.Error(), "missing_directory") {
+			t.Fatalf("cited PDF dispatch still requires the full TNR set: %v", err)
+		}
+		if !errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
+			t.Fatalf("PDF with a partial academic font set: %v", err)
+		}
+		return
+	}
+	if !strings.HasSuffix(filename, ".pdf") {
+		t.Fatalf("filename = %q, want *.pdf", filename)
+	}
+	if !bytes.HasPrefix(data, []byte("%PDF")) {
+		t.Fatalf("PDF payload missing %%PDF header, filename=%s", filename)
+	}
 }
 
 func assertDownloadFilename(t *testing.T, filename, prefix, suffix string) {
