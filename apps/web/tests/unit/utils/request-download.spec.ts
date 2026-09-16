@@ -225,7 +225,7 @@ describe("download", () => {
       );
       expect(mocks.elMessage).not.toHaveBeenCalled();
       expect(mocks.elMessageError).toHaveBeenCalledExactlyOnceWith(
-        "chat.pdfFontsUnavailable"
+        "chat.downloadError"
       );
       expect(mocks.alert).not.toHaveBeenCalled();
       expect(mocks.logout).not.toHaveBeenCalled();

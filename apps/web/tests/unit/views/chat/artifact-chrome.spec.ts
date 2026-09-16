@@ -237,6 +237,24 @@ describe("artifactChromeFromMessage", () => {
     ).toEqual([]);
   });
 
+  it.each(["FAILED", "TIMED_OUT"] as const)(
+    "keeps overflow PDF/Word/Markdown for a retained cited report after %s",
+    (status) => {
+      const chrome = artifactChromeFromMessage({
+        ...review,
+        status,
+        content: "retained scientific report",
+      });
+      expect(chrome.exportFormats).toEqual(["PDF", "Markdown", "Word"]);
+      expect(
+        copyDownloadCloseArtifactMenuItems(
+          (key) => key,
+          chrome.exportFormats
+        )[1]?.children?.map((child) => child.id)
+      ).toEqual(["download:PDF", "download:Markdown", "download:Word"]);
+    }
+  );
+
   it("treats a cited row with no status as complete", () => {
     expect(
       artifactChromeFromMessage({

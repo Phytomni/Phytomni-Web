@@ -77,7 +77,7 @@ describe("downloadRenderingFile", () => {
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
       await downloadRenderingFile("100", "PDF", t);
-      expectError("chat.pdfFontsUnavailable");
+      expectError();
       expect(log).not.toHaveBeenCalled();
     }
   );
@@ -149,7 +149,7 @@ describe("downloadRenderingFile", () => {
       ) as Awaited<ReturnType<typeof getFileDownUrlApi>>
     );
     await downloadRenderingFile("100", "PDF", t);
-    expectError("chat.pdfFontsUnavailable");
+    expectError();
   });
 
   it.each([400, 401, 403, 404, 500])(

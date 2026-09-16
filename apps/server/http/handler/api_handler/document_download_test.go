@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +23,8 @@ import (
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
+
+const citedScientificDownloadAnswer = `{"content":"# Plant hormones\n\nGibberellin GA₂₀ GA₁ 10⁻⁶.","doc_list":[{"au":"Doe, JA","ti":"A plant study","py":"2024"}]}`
 
 func setupRenderingDownloadDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -309,4 +313,66 @@ func TestRenderingDownloadHandlerMissingAcademicFonts(t *testing.T) {
 				http.StatusNotFound, "artifact not found")
 		})
 	}
+}
+
+func assertRenderingDownloadBinary(t *testing.T, w *httptest.ResponseRecorder, format string) {
+	t.Helper()
+	if w.Code != http.StatusOK || w.Header().Get("Content-Disposition") == "" || w.Body.Len() == 0 {
+		t.Fatalf("%s: status=%d bytes=%d prefix=%q", format, w.Code, w.Body.Len(), w.Body.Bytes()[:min(w.Body.Len(), 16)])
+	}
+	if w.Header().Get("Content-Type") != "application/octet-stream" {
+		t.Fatalf("%s content-type: %q", format, w.Header().Get("Content-Type"))
+	}
+	switch format {
+	case "PDF":
+		if !bytes.HasPrefix(w.Body.Bytes(), []byte("%PDF")) {
+			t.Fatal("PDF response is not a PDF")
+		}
+	case "Word":
+		if !bytes.HasPrefix(w.Body.Bytes(), []byte("PK")) {
+			t.Fatal("Word response is not a DOCX archive")
+		}
+	default:
+		t.Fatalf("unsupported format %q", format)
+	}
+}
+
+func TestRenderingDownloadHandlerCitedScientificScripts(t *testing.T) {
+	gdb := setupRenderingDownloadDB(t)
+	fontDir := os.Getenv("PHYTOMNI_REPORT_FONT_DIR")
+	if fontDir == "" {
+		t.Fatal("PHYTOMNI_REPORT_FONT_DIR is required for genuine Times New Roman tests")
+	}
+	previous := viper.Get("document_export.font_dir")
+	viper.Set("document_export.font_dir", fontDir)
+	t.Cleanup(func() { viper.Set("document_export.font_dir", previous) })
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, tool_name, answer, image_paths)
+		VALUES (1, 'alice', 'ReviewAgent', ?, '[]')`, citedScientificDownloadAnswer).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	for _, format := range []string{"PDF", "Word"} {
+		assertRenderingDownloadBinary(t, renderingDownloadRequest("alice", "1", format, ""), format)
+	}
+	assertRenderingDownloadError(t, renderingDownloadRequest("bob", "1", "PDF", "alice"),
+		http.StatusNotFound, "artifact not found")
+}
+
+func TestRenderingDownloadHandlerCitedScientificScriptsMissingFontDirectory(t *testing.T) {
+	gdb := setupRenderingDownloadDB(t)
+	previous := viper.Get("document_export.font_dir")
+	viper.Set("document_export.font_dir", filepath.Join(t.TempDir(), "missing-academic-fonts"))
+	t.Cleanup(func() { viper.Set("document_export.font_dir", previous) })
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, tool_name, answer, image_paths)
+		VALUES (1, 'alice', 'ReviewAgent', ?, '[]')`, citedScientificDownloadAnswer).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	for _, format := range []string{"PDF", "Word"} {
+		assertRenderingDownloadBinary(t, renderingDownloadRequest("alice", "1", format, ""), format)
+	}
+	assertRenderingDownloadError(t, renderingDownloadRequest("bob", "1", "Word", "alice"),
+		http.StatusNotFound, "artifact not found")
 }

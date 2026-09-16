@@ -7,7 +7,6 @@ import {
 } from "@/utils/download-transfers";
 
 let renderingFileDownloadSeq = 0;
-const MAX_ERROR_BODY_BYTES = 4096;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,31 +27,6 @@ function isJsonContentType(value: string | undefined): boolean {
   return (
     mime === "application/json" || /^application\/[\w.+-]+\+json$/.test(mime)
   );
-}
-
-async function renderingDownloadErrorKey(response: unknown): Promise<string> {
-  if (!isRecord(response) || response.status !== 503)
-    return "chat.downloadError";
-  let body: unknown = response.data;
-  const contentType =
-    readResponseHeader(response.headers, "content-type") ||
-    (body instanceof Blob ? body.type : undefined);
-  if (!isJsonContentType(contentType)) return "chat.downloadError";
-
-  if (body instanceof Blob) {
-    // Error bodies are bounded before reading; report bytes never enter JSON.parse.
-    if (body.size > MAX_ERROR_BODY_BYTES) return "chat.downloadError";
-    try {
-      body = JSON.parse(await body.text());
-    } catch {
-      return "chat.downloadError";
-    }
-  }
-  return isRecord(body) &&
-    body.code === 503 &&
-    body.reason === "academic_report_fonts_unavailable"
-    ? "chat.pdfFontsUnavailable"
-    : "chat.downloadError";
 }
 
 export async function downloadRenderingFile(
@@ -79,7 +53,7 @@ export async function downloadRenderingFile(
       isJsonContentType(readResponseHeader(response.headers, "content-type")) ||
       isJsonContentType(response.data.type)
     ) {
-      ElMessage.error(t(await renderingDownloadErrorKey(response)));
+      ElMessage.error(t("chat.downloadError"));
       return;
     }
     const contentDisposition = readResponseHeader(
@@ -113,8 +87,7 @@ export async function downloadRenderingFile(
       ElMessage.info(t("chat.downloadCancelled"));
       return;
     }
-    const response = isRecord(error) ? error.response : undefined;
-    ElMessage.error(t(await renderingDownloadErrorKey(response)));
+    ElMessage.error(t("chat.downloadError"));
   } finally {
     removeDownloadTransfer(requestId);
   }

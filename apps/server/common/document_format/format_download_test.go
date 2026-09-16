@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"phytomni-server/common/citation"
-	"phytomni-server/common/document_format/mdoc"
 )
 
 const citedDownloadAnswer = `{"content":"# Plant report\n\nEvidence [1].","doc_list":[{"au":"Doe, JA","ti":"A plant study","so":"Plant Journal","vl":"12","bp":"45","ep":"49","py":"2024"}]}`
@@ -251,6 +250,43 @@ func TestFormatDownloadCitedPDFUsesLoadedTimesNewRomanFaces(t *testing.T) {
 	}
 }
 
+func TestCitedDownloadScientificScriptsSurviveIncompleteFonts(t *testing.T) {
+	const answer = `{"content":"# Plant hormones\n\nGibberellin GA₂₀ GA₁ 10⁻⁶.","doc_list":[{"au":"Doe, JA","ti":"A plant study","py":"2024"}]}`
+	for _, tc := range []struct {
+		name string
+		dir  string
+	}{
+		{name: "complete", dir: requiredAcademicFontDir(t)},
+		{name: "missing_directory", dir: ""},
+		{name: "empty_directory", dir: t.TempDir()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			agent, err := NewAgentWithOptions("ReviewAgent", AgentOptions{FontDir: tc.dir})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, format := range []string{"PDF", "Word"} {
+				data, filename, err := agent.Download(format, answer)
+				if err != nil || len(data) == 0 {
+					t.Fatalf("%s: data=%d err=%v", format, len(data), err)
+				}
+				switch format {
+				case "PDF":
+					assertDownloadFilename(t, filename, "review_", ".pdf")
+					if !bytes.HasPrefix(data, []byte("%PDF")) {
+						t.Fatal("PDF payload is not a PDF")
+					}
+				case "Word":
+					assertDownloadFilename(t, filename, "review_", ".docx")
+					if !bytes.HasPrefix(data, []byte("PK")) {
+						t.Fatal("Word payload is not a DOCX archive")
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestCitedDownloadRejectsMalformedReferences(t *testing.T) {
 	agent, err := NewAgent("ReviewAgent")
 	if err != nil {
@@ -299,19 +335,13 @@ func copyDownloadTestFont(t *testing.T, src, dst string) {
 func assertCitedPDFDispatchDoesNotRequireCompleteFontSet(t *testing.T, data []byte, filename string, err error) {
 	t.Helper()
 	if err != nil {
-		if strings.HasSuffix(err.Error(), "reason=missing") || strings.Contains(err.Error(), "missing_directory") {
-			t.Fatalf("cited PDF dispatch still requires the full TNR set: %v", err)
-		}
-		if !errors.Is(err, mdoc.ErrAcademicFontsUnavailable) {
-			t.Fatalf("PDF with a partial academic font set: %v", err)
-		}
-		return
+		t.Fatalf("cited PDF dispatch failed without a complete TNR set: %v", err)
 	}
 	if !strings.HasSuffix(filename, ".pdf") {
 		t.Fatalf("filename = %q, want *.pdf", filename)
 	}
-	if !bytes.HasPrefix(data, []byte("%PDF")) {
-		t.Fatalf("PDF payload missing %%PDF header, filename=%s", filename)
+	if len(data) == 0 || !bytes.HasPrefix(data, []byte("%PDF")) {
+		t.Fatalf("PDF payload missing %%PDF header, filename=%s bytes=%d", filename, len(data))
 	}
 }
 
