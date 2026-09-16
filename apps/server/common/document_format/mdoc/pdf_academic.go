@@ -35,6 +35,7 @@ func RenderCitedPDF(doc Document, fonts AcademicFonts) (data []byte, err error) 
 			err = errAcademicPDF
 		}
 	}()
+	doc = normalizeScientificDocument(doc)
 	w, err := newAcademicPDFWriter(fonts)
 	if err != nil {
 		return nil, err

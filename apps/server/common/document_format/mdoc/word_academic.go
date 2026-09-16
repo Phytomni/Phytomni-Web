@@ -16,6 +16,7 @@ import (
 // RenderCitedWord writes the already assembled semantic report. Ordinary Chat
 // continues to use RenderWord and never opts in to this layout/package policy.
 func RenderCitedWord(document Document) ([]byte, error) {
+	document = normalizeScientificDocument(document)
 	doc, err := godocx.NewDocument()
 	if err != nil {
 		return nil, fmt.Errorf("create academic word: %w", err)
