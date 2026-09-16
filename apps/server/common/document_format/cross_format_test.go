@@ -54,6 +54,159 @@ type citedContract struct {
 	} `json:"expected"`
 }
 
+const crossFormatUnicodeSource = "# Plant hormones\n\nGibberellin GA₂₀ and GA₁ act at 10⁻⁶ M. Water is H<sub>2</sub>O and iron is Fe<sup>3+</sup>. The *OsD18* gene remains italic [1]."
+
+func TestCrossFormatUnicodeScientificScriptsKeepMarkdownSource(t *testing.T) {
+	refs := json.RawMessage(`[{"title":"A plant study"}]`)
+	answer, err := json.Marshal(citedEnvelope{crossFormatUnicodeSource, refs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scripts := []contractScript{
+		{Before: "Gibberellin GA", Text: "20", Vertical: "subscript"},
+		{Before: " and GA", Text: "1", Vertical: "subscript"},
+		{Before: " act at 10", Text: "-6", Vertical: "superscript"},
+		{Before: "Water is H", Text: "2", Vertical: "subscript"},
+		{Before: "iron is Fe", Text: "3+", Vertical: "superscript"},
+	}
+	for _, tool := range []string{"KnowledgeAgent", "ReviewAgent", "BriefGeneAgent", "DeepGenomeAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			agent, err := NewAgentWithOptions(tool, AgentOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			markdown, _, err := agent.Download("Markdown", string(answer))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := string(markdown)
+			if !strings.HasPrefix(body, crossFormatUnicodeSource+"\n\n## References\n\n") {
+				t.Fatal("Markdown rewrote the Unicode source")
+			}
+			for _, keep := range []string{"GA₂₀", "GA₁", "10⁻⁶", "H<sub>2</sub>O", "Fe<sup>3+</sup>", "*OsD18*"} {
+				if !strings.Contains(body, keep) {
+					t.Fatalf("Markdown lost source %q", keep)
+				}
+			}
+			for _, sub := range []string{"GA20", "10-6"} {
+				if strings.Contains(body, sub) {
+					t.Fatalf("Markdown substituted ASCII %q", sub)
+				}
+			}
+			word, _, err := agent.Download("Word", string(answer))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertWordUnicodeScriptsNormalized(t, word, scripts)
+		})
+	}
+}
+
+func assertWordUnicodeScriptsNormalized(t *testing.T, body []byte, scripts []contractScript) {
+	t.Helper()
+	stylesXML := wordPackagePart(t, body, "word/styles.xml")
+	if !strings.Contains(stylesXML, "Times New Roman") {
+		t.Fatal("DOCX styles omitted Times New Roman")
+	}
+	xmlBody := wordDocumentXML(t, body)
+	if !strings.Contains(xmlBody, "vertAlign") {
+		t.Fatal("DOCX omitted w:vertAlign")
+	}
+	for _, keep := range []string{"GA₂₀", "GA₁", "10⁻⁶"} {
+		if strings.Contains(xmlBody, keep) {
+			t.Fatalf("DOCX kept Unicode %q instead of native vertical runs", keep)
+		}
+	}
+	var styles struct {
+		Rows []struct {
+			ID    string `xml:"styleId,attr"`
+			Fonts struct {
+				Ascii string `xml:"ascii,attr"`
+			} `xml:"rPr>rFonts"`
+		} `xml:"style"`
+	}
+	if err := xml.Unmarshal([]byte(stylesXML), &styles); err != nil {
+		t.Fatal(err)
+	}
+	styleFonts := map[string]string{}
+	for _, style := range styles.Rows {
+		styleFonts[style.ID] = style.Fonts.Ascii
+	}
+	decoder := xml.NewDecoder(strings.NewReader(xmlBody))
+	paragraphStyle := ""
+	var visible strings.Builder
+	matched := 0
+	gene := false
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if start.Name.Local == "p" {
+			paragraphStyle = ""
+		}
+		if start.Name.Local == "pPr" {
+			var properties struct {
+				Style struct {
+					Val string `xml:"val,attr"`
+				} `xml:"pStyle"`
+			}
+			if err := decoder.DecodeElement(&properties, &start); err != nil {
+				t.Fatal(err)
+			}
+			paragraphStyle = properties.Style.Val
+		}
+		if start.Name.Local != "r" {
+			continue
+		}
+		var run contractWordRun
+		if err := decoder.DecodeElement(&run, &start); err != nil {
+			t.Fatal(err)
+		}
+		value := strings.Join(run.Text, "")
+		if value == "" {
+			continue
+		}
+		font := styleFonts[paragraphStyle]
+		if run.Properties.Fonts != nil && run.Properties.Fonts.Ascii != "" {
+			font = run.Properties.Fonts.Ascii
+		}
+		if font != "Times New Roman" {
+			t.Fatalf("DOCX run %q omitted Times New Roman", value)
+		}
+		before := visible.String()
+		if value == "OsD18" {
+			italic := run.Properties.Italic != nil && run.Properties.Italic.Val != "false" && run.Properties.Italic.Val != "0"
+			if !italic {
+				t.Fatal("italic gene lost")
+			}
+			gene = true
+		}
+		for _, script := range scripts {
+			if script.Before != "" && strings.HasSuffix(before, script.Before) && value == script.Text {
+				if run.Properties.Vertical == nil || run.Properties.Vertical.Val != script.Vertical {
+					t.Fatalf("DOCX ordinary script %q lost native w:vertAlign=%s", script.Before, script.Vertical)
+				}
+				matched++
+			}
+		}
+		visible.WriteString(value)
+	}
+	if matched != len(scripts) {
+		t.Fatalf("DOCX ordinary script count: got %d want %d in %q", matched, len(scripts), visible.String())
+	}
+	if !gene {
+		t.Fatal("italic gene run missing")
+	}
+}
+
 func TestCrossFormatOrdinaryScriptsAreNotCitationMarkers(t *testing.T) {
 	data, err := os.ReadFile("testdata/cited-contract.json")
 	if err != nil {
@@ -194,12 +347,18 @@ type contractWordRun struct {
 		Size *struct {
 			Val string `xml:"val,attr"`
 		} `xml:"sz"`
+		Fonts *struct {
+			Ascii string `xml:"ascii,attr"`
+		} `xml:"rFonts"`
 	} `xml:"rPr"`
 	Text []string `xml:"t"`
 }
 
 func checkContractWord(t *testing.T, body []byte, f citedContract) {
 	t.Helper()
+	if !strings.Contains(wordPackagePart(t, body, "word/styles.xml"), "Times New Roman") {
+		t.Fatal("DOCX styles omitted Times New Roman")
+	}
 	var styles struct {
 		Rows []struct {
 			ID   string `xml:"styleId,attr"`
