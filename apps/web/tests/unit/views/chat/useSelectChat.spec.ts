@@ -150,6 +150,31 @@ describe("useSelectChat", () => {
     });
   }
 
+  it("hydrates an empty scientific answer with its public report warnings and archive", async () => {
+    const { default: golden } =
+      await import("../../../fixtures/report-integrity/public-projection.json");
+    const { decodeChatHistory } = await import("@/api/types");
+    const fixture = golden.cases.find(
+      (entry) => entry.id === "no-science-archive-design"
+    );
+    if (!fixture) throw new Error("Archive golden is missing");
+    mockGetAnswerCheck.mockResolvedValueOnce({
+      code: 200,
+      data: decodeChatHistory([{ ...fixture.history, dialogue_id: "d1" }]),
+    });
+    await makeComposable().selectChat("d1");
+    const assistant = stateFor("d1").renderedChat?.messages.find(
+      (entry) => entry.role === "assistant"
+    );
+    expect(assistant).toBeDefined();
+    expect(assistant?.content).toBe("");
+    expect(assistant?.botProjection?.reportWarningCodes).toEqual(
+      fixture.history.projection.report_warning_codes
+    );
+    expect(assistant?.delivery).toEqual(fixture.history.delivery);
+    expect(assistant?.artifacts).toEqual(fixture.history.artifacts);
+  });
+
   function attachmentStore(
     records: Array<{
       assetId: string;
@@ -210,6 +235,17 @@ describe("useSelectChat", () => {
               {
                 title: "Drought epigenetics",
                 di: "10.1000/safe-doi",
+                formatted_citation: "Drought epigenetics.",
+                doi_missing: false,
+                citation: {
+                  runs: [{ text: "Drought epigenetics", italic: true }],
+                  links: [
+                    {
+                      label: "Article",
+                      href: "https://doi.org/10.1000/safe-doi",
+                    },
+                  ],
+                },
               },
             ],
             status: "running",
@@ -320,6 +356,15 @@ describe("useSelectChat", () => {
           {
             title: "Drought epigenetics",
             di: "10.1000/safe-doi",
+            citation: {
+              runs: [{ text: "Drought epigenetics", italic: true }],
+              links: [
+                {
+                  label: "Article",
+                  href: "https://doi.org/10.1000/safe-doi",
+                },
+              ],
+            },
           },
         ],
         content: [{ transcript_id_1: "Os01t0177400-01" }],
@@ -355,6 +400,166 @@ describe("useSelectChat", () => {
     expect(stateFor("d1").executionRuns["turn-history"].events).toMatchObject([
       { eventId: "event-history-started", kind: "execution.started" },
     ]);
+  });
+
+  it("restores a successful completed V2 scientific answer as a complete final report", async () => {
+    const report =
+      "# Research synthesis\n\nThe controlled comparison retained a reproducible drought-response signal [1].";
+    const reportLength = [...report].length;
+    const citation = {
+      runs: [{ text: "Canonical drought study", italic: true }],
+      links: [
+        {
+          label: "Article",
+          href: "https://doi.org/10.1000/history-safe",
+        },
+      ],
+    };
+    const eventBase = {
+      schema_version: 2,
+      execution_id: "turn-report-history",
+      occurred_at: "2026-09-18T00:00:01Z",
+      span_id: "root",
+      parent_span_id: null,
+      work_unit_id: null,
+      attempt: 1,
+      target: null,
+      idempotency_key: null,
+    };
+    mockGetConversationHistoryV2.mockResolvedValueOnce(
+      buildApiEnvelope<ConversationHistoryV2>({
+        schema_version: 2,
+        conversation_id: "d1",
+        messages: [
+          {
+            message_id: "msg-report-history",
+            conversation_id: "d1",
+            message_index: 1,
+            execution_id: "turn-report-history",
+            source_message_id: "msg-report-history",
+            type: "assistant",
+            role: "assistant",
+            visibility: "user",
+            content_revision: 1,
+            content_offset: reportLength,
+            content_length: reportLength,
+            content_sha256: "a".repeat(64),
+            content: report,
+            references: [
+              {
+                title: "Canonical drought study",
+                citation,
+              },
+            ],
+            status: "succeeded",
+            occurred_at: "2026-09-18T00:00:01Z",
+          },
+        ],
+        executions: [
+          {
+            execution_id: "turn-report-history",
+            user_message_id: "msg-user-history",
+            assistant_message_id: "msg-report-history",
+            status: "succeeded",
+            event_cursor: 2,
+            projection_revision: 2,
+            content_revision: 1,
+            content_offset: reportLength,
+            tracking_health: "healthy",
+            stale: false,
+            projection: {
+              schema_version: 2,
+              execution_id: "turn-report-history",
+              agent_slug: "research",
+              status: "succeeded",
+              latest_seq: 2,
+              output_revision: 1,
+              output_offset: reportLength,
+              operation_revision: 0,
+              operations: [],
+              execution_stage: null,
+              tracking_health: "healthy",
+              active_span_ids: [],
+              todo_declared: false,
+              todos: [],
+              results: [],
+              targets: [],
+              failed_work_unit_ids: [],
+              warnings: [],
+              input_required: null,
+              context_stage: null,
+              terminal: {
+                status: "succeeded",
+                event_id: "event-history-succeeded",
+                result_revision: 1,
+              },
+            },
+            events: [
+              {
+                ...eventBase,
+                event_id: "event-history-completed",
+                seq: 1,
+                type: "message.completed",
+                status: "succeeded",
+                source: "message",
+                summary: {
+                  key: "message.completed",
+                  text: "Answer completed",
+                },
+                public_payload: {
+                  output_revision: 1,
+                  message_id: "msg-report-history",
+                  source_message_id: "msg-report-history",
+                  base_offset: 0,
+                  offset: reportLength,
+                  total_length: reportLength,
+                  chunk_index: 0,
+                  chunk_count: 1,
+                  content_sha256: "a".repeat(64),
+                  text: report,
+                  references: [
+                    {
+                      title: "Canonical drought study",
+                      citation,
+                    },
+                  ],
+                },
+              },
+              {
+                ...eventBase,
+                event_id: "event-history-succeeded",
+                seq: 2,
+                type: "execution.succeeded",
+                status: "succeeded",
+                source: "runtime",
+                summary: {
+                  key: "activity.execution.succeeded",
+                  text: "Execution succeeded",
+                },
+                public_payload: {},
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    await makeComposable({ orderedHistory: true }).selectChat("d1");
+
+    const assistant = messageAt("d1", 0, "final V2 report");
+    expect(assistant.doc_list?.[0]?.citation).toEqual(citation);
+    expect(assistant.botProjection).toMatchObject({
+      agent: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      reportPresentation: true,
+      reportStage: "final",
+      reportCompleteness: "complete",
+      finalReport: report,
+      reportWarningCodes: [],
+      degraded: false,
+    });
+    expect(assistant.botProjection?.report).toBeUndefined();
+    expect(assistant.executionRun?.outputCompleted).toBe(true);
   });
 
   it("does not regress newer live assistant content during a forced v2 history refresh", async () => {
@@ -513,6 +718,34 @@ describe("useSelectChat", () => {
       expect(stateFor("d1").mode).toBe(persistedMode);
     }
   );
+
+  it("hydrates canonical cited history without shifting malformed reference slots", async () => {
+    const doc = {
+      citation: {
+        runs: [{ text: "Canonical history source" }],
+        links: [{ label: "Article", href: "https://doi.org/10.1000/history" }],
+      },
+    };
+    mockGetAnswerCheck.mockResolvedValueOnce(
+      historyResponse([
+        buildChatHistoryRecord({
+          id: "42",
+          query: "Question",
+          tool_name: "KnowledgeAgent",
+          answer: JSON.stringify({
+            content: "Answer [3].",
+            doc_list: [doc, null, doc],
+          }),
+          status: "SUCCEEDED",
+        }),
+      ])
+    );
+    await makeComposable().selectChat("d1");
+    const messages = renderedFor("d1", "canonical history").messages;
+    const assistant = messages?.find((message) => message.role === "assistant");
+    expect(assistant?.content).toBe("Answer [3].");
+    expect(assistant?.doc_list).toEqual([doc, { citation: null }, doc]);
+  });
 
   it("hydrates structured attachments with purpose-free same-account metadata", async () => {
     mockGetAnswerCheck.mockResolvedValueOnce(

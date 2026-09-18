@@ -2,13 +2,19 @@ import {
   MAX_BOT_ARTIFACTS,
   MAX_BOT_ARTIFACT_PATHS,
   MAX_BOT_FAILURES,
+  isBotReportWarningCode,
 } from "../botProjection";
+import { isApprovedReportText } from "../utils/valid-report-ledger";
 import type {
   BotArtifact,
   BotInteropProvenance,
   BotRunProjection,
   BotRunStatus,
   BotWorkStage,
+  BotReport,
+  BotReportWarningCode,
+  BotReportStage,
+  BotProgress,
 } from "../botProjection";
 import type {
   AgentResultDelivery,
@@ -29,6 +35,12 @@ export interface BotLifecycleState {
   status: BotLifecycleStatus;
   workStage?: BotWorkStage | null;
   reportRevision: number;
+  report?: BotReport;
+  reportWarningCodes?: BotReportWarningCode[];
+  reportStage?: BotReportStage;
+  reportUpdatedAt?: string | null;
+  progress?: BotProgress;
+  trackingDegraded?: boolean;
   visibleReport: string;
   intermediateReport: string;
   finalReport: string;
@@ -392,9 +404,8 @@ export function initBotLifecycleState(): BotLifecycleState {
 /**
  * Fold one sanitized Bot projection into a fresh lifecycle snapshot.
  *
- * Revision order controls status and report replacement. Metadata is merged
- * by union/OR so a blank or stale poll can never erase user-visible content,
- * failures, or artifact references.
+ * Revision order controls report facts. Empty content preserves real science;
+ * an explicit fresh warning list may clear warnings from an earlier report.
  */
 export function reduceBotProjection(
   state: BotLifecycleState,
@@ -403,22 +414,18 @@ export function reduceBotProjection(
   const currentRevision = normalizedRevision(state.reportRevision);
   const incomingRevision = normalizedRevision(incoming.reportRevision);
   const stale = isStaleRevision(currentRevision, incomingRevision);
+  const valid = (value: string) =>
+    isApprovedReportText(incoming.agent, value) ? value : "";
   const nextIntermediate = stale
-    ? state.intermediateReport
+    ? valid(state.intermediateReport)
     : mergeReport(
-        state.intermediateReport,
-        typeof incoming.intermediateReport === "string"
-          ? incoming.intermediateReport
-          : "",
+        valid(state.intermediateReport),
+        valid(incoming.intermediateReport),
         false
       );
   const nextFinal = stale
-    ? state.finalReport
-    : mergeReport(
-        state.finalReport,
-        typeof incoming.finalReport === "string" ? incoming.finalReport : "",
-        false
-      );
+    ? valid(state.finalReport)
+    : mergeReport(valid(state.finalReport), valid(incoming.finalReport), false);
   const incomingStatus = mapStatus(incoming.status);
   const nextStatus = mergeStatus(state.status, incomingStatus, stale);
   const nextWorkStage =
@@ -431,19 +438,33 @@ export function reduceBotProjection(
     interopEnabled ? incoming.interop : null,
     stale
   );
+  const report = stale ? state.report : (incoming.report ?? state.report);
+  const warnings = stale
+    ? state.reportWarningCodes
+    : (incoming.reportWarningCodes ?? state.reportWarningCodes);
 
   return {
     runId: nextRunId,
     status: nextStatus,
     workStage: nextWorkStage,
     reportRevision: nextRevision,
+    report: report ? { ...report } : undefined,
+    reportWarningCodes: warnings
+      ? [...new Set(warnings.filter(isBotReportWarningCode))]
+      : undefined,
+    reportStage: stale ? state.reportStage : incoming.reportStage,
+    reportUpdatedAt: stale ? state.reportUpdatedAt : incoming.reportUpdatedAt,
+    progress: stale ? state.progress : { ...incoming.progress },
     intermediateReport: nextIntermediate,
     finalReport: nextFinal,
     visibleReport: hasText(nextFinal) ? nextFinal : nextIntermediate,
-    degraded:
-      state.degraded === true ||
-      incoming.degraded === true ||
-      incoming.trackingDegraded === true,
+    degraded: stale
+      ? state.degraded
+      : report
+        ? report.degraded || report.state === "degraded"
+        : incoming.degraded,
+    trackingDegraded:
+      state.trackingDegraded === true || incoming.trackingDegraded === true,
     degradedInterop:
       state.degradedInterop === true ||
       (interopEnabled && incoming.degradedInterop === true),
@@ -465,6 +486,15 @@ export function reduceBotFailure(
   const terminal = isTerminal(state.status);
   const cancelled = safeMessage === SAFE_FAILURE_MESSAGES.cancelled;
   return {
+    workStage: state.workStage,
+    report: state.report ? { ...state.report } : undefined,
+    reportWarningCodes: state.reportWarningCodes?.filter(
+      isBotReportWarningCode
+    ),
+    reportStage: state.reportStage,
+    reportUpdatedAt: state.reportUpdatedAt,
+    progress: state.progress ? { ...state.progress } : undefined,
+    trackingDegraded: state.trackingDegraded,
     runId: state.runId,
     status: terminal ? state.status : cancelled ? "CANCELLED" : "FAILED",
     reportRevision: normalizedRevision(state.reportRevision),

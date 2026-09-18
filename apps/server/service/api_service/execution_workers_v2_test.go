@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 
@@ -481,7 +482,17 @@ func TestExecutionProjectorReconstructsAssistantAcrossPagesWithoutCreatingAnothe
 	fake.page = &rxBot.ExecutionEventPageV2{SchemaVersion: 2, ExecutionID: admission.ExecutionID, NextAfterSeq: 3, Items: []rxBot.ExecutionEventV2{
 		{SchemaVersion: 2, ExecutionID: admission.ExecutionID, EventID: "event-chunk-2", Seq: 2, Type: "message.completed", Status: "succeeded", OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), Source: "message", SpanID: "root", Attempt: 1, PublicPayload: func() map[string]any {
 			payload := messageContentPayload(messageID, lastChunk, 1, int64(len([]rune(firstChunk))), totalLength, 1, 2, digest)
-			payload["references"] = []any{map[string]any{"title": "Drought epigenetics", "di": "10.1000/safe-doi", "pm": "12345"}}
+			payload["references"] = []any{
+				map[string]any{
+					"title": "Drought epigenetics", "di": "10.1000/safe-doi", "pm": "12345",
+					"formatted_citation": "Rich *citation*.",
+					"citation": map[string]any{
+						"runs":  []any{map[string]any{"text": "forged"}},
+						"links": []any{map[string]any{"label": "Article", "href": "https://evil.example/private"}},
+					},
+				},
+				nil,
+			}
 			return payload
 		}()},
 		{SchemaVersion: 2, ExecutionID: admission.ExecutionID, EventID: "event-terminal", Seq: 3, Type: "execution.succeeded", Status: "succeeded", OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), Source: "runtime", SpanID: "root", Attempt: 1, PublicPayload: map[string]any{}},
@@ -498,8 +509,14 @@ func TestExecutionProjectorReconstructsAssistantAcrossPagesWithoutCreatingAnothe
 	if completed.Content != answer || completed.ContentOffset != totalLength || completed.ContentLength != totalLength || completed.ContentSHA256 != digest || completed.Status != "succeeded" {
 		t.Fatalf("completed assistant=%#v", completed)
 	}
-	if len(completed.References) != 1 || completed.References[0].Title != "Drought epigenetics" || completed.References[0].DOI != "10.1000/safe-doi" {
+	if len(completed.References) != 2 || completed.References[0].Title != "Drought epigenetics" || completed.References[0].DOI != "10.1000/safe-doi" ||
+		completed.References[0].FormattedCitation != "Rich *citation*." || citation.PlainText(completed.References[0].Citation) != "Rich citation." ||
+		citation.PlainText(completed.References[1].Citation) != "Reference details unavailable." {
 		t.Fatalf("completed assistant references=%#v", completed.References)
+	}
+	encodedCanonical, _ := json.Marshal(completed.References)
+	if strings.Contains(string(encodedCanonical), "forged") || strings.Contains(string(encodedCanonical), "evil.example") || !strings.Contains(string(encodedCanonical), "https://doi.org/10.1000/safe-doi") {
+		t.Fatalf("unsafe canonical references=%s", encodedCanonical)
 	}
 	var canonicalMessageCount int64
 	if err := model.DB(ctx).Model(&model.ConversationMessageV2{}).Where("execution_id = ? AND message_type IN ?", admission.ExecutionID, []string{"user", "assistant"}).Count(&canonicalMessageCount).Error; err != nil {
@@ -518,6 +535,26 @@ func TestExecutionProjectorReconstructsAssistantAcrossPagesWithoutCreatingAnothe
 
 	// History hydration is database-only: once the projector commits, a Bot
 	// outage must not erase the ordered messages or the last verified cursor.
+	// Simulate rows persisted before canonical citation presentation was added;
+	// the read DTO must enrich them without mutating either durable row.
+	legacyReferences := []any{map[string]any{"title": "Drought epigenetics", "di": "10.1000/safe-doi", "pm": "12345", "formatted_citation": "Rich *citation*."}, nil}
+	legacyReferencesJSON, _ := json.Marshal(legacyReferences)
+	if err := model.DB(ctx).Model(&model.ConversationMessageV2{}).Where("message_id = ?", messageID).UpdateColumn("references_json", string(legacyReferencesJSON)).Error; err != nil {
+		t.Fatal(err)
+	}
+	var cachedCompleted model.QuestionAgentExecutionEventV2
+	if err := model.DB(ctx).Where("execution_id = ? AND event_id = ?", admission.ExecutionID, "event-chunk-2").Take(&cachedCompleted).Error; err != nil {
+		t.Fatal(err)
+	}
+	var legacyEvent rxBot.ExecutionEventV2
+	if err := json.Unmarshal([]byte(cachedCompleted.EventJSON), &legacyEvent); err != nil {
+		t.Fatal(err)
+	}
+	legacyEvent.PublicPayload["references"] = legacyReferences
+	legacyEventJSON, _ := json.Marshal(legacyEvent)
+	if err := model.DB(ctx).Model(&model.QuestionAgentExecutionEventV2{}).Where("user_name = ? AND execution_id = ? AND seq = ?", admission.UserName, admission.ExecutionID, cachedCompleted.Seq).UpdateColumn("event_json", string(legacyEventJSON)).Error; err != nil {
+		t.Fatal(err)
+	}
 	fake.pageErr = errors.New("bot unavailable")
 	history, err := service.ConversationHistoryV2(ctx, admission.UserName, *admission.DialogueID)
 	if err != nil {
@@ -526,7 +563,8 @@ func TestExecutionProjectorReconstructsAssistantAcrossPagesWithoutCreatingAnothe
 	if history.SchemaVersion != 2 || len(history.Messages) != 3 || len(history.Executions) != 1 {
 		t.Fatalf("history envelope=%#v", history)
 	}
-	if history.Messages[1].MessageID != messageID || history.Messages[1].Content != answer || len(history.Messages[1].References) != 1 {
+	if history.Messages[1].MessageID != messageID || history.Messages[1].Content != answer || len(history.Messages[1].References) != 2 ||
+		citation.PlainText(history.Messages[1].References[0].Citation) != "Rich citation." || citation.PlainText(history.Messages[1].References[1].Citation) != "Reference details unavailable." {
 		t.Fatalf("history assistant=%#v", history.Messages[1])
 	}
 	if history.Executions[0].ExecutionID != admission.ExecutionID || history.Executions[0].EventCursor != 3 || history.Executions[0].Projection == nil {
@@ -534,6 +572,24 @@ func TestExecutionProjectorReconstructsAssistantAcrossPagesWithoutCreatingAnothe
 	}
 	if len(history.Executions[0].Events) != 3 {
 		t.Fatalf("history did not retain execution facts: %#v", history.Executions[0].Events)
+	}
+	historyReferences, ok := history.Executions[0].Events[1].PublicPayload["references"].([]any)
+	if !ok || len(historyReferences) != 2 {
+		t.Fatalf("legacy cached event references were not hydrated: %#v", history.Executions[0].Events[1])
+	}
+	hydratedEventReferences, _ := json.Marshal(historyReferences)
+	if !strings.Contains(string(hydratedEventReferences), `"citation"`) || !strings.Contains(string(hydratedEventReferences), "https://doi.org/10.1000/safe-doi") {
+		t.Fatalf("cached event canonical citation missing: %s", hydratedEventReferences)
+	}
+	var persistedReferences, persistedEvent string
+	if err := model.DB(ctx).Raw("SELECT references_json FROM conversation_messages_v2 WHERE message_id = ?", messageID).Row().Scan(&persistedReferences); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.DB(ctx).Raw("SELECT event_json FROM question_agent_execution_events_v2 WHERE user_name = ? AND execution_id = ? AND seq = ?", admission.UserName, admission.ExecutionID, cachedCompleted.Seq).Row().Scan(&persistedEvent); err != nil {
+		t.Fatal(err)
+	}
+	if persistedReferences != string(legacyReferencesJSON) || persistedEvent != string(legacyEventJSON) {
+		t.Fatal("history citation hydration wrote back to durable rows")
 	}
 }
 

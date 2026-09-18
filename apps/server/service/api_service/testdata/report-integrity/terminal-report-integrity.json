@@ -1,0 +1,646 @@
+[
+  {
+    "agent": "analyst",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          },
+          {
+            "download_ref": "fixture:results.md",
+            "downloadable": true,
+            "media_type": "text/markdown",
+            "name": "results.md",
+            "report_context_eligible": true,
+            "role": "scientific_report",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "analyst-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 1,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_synthesis_failed",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 1,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "empty_synthesis",
+    "status": "succeeded"
+  },
+  {
+    "agent": "analyst",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "analyst-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 0,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_no_scientific_text",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 0,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "no_text",
+    "status": "succeeded"
+  },
+  {
+    "agent": "design",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          },
+          {
+            "download_ref": "fixture:results.md",
+            "downloadable": true,
+            "media_type": "text/markdown",
+            "name": "results.md",
+            "report_context_eligible": true,
+            "role": "scientific_report",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "design-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 1,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_synthesis_failed",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 1,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "empty_synthesis",
+    "status": "succeeded"
+  },
+  {
+    "agent": "design",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "design-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 0,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_no_scientific_text",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 0,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "no_text",
+    "status": "succeeded"
+  },
+  {
+    "agent": "network",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          },
+          {
+            "download_ref": "fixture:results.md",
+            "downloadable": true,
+            "media_type": "text/markdown",
+            "name": "results.md",
+            "report_context_eligible": true,
+            "role": "scientific_report",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "network-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 1,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_synthesis_failed",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 1,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "empty_synthesis",
+    "status": "succeeded"
+  },
+  {
+    "agent": "network",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "network-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 0,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_no_scientific_text",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 0,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "no_text",
+    "status": "succeeded"
+  },
+  {
+    "agent": "research",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          },
+          {
+            "download_ref": "fixture:results.md",
+            "downloadable": true,
+            "media_type": "text/markdown",
+            "name": "results.md",
+            "report_context_eligible": true,
+            "role": "scientific_report",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "research-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 1,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_synthesis_failed",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 1,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "empty_synthesis",
+    "status": "succeeded"
+  },
+  {
+    "agent": "research",
+    "result": {
+      "execution": {
+        "artifacts": [
+          {
+            "download_ref": "fixture:measurements.parquet",
+            "downloadable": true,
+            "media_type": "application/octet-stream",
+            "name": "measurements.parquet",
+            "report_context_eligible": false,
+            "role": "scientific_data",
+            "size_bytes": 32
+          }
+        ],
+        "delivery": {
+          "archive": {
+            "download_ref": "result-archive:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "downloadable": true,
+            "media_type": "application/zip",
+            "name": "research-results.zip",
+            "report_context_eligible": false,
+            "role": "result_archive",
+            "size_bytes": 32
+          },
+          "error_code": null,
+          "inventory_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "required": true,
+          "retryable": false,
+          "revision": 1,
+          "schema_version": 1,
+          "status": "ready"
+        },
+        "diagnostics": [],
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "report": {
+          "degraded": true,
+          "source_artifact_count": 0,
+          "state": "degraded"
+        },
+        "tasks": [
+          {
+            "accepted": true,
+            "id": "child-fixture",
+            "status": "succeeded"
+          }
+        ],
+        "tracking": {
+          "degraded": true
+        },
+        "warnings": [
+          {
+            "code": "report_no_scientific_text",
+            "retryable": false,
+            "stage": "terminal_report"
+          }
+        ]
+      },
+      "formatted": {
+        "answer": "",
+        "follow_up_questions": [],
+        "metadata": {
+          "report": {
+            "degraded": true,
+            "source_artifact_count": 0,
+            "state": "degraded"
+          }
+        },
+        "output_dirs": ["/obs/synthetic-bucket/fixture-owner/run-fixture"],
+        "references": [],
+        "tabular": null
+      }
+    },
+    "scenario": "no_text",
+    "status": "succeeded"
+  }
+]

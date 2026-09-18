@@ -215,13 +215,17 @@ describe("reduceAGUIEvent", () => {
       type: "Custom",
       data: {
         name: "phyto.references",
-        value: { doc_list: [{ title: "T1" }] },
+        value: {
+          doc_list: [{ citation: { runs: [{ text: "T1" }], links: [] } }],
+        },
       },
     });
-    expect(s.references).toEqual([{ title: "T1" }]);
+    expect(s.references).toEqual([
+      { citation: { runs: [{ text: "T1" }], links: [] } },
+    ]);
   });
 
-  it("drops non-object citation rows at the stream boundary", () => {
+  it("retains malformed citation slots at the stream boundary", () => {
     const state = reduceAGUIEvent(initReducerState(), {
       type: "Custom",
       data: {
@@ -229,7 +233,50 @@ describe("reduceAGUIEvent", () => {
         value: { doc_list: [{ title: "T1" }, "not-a-document", null] },
       },
     });
-    expect(state.references).toEqual([{ title: "T1" }]);
+    expect(state.references).toEqual([
+      { title: "T1", citation: null },
+      { citation: null },
+      { citation: null },
+    ]);
+  });
+
+  it.each([
+    { label: "absent", doc_list: undefined },
+    { label: "null", doc_list: null },
+    { label: "empty array", doc_list: [] },
+  ])(
+    "retains valid references through a blank event and finish: $label",
+    ({ doc_list }) => {
+      const references = [
+        { citation: { runs: [{ text: "Canonical" }], links: [] } },
+      ];
+      let state = reduceAGUIEvent(initReducerState(), {
+        type: "Custom",
+        data: { name: "phyto.references", value: { doc_list: references } },
+      });
+      state = reduceAGUIEvent(state, {
+        type: "Custom",
+        data: { name: "phyto.references", value: { doc_list } },
+      });
+      state = reduceAGUIEvent(state, { type: "RunFinished", data: {} });
+      expect(state.references).toEqual(references);
+      expect(state.done).toBe(true);
+    }
+  );
+
+  it("replaces a valid list with all positions of a nonempty mixed list through finish", () => {
+    const doc = { citation: { runs: [{ text: "Canonical" }], links: [] } };
+    let state = reduceAGUIEvent(initReducerState(), {
+      type: "Custom",
+      data: { name: "phyto.references", value: { doc_list: [doc] } },
+    });
+    state = reduceAGUIEvent(state, {
+      type: "Custom",
+      data: { name: "phyto.references", value: { doc_list: [doc, null, doc] } },
+    });
+    state = reduceAGUIEvent(state, { type: "RunFinished", data: {} });
+    expect(state.references).toEqual([doc, { citation: null }, doc]);
+    expect(state.done).toBe(true);
   });
 
   it("captures error from RunError", () => {

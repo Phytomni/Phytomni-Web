@@ -298,6 +298,13 @@ function handleTabKeydown(
   outline-offset: -2px;
 }
 
+@media (forced-colors: active) {
+  .research-artifact-shell__tab.is-active::after {
+    border-block-end: 2px solid Highlight;
+    background: none;
+  }
+}
+
 .research-artifact-shell__body {
   display: flex;
   flex: 1 1 auto;

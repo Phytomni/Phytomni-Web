@@ -14,6 +14,15 @@
   >
     {{ $t("chat.contextDegraded") }}
   </div>
+  <p
+    v-if="showReportUnavailable"
+    class="agent-lifecycle"
+    data-test="report-unavailable"
+    role="status"
+  >
+    {{ t(reportPresentation.labelKey) }}
+  </p>
+  <BotReportWarnings :warning-keys="reportPresentation.warningKeys" />
   <!-- User message, lifecycle-owned DeepGenome, or an answer without reasoning steps -->
   <div
     v-if="
@@ -27,7 +36,7 @@
       'message-text',
       message.role === 'user'
         ? 'phy-bubble-user has-user'
-        : 'phy-bubble-assistant',
+        : !showArtifactPreview && 'phy-bubble-assistant',
     ]"
   >
     <!-- Streaming assistant messages (AG-UI content blocks) render via
@@ -242,19 +251,29 @@
   </div>
   <!-- Table data display -->
   <div v-else-if="message.tableHeaders" class="table-response">
-    <el-table
-      :data="chatContentToRows(message.content)"
-      border
-      style="width: 100%"
-    >
-      <el-table-column
-        v-for="header in message.tableHeaders"
-        :key="header.prop"
-        :prop="header.prop"
-        :label="header.label"
-        align="center"
-      />
-    </el-table>
+    <figure class="chat-data-figure">
+      <figcaption :id="'table-caption-' + index">
+        {{ tableCaptionText }}
+      </figcaption>
+      <PhyTableFrame>
+        <el-table
+          :data="tableRows"
+          border
+          class="chat-data-table"
+          header-cell-class-name="chat-table-header-cell"
+          max-height="min(24rem, 55vh)"
+          style="width: 100%"
+        >
+          <el-table-column
+            v-for="header in message.tableHeaders"
+            :key="header.prop"
+            :prop="header.prop"
+            :label="humanizeTableHeaderLabel(header.label)"
+            min-width="140"
+          />
+        </el-table>
+      </PhyTableFrame>
+    </figure>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
   <div v-else class="ai-response">
@@ -292,6 +311,14 @@
       />
     </div>
   </div>
+  <ResultArchiveDelivery
+    v-if="message.role === 'assistant' && archiveDelivery"
+    :delivery="archiveDelivery"
+    :artifacts="message.artifacts ?? []"
+    :retrying="archiveRetrying"
+    @download="emit('download-result-archive', $event)"
+    @retry="emit('retry-result-archive')"
+  />
 </template>
 
 <script setup lang="ts">
@@ -301,10 +328,13 @@ import ScientificMarkdownTypewriter from "@/components/ScientificMarkdownTypewri
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
+import BotReportWarnings from "@/components/research/BotReportWarnings.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
+import { PhyTableFrame } from "@/components/shell";
 import StreamMessage from "./StreamMessage.vue";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { AgentTaskLifecycle } from "@/api/types";
+import type { AgentTaskLifecycle, ConversationArtifactLink } from "@/api/types";
 import type { ChatMessage } from "../types";
 import {
   CANONICAL_AGENT_DISPLAY_NAMES,
@@ -314,12 +344,17 @@ import {
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
 import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { chatContentToRows, chatContentToText } from "../messageTypes";
+import { humanizeTableHeaderLabel } from "../utils/format";
 import { normalizePositiveTaskRowId } from "@/api/task";
 import {
   artifactPresentationForMessage,
   isDeepGenomeTransportPlaceholder,
   isMeaningfulDeepGenomeReport,
 } from "../utils/artifact-policy";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "../utils/report-presentation";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -337,11 +372,14 @@ const props = defineProps<{
   digitalDesignImages: Record<string, string[]>;
   digitalDesignImagesLoading: Record<string, boolean>;
   lifecycle?: AgentTaskLifecycle;
+  archiveRetrying?: boolean;
 }>();
 
 const emit = defineEmits<{
   finish: [];
   "open-artifact": [];
+  "download-result-archive": [artifact: ConversationArtifactLink];
+  "retry-result-archive": [];
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
@@ -349,6 +387,13 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
+
+const tableRows = computed(() => chatContentToRows(props.message.content));
+const tableCaptionText = computed(() => {
+  const titled = props.message.tableCaption?.trim();
+  if (titled) return titled;
+  return t("chat.tableRowCount", { count: tableRows.value.length });
+});
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
@@ -385,6 +430,32 @@ const isResearchMessage = computed(
 );
 const artifactPresentation = computed(() =>
   artifactPresentationForMessage(props.message)
+);
+const reportLifecycle = computed(() =>
+  reportLifecycleForMessage(props.message)
+);
+const reportPresentation = computed(() =>
+  reportPresentationFor(
+    {
+      ...reportLifecycle.value,
+      status: effectiveLifecyclePhase.value ?? reportLifecycle.value.status,
+    },
+    artifactPresentation.value ?? undefined,
+    props.message.tool_name
+  )
+);
+const showReportUnavailable = computed(
+  () =>
+    props.message.role === "assistant" &&
+    Boolean(
+      reportLifecycle.value.report ||
+      reportLifecycle.value.reportWarningCodes?.length
+    ) &&
+    !reportPresentation.value.active &&
+    !reportPresentation.value.reportText
+);
+const archiveDelivery = computed(
+  () => props.message.delivery ?? reportLifecycle.value.delivery
 );
 const hasArtifactPresentation = computed(
   () => artifactPresentation.value !== null
@@ -445,9 +516,19 @@ function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
   return null;
 }
 
-const effectiveLifecyclePhase = computed(
-  () => props.lifecycle?.phase ?? messageLifecyclePhase()
-);
+const effectiveLifecyclePhase = computed(() => {
+  const status = reportLifecycle.value.status;
+  if (
+    (props.message.botProjection || props.message.botLifecycle) &&
+    (status === "SUCCEEDED" ||
+      status === "FAILED" ||
+      status === "TIMED_OUT" ||
+      status === "CANCELLED")
+  ) {
+    return status;
+  }
+  return props.lifecycle?.phase ?? messageLifecyclePhase();
+});
 const isBlankExecutionShell = computed(
   () =>
     props.message.role === "assistant" &&
@@ -501,6 +582,13 @@ const showLeadingLifecycleStatus = computed(
       (!props.message.streaming &&
         !(props.message.blocks && props.message.blocks.length))) &&
     !isSpecializedImageAgent.value
+);
+const showArtifactPreview = computed(
+  () =>
+    hasArtifactPresentation.value &&
+    !!props.artifactPreview &&
+    !props.message.streaming &&
+    !props.message.blocks?.length
 );
 const isTerminalLifecycle = computed(
   () =>
@@ -592,6 +680,38 @@ const shouldShowSpecializedNoData = computed(() => {
   max-width: 100%;
   overflow-x: auto;
   box-sizing: border-box;
+  --el-table-header-bg-color: var(--phy-color-fill-subtle);
+  --el-table-header-text-color: var(--phy-color-text);
+  --el-table-tr-bg-color: var(--phy-color-bg-elevated);
+  --el-table-text-color: var(--phy-color-text);
+
+  :deep(th.chat-table-header-cell) {
+    background-color: var(--phy-color-fill-subtle) !important;
+    color: var(--phy-color-text);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 -1px 0 var(--phy-color-border-control);
+  }
+
+  :deep(.chat-data-table td.el-table__cell) {
+    color: var(--phy-color-text);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.chat-data-figure {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-data-figure figcaption {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .gene-network-images {

@@ -22,6 +22,8 @@ import {
   REAL_DEEP_GENOME_MARKDOWN,
   REAL_DEEP_GENOME_REFERENCES,
   REAL_DEEP_GENOME_RESOURCES,
+  SCIENTIFIC_FORMATTING_MARKDOWN,
+  SCIENTIFIC_FORMATTING_REFERENCES,
 } from "../../visual/research/fixture-data";
 
 const WEB_ROOT = resolve(__dirname, "../../..");
@@ -44,6 +46,10 @@ const FIXTURE_ENTRY_SOURCE = readFileSync(
   resolve(WEB_ROOT, "tests/visual/research/main.ts"),
   "utf8"
 );
+const CIF_READINESS_SOURCE = readFileSync(
+  resolve(WEB_ROOT, "tests/visual/research/cif-readiness.ts"),
+  "utf8"
+);
 const CAPTURE_RUNNER_PATH = resolve(
   WEB_ROOT,
   "tests/visual/research/capture-contract.sh"
@@ -61,6 +67,33 @@ const MARKDOWN_CSS_SOURCE = readFileSync(
   resolve(WEB_ROOT, "src/styles/markdown.css"),
   "utf8"
 );
+
+describe("Scientific formatting fixture host", () => {
+  it("uses the original authorized CIF for the focused viewer lane", () => {
+    expect(VISUAL_FIXTURE_SOURCE).toContain('params.get("case") === "cif"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain('resource.kind === "cif"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(
+      'DEEP_GENOME_CASE_MARKDOWN.split("\\n")'
+    );
+    expect(VISUAL_FIXTURE_SOURCE).toContain('kind: "cif-text"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(
+      'artifactRef.value?.download("pdf")'
+    );
+    expect(FIXTURE_ENTRY_SOURCE).toContain('fixtureCase === "cif"');
+  });
+
+  it("supplies the bounded artifact height required by the production shell", () => {
+    expect(VISUAL_FIXTURE_SOURCE).toMatch(
+      /\.deep-genome-visual-fixture > :deep\(\.deep-genome-artifact\)\s*\{\s*height: 100%;/
+    );
+  });
+
+  it("allows the actual theme store to follow emulated system appearance", () => {
+    expect(FIXTURE_ENTRY_SOURCE).toContain('params.get("theme") === "system"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain('"system"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain("useThemeStore().setTheme(theme)");
+  });
+});
 
 const EXPECTED_MEDIA = [
   "Os01g0177400_tree.png",
@@ -174,8 +207,10 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(REAL_DEEP_GENOME_MARKDOWN).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
-    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("<sup>5</sup>");
-    expect(REAL_DEEP_GENOME_MARKDOWN).not.toMatch(/\[document\s*:/i);
+    expect(REAL_DEEP_GENOME_MARKDOWN).toContain("[document:5]");
+    expect(REAL_DEEP_GENOME_MARKDOWN.match(/\[document:\d+\]/g)).toHaveLength(
+      94
+    );
     expect(REAL_DEEP_GENOME_MARKDOWN).not.toContain("## Reference:");
     expect(REAL_DEEP_GENOME_MARKDOWN).not.toContain(
       "[256] Physiological and Transcriptome Analyses"
@@ -211,22 +246,46 @@ describe("Deep Genome real-content visual fixture", () => {
   it("derives all 256 evidence entries from the complete report", () => {
     expect(REAL_DEEP_GENOME_REFERENCES).toHaveLength(256);
     expect(
-      new Set(REAL_DEEP_GENOME_REFERENCES.map(({ file_id }) => file_id)).size
-    ).toBe(256);
-    expect(REAL_DEEP_GENOME_REFERENCES.at(-1)?.title).toContain(
-      "Physiological and Transcriptome Analyses"
-    );
+      REAL_DEEP_GENOME_REFERENCES.every(
+        (reference) =>
+          reference.citation?.runs.some((run) => run.text.trim()) === true
+      )
+    ).toBe(true);
+    expect(
+      REAL_DEEP_GENOME_REFERENCES.some((reference) => "file_id" in reference)
+    ).toBe(false);
+    expect(
+      REAL_DEEP_GENOME_REFERENCES.at(-1)
+        ?.citation?.runs.map((run) => run.text)
+        .join("")
+    ).toContain("Physiological and Transcriptome Analyses");
   });
 
   it("authorizes the real-case figures from public attachments", () => {
-    expect(REAL_DEEP_GENOME_RESOURCES).toHaveLength(14);
+    expect(REAL_DEEP_GENOME_RESOURCES).toHaveLength(15);
+    const media = REAL_DEEP_GENOME_RESOURCES.filter(
+      (resource) => resource.kind !== "markdown"
+    );
+    expect(media).toHaveLength(14);
     expect(
-      REAL_DEEP_GENOME_RESOURCES.every(
+      media.every(
         (resource) =>
           typeof resource.displayUrl === "string" &&
           resource.displayUrl.startsWith("/attachments/Os01g0177400/")
       )
     ).toBe(true);
+    expect(
+      REAL_DEEP_GENOME_RESOURCES.filter(
+        (resource) => resource.kind === "markdown"
+      )
+    ).toEqual([
+      {
+        id: "deep-genome-case-protocol",
+        name: "Os01g0177400_result-experiments.md",
+        kind: "markdown",
+        markdownHref: "./Os01g0177400_result-experiments.md",
+      },
+    ]);
     expect(VISUAL_FIXTURE_SOURCE).toContain("DEEP_GENOME_CASE_RESOURCES");
   });
 
@@ -253,6 +312,24 @@ describe("Deep Genome real-content visual fixture", () => {
     expect(VISUAL_FIXTURE_SOURCE).toContain(':resources="resources"');
   });
 
+  it("exposes the shared scientific source and Go-normalized references only in the fixture", () => {
+    expect(SCIENTIFIC_FORMATTING_MARKDOWN).toContain(
+      "This is synthetic layout evidence, not a scientific report."
+    );
+    expect(SCIENTIFIC_FORMATTING_MARKDOWN).toContain("<sup>[2]</sup>");
+    expect(SCIENTIFIC_FORMATTING_REFERENCES).toHaveLength(2);
+    expect(
+      SCIENTIFIC_FORMATTING_REFERENCES.map((row) =>
+        row.citation?.runs
+          .filter((run) => run.vertical)
+          .map((run) => run.vertical)
+      )
+    ).toEqual([["subscript"], ["superscript"]]);
+    expect(VISUAL_FIXTURE_SOURCE).toContain('get("case") === "scientific"');
+    expect(VISUAL_FIXTURE_SOURCE).toContain(':references="references"');
+    expect(FIXTURE_ENTRY_SOURCE).toContain('fixtureCase === "scientific"');
+  });
+
   it("serves the authorized visual fixture image from a browser-safe URL", () => {
     const figure = CONTRACT_DEEP_GENOME_RESOURCES.find(
       ({ kind }) => kind === "image"
@@ -274,7 +351,8 @@ describe("Deep Genome real-content visual fixture", () => {
       "__scientificMarkdownHostileImageExecuted"
     );
     expect(FIXTURE_ENTRY_SOURCE).toContain("VISUAL_READINESS_TIMEOUT_MS");
-    expect(FIXTURE_ENTRY_SOURCE).toContain("scientificCifReady");
+    expect(FIXTURE_ENTRY_SOURCE).toContain("hasReadyCifViewers(");
+    expect(CIF_READINESS_SOURCE).toContain("scientificCifReady");
     expect(SCIENTIFIC_CIF_SOURCE).toContain("data-scientific-cif-ready");
     expect(FIXTURE_ENTRY_SOURCE).toContain("canvas.offsetParent !== viewer");
     expect(FIXTURE_ENTRY_SOURCE).toContain(
@@ -327,23 +405,24 @@ describe("Deep Genome real-content visual fixture", () => {
     }, 20_000);
   });
 
-  it("keeps XMarkdown foreground and CIF geometry owned by the shared skin", () => {
+  it("keeps XMarkdown foreground in the shared skin and CIF geometry in its component", () => {
     const xMarkdownBlock = MARKDOWN_CSS_SOURCE.match(
       /\.phy-markdown \.elx-xmarkdown-container\s*\{([^}]*)\}/
     )?.[1];
-    const cifBlock = MARKDOWN_CSS_SOURCE.match(
-      /\.phy-markdown \.scientific-cif-viewer\s*\{([^}]*)\}/
+    const cifBlock = SCIENTIFIC_CIF_SOURCE.match(
+      /\.scientific-cif-block__host :deep\(\.scientific-cif-viewer\)\s*\{([^}]*)\}/
     )?.[1];
     expect(xMarkdownBlock).toContain("color: inherit;");
     expect(cifBlock).toContain("position: relative;");
     expect(cifBlock).toContain(
-      "height: var(--phy-layout-scientific-media-max-height);"
+      "height: clamp(min(280px, 60dvh), 62cqi, min(920px, 76dvh));"
     );
+    expect(MARKDOWN_CSS_SOURCE).not.toContain(".scientific-cif-viewer");
     expect(MARKDOWN_CSS_SOURCE).toMatch(
       /\.elx-xmarkdown-container tbody tr:nth-child\(2n\)\s*\{[^}]*background-color: var\(--phy-color-bg-elevated\);/
     );
-    expect(MARKDOWN_CSS_SOURCE).toMatch(
-      /\.scientific-cif-viewer > canvas\s*\{[^}]*max-width: 100%;[^}]*max-height: 100%;/
+    expect(SCIENTIFIC_CIF_SOURCE).toMatch(
+      /\.scientific-cif-viewer > canvas\)\s*\{[^}]*max-width: 100%;[^}]*max-height: 100%;/
     );
   });
 });

@@ -2,6 +2,7 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -82,6 +83,21 @@ func (ps *Service) A2uiAction(
 	}
 	if result == nil || validateA2uiUpstreamResponse(result.Status, result.ContentType, result.Body) != nil {
 		return nil, ErrA2uiUpstreamProtocol
+	}
+	if result.Status >= 200 && result.Status < 300 {
+		var actionResponse struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(result.Body, &actionResponse); err != nil {
+			return nil, ErrA2uiUpstreamProtocol
+		}
+		if actionResponse.Status == "succeeded" {
+			normalized, err := rxBot.NormalizeActionReferences(result.Body)
+			if err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			result.Body = normalized
+		}
 	}
 	// This compatibility uplink forwards the command only. Runtime supervision
 	// and the canonical projector own every resulting lifecycle/business write.

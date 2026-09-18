@@ -286,6 +286,30 @@ func TestAgentTaskLifecycleDerivesDeliveryTerminalStates(t *testing.T) {
 			name: "delivery failure is terminal but incomplete", scientificStatus: "SUCCEEDED",
 			delivery: testFailedDelivery(1, testProjectionDigestA, true), wantPhase: "FAILED", wantTerminal: true,
 		},
+		{
+			name: "empty archive keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "no_user_deliverables", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
+		{
+			name: "invalid producer manifest keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "artifact_manifest_invalid", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
+		{
+			name: "truncated inventory keeps scientific success", scientificStatus: "SUCCEEDED",
+			delivery: &ProjectionDelivery{
+				SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+				ErrorCode: "archive_inventory_limit_exceeded", Retryable: false,
+			},
+			wantPhase: "SUCCEEDED", wantTerminal: true,
+		},
 	}
 	for index, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

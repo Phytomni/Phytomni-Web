@@ -22,6 +22,13 @@ function isCanceledRequest(error: unknown): boolean {
   return err?.code === "ERR_CANCELED" || err?.name === "CanceledError";
 }
 
+function isJsonContentType(value: string | undefined): boolean {
+  const mime = value?.split(";", 1)[0].trim().toLowerCase() ?? "";
+  return (
+    mime === "application/json" || /^application\/[\w.+-]+\+json$/.test(mime)
+  );
+}
+
 export async function downloadRenderingFile(
   id: string,
   format: string,
@@ -35,10 +42,20 @@ export async function downloadRenderingFile(
   try {
     const response = await getFileDownUrlApi(queryData, {
       requestId,
+      suppressErrorToast: true,
       onDownloadProgress: (event) => {
         upsertDownloadTransfer(tracker.update(event));
       },
     });
+    if (
+      !(response.data instanceof Blob) ||
+      !(response.status >= 200 && response.status < 300) ||
+      isJsonContentType(readResponseHeader(response.headers, "content-type")) ||
+      isJsonContentType(response.data.type)
+    ) {
+      ElMessage.error(t("chat.downloadError"));
+      return;
+    }
     const contentDisposition = readResponseHeader(
       response.headers,
       "content-disposition"
@@ -70,7 +87,6 @@ export async function downloadRenderingFile(
       ElMessage.info(t("chat.downloadCancelled"));
       return;
     }
-    console.error("File download failed:", error);
     ElMessage.error(t("chat.downloadError"));
   } finally {
     removeDownloadTransfer(requestId);

@@ -50,6 +50,17 @@ describe("ordered conversation history v2 decoding", () => {
               title: "Drought epigenetics",
               di: "10.1000/safe-doi",
               pm: "12345",
+              formatted_citation: "Drought epigenetics.",
+              doi_missing: false,
+              citation: {
+                runs: [{ text: "Drought epigenetics", italic: true }],
+                links: [
+                  {
+                    label: "Article",
+                    href: "https://doi.org/10.1000/safe-doi",
+                  },
+                ],
+              },
             },
           ],
           status: "succeeded",
@@ -97,6 +108,17 @@ describe("ordered conversation history v2 decoding", () => {
           title: "Drought epigenetics",
           di: "10.1000/safe-doi",
           pm: "12345",
+          formatted_citation: "Drought epigenetics.",
+          doi_missing: false,
+          citation: {
+            runs: [{ text: "Drought epigenetics", italic: true }],
+            links: [
+              {
+                label: "Article",
+                href: "https://doi.org/10.1000/safe-doi",
+              },
+            ],
+          },
         },
       ],
     });
@@ -117,6 +139,56 @@ describe("ordered conversation history v2 decoding", () => {
         executions: [],
       })
     ).toThrow("Invalid conversation history v2");
+  });
+
+  it("rejects non-journal and malformed canonical references in V2 history", () => {
+    const citation = { runs: [{ text: "Canonical" }], links: [] };
+    const historyWith = (references: unknown) => ({
+      schema_version: 2,
+      conversation_id: "dialogue-1",
+      messages: [
+        {
+          message_id: "msg-assistant-1",
+          conversation_id: "dialogue-1",
+          message_index: 1,
+          execution_id: "turn-1",
+          source_message_id: "msg-assistant-1",
+          type: "assistant",
+          role: "assistant",
+          visibility: "user",
+          content_revision: 1,
+          content_offset: 6,
+          content_length: 6,
+          content_sha256: "a".repeat(64),
+          content: "answer",
+          references,
+          status: "succeeded",
+          occurred_at: "2026-08-21T00:00:01Z",
+        },
+      ],
+      executions: [],
+    });
+
+    for (const references of [
+      [
+        {
+          title: "Canonical",
+          dl: "https://provider.invalid/private",
+          citation,
+        },
+      ],
+      [
+        {
+          title: "Canonical",
+          citation: { ...citation, provider_payload: "private" },
+        },
+      ],
+      [{ title: "Canonical", citation: { runs: "invalid", links: [] } }],
+    ]) {
+      expect(() =>
+        decodeConversationHistoryV2(historyWith(references))
+      ).toThrow("Invalid conversation history v2");
+    }
   });
 });
 

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,22 +54,9 @@ func (liveDocumentObjectReader) ReadOBS(ctx context.Context, path string) ([]byt
 	return readDocumentImageBytes(rc)
 }
 
-func (liveDocumentObjectReader) ReadGeneImage(_ context.Context, gene, file string) ([]byte, error) {
-	mount := geneObsfsDir()
-	if mount == "" {
-		return nil, errors.New("gene image mount unavailable")
-	}
-	base := filepath.Join(mount, "img", gene)
-	full, err := utils.SafeJoinUploadPath(base, file)
-	if err != nil {
-		return nil, err
-	}
-	f, err := os.Open(full)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return readDocumentImageBytes(f)
+func (liveDocumentObjectReader) ReadGeneImage(ctx context.Context, gene, file string) ([]byte, error) {
+	data, _, err := NewService().GeneImage(ctx, gene, file)
+	return data, err
 }
 
 func readDocumentImageBytes(r io.Reader) ([]byte, error) {

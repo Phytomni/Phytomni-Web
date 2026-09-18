@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"phytomni-server/common/citation"
 )
 
 const ExecutionRuntimeSchemaV2 = 2
@@ -437,6 +439,11 @@ func validateExecutionEventV2(event ExecutionEventV2, executionID string) error 
 		// The message contract independently bounds text to one 8K chunk. Keep
 		// every other public string under the shared 512-character safety rule.
 		publicPayload["text"] = ""
+		// References have already passed their dedicated strict field boundary
+		// and were replaced with Web-derived canonical presentation. Its safe,
+		// derived resolver links are deliberately outside the generic public
+		// payload rule that rejects every URL.
+		delete(publicPayload, "references")
 	}
 	if err := validatePublicEventValue(map[string]any{"key": event.Summary.Key, "text": event.Summary.Text, "payload": publicPayload}); err != nil {
 		return err
@@ -513,43 +520,101 @@ func validateExecutionMessagePayloadV2(payload map[string]any) error {
 		}
 	}
 	if references, ok := payload["references"]; ok {
-		if err := validateExecutionCitationReferencesV2(references); err != nil {
+		normalized, err := normalizeExecutionCitationReferencesV2(references, DefaultExecutionEventLimits.MaxEventBytes)
+		if err != nil {
 			return err
 		}
+		payload["references"] = normalized
 	}
 	return nil
 }
 
-func validateExecutionCitationReferencesV2(value any) error {
-	references, ok := value.([]any)
-	if !ok || len(references) > 64 {
-		return errors.New("invalid execution citation references")
+const maxExecutionCitationBytesV2 = 64 * 1024
+
+var executionCitationSourceFieldsV2 = stringSet([]string{
+	"title", "au", "ti", "so", "vl", "bp", "ep", "ar", "py", "di", "pm", "formatted_citation",
+})
+
+// NormalizeExecutionCitationReferencesV2 is the single trust boundary for
+// citation rows carried by the execution journal. The provider may supply
+// bibliographic source fields and may replay an earlier canonical `citation`,
+// but Web always discards that presentation and rebuilds it with common/citation.
+// Unknown fields (including provider URLs and private file identities) fail
+// closed. Null rows remain ordered neutral slots.
+func NormalizeExecutionCitationReferencesV2(value any) ([]any, error) {
+	return normalizeExecutionCitationReferencesV2(value, maxExecutionCitationBytesV2)
+}
+
+func normalizeExecutionCitationReferencesV2(value any, maxInputBytes int) ([]any, error) {
+	encoded, err := json.Marshal(value)
+	trimmedRoot := bytes.TrimSpace(encoded)
+	if err != nil || len(encoded) > maxInputBytes || len(trimmedRoot) == 0 || trimmedRoot[0] != '[' {
+		return nil, errors.New("invalid execution citation references")
 	}
-	allowed := stringSet([]string{
-		"title", "au", "ti", "so", "vl", "bp", "ep", "ar", "py", "di", "pm", "doi_missing",
-	})
-	for _, rawReference := range references {
-		reference, ok := rawReference.(map[string]any)
-		if !ok {
-			return errors.New("invalid execution citation reference")
+	var members []json.RawMessage
+	if err := json.Unmarshal(encoded, &members); err != nil || len(members) > 64 {
+		return nil, errors.New("invalid execution citation references")
+	}
+	doiMissing := make([]*bool, len(members))
+	for index, member := range members {
+		trimmed := bytes.TrimSpace(member)
+		if bytes.Equal(trimmed, []byte("null")) {
+			continue
 		}
-		for key, value := range reference {
-			if _, ok := allowed[key]; !ok {
-				return errors.New("invalid execution citation reference field")
-			}
-			if key == "doi_missing" {
-				if _, ok := value.(bool); !ok {
-					return errors.New("invalid execution citation reference value")
+		var reference map[string]json.RawMessage
+		if len(trimmed) == 0 || trimmed[0] != '{' || json.Unmarshal(trimmed, &reference) != nil || reference == nil {
+			return nil, errors.New("invalid execution citation reference")
+		}
+		for key, raw := range reference {
+			switch {
+			case key == "citation":
+				// Incoming presentation is intentionally ignored. Bounding the whole
+				// references value above keeps this untrusted compatibility field finite.
+				var object map[string]json.RawMessage
+				if json.Unmarshal(raw, &object) != nil || object == nil {
+					return nil, errors.New("invalid execution citation reference value")
 				}
-				continue
-			}
-			text, ok := value.(string)
-			if !ok || text == "" || len([]rune(text)) > DefaultExecutionEventLimits.MaxSummaryChars {
-				return errors.New("invalid execution citation reference value")
+			case key == "doi_missing":
+				var flag bool
+				if json.Unmarshal(raw, &flag) != nil {
+					return nil, errors.New("invalid execution citation reference value")
+				}
+				doiMissing[index] = &flag
+			case hasStringKey(executionCitationSourceFieldsV2, key):
+				var text string
+				if json.Unmarshal(raw, &text) != nil || validatePublicEventValue(text) != nil {
+					return nil, errors.New("invalid execution citation reference value")
+				}
+			default:
+				return nil, errors.New("invalid execution citation reference field")
 			}
 		}
 	}
-	return nil
+
+	normalized, err := citation.NormalizeRows(encoded)
+	if err != nil || len(normalized) > maxExecutionCitationBytesV2 {
+		return nil, errors.New("invalid execution citation references")
+	}
+	var references []any
+	if err := json.Unmarshal(normalized, &references); err != nil || len(references) != len(members) {
+		return nil, errors.New("invalid execution citation references")
+	}
+	for index, flag := range doiMissing {
+		if flag == nil {
+			continue
+		}
+		reference, ok := references[index].(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid execution citation references")
+		}
+		reference["doi_missing"] = *flag
+	}
+	return references, nil
+}
+
+func hasStringKey(values map[string]struct{}, key string) bool {
+	_, ok := values[key]
+	return ok
 }
 
 func validateExecutionProjectionV2(value ExecutionProjectionV2, executionID string) error {

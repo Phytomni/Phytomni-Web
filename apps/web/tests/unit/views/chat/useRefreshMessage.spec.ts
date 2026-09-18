@@ -10,6 +10,8 @@ import type {
   DialogueReconciliationResult,
 } from "@/views/chat/types";
 import type { ApiEnvelope, DecodedQueryData } from "@/api/types";
+import { decodeQueryData } from "@/api/types";
+import golden from "../../../fixtures/report-integrity/public-projection.json";
 import {
   buildApiEnvelope,
   buildDecodedQueryData,
@@ -137,6 +139,22 @@ describe("useRefreshMessage", () => {
     });
   }
 
+  it.each(golden.cases)(
+    "retains $id report and delivery metadata on a blocking refresh",
+    async ({ history }) => {
+      const data = decodeQueryData(history);
+      mockGetQuery.mockResolvedValueOnce(buildApiEnvelope(data));
+      await makeComposable().refreshMessage(1);
+      expect(messageAt("A", 1, "archive-only refresh")).toMatchObject({
+        botProjection: data.projection,
+      });
+      const message = messageAt("A", 1, "report refresh");
+      expect(message.delivery).toEqual(data.delivery);
+      expect(message.artifacts).toEqual(data.artifacts);
+      if (!history.answer) expect(message.content).toBe("");
+    }
+  );
+
   it("Happy path: KnowledgeAgent rebuilds the assistant message, hydrates reaction, clears refresh state, resets isSending, fetches history in finally", async () => {
     // KnowledgeAgent branch: the JSON answer parses out content/doc_list, and it also syncs the reaction
     mockGetQuery.mockResolvedValueOnce(
@@ -159,7 +177,7 @@ describe("useRefreshMessage", () => {
     const rebuilt = messageAt("A", 1, "KnowledgeAgent refresh");
     expect(rebuilt.role).toBe("assistant");
     expect(rebuilt.content).toBe("New answer");
-    expect(rebuilt.doc_list).toEqual([{ pm: "1" }]);
+    expect(rebuilt.doc_list).toEqual([{ pm: "1", citation: null }]);
     expect(rebuilt.tool_name).toBe("KnowledgeAgent");
     expect(rebuilt.id).toBe("msg-2");
     expect(rebuilt.instantMessage).toBe(true);

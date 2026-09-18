@@ -148,6 +148,7 @@ jobs:
     timeout-minutes: 20
     env:
       PHYTOMNI_RUN_RACE: "1"
+      PHYTOMNI_REPORT_FONT_DIR: /usr/share/fonts/truetype/msttcorefonts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -162,6 +163,23 @@ jobs:
         with:
           go-version: "1.23"
           cache-dependency-path: apps/server/go.sum
+
+      - name: Install genuine Times New Roman report fonts
+        run: |
+          printf '%s\n' 'ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula boolean true' | sudo debconf-set-selections
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer=3.8ubuntu2
+
+      - name: Verify genuine report font resources
+        working-directory: apps/server
+        run: |
+          for font in times.ttf timesbd.ttf timesi.ttf timesbi.ttf; do
+            if [ ! -r "$PHYTOMNI_REPORT_FONT_DIR/$font" ]; then
+              printf '::error::Required report font is missing or unreadable: %s\n' "$font" >&2
+              exit 1
+            fi
+          done
+          go test ./common/document_format/mdoc -run '^TestFontLoaderGenuine(TimesNewRomanRoles|GlyphCoverage)$' -count=1
 
       - name: Run shared server runtime gate
         run: ./scripts/run_gate_group.sh server-runtime

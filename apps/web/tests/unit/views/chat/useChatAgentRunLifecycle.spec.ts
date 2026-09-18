@@ -90,6 +90,106 @@ describe("useChatAgentRunLifecycle", () => {
     coordinator.dispose();
   });
 
+  it("restarts terminal lifecycle polling for a newer archive retry without reopening execution", async () => {
+    vi.useFakeTimers();
+    const delivery = {
+      schema_version: 1 as const,
+      required: true as const,
+      status: "failed" as const,
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_generation_failed" as const,
+      retryable: true,
+    };
+    const chatStates = ref({
+      review: buildChatState({
+        historyHydration: "ready",
+        renderedChat: {
+          dialogue_id: "review",
+          messages: [
+            buildChatMessage({
+              id: "151",
+              tool_name: "DigitalDesignAgent",
+              status: "SUCCEEDED",
+              content: "",
+              delivery,
+            }),
+          ],
+        },
+        agentRunLifecycles: {
+          "151": lifecycle(151, {
+            phase: "SUCCEEDED",
+            terminal: true,
+            delivery,
+          }),
+        },
+      }),
+    });
+    const fetchLifecycle = vi
+      .fn()
+      .mockResolvedValue(
+        response(lifecycle(151, { phase: "FINALIZING", terminal: false }))
+      );
+    const coordinator = useChatAgentRunLifecycle({
+      chatStates,
+      getChatState: (id) => chatStates.value[id],
+      reloadChat: vi.fn().mockResolvedValue("applied"),
+      fetchLifecycle,
+      jitter: () => 0,
+    });
+    try {
+      await flush();
+      expect(fetchLifecycle).not.toHaveBeenCalled();
+      const message = chatStates.value.review.renderedChat?.messages[0];
+      if (!message) throw new Error("Archive message is missing");
+      message.delivery = {
+        ...delivery,
+        status: "pending",
+        error_code: null,
+        retryable: false,
+      };
+      await flush();
+      expect(fetchLifecycle).not.toHaveBeenCalled();
+      message.delivery = {
+        ...delivery,
+        status: "pending",
+        revision: 2,
+        error_code: null,
+        retryable: false,
+      };
+      await flush();
+      expect(fetchLifecycle).toHaveBeenCalledOnce();
+      expect(message.status).toBe("SUCCEEDED");
+      fetchLifecycle.mockResolvedValueOnce(
+        response(
+          lifecycle(151, {
+            phase: "SUCCEEDED",
+            terminal: true,
+            delivery: {
+              ...delivery,
+              status: "ready",
+              revision: 2,
+              name: "results.zip",
+              size_bytes: 32,
+              error_code: null,
+              retryable: false,
+            },
+          })
+        )
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      await flush();
+      expect(
+        chatStates.value.review.agentRunLifecycles["151"]?.delivery
+      ).toMatchObject({ status: "ready", revision: 2 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchLifecycle).toHaveBeenCalledTimes(2);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("keeps the live Research stage sequence owner-scoped until one terminal hydration", async () => {
     vi.useFakeTimers();
     const rawQuery = [

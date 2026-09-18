@@ -179,6 +179,28 @@ describe("artifactChrome", () => {
 });
 
 describe("artifactChromeFromMessage", () => {
+  it("offers only local formats for a static Deep Genome Case while retaining live Word export", () => {
+    const frozenCase: ChatMessage = {
+      role: "assistant",
+      tool_name: "DeepGenomeAgent",
+      content: "Static report",
+      status: "SUCCEEDED",
+      casePresentationKey: "deep-genome-os01g0177400",
+    };
+    expect(artifactChromeFromMessage(frozenCase).exportFormats).toEqual([
+      "PDF",
+      "Markdown",
+    ]);
+    expect(
+      artifactChromeFromMessage({
+        role: "assistant",
+        tool_name: "DeepGenomeAgent",
+        content: "Live report",
+        status: "SUCCEEDED",
+        id: "42",
+      }).exportFormats
+    ).toEqual(["PDF", "Markdown", "Word"]);
+  });
   const review: ChatMessage = {
     role: "assistant",
     id: "11",
@@ -214,6 +236,24 @@ describe("artifactChromeFromMessage", () => {
       }).exportFormats
     ).toEqual([]);
   });
+
+  it.each(["FAILED", "TIMED_OUT"] as const)(
+    "keeps overflow PDF/Word/Markdown for a retained cited report after %s",
+    (status) => {
+      const chrome = artifactChromeFromMessage({
+        ...review,
+        status,
+        content: "retained scientific report",
+      });
+      expect(chrome.exportFormats).toEqual(["PDF", "Markdown", "Word"]);
+      expect(
+        copyDownloadCloseArtifactMenuItems(
+          (key) => key,
+          chrome.exportFormats
+        )[1]?.children?.map((child) => child.id)
+      ).toEqual(["download:PDF", "download:Markdown", "download:Word"]);
+    }
+  );
 
   it("treats a cited row with no status as complete", () => {
     expect(

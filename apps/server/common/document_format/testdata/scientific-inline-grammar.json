@@ -1,0 +1,296 @@
+[
+  {
+    "name": "numeric-sup-is-ordinary",
+    "source": "x<sup>2</sup>",
+    "runs": [{ "text": "x" }, { "text": "2", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "subscript",
+    "source": "H<sub>2</sub>O",
+    "runs": [
+      { "text": "H" },
+      { "text": "2", "vertical": "subscript" },
+      { "text": "O" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "charged-superscript",
+    "source": "Ca<sup>2+</sup>",
+    "runs": [{ "text": "Ca" }, { "text": "2+", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "unmodified-script-punctuation",
+    "source": "<sup>01, 2-3</sup>",
+    "runs": [{ "text": "01, 2-3", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "brackets-inside-sup",
+    "source": "<sup>[2]</sup>",
+    "runs": [{ "text": "[2]", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "brackets-inside-sub",
+    "source": "<sub>[2]</sub>",
+    "runs": [{ "text": "[2]", "vertical": "subscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "script-and-explicit-citation",
+    "source": "<sup>2</sup> [2]",
+    "runs": [{ "text": "2", "vertical": "superscript" }, { "text": " 2" }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "explicit-citation-unchanged",
+    "source": "Evidence [2]",
+    "runs": [{ "text": "Evidence 2" }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "source-authored-italics",
+    "source": "*FLC* and *Arabidopsis thaliana*",
+    "runs": [
+      { "text": "FLC", "italic": true },
+      { "text": " and " },
+      { "text": "Arabidopsis thaliana", "italic": true }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "italic-encloses-sub",
+    "source": "*x<sub>i</sub>*",
+    "runs": [
+      { "text": "x", "italic": true },
+      { "text": "i", "italic": true, "vertical": "subscript" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "sup-encloses-italic",
+    "source": "<sup>*n*</sup>",
+    "runs": [{ "text": "n", "italic": true, "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "strong-italic-script",
+    "source": "**<sub>*i*</sub>**",
+    "runs": [
+      { "text": "i", "bold": true, "italic": true, "vertical": "subscript" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "inline-italic-tags",
+    "source": "<i>FLC</i> <em>FT</em>",
+    "runs": [
+      { "text": "FLC", "italic": true },
+      { "text": " " },
+      { "text": "FT", "italic": true }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "italic-tag-and-script",
+    "source": "<i>x<sub>i</sub></i>",
+    "runs": [
+      { "text": "x", "italic": true },
+      { "text": "i", "italic": true, "vertical": "subscript" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "italic-allows-explicit-citation",
+    "source": "<i>Evidence [2]</i>",
+    "runs": [{ "text": "Evidence 2", "italic": true }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "authored-link-label",
+    "source": "[H<sub>2</sub>O](https://example.org)",
+    "runs": [
+      { "text": "H", "href": "https://example.org" },
+      { "text": "2", "vertical": "subscript", "href": "https://example.org" },
+      { "text": "O", "href": "https://example.org" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "link-label-protects-citation",
+    "source": "[<sup>[2]</sup>](https://example.org)",
+    "runs": [
+      {
+        "text": "[2]",
+        "vertical": "superscript",
+        "href": "https://example.org"
+      }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "no-biological-guessing",
+    "source": "H3K27me3 H2A.Z 5mC ddm1-2",
+    "runs": [{ "text": "H3K27me3 H2A.Z 5mC ddm1-2" }],
+    "citationIndices": []
+  },
+  {
+    "name": "empty-pairs",
+    "source": "a<sup></sup>b<sub></sub>c",
+    "runs": [{ "text": "abc" }],
+    "citationIndices": []
+  },
+  {
+    "name": "escaped-opener",
+    "source": "\\<sup>2</sup>",
+    "runs": [{ "text": "<sup>2</sup>" }],
+    "citationIndices": []
+  },
+  {
+    "name": "encoded-tags",
+    "source": "&lt;sup&gt;2&lt;/sup&gt;",
+    "runs": [{ "text": "<sup>2</sup>" }],
+    "citationIndices": []
+  },
+  {
+    "name": "decoded-script-text",
+    "source": "<sup>&#49;&amp;</sup>",
+    "runs": [{ "text": "1&", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "single-decode-only",
+    "source": "<sup>&amp;lt;sub&amp;gt;2</sup>",
+    "runs": [{ "text": "&lt;sub&gt;2", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "entity-lf-is-not-source-line",
+    "source": "<sup>2&#10;3</sup>",
+    "runs": [{ "text": "2\n3", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "entity-cr-is-not-source-line",
+    "source": "<sub>2&#13;3</sub>",
+    "runs": [{ "text": "2\r3", "vertical": "subscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "entity-crlf-is-not-source-line",
+    "source": "<sup>2&#13;&#10;3</sup>",
+    "runs": [{ "text": "2\r\n3", "vertical": "superscript" }],
+    "citationIndices": []
+  },
+  {
+    "name": "mismatched-closer-recovers",
+    "source": "<sup>2</sub> [2]",
+    "runs": [{ "text": "<sup>2</sub> 2" }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "nested-script-is-literal",
+    "source": "<sup><sub>2</sub></sup> [3]",
+    "runs": [{ "text": "<sup><sub>2</sub></sup> 3" }],
+    "citationIndices": [[3]]
+  },
+  {
+    "name": "same-script-nesting-is-literal",
+    "source": "<sup><sup>2</sup></sup> [3]",
+    "runs": [{ "text": "<sup><sup>2</sup></sup> 3" }],
+    "citationIndices": [[3]]
+  },
+  {
+    "name": "attributes-are-inert",
+    "source": "<sup class=\"x\">2</sup> [2]",
+    "runs": [{ "text": "<sup class=\"x\">2</sup> 2" }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "uppercase-script-is-literal",
+    "source": "<SUP>2</SUP> [2]",
+    "runs": [{ "text": "<SUP>2</SUP> 2" }],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "uppercase-italic-is-literal",
+    "source": "<I>FLC</I>",
+    "runs": [{ "text": "<I>FLC</I>" }],
+    "citationIndices": []
+  },
+  {
+    "name": "code-span-is-protected",
+    "source": "`<sup>[2]</sup>`",
+    "runs": [{ "text": "<sup>[2]</sup>", "code": true }],
+    "citationIndices": []
+  },
+  {
+    "name": "wrapper-containing-code-is-literal",
+    "source": "<sup>`[2]`</sup> [3]",
+    "runs": [
+      { "text": "<sup>" },
+      { "text": "[2]", "code": true },
+      { "text": "</sup> 3" }
+    ],
+    "citationIndices": [[3]]
+  },
+  {
+    "name": "raw-wrapper-stays-inert",
+    "source": "Before <span><sup>2</sup> [1]</span> [3]",
+    "runs": [{ "text": "Before <span><sup>2</sup> [1]</span> 3" }],
+    "citationIndices": [[3]]
+  },
+  {
+    "name": "adjacent-script-directions",
+    "source": "x<sup>2</sup><sub>i</sub>",
+    "runs": [
+      { "text": "x" },
+      { "text": "2", "vertical": "superscript" },
+      { "text": "i", "vertical": "subscript" }
+    ],
+    "citationIndices": []
+  },
+  {
+    "name": "self-closing-sup-recovers",
+    "source": "<sup/> x<sup>2</sup> [2]",
+    "runs": [
+      { "text": "<sup/> x" },
+      { "text": "2", "vertical": "superscript" },
+      { "text": " 2" }
+    ],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "self-closing-sub-recovers",
+    "source": "<sub/> x<sup>2</sup> [2]",
+    "runs": [
+      { "text": "<sub/> x" },
+      { "text": "2", "vertical": "superscript" },
+      { "text": " 2" }
+    ],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "self-closing-i-recovers",
+    "source": "<i/> x<sup>2</sup> [2]",
+    "runs": [
+      { "text": "<i/> x" },
+      { "text": "2", "vertical": "superscript" },
+      { "text": " 2" }
+    ],
+    "citationIndices": [[2]]
+  },
+  {
+    "name": "self-closing-em-recovers",
+    "source": "<em/> x<sup>2</sup> [2]",
+    "runs": [
+      { "text": "<em/> x" },
+      { "text": "2", "vertical": "superscript" },
+      { "text": " 2" }
+    ],
+    "citationIndices": [[2]]
+  }
+]

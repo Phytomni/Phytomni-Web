@@ -11,6 +11,7 @@ import { artifactPresentationForMessage } from "@/views/chat/utils/artifact-poli
 import type { ChatMessage } from "@/views/chat/types";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import validity from "../../../fixtures/report-integrity/report-validity.json";
 
 const REPORT_TOOLS = [
   "KnowledgeAgent",
@@ -45,6 +46,12 @@ function reportMessage(
 }
 
 describe("valid report ledger", () => {
+  it.each(validity.cases)(
+    "shared report validity: $name",
+    ({ tool_name, text, valid }) => {
+      expect(isApprovedReportText(tool_name, text)).toBe(valid);
+    }
+  );
   it("encodes only the approved generic and DeepGenome placeholder sets", () => {
     expect(Object.keys(TOOL_REPORT_PLACEHOLDERS)).toEqual(["DeepGenomeAgent"]);
     expect(

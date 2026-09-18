@@ -1,6 +1,7 @@
 <template>
   <aside
     class="deep-genome-toc"
+    :class="{ 'deep-genome-toc--compact': compact }"
     data-testid="deep-genome-toc"
     :aria-label="title"
   >
@@ -32,27 +33,29 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { ref, watch } from "vue";
 import { ElMenu } from "element-plus";
 import DeepGenomeTocNode from "./DeepGenomeTocNode.vue";
 import type { NestedScientificHeading } from "@/utils/scientific-markdown/toc";
 
-defineProps<{
+const props = defineProps<{
   nestedHeadings: NestedScientificHeading[];
   activeHeadingId: string;
   title: string;
+  compact: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "select", id: string): void;
 }>();
 
-const disclosureOpen = ref(false);
-let desktopMedia: MediaQueryList | null = null;
-
-const syncDisclosure = () => {
-  disclosureOpen.value = desktopMedia?.matches ?? false;
-};
+const disclosureOpen = ref(!props.compact);
+watch(
+  () => props.compact,
+  (compact) => {
+    disclosureOpen.value = !compact;
+  }
+);
 
 const handleToggle = (event: Event) => {
   disclosureOpen.value = (event.currentTarget as HTMLDetailsElement).open;
@@ -61,16 +64,6 @@ const handleToggle = (event: Event) => {
 const handleSelect = (id: string) => {
   emit("select", id);
 };
-
-onMounted(() => {
-  desktopMedia = window.matchMedia("(min-width: 900px)");
-  syncDisclosure();
-  desktopMedia.addEventListener("change", syncDisclosure);
-});
-
-onBeforeUnmount(() => {
-  desktopMedia?.removeEventListener("change", syncDisclosure);
-});
 </script>
 
 <style scoped>
@@ -161,45 +154,47 @@ onBeforeUnmount(() => {
   color: var(--phy-color-action-text);
 }
 
-@media (max-width: 899px) {
-  .deep-genome-toc {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    max-height: none;
-    flex: 0 0 auto;
-    padding: var(--phy-space-12);
-    overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid var(--phy-color-border-subtle);
-  }
+.deep-genome-toc--compact {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-height: none;
+  flex: 0 0 auto;
+  padding: var(--phy-space-12);
+  overflow: visible;
+  border-right: 0;
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+}
 
+.deep-genome-toc--compact .deep-genome-toc__summary {
+  position: relative;
+  margin: 0;
+  padding-right: var(--phy-space-24);
+  cursor: pointer;
+}
+
+.deep-genome-toc--compact .deep-genome-toc__summary::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  content: "+";
+  transform: translateY(-50%);
+}
+
+.deep-genome-toc--compact
+  .deep-genome-toc__disclosure[open]
   .deep-genome-toc__summary {
-    position: relative;
-    margin: 0;
-    padding-right: var(--phy-space-24);
-    cursor: pointer;
-  }
+  margin-bottom: var(--phy-space-12);
+}
 
+.deep-genome-toc--compact
+  .deep-genome-toc__disclosure[open]
   .deep-genome-toc__summary::after {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    content: "+";
-    transform: translateY(-50%);
-  }
+  content: "−";
+}
 
-  .deep-genome-toc__disclosure[open] .deep-genome-toc__summary {
-    margin-bottom: var(--phy-space-12);
-  }
-
-  .deep-genome-toc__disclosure[open] .deep-genome-toc__summary::after {
-    content: "−";
-  }
-
-  .deep-genome-toc-menu {
-    max-height: 320px;
-    overflow-y: auto;
-  }
+.deep-genome-toc--compact .deep-genome-toc-menu {
+  max-height: 320px;
+  overflow-y: auto;
 }
 </style>

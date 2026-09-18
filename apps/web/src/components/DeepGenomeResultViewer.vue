@@ -1,9 +1,15 @@
 <template>
-  <div class="deep-genome-viewer" data-testid="deep-genome-viewer">
+  <div
+    ref="reportRoot"
+    class="deep-genome-viewer"
+    :class="{ 'deep-genome-viewer--compact': compactToc }"
+    data-testid="deep-genome-viewer"
+  >
     <DeepGenomeToc
       :nested-headings="nestedHeadings"
       :active-heading-id="activeHeadingId"
       :title="$t('help.tableOfContents')"
+      :compact="compactToc"
       @select="handleNavSelect"
     />
 
@@ -45,8 +51,9 @@
           :citation-namespace="citationNamespace"
           :reference-count="referenceRows.length"
           :resources="props.resources"
+          :registered-resources-only="props.registeredResourcesOnly"
           @headings="handleHeadings"
-          @citation-activate="emit('citation-activate', $event)"
+          @citation-activate="activateCitation"
           @resource-activate="emit('resource-activate', $event)"
         />
 
@@ -68,8 +75,15 @@
               :key="ref.id"
               :id="ref.id"
               class="deep-genome-reference"
-              v-html="ref.html"
-            ></div>
+              :class="{ 'is-citation-target': activeReferenceIds.has(ref.id) }"
+              tabindex="-1"
+              :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
+            >
+              <CitationReferenceRow
+                :index="ref.index"
+                :citation="ref.citation"
+              />
+            </div>
           </div>
           <p v-else class="deep-genome-empty-references">
             {{ $t("agents.deepGenome.noReferences") }}
@@ -81,10 +95,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { ElButton } from "element-plus";
 import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import type {
   DeepGenomeDownloadFormat,
   DeepGenomeViewerHandle,
@@ -92,6 +114,7 @@ import type {
 import { useDeepGenomeDownloads } from "@/composables/useDeepGenomeDownloads";
 import { useDeepGenomeToc } from "@/composables/useDeepGenomeToc";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
 import {
   buildNestedHeadings,
   type NestedScientificHeading,
@@ -109,15 +132,18 @@ const props = withDefaults(
     references?: readonly unknown[] | null;
     ns: string;
     resources?: readonly AuthorizedScientificResource[];
+    registeredResourcesOnly?: boolean;
     embedded?: boolean;
     showActions?: boolean;
     showReferences?: boolean;
     renderingFileId?: string;
+    printReferencesRoot?: () => HTMLElement | null;
   }>(),
   {
     markdown: "",
     references: () => [],
     resources: () => [],
+    registeredResourcesOnly: false,
     embedded: false,
     showActions: true,
     showReferences: true,
@@ -133,11 +159,30 @@ const headings = ref<ScientificHeading[]>([]);
 const nestedHeadings = ref<NestedScientificHeading[]>([]);
 const mainContentRef = ref<HTMLElement | null>(null);
 const documentRef = ref<HTMLElement | null>(null);
+const reportRoot = ref<HTMLElement | null>(null);
+const compactToc = ref(true);
+let layoutObserver: ResizeObserver | null = null;
+let layoutUpdateFrame: number | null = null;
+let latestLayoutWidth = 0;
 let observerSetupTimer: number | null = null;
 
-// Computed: process the reference list into formatted HTML.
-// Rendering logic (incl. the v-html sanitization invariant) is extracted to
-// @/utils/reference-renderer for direct unit testing.
+function updateTocLayout(width: number): void {
+  // Hidden material parents report zero width; retain their disclosure state.
+  if (width > 0) compactToc.value = width < 900;
+}
+
+function scheduleTocLayout(width: number): void {
+  if (width <= 0) return;
+  latestLayoutWidth = width;
+  if (layoutUpdateFrame !== null) return;
+  // Disclosure changes resize this observed root; leave the delivery phase first.
+  layoutUpdateFrame = requestAnimationFrame(() => {
+    layoutUpdateFrame = null;
+    updateTocLayout(latestLayoutWidth);
+  });
+}
+
+// Keep the canonical citation array positions separate from report Markdown.
 const referenceRows = computed<readonly unknown[]>(
   () => props.references ?? []
 );
@@ -147,6 +192,27 @@ const displayReferences = computed(() =>
 const citationNamespace = computed(() =>
   referenceRows.value.length > 0 ? props.ns : ""
 );
+const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const currentReferenceId = ref<string>();
+
+function activateCitation(activation: ScientificCitationActivation): void {
+  if (
+    props.showReferences &&
+    documentRef.value &&
+    activation.namespace === props.ns &&
+    focusReferenceRows({ root: documentRef.value, ...activation })
+  ) {
+    const ids = activation.indices.map((index) => `${props.ns}-ref-${index}`);
+    activeReferenceIds.value = new Set(ids);
+    currentReferenceId.value = ids[0];
+  }
+  emit("citation-activate", activation);
+}
+
+watch([displayReferences, () => props.showReferences], () => {
+  activeReferenceIds.value = new Set();
+  currentReferenceId.value = undefined;
+});
 
 function handleHeadings(nextHeadings: ScientificHeading[]): void {
   headings.value = nextHeadings;
@@ -159,6 +225,7 @@ const { downloadPDF, downloadMarkdown } = useDeepGenomeDownloads({
   props,
   mainContentRef: documentRef,
   displayReferences,
+  printReferencesRoot: () => props.printReferencesRoot?.() ?? null,
 });
 
 const download: DeepGenomeViewerHandle["download"] = async (
@@ -179,12 +246,25 @@ const { activeHeadingId, handleNavSelect, setupIntersectionObserver } =
   useDeepGenomeToc({ headings, nestedHeadings, mainContentRef });
 
 onMounted(() => {
+  if (reportRoot.value) {
+    updateTocLayout(reportRoot.value.getBoundingClientRect().width);
+    layoutObserver = new ResizeObserver((entries) => {
+      const entry = entries.find((item) => item.target === reportRoot.value);
+      if (entry) scheduleTocLayout(entry.contentRect.width);
+    });
+    layoutObserver.observe(reportRoot.value);
+  }
   observerSetupTimer = window.setTimeout(() => {
     setupIntersectionObserver();
   }, 100);
 });
 
 onBeforeUnmount(() => {
+  layoutObserver?.disconnect();
+  if (layoutUpdateFrame !== null) {
+    cancelAnimationFrame(layoutUpdateFrame);
+    layoutUpdateFrame = null;
+  }
   if (observerSetupTimer !== null) {
     window.clearTimeout(observerSetupTimer);
     observerSetupTimer = null;
@@ -247,21 +327,19 @@ onBeforeUnmount(() => {
   background: var(--phy-color-fill-subtle);
 }
 
-@media (max-width: 899px) {
-  .deep-genome-viewer {
-    flex-direction: column;
-    gap: var(--phy-space-20);
-  }
+.deep-genome-viewer--compact {
+  flex-direction: column;
+  gap: var(--phy-space-20);
+}
 
-  .deep-genome-main {
-    width: 100%;
-    flex: 1 1 auto;
-    padding: 0;
-  }
+.deep-genome-viewer--compact .deep-genome-main {
+  width: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+}
 
-  .deep-genome-toolbar {
-    justify-content: flex-start;
-  }
+.deep-genome-viewer--compact .deep-genome-toolbar {
+  justify-content: flex-start;
 }
 
 .deep-genome-document {
@@ -341,24 +419,16 @@ onBeforeUnmount(() => {
   border-bottom: 0;
 }
 
-.deep-genome-reference :deep(.doc-citation) {
-  line-height: 1.6;
+.deep-genome-reference.is-citation-target {
+  padding-inline: var(--phy-space-8);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--phy-color-accent);
 }
 
-.deep-genome-reference :deep(.doi-link),
-.deep-genome-reference :deep(.pmid-link) {
-  color: var(--phy-color-action-text);
-  text-decoration: none;
-}
-
-.deep-genome-reference :deep(.doi-link:hover),
-.deep-genome-reference :deep(.pmid-link:hover) {
-  color: var(--phy-color-action-text-hover);
-  text-decoration: underline;
-}
-
-.deep-genome-reference :deep(.doc-link-inline) {
-  margin-left: var(--phy-space-4);
+.deep-genome-reference:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 .deep-genome-empty-references {

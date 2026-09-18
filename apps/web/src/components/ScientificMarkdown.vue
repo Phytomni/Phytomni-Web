@@ -13,7 +13,7 @@
       :sanitize-options="sanitizeOptions"
       :need-view-code-btn="false"
       :secure-view-code="true"
-      :remark-plugins="remarkPlugins"
+      :remark-plugins-ahead="remarkPlugins"
       :rehype-plugins="rehypePlugins"
     >
       <template #a="slotProps">
@@ -45,7 +45,10 @@
             <component :is="slotProps.children" />
           </a>
           <a
-            v-else-if="safeAnchorHref(slotHref(slotProps))"
+            v-else-if="
+              safeAnchorHref(slotHref(slotProps)) &&
+              !unregisteredLocalLink(slotHref(slotProps))
+            "
             :href="safeAnchorHref(slotHref(slotProps))!"
             :target="opensInNewTab(slotHref(slotProps)) ? '_blank' : undefined"
             :rel="
@@ -60,6 +63,10 @@
             v-else
             class="scientific-resource scientific-resource--unavailable"
           >
+            <component
+              v-if="registeredResourcesOnly"
+              :is="slotProps.children"
+            />
             {{ unavailableResourceLabel(resourceAlt(slotProps)) }}
           </span>
           <template #fallback>
@@ -154,6 +161,7 @@ const props = withDefaults(
     referenceCount?: number;
     streaming?: boolean;
     resources?: readonly AuthorizedScientificResource[];
+    registeredResourcesOnly?: boolean;
   }>(),
   {
     surface: "reading",
@@ -161,6 +169,7 @@ const props = withDefaults(
     referenceCount: 0,
     streaming: false,
     resources: () => [],
+    registeredResourcesOnly: false,
   }
 );
 
@@ -233,6 +242,8 @@ const sanitizeOptions: SanitizeOptions = {
       h5: ["id"],
       h6: ["id"],
       sup: ["className"],
+      sub: ["className"],
+      em: ["className"],
       span: ["className", "ariaHidden", "style"],
       math: ["xmlns", "display"],
       annotation: ["encoding"],
@@ -288,6 +299,17 @@ function resourceAlt(slotProps: Record<string, unknown>): string {
 
 function safeAnchorHref(href: string): string | null {
   return safeHrefValue(href);
+}
+
+function unregisteredLocalLink(href: string): boolean {
+  if (!props.registeredResourcesOnly || href.startsWith("#")) return false;
+  try {
+    return (
+      new URL(href, window.location.href).origin === window.location.origin
+    );
+  } catch {
+    return true;
+  }
 }
 
 function opensInNewTab(href: string): boolean {

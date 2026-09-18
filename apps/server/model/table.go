@@ -2,6 +2,8 @@ package model
 
 import (
 	"time"
+
+	"phytomni-server/common/citation"
 )
 
 type User struct {
@@ -201,21 +203,24 @@ type ConversationMessageV2 struct {
 }
 
 // ConversationCitationReferenceV2 is the finite bibliography persisted with
-// one projected assistant message. Resolver URLs are derived by the browser
-// from DOI/PMID values and are never stored in the public execution journal.
+// one projected assistant message. Citation presentation, including its links,
+// is rebuilt by Web's citation formatter before persistence. Provider-authored
+// URLs and presentation are never trusted or stored in the public journal.
 type ConversationCitationReferenceV2 struct {
-	Title      string `json:"title,omitempty"`
-	Authors    string `json:"au,omitempty"`
-	WorkTitle  string `json:"ti,omitempty"`
-	Source     string `json:"so,omitempty"`
-	Volume     string `json:"vl,omitempty"`
-	BeginPage  string `json:"bp,omitempty"`
-	EndPage    string `json:"ep,omitempty"`
-	Article    string `json:"ar,omitempty"`
-	Year       string `json:"py,omitempty"`
-	DOI        string `json:"di,omitempty"`
-	PMID       string `json:"pm,omitempty"`
-	DOIMissing *bool  `json:"doi_missing,omitempty"`
+	Title             string                `json:"title,omitempty"`
+	Authors           string                `json:"au,omitempty"`
+	WorkTitle         string                `json:"ti,omitempty"`
+	Source            string                `json:"so,omitempty"`
+	Volume            string                `json:"vl,omitempty"`
+	BeginPage         string                `json:"bp,omitempty"`
+	EndPage           string                `json:"ep,omitempty"`
+	Article           string                `json:"ar,omitempty"`
+	Year              string                `json:"py,omitempty"`
+	DOI               string                `json:"di,omitempty"`
+	PMID              string                `json:"pm,omitempty"`
+	FormattedCitation string                `json:"formatted_citation,omitempty"`
+	Citation          citation.Presentation `json:"citation"`
+	DOIMissing        *bool                 `json:"doi_missing,omitempty"`
 }
 
 func (ConversationMessageV2) TableName() string {

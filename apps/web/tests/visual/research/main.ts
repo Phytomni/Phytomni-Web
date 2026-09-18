@@ -5,6 +5,7 @@ import ElementPlus from "element-plus";
 import i18n, { setLanguage } from "@/locales";
 import { useThemeStore } from "@/stores";
 import DeepGenomeArtifactVisualFixtureApp from "./DeepGenomeArtifactVisualFixtureApp.vue";
+import { hasReadyCifViewers } from "./cif-readiness";
 
 import "@fontsource/inter/400";
 import "@fontsource/inter/600";
@@ -15,9 +16,22 @@ import "@/assets/main.css";
 
 const params = new URLSearchParams(window.location.search);
 const locale = params.get("locale") === "zh-CN" ? "zh-CN" : "en-US";
-const theme = params.get("theme") === "dark" ? "dark" : "light";
-const fixtureCase = params.get("case") === "contract" ? "contract" : "real";
-const VISUAL_READINESS_TIMEOUT_MS = 5_000;
+const theme =
+  params.get("theme") === "dark"
+    ? "dark"
+    : params.get("theme") === "system"
+      ? "system"
+      : "light";
+const fixtureCase =
+  params.get("case") === "cif"
+    ? "cif"
+    : params.get("case") === "scientific"
+      ? "scientific"
+      : params.get("case") === "contract"
+        ? "contract"
+        : "real";
+// Real native SES workers need more time than the earlier cartoon-only viewer.
+const VISUAL_READINESS_TIMEOUT_MS = 30_000;
 
 declare global {
   interface Window {
@@ -249,18 +263,25 @@ function waitForVisualReadiness(root: HTMLElement): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = performance.now() + VISUAL_READINESS_TIMEOUT_MS;
     const check = () => {
+      if (
+        fixtureCase === "scientific" &&
+        root.querySelector(".scientific-inline--subscript") &&
+        root.querySelector("table tbody tr")
+      ) {
+        resolve();
+        return;
+      }
       const image = root.querySelector<HTMLImageElement>(
         ".scientific-image__thumbnail"
       );
       const viewer = root.querySelector<HTMLElement>(".scientific-cif-viewer");
-      const canvas = viewer?.querySelector<HTMLCanvasElement>("canvas");
       if (
-        image?.complete &&
-        image.naturalWidth > 0 &&
-        viewer?.dataset.scientificCifReady === "true" &&
-        canvas &&
-        canvas.width > 0 &&
-        canvas.height > 0
+        (fixtureCase === "cif" ||
+          (image?.complete && image.naturalWidth > 0)) &&
+        hasReadyCifViewers(
+          root,
+          fixtureCase === "cif" && params.get("multiple") === "1" ? 2 : 1
+        )
       ) {
         resolve();
         return;

@@ -277,6 +277,16 @@ export function releaseDialogueUploads(
                           digitalDesignImagesLoading
                         "
                         :lifecycle="agentRunLifecycleForMessage(message)"
+                        :archive-retrying="
+                          Boolean(
+                            getChatState(currentChatId)
+                              .archiveRetryingByMessageId[message.id || '']
+                          )
+                        "
+                        @download-result-archive="
+                          downloadMessageArchive(message, $event)
+                        "
+                        @retry-result-archive="retryMessageArchive(message)"
                         @finish="() => handleMarkdownFinish(index)"
                         @open-artifact="openArtifactForMessage(message)"
                         @update:activity-expanded="
@@ -596,25 +606,40 @@ export function releaseDialogueUploads(
                 currentArtifactMessage &&
                 currentArtifactMessage.tool_name === 'DeepGenomeAgent'
               "
+              ref="deepGenomeArtifactRef"
               :title="chatHeaderTitle"
               :metadata="artifactAgentLabel(currentArtifactMessage)"
               :status="currentArtifactStatusLabel"
+              :report-state="currentArtifactLifecycle ?? undefined"
               :markdown="
-                currentArtifactPresentation?.report ??
-                String(currentArtifactMessage.content)
+                currentArtifactPresentation?.kind === 'deep-genome'
+                  ? currentArtifactPresentation.report
+                  : ''
               "
               :references="currentArtifactMessage.doc_list"
               :resources="currentArtifactResources"
+              :reference-materials="currentArtifactMessage.referenceMaterials"
+              :detail-state="currentArtifactMaterialState"
+              :report-key="currentArtifactMaterialReportKey"
+              :read-resource="
+                demoKey === 'deep-genome'
+                  ? readDeepGenomeCaseResource
+                  : undefined
+              "
+              :rendering-file-id="currentArtifactMessage.id"
               :ns="artifactNamespace"
               :tab="artifactTab"
+              :tabs="artifactTabs"
               :tab-labels="artifactTabLabels"
               :tablist-label="t('common.operation')"
               :artifact-id="artifactId"
               :back-label="t('common.back')"
               :close-label="t('common.close')"
               :action-label="t('common.operation')"
+              :menu-items="artifactMenuItems"
               @back="closeExecutionWorkspace"
               @close="closeActiveExecutionWorkspaceTab"
+              @action="onArtifactMenu"
               @tab="selectArtifactTab"
               @resource-activate="activateArtifactResource"
             />
@@ -628,21 +653,30 @@ export function releaseDialogueUploads(
               "
               :report-status="currentArtifactReportStatus || undefined"
               :tab="artifactTab"
+              :tabs="artifactTabs"
               :tab-labels="artifactTabLabels"
               :tablist-label="t('common.operation')"
               :artifact-id="artifactId"
               :back-label="t('common.back')"
               :close-label="t('common.close')"
               :action-label="t('common.operation')"
+              :menu-items="artifactMenuItems"
               @back="closeExecutionWorkspace"
               @close="closeActiveExecutionWorkspaceTab"
+              @action="onArtifactMenu"
               @tab="selectArtifactPanelTab"
             >
               <template #content>
                 <BotReportState
                   v-if="currentArtifactLifecycle"
                   :state="currentArtifactLifecycle"
-                  :report="currentArtifactPresentation?.report ?? null"
+                  :agent-name="currentArtifactMessage.tool_name || ''"
+                  :report="
+                    currentArtifactPresentation?.kind === 'research'
+                      ? currentArtifactPresentation.report
+                      : null
+                  "
+                  :report-source="currentArtifactPresentation?.source"
                   :progress="currentArtifactProjection?.progress"
                   :updated-at="currentArtifactProjection?.reportUpdatedAt"
                   :labels="currentArtifactBotReportLabels"
@@ -768,6 +802,8 @@ import {
   computed,
 } from "vue";
 import Sidebar from "./ChatSidebar.vue";
+import { createDeepGenomeMaterialDetailState } from "@/components/research/deep-genome-report";
+import type { DeepGenomeViewerHandle } from "@/components/research/deep-genome-types";
 import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
 import TransferProgress from "@/components/TransferProgress.vue";
@@ -789,6 +825,7 @@ import {
   DeepGenomeArtifact,
   ResearchArtifactShell,
   ResearchEvidencePanel,
+  copyDownloadCloseArtifactMenuItems,
 } from "@/components/research";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -884,16 +921,23 @@ import {
   safeParse,
   upsertPendingChatListEntry,
 } from "@/utils/pending-chat";
-import { formatDetailedCitation } from "@/utils/citation";
-import { chatContentToText } from "./messageTypes";
+import { referenceListPlainText } from "@/utils/citation-presentation";
+import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { chatContentToText, messagePlainText } from "./messageTypes";
 import { parentRowIdForDialogue } from "./utils/chat-parent-row";
 import { messageActionCapabilities } from "./utils/message-action-capabilities";
 import {
   artifactIdentityForMessage,
   artifactPresentationForMessage,
   artifactPreviewTitleKey,
-  researchRowLifecycleStatus,
 } from "./utils/artifact-policy";
+import { useResultArchiveDelivery } from "./composables/useResultArchiveDelivery";
+import type { ConversationArtifactLink } from "@/api/types";
+import {
+  artifactChromeFromMessage,
+  artifactDownloadFormat,
+  type ArtifactChrome,
+} from "./utils/artifact-chrome";
 import type {
   ArtifactTab,
   Chat,
@@ -923,6 +967,10 @@ import {
   primaryExecutionActivitySurface,
   usesLegacyTaskLog,
 } from "./executionLogPolicy";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "./utils/report-presentation";
 
 const chatLogo = "/logo.png";
 
@@ -1842,6 +1890,28 @@ const artifactId = computed(() => {
   return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 });
 const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const deepGenomeArtifactRef = ref<DeepGenomeViewerHandle | null>(null);
+const currentArtifactMaterialState = computed(() => {
+  const states = getChatState(currentChatId.value).materialDetailsByArtifact;
+  const identity = activeArtifactIdentity.value || "none";
+  return (
+    states[identity] ??
+    (states[identity] = createDeepGenomeMaterialDetailState())
+  );
+});
+const currentArtifactMaterialReportKey = computed(
+  () =>
+    `${currentChatId.value}:${activeArtifactIdentity.value}:${currentArtifactMessage.value?.botProjection?.reportRevision ?? 0}`
+);
+async function readDeepGenomeCaseResource(
+  resourceId: string,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted();
+  const reader = await import("@/views/deep-genome-agent/deep-genome-case");
+  signal.throwIfAborted();
+  return reader.readDeepGenomeCaseResource(resourceId, signal);
+}
 const evidencePanelRef = ref<{
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);
@@ -1849,13 +1919,27 @@ const artifactTabLabels = computed(() => ({
   content: t("common.view"),
   evidence: t("agents.deepGenome.references"),
   activity: t("chat.log.activityLabel"),
-  downloads: t("chat.actions.downloadAttachments"),
+  downloads: t("chat.actions.attachments"),
 }));
+const currentArtifactChrome = computed<ArtifactChrome>(() => {
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactChromeFromMessage(message)
+    : { tabs: ["content"], exportFormats: [] };
+});
+const artifactTabs = computed(() => currentArtifactChrome.value.tabs);
+const artifactMenuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(
+    t,
+    currentArtifactChrome.value.exportFormats
+  )
+);
 
 async function activateEvidence(
   activation: ScientificCitationActivation
 ): Promise<void> {
   if (activation.namespace !== artifactNamespace.value) return;
+  if (!artifactTabs.value.includes("evidence")) return;
   await selectArtifactPanelTab("evidence");
   await nextTick();
   evidencePanelRef.value?.focusReferences(activation.indices);
@@ -1889,80 +1973,14 @@ function lifecycleFromMessage(
     !message.botLifecycle &&
     projection &&
     projection.reportPresentation !== true &&
+    !projection.report &&
     presentation?.kind !== "research"
   ) {
     return null;
   }
-  if (message.botLifecycle) {
-    if (!projection) {
-      return {
-        ...message.botLifecycle,
-        degradedInterop: message.botLifecycle.degradedInterop === true,
-        interop: cloneBotInterop(message.botLifecycle.interop),
-      };
-    }
-    return {
-      ...message.botLifecycle,
-      degradedInterop: projection.degradedInterop === true,
-      interop: cloneBotInterop(projection.interop),
-      reportStage: projection.reportStage,
-      reportUpdatedAt: projection.reportUpdatedAt,
-      progress: projection.progress,
-    };
-  }
-  if (!projection) {
-    if (presentation?.kind !== "research") return null;
-    const status = researchRowLifecycleStatus(String(message.status ?? ""));
-    return {
-      runId: null,
-      status,
-      reportRevision: 0,
-      visibleReport: "",
-      intermediateReport: "",
-      finalReport: "",
-      degraded: false,
-      failures: [],
-      artifacts: [],
-    };
-  }
-
-  let status: BotLifecycleState["status"] = "RUNNING";
-  switch (projection.status) {
-    case "INPUT_REQUIRED":
-      status = "INPUT_REQUIRED";
-      break;
-    case "SUCCEEDED":
-      status = "SUCCEEDED";
-      break;
-    case "FAILED":
-      status = "FAILED";
-      break;
-    case "CANCELLED":
-      status = "CANCELLED";
-      break;
-    case "TIMED_OUT":
-      status = "TIMED_OUT";
-      break;
-  }
-
-  const intermediateReport = projection.intermediateReport || "";
-  const finalReport = projection.finalReport || "";
-  return {
-    runId: projection.runId,
-    status,
-    reportRevision: projection.reportRevision,
-    visibleReport: finalReport.trim() ? finalReport : intermediateReport,
-    intermediateReport,
-    finalReport,
-    degraded: projection.degraded || projection.trackingDegraded,
-    degradedInterop: projection.degradedInterop === true,
-    interop: cloneBotInterop(projection.interop),
-    failures: projection.failures,
-    artifacts: projection.artifacts,
-    reportStage: projection.reportStage,
-    reportUpdatedAt: projection.reportUpdatedAt,
-    progress: projection.progress,
-  };
+  if (!projection && !message.botLifecycle && presentation?.kind !== "research")
+    return null;
+  return reportLifecycleForMessage(message);
 }
 
 const currentArtifactLifecycle = computed(() => {
@@ -1976,6 +1994,38 @@ const currentArtifactDelivery = computed(
     currentArtifactLifecycle.value?.delivery ??
     currentArtifactProjection.value?.delivery
 );
+const messageArchives = useResultArchiveDelivery({ getChatState });
+function downloadMessageArchive(
+  message: ChatMessage,
+  artifact: ConversationArtifactLink
+): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.downloadResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    artifact,
+  });
+}
+function retryMessageArchive(message: ChatMessage): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.retryResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    onPending: (delivery) => {
+      message.delivery = { ...delivery };
+      if (message.botProjection)
+        message.botProjection = {
+          ...message.botProjection,
+          delivery: { ...delivery },
+        };
+      if (message.botLifecycle)
+        message.botLifecycle = {
+          ...message.botLifecycle,
+          delivery: { ...delivery },
+        };
+    },
+  });
+}
 
 const currentArtifactRetrying = computed(() => {
   const messageId = currentArtifactMessage.value?.id;
@@ -1998,7 +2048,6 @@ function retryCurrentResultArchive(): void {
     if (matches.length !== 1) return;
     const [message] = matches;
     message.delivery = { ...delivery };
-    message.status = "RUNNING";
     if (message.botProjection) {
       message.botProjection = {
         ...message.botProjection,
@@ -2019,51 +2068,47 @@ function retryCurrentResultArchive(): void {
 function reportStatusForArtifact(
   state: BotLifecycleState
 ): ChatArtifactReportStatus {
-  const stage = (
-    state as BotLifecycleState & {
-      reportStage?: "waiting_for_brief_gene" | "intermediate" | "final" | null;
-    }
-  ).reportStage;
-  if (state.status === "FAILED" || state.status === "TIMED_OUT") {
-    return "failed";
-  }
-  if (state.status === "INPUT_REQUIRED" || stage === "waiting_for_brief_gene") {
-    return "loading";
-  }
-  if (state.degraded || stage === "intermediate") return "degraded";
-  if (
-    state.status === "SUCCEEDED" ||
-    stage === "final" ||
-    state.finalReport.trim() !== ""
-  ) {
-    return "complete";
-  }
-  return "loading";
+  return reportPresentationFor(
+    state,
+    currentArtifactPresentation.value ?? undefined
+  ).state;
 }
 
 const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
-  () =>
-    currentArtifactLifecycle.value
-      ? reportStatusForArtifact(currentArtifactLifecycle.value)
-      : null
+  () => {
+    const state = currentArtifactLifecycle.value;
+    if (state) return reportStatusForArtifact(state);
+    const message = currentArtifactMessage.value;
+    return message ? reportStatusForRow(message) : null;
+  }
 );
 
 function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
-  const stage = state.reportStage;
-  if (state.status === "TIMED_OUT") return t("chat.lifecycle.timed_out");
-  if (state.status === "FAILED") return t("chat.botReport.failed");
-  if (state.status === "INPUT_REQUIRED") {
-    return t("chat.botReport.inputRequired");
-  }
-  if (stage === "waiting_for_brief_gene") {
-    return t("chat.botReport.waiting");
-  }
-  if (state.degraded) return t("chat.botReport.degraded");
-  if (stage === "intermediate") return t("chat.botReport.partial");
-  if (state.status === "RUNNING") return t("chat.botReport.waiting");
-  return t("chat.botReport.complete");
+  return t(
+    reportPresentationFor(state, currentArtifactPresentation.value ?? undefined)
+      .labelKey
+  );
 }
 
+function reportStatusForRow(message: ChatMessage): ChatArtifactReportStatus {
+  if (message.streaming === true) return "loading";
+  return reportPresentationFor(
+    reportLifecycleForMessage(message),
+    artifactPresentationForMessage(message) ?? undefined,
+    message.tool_name
+  ).state;
+}
+
+function artifactStatusLabelForMessage(message: ChatMessage): string {
+  if (message.streaming === true) return t("chat.botReport.waiting");
+  return t(
+    reportPresentationFor(
+      reportLifecycleForMessage(message),
+      artifactPresentationForMessage(message) ?? undefined,
+      message.tool_name
+    ).labelKey
+  );
+}
 const currentArtifactBotReportLabels = computed(() => {
   const state = currentArtifactLifecycle.value;
   if (!state) return {};
@@ -2094,8 +2139,10 @@ const currentArtifactEmptyReportLabel = computed(() => {
 
 const currentArtifactStatusLabel = computed(() => {
   const state = currentArtifactLifecycle.value;
-  return state
-    ? botReportLabelForLifecycle(state)
+  if (state) return botReportLabelForLifecycle(state);
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactStatusLabelForMessage(message)
     : t("chat.botReport.waiting");
 });
 
@@ -2935,19 +2982,13 @@ const setTourInputTarget = (el: HTMLElement | null) => {
 const copyMessageWithDocs = (message: ChatMessage, index: number) => {
   const docs =
     message.doc_list && message.doc_list.length > 0
-      ? message.doc_list
-          .map((item, idx) => {
-            if (item.au || item.ti) {
-              return `${idx + 1}. ${formatDetailedCitation(item)}`;
-            } else if (item.title) {
-              return `${idx + 1}. ${item.title}`;
-            }
-            return `${idx + 1}. ${JSON.stringify(item)}`;
-          })
-          .join("\n")
+      ? referenceListPlainText(
+          buildDisplayReferences(message.doc_list, `copy-${index + 1}`)
+        )
       : "";
   const text =
-    chatContentToText(message.content) +
+    (artifactPresentationForMessage(message)?.report ??
+      messagePlainText(message)) +
     (docs && docs !== "" ? "\nReferences:\n" : "") +
     docs;
   fallbackCopyText(text, index + 1);
@@ -2965,6 +3006,33 @@ const handleMessageCopy = (message: ChatMessage, index: number) => {
   copyMessageWithDocs(message, index);
 };
 
+const onArtifactMenu = async (command: string) => {
+  if (command === "close") {
+    closeActiveExecutionWorkspaceTab();
+    return;
+  }
+  const format = artifactDownloadFormat(command);
+  if (format) {
+    if (demoKey.value === "deep-genome") {
+      if (format === "PDF" || format === "Markdown") {
+        await deepGenomeArtifactRef.value?.download(
+          format === "PDF" ? "pdf" : "markdown"
+        );
+      }
+      return;
+    }
+    const message = currentArtifactMessage.value;
+    if (message?.id) getFileDownUrl(message.id, format);
+    return;
+  }
+  if (command !== "copy") return;
+  const message = currentArtifactMessage.value;
+  if (!message) return;
+  const index = (currentChat.value?.messages ?? []).findIndex(
+    (entry) => entry.id === message.id && entry.role === message.role
+  );
+  handleMessageCopy(message, index >= 0 ? index : 0);
+};
 const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
   const items: DirectDownloadItem[] = [];
   if (

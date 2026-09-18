@@ -45,6 +45,7 @@ export type QueryProgressOpts = {
 export type DownloadProgressOpts = {
   requestId?: string;
   onDownloadProgress?: (e: AxiosProgressEvent) => void;
+  suppressErrorToast?: boolean;
 };
 
 type FormIdPayload = { id: string | number };
@@ -199,13 +200,17 @@ export function resumeMessageStream(opts: {
 }
 
 // Query conversation (all child messages of a conversation)
-export const getAnswerCheck = (data: {
-  dialogue_id: string;
-}): Promise<ApiEnvelope<ChatHistoryRecord[]>> =>
+export const getAnswerCheck = (
+  data: {
+    dialogue_id: string;
+  },
+  signal?: AbortSignal
+): Promise<ApiEnvelope<ChatHistoryRecord[]>> =>
   requestApi(
     {
       url: `/api/v1/conversations/${data.dialogue_id}/messages`,
       method: "get",
+      ...(signal ? { signal } : {}),
     },
     decodeChatHistory
   );
@@ -357,6 +362,7 @@ export const getFileDownUrlApi = (
     responseType: "blob",
     requestId: opts?.requestId,
     onDownloadProgress: opts?.onDownloadProgress,
+    ...(opts?.suppressErrorToast ? { suppressErrorToast: true } : {}),
   });
 
 // Get analyst log (RESTful: task id in path)

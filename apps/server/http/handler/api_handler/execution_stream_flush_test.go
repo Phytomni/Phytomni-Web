@@ -16,9 +16,9 @@ func (flusher *countingFlusher) Flush() {
 func TestCopyExecutionStreamFlushesForwardedSSE(t *testing.T) {
 	var destination bytes.Buffer
 	flusher := &countingFlusher{}
-	source := bytes.NewBufferString(": heartbeat\n\nevent: execution_event\ndata: {}\n\n")
+	source := bytes.NewBufferString(": heartbeat\n\nevent: execution_tracking\ndata: {}\n\n")
 
-	written, err := copyExecutionStream(&destination, flusher, source)
+	written, err := copyExecutionStream(&destination, flusher, source, "turn-stream")
 
 	if err != nil {
 		t.Fatalf("copy execution stream: %v", err)

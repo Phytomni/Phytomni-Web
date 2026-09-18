@@ -161,6 +161,17 @@ guest_default_chat_limit: 5
 bcrypt_cost: 10
 
 # ---------------------------------------------------------------------
+# Academic cited-report fonts. This server-owned directory must contain
+# authorized Times New Roman files named times.ttf, timesbd.ttf,
+# timesi.ttf, and timesbi.ttf. Fonts are validated when a cited PDF is
+# requested; missing/invalid resources fail that export without blocking
+# service startup or ordinary Chat exports. The browser cannot set this
+# path. No font is downloaded or silently substituted.
+# ---------------------------------------------------------------------
+document_export:
+  font_dir: "/opt/phytomni/report-fonts"
+
+# ---------------------------------------------------------------------
 # Bot service integration (Wave A multi-tenant proxy).
 #
 # `base_url`         — Bot's HTTP root (production: internal VPC URL).

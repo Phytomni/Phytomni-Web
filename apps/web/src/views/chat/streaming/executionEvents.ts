@@ -1,4 +1,10 @@
 import type { AguiEvent } from "./aguiEvents";
+import {
+  isBotReportWarningCode,
+  MAX_BOT_REPORT_WARNINGS,
+  type BotReportWarningCode,
+} from "../botProjection";
+import { decodeJournalCitationReferences } from "@/utils/citation-presentation";
 
 export const EXECUTION_EVENT_KINDS = [
   "execution.admitted",
@@ -381,6 +387,7 @@ export interface ExecutionProjection {
   routeReasonCode: string | null;
   operations: ExecutionOperationRecord[];
   executionStage: ExecutionStageState | null;
+  reportWarningCodes?: BotReportWarningCode[];
 }
 
 export interface ExecutionEventPage {
@@ -489,6 +496,7 @@ export interface ExecutionRunState {
   outputOffset: number;
   operationRevision: number;
   outputText: string;
+  outputCompleted: boolean;
   trackingHealth: string;
   targets: ExecutionTarget[];
   agentSlug: string | null;
@@ -496,6 +504,7 @@ export interface ExecutionRunState {
   routeReasonCode: string | null;
   operations: ExecutionOperationRecord[];
   executionStage: ExecutionStageState | null;
+  reportWarningCodes?: BotReportWarningCode[];
 }
 
 export interface ExecutionWorkspaceTab {
@@ -595,41 +604,8 @@ type DurableMessageChunk = {
   chunkCount: number;
   digest: string;
   text: string;
+  references?: ReadonlyArray<Readonly<Record<string, unknown>>>;
 };
-
-const EXECUTION_CITATION_FIELDS = new Set([
-  "title",
-  "au",
-  "ti",
-  "so",
-  "vl",
-  "bp",
-  "ep",
-  "ar",
-  "py",
-  "di",
-  "pm",
-  "doi_missing",
-]);
-
-function validExecutionCitationReferences(value: unknown): boolean {
-  if (!Array.isArray(value) || value.length > 64) return false;
-  return value.every((reference) => {
-    if (
-      !isRecord(reference) ||
-      Object.keys(reference).some((key) => !EXECUTION_CITATION_FIELDS.has(key))
-    ) {
-      return false;
-    }
-    return Object.entries(reference).every(([key, field]) =>
-      key === "doi_missing"
-        ? typeof field === "boolean"
-        : typeof field === "string" &&
-          field.length > 0 &&
-          [...field].length <= 512
-    );
-  });
-}
 
 function decodeDurableMessageChunk(
   value: Readonly<Record<string, unknown>>
@@ -647,13 +623,13 @@ function decodeDurableMessageChunk(
     "text",
   ]);
   const allowedFields = new Set([...requiredFields, "references"]);
+  const references = decodeJournalCitationReferences(value.references);
   if (
     Object.keys(value).length < requiredFields.size ||
     Object.keys(value).length > allowedFields.size ||
     [...requiredFields].some((key) => !(key in value)) ||
     Object.keys(value).some((key) => !allowedFields.has(key)) ||
-    (value.references !== undefined &&
-      !validExecutionCitationReferences(value.references))
+    !references.ok
   ) {
     return null;
   }
@@ -698,6 +674,7 @@ function decodeDurableMessageChunk(
     chunkCount,
     digest,
     text,
+    ...(references.value === undefined ? {} : { references: references.value }),
   };
 }
 
@@ -794,13 +771,18 @@ export function decodeExecutionEvent(
     if (!isRecord(value.public_payload)) {
       return { ok: false, reason: "forbidden_public_payload" };
     }
-    if (
-      (kind === "message.snapshot" || kind === "message.completed") &&
-      decodeDurableMessageChunk(value.public_payload) === null
-    ) {
+    const durableMessage =
+      kind === "message.snapshot" || kind === "message.completed"
+        ? decodeDurableMessageChunk(value.public_payload)
+        : undefined;
+    if (durableMessage === null) {
       return { ok: false, reason: "invalid_public_payload" };
     }
-    if (containsForbiddenValue(value.public_payload)) {
+    const forbiddenPayload = { ...value.public_payload };
+    // Canonical citation links are the only validated URL-bearing values in a
+    // message event. Scan every other field with the generic secret/URL guard.
+    if (durableMessage) delete forbiddenPayload.references;
+    if (containsForbiddenValue(forbiddenPayload)) {
       return { ok: false, reason: "forbidden_public_payload" };
     }
     const target = decodeTarget(value.target);
@@ -839,7 +821,14 @@ export function decodeExecutionEvent(
         ignorable: false,
         status: status as ExecutionStatus,
         summary: { key: summaryKey, text: summaryText },
-        payload: value.public_payload,
+        payload: durableMessage
+          ? {
+              ...value.public_payload,
+              ...(durableMessage.references === undefined
+                ? {}
+                : { references: durableMessage.references }),
+            }
+          : value.public_payload,
         source,
         spanId,
         attempt,
@@ -1239,6 +1228,42 @@ function decodeExecutionStage(
   };
 }
 
+function decodeProjectionReportWarningCodes(
+  value: unknown
+): DecodeResult<BotReportWarningCode[] | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!Array.isArray(value) || value.length > MAX_BOT_REPORT_WARNINGS) {
+    return { ok: false, reason: "invalid_projection" };
+  }
+
+  const codes: BotReportWarningCode[] = [];
+  for (const warning of value) {
+    if (
+      !isRecord(warning) ||
+      !Object.prototype.hasOwnProperty.call(warning, "code") ||
+      Object.keys(warning).some(
+        (key) => key !== "code" && key !== "work_unit_id"
+      )
+    ) {
+      return { ok: false, reason: "invalid_projection" };
+    }
+    const code = warning.code;
+    const workUnitId = warning.work_unit_id;
+    if (
+      typeof code !== "string" ||
+      !/^[a-z][a-z0-9_]{0,127}$/u.test(code) ||
+      (workUnitId !== undefined &&
+        workUnitId !== null &&
+        (typeof workUnitId !== "string" ||
+          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(workUnitId)))
+    ) {
+      return { ok: false, reason: "invalid_projection" };
+    }
+    if (isBotReportWarningCode(code) && !codes.includes(code)) codes.push(code);
+  }
+  return { ok: true, value: codes };
+}
+
 export function decodeExecutionProjection(
   value: unknown
 ): DecodeResult<ExecutionProjection> {
@@ -1294,6 +1319,12 @@ export function decodeExecutionProjection(
     }
     const executionStage = decodeExecutionStage(value.execution_stage);
     if (!executionStage.ok) return { ok: false, reason: "invalid_projection" };
+    const reportWarningCodes = decodeProjectionReportWarningCodes(
+      value.warnings
+    );
+    if (!reportWarningCodes.ok) {
+      return { ok: false, reason: "invalid_projection" };
+    }
     const results: ExecutionResult[] = [];
     for (const raw of value.results) {
       const decoded = decodeResult(raw);
@@ -1399,6 +1430,9 @@ export function decodeExecutionProjection(
         routeReasonCode,
         operations,
         executionStage: executionStage.value,
+        ...(reportWarningCodes.value === undefined
+          ? {}
+          : { reportWarningCodes: reportWarningCodes.value }),
       },
     };
   }
@@ -2157,6 +2191,7 @@ export function createExecutionRunState(
     outputOffset: 0,
     operationRevision: 0,
     outputText: "",
+    outputCompleted: false,
     trackingHealth: "pending",
     targets: [],
     agentSlug: null,
@@ -3031,13 +3066,18 @@ export function applyExecutionEvent(
     if (chunk) {
       const newerRevision = chunk.revision > state.outputRevision;
       const sameRevision = chunk.revision === state.outputRevision;
+      let appliedChunk = false;
       if (newerRevision && chunk.baseOffset === 0) {
         next.outputText = chunk.text;
         next.outputRevision = chunk.revision;
         next.outputOffset = chunk.offset;
+        next.outputCompleted = false;
+        appliedChunk = true;
       } else if (sameRevision && chunk.baseOffset === state.outputOffset) {
         next.outputText = state.outputText + chunk.text;
         next.outputOffset = chunk.offset;
+        next.outputCompleted = false;
+        appliedChunk = true;
       } else if (
         sameRevision &&
         chunk.baseOffset === 0 &&
@@ -3045,11 +3085,20 @@ export function applyExecutionEvent(
       ) {
         next.outputText = chunk.text;
         next.outputOffset = chunk.offset;
+        next.outputCompleted = false;
+        appliedChunk = true;
       } else if (
         chunk.revision >= state.outputRevision &&
         chunk.offset > state.outputOffset
       ) {
         next.delivery = "gap";
+      }
+      if (
+        appliedChunk &&
+        event.kind === "message.completed" &&
+        next.outputOffset === chunk.totalLength
+      ) {
+        next.outputCompleted = true;
       }
     }
   }
@@ -3065,6 +3114,12 @@ export function hydrateExecutionProjection(
     projection.latestSeq < state.latestSeq
   )
     return state;
+  const projectionOutputRevision = projection.outputRevision ?? 0;
+  const projectionOutputOffset = projection.outputOffset ?? 0;
+  const projectionAdvancesOutput =
+    projectionOutputRevision > state.outputRevision ||
+    (projectionOutputRevision === state.outputRevision &&
+      projectionOutputOffset > state.outputOffset);
   return {
     ...state,
     schemaVersion: projection.schemaVersion,
@@ -3081,6 +3136,7 @@ export function hydrateExecutionProjection(
       projection.outputRevision ?? 0
     ),
     outputOffset: Math.max(state.outputOffset, projection.outputOffset ?? 0),
+    outputCompleted: projectionAdvancesOutput ? false : state.outputCompleted,
     operationRevision: Math.max(
       state.operationRevision,
       projection.operationRevision ?? 0
@@ -3092,6 +3148,9 @@ export function hydrateExecutionProjection(
     routeReasonCode: projection.routeReasonCode ?? state.routeReasonCode,
     operations: projection.operations,
     executionStage: projection.executionStage,
+    ...(projection.reportWarningCodes === undefined
+      ? {}
+      : { reportWarningCodes: [...projection.reportWarningCodes] }),
     todoDeclared:
       projection.todoDeclared ??
       (projection.todos.length > 0 || state.todoDeclared),

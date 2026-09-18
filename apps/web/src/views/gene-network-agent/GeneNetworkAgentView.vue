@@ -333,6 +333,7 @@ import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { useResultArchiveDelivery } from "@/views/chat/composables/useResultArchiveDelivery";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
 import type {
   AgentResultDelivery,
   ConversationArtifactLink,
@@ -452,25 +453,14 @@ const hasRun = computed(
     displayedState.value.projection !== null ||
     displayedState.value.degraded
 );
-const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
-  () => {
-    if (displayedState.value.phase === "failed") return "failed";
-    if (displayedState.value.degraded) return "degraded";
-    if (displayedState.value.phase === "succeeded") return "complete";
-    return "loading";
-  }
+const reportPresentation = computed(() =>
+  reportPresentationFor(displayedState.value, undefined, "GeneNetworkAgent")
 );
+const reportStatus = computed(() => reportPresentation.value.state);
 const reportStatusLabel = computed(() => {
-  switch (reportStatus.value) {
-    case "complete":
-      return t("agents.geneNetwork.complete");
-    case "degraded":
-      return t("agents.geneNetwork.degraded");
-    case "failed":
-      return t("common.failed");
-    default:
-      return t("agents.geneNetwork.progress");
-  }
+  return reportPresentation.value.active
+    ? t("agents.geneNetwork.progress")
+    : t(reportPresentation.value.labelKey);
 });
 const progressLabel = computed(() =>
   isRunActive.value ? t("agents.geneNetwork.progress") : reportStatusLabel.value

@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"phytomni-server/common/i18n"
+	rxBot "phytomni-server/external/bot"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
@@ -84,5 +86,62 @@ func TestGeneImage_TraversalReject(t *testing.T) {
 		if rec.Code == http.StatusOK {
 			t.Fatalf("GeneImage(gene=%q file=%q) = 200, want rejection", tc.gene, tc.file)
 		}
+	}
+}
+
+func TestGeneImageCuratedRelay(t *testing.T) {
+	gene, file := "Os01g0107900", "Os01g0107900_tree.png"
+	c, rec, _ := newGeneImageCtx(t, gene, file)
+	viper.Set("gene_obsfs_path", "")
+	oldBot := rxBot.BotConfig
+	want := []byte("\x89PNG\r\n\x1a\nIMAGE")
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/v1/relay/obs/object" || r.URL.Query().Get("path") != "gene-examples/img/"+gene+"/"+file {
+			t.Errorf("unexpected relay object request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write(want)
+	}))
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { srv.Close(); rxBot.BotConfig = oldBot })
+	(&Handler{}).GeneImage(c)
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), want) || calls != 1 {
+		t.Fatalf("curated PNG relay: status=%d calls=%d body=%q", rec.Code, calls, rec.Body.String())
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatal("PNG relay lost response hardening")
+	}
+}
+
+func TestGeneImageRejectsSymlinkEscape(t *testing.T) {
+	c, rec, root := newGeneImageCtx(t, "Os01g0107900", "Os01g0107900_escape.png")
+	canary := filepath.Join(t.TempDir(), "canary.png")
+	if err := os.WriteFile(canary, []byte("\x89PNG\r\n\x1a\nCANARY"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(canary, filepath.Join(root, "img", "Os01g0107900", "Os01g0107900_escape.png")); err != nil {
+		t.Fatal(err)
+	}
+	(&Handler{}).GeneImage(c)
+	if rec.Code == http.StatusOK || bytes.Contains(rec.Body.Bytes(), []byte("CANARY")) {
+		t.Fatalf("symlink escape exposed a file: status=%d body=%q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGeneImageRejectsNonImageAndDisguisedContent(t *testing.T) {
+	for _, file := range []string{"protocol.md", "original.pdf", "page.html", "figure.svg", "Os01g0107900_disguised.png"} {
+		t.Run(file, func(t *testing.T) {
+			c, rec, root := newGeneImageCtx(t, "Os01g0107900", file)
+			if err := os.WriteFile(filepath.Join(root, "img", "Os01g0107900", file), []byte("<html>PRIVATE-CONTENT</html>"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			(&Handler{}).GeneImage(c)
+			if rec.Code == http.StatusOK || bytes.Contains(rec.Body.Bytes(), []byte("PRIVATE-CONTENT")) {
+				t.Fatalf("non-image exposed through public image endpoint: status=%d", rec.Code)
+			}
+		})
 	}
 }

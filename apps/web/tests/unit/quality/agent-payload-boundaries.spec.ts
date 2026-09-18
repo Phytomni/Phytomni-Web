@@ -53,10 +53,15 @@ describe("agent payload boundary decoders", () => {
     ).toBeUndefined();
   });
 
-  it("drops primitive citation rows and malformed table shapes", () => {
+  it("retains rejected citation slots without exposing primitives and rejects malformed tables", () => {
     expect(
       decodeCitationDocuments([{ title: "paper" }, "secret", null, []])
-    ).toEqual([{ title: "paper" }]);
+    ).toEqual([
+      { title: "paper", citation: null },
+      { citation: null },
+      { citation: null },
+      { citation: null },
+    ]);
     expect(decodeTableDataInput({ headers: "secret", rows: [] })).toEqual({
       headers: [],
       rows: [],

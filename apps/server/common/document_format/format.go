@@ -3,38 +3,37 @@ package document_format
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"phytomni-server/common/citation"
 	"phytomni-server/common/document_format/chat_agent"
 	"phytomni-server/common/document_format/data_agent"
-	"phytomni-server/common/document_format/knowledge_agent"
 	"phytomni-server/common/document_format/mdoc"
-	"phytomni-server/common/document_format/review_agent"
-	"time"
 )
 
 type FileDownloader interface {
 	Download(format string, answer string) ([]byte, string, error)
 }
 
-// AgentOptions carries per-download helpers. FetchImage is optional; a nil
-// fetcher leaves Markdown images as alt text.
+// AgentOptions carries server-owned per-download resources. A nil FetchImage
+// leaves Markdown images as alt text; FontDir is read only for cited PDFs.
 type AgentOptions struct {
 	FetchImage mdoc.ImageFetcher
+	FontDir    string
 }
 
-func parseKnowledgeAnswer(answer string) knowledge_agent.Document {
-	var doc knowledge_agent.Document
-	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return knowledge_agent.Document{Content: answer}
-	}
-	return doc
+type citedEnvelope struct {
+	Content string          `json:"content"`
+	DocList json.RawMessage `json:"doc_list"`
 }
 
-func parseReviewAnswer(answer string) review_agent.Document {
-	var doc review_agent.Document
-	if err := json.Unmarshal([]byte(answer), &doc); err != nil {
-		return review_agent.Document{Content: answer}
+func decodeCitedAnswer(answer string) (string, []citation.Row, error) {
+	var envelope citedEnvelope
+	if err := json.Unmarshal([]byte(answer), &envelope); err != nil {
+		return answer, nil, nil
 	}
-	return doc
+	rows, err := citation.DecodeRows(envelope.DocList)
+	return envelope.Content, rows, err
 }
 
 func NewAgent(toolName string) (FileDownloader, error) {
@@ -46,16 +45,16 @@ func NewAgentWithOptions(toolName string, opts AgentOptions) (FileDownloader, er
 	case "ChatAgent":
 		return &ChatAgent{opts: opts}, nil
 	case "KnowledgeAgent":
-		return &KnowledgeAgent{opts: opts}, nil
+		return &citedAgent{opts: opts, filePrefix: "knowledge"}, nil
 	case "DataAgent":
 		return &DataAgent{}, nil
 	case "BriefGeneAgent", "ReviewAgent":
 		// Cited-family reports share the {content, doc_list} formatter.
 		// Register every canonical Bot-side tool name or /v1/download/*
 		// reports "unknown tool".
-		return &ReviewAgent{opts: opts}, nil
+		return &citedAgent{opts: opts, filePrefix: "review"}, nil
 	case "DeepGenomeAgent":
-		return &ReviewAgent{opts: opts, filePrefix: "deepgenome"}, nil
+		return &citedAgent{opts: opts, filePrefix: "deepgenome"}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
@@ -80,34 +79,6 @@ func (a *ChatAgent) Download(format string, answer string) ([]byte, string, erro
 	case "Markdown":
 		filename += ".md"
 		content, err := chat_agent.GenerateMarkdown(answer)
-		return content, filename, err
-	default:
-		return nil, "", fmt.Errorf("unsupported format: %s", format)
-	}
-}
-
-type KnowledgeAgent struct {
-	opts AgentOptions
-}
-
-func (a *KnowledgeAgent) Download(format string, answer string) ([]byte, string, error) {
-	doc := parseKnowledgeAnswer(answer)
-
-	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("knowledge_%d", timestamp)
-
-	switch format {
-	case "Word":
-		filename += ".docx"
-		content, err := knowledge_agent.GenerateWord(doc, a.opts.FetchImage)
-		return content, filename, err
-	case "PDF":
-		filename += ".pdf"
-		content, err := knowledge_agent.GeneratePDF(doc, a.opts.FetchImage)
-		return content, filename, err
-	case "Markdown":
-		filename += ".md"
-		content, err := knowledge_agent.GenerateMarkdown(doc)
 		return content, filename, err
 	default:
 		return nil, "", fmt.Errorf("unsupported format: %s", format)
@@ -143,34 +114,49 @@ func (a *DataAgent) Download(format string, answer string) ([]byte, string, erro
 	}
 }
 
-type ReviewAgent struct {
+type citedAgent struct {
 	opts       AgentOptions
 	filePrefix string
 }
 
-func (a *ReviewAgent) Download(format string, answer string) ([]byte, string, error) {
-	doc := parseReviewAnswer(answer)
-
-	timestamp := time.Now().Unix()
-	prefix := a.filePrefix
-	if prefix == "" {
-		prefix = "review"
+func (a *citedAgent) Download(format string, answer string) ([]byte, string, error) {
+	switch format {
+	case "Word", "PDF", "Markdown":
+	default:
+		return nil, "", fmt.Errorf("unsupported format: %s", format)
 	}
-	filename := fmt.Sprintf("%s_%d", prefix, timestamp)
+	source, rows, err := decodeCitedAnswer(answer)
+	if err != nil {
+		return nil, "", err
+	}
+	timestamp := time.Now().Unix()
+	filename := fmt.Sprintf("%s_%d", a.filePrefix, timestamp)
 
 	switch format {
 	case "Word":
 		filename += ".docx"
-		content, err := review_agent.GenerateWord(doc, a.opts.FetchImage)
+		document, err := mdoc.BuildCited(source, rows, mdoc.Options{FetchImage: a.opts.FetchImage})
+		if err != nil {
+			return nil, filename, err
+		}
+		content, err := mdoc.RenderCitedWord(document)
 		return content, filename, err
 	case "PDF":
 		filename += ".pdf"
-		content, err := review_agent.GeneratePDF(doc, a.opts.FetchImage)
+		document, err := mdoc.BuildCited(source, rows, mdoc.Options{FetchImage: a.opts.FetchImage})
+		if err != nil {
+			return nil, filename, err
+		}
+		fonts := mdoc.LoadAcademicFontsBestEffort(a.opts.FontDir)
+		content, err := mdoc.RenderCitedPDF(document, fonts)
 		return content, filename, err
 	case "Markdown":
 		filename += ".md"
-		content, err := review_agent.GenerateMarkdown(doc)
-		return content, filename, err
+		content, err := mdoc.CitedMarkdown(source, rows)
+		if err != nil {
+			return nil, filename, err
+		}
+		return []byte(content), filename, nil
 	default:
 		return nil, "", fmt.Errorf("unsupported format: %s", format)
 	}

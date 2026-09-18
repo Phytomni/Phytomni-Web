@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { flushPromises } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { mountWithApp } from "../helpers/test-app-context";
@@ -10,14 +11,28 @@ import DeepGenomeToc from "@/components/research/DeepGenomeToc.vue";
 const threeDMolMock = vi.hoisted(() => {
   const viewer = {
     addModel: vi.fn(),
+    selectedAtoms: vi.fn(() => [{ x: 0, y: 0, z: 0 }]),
+    modelToScreen: vi.fn((points: Array<{ x: number; y: number; z: number }>) =>
+      points.map(({ x, y }) => ({ x, y }))
+    ),
+    addSurface: vi.fn(() => Object.assign(Promise.resolve(7), { surfid: 7 })),
+    getView: vi.fn(() => [0, 0, 0, -20, 0, 0, 0, 1]),
     setStyle: vi.fn(),
+    setProjection: vi.fn(),
+    setViewStyle: vi.fn(),
+    rotate: vi.fn(),
     zoomTo: vi.fn(),
+    zoom: vi.fn(),
+    resize: vi.fn(),
     render: vi.fn(),
     animate: vi.fn(),
     stopAnimate: vi.fn(),
     clear: vi.fn(),
   };
-  const createViewer = vi.fn(() => viewer);
+  const createViewer = vi.fn((target: HTMLElement) => {
+    target.append(document.createElement("canvas"));
+    return viewer;
+  });
   return {
     viewer,
     createViewer,
@@ -25,7 +40,8 @@ const threeDMolMock = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/utils/3dmol", () => ({
+vi.mock("@/utils/3dmol", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/3dmol")>()),
   load3DMol: threeDMolMock.load3DMol,
 }));
 
@@ -88,6 +104,124 @@ async function settleMarkdown(): Promise<void> {
 }
 
 describe("DeepGenomeResultViewer — shared document boundary", () => {
+  it("collapses the TOC from report width rather than the window and releases its observer", async () => {
+    let notifyResize: ResizeObserverCallback | undefined;
+    const frames = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    const requestFrame = vi.fn((callback: FrameRequestCallback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    });
+    vi.stubGlobal("requestAnimationFrame", requestFrame);
+    const cancelFrame = vi.fn((id: number) => frames.delete(id));
+    vi.stubGlobal("cancelAnimationFrame", cancelFrame);
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notifyResize = callback;
+        }
+        observe = observe;
+        disconnect = disconnect;
+      }
+    );
+    const bounds = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function () {
+        return this.dataset.testid === "deep-genome-viewer"
+          ? new DOMRect(0, 0, 537, 600)
+          : bounds.call(this);
+      }
+    );
+    const wrapper = render("# Report\n\n## Evidence\n\nBody");
+    await settleMarkdown();
+    const root = wrapper.get("[data-testid=deep-genome-viewer]");
+    const details = wrapper.get("details");
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeUndefined();
+    expect(observe).toHaveBeenCalledWith(root.element);
+    const resize = async (width: number) => {
+      if (!notifyResize)
+        throw new Error("Report ResizeObserver was not installed");
+      notifyResize(
+        [
+          { target: root.element, contentRect: { width } },
+        ] as ResizeObserverEntry[],
+        {} as ResizeObserver
+      );
+      await nextTick();
+    };
+    const flushFrames = async () => {
+      const queued = [...frames.values()];
+      frames.clear();
+      queued.forEach((callback) => callback(0));
+      await nextTick();
+    };
+    await resize(900);
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(frames.size).toBe(1);
+    await flushFrames();
+    expect(root.classes()).not.toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeDefined();
+    await resize(899);
+    expect(root.classes()).not.toContain("deep-genome-viewer--compact");
+    await flushFrames();
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeUndefined();
+    (details.element as HTMLDetailsElement).open = true;
+    await details.trigger("toggle");
+    await resize(540);
+    await flushFrames();
+    expect(details.attributes("open")).toBeDefined();
+    await resize(0);
+    expect(frames.size).toBe(0);
+    expect(details.attributes("open")).toBeDefined();
+    await resize(540);
+    await flushFrames();
+    expect(details.attributes("open")).toBeDefined();
+    const requestsBeforeBurst = requestFrame.mock.calls.length;
+    await resize(900);
+    await resize(899);
+    await resize(0);
+    expect(frames.size).toBe(1);
+    expect(requestFrame).toHaveBeenCalledTimes(requestsBeforeBurst + 1);
+    await flushFrames();
+    expect(root.classes()).toContain("deep-genome-viewer--compact");
+    expect(details.attributes("open")).toBeDefined();
+    await resize(900);
+    expect(frames.size).toBe(1);
+    wrapper.unmount();
+    mountedViewers.splice(mountedViewers.indexOf(wrapper), 1);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(frames.size).toBe(0);
+    expect(cancelFrame).toHaveBeenCalled();
+  });
+  it("renders canonical references and retains rejected slots without interpreting HTML", () => {
+    const wrapper = render("# Report", {
+      references: [
+        {
+          citation: {
+            runs: [
+              { text: '<img src=x onerror="alert(1)">' },
+              { text: "Journal", italic: true },
+            ],
+            links: [{ label: "Article", href: "https://doi.org/10.1000/test" }],
+          },
+        },
+        null,
+        { citation: { runs: [{ text: "Third source" }], links: [] } },
+      ],
+    });
+    expect(wrapper.find("img").exists()).toBe(false);
+    expect(wrapper.get("#deep-test-ref-1 em").text()).toBe("Journal");
+    expect(wrapper.get("#deep-test-ref-1 a").attributes("href")).toBe(
+      "https://doi.org/10.1000/test"
+    );
+    expect(wrapper.get("#deep-test-ref-3").text()).toContain("Third source");
+    expect(wrapper.findAll(".deep-genome-reference")).toHaveLength(3);
+  });
   it("renders one ScientificMarkdown body and keeps references outside the report body sink", async () => {
     const wrapper = render("# Report\n\n## Evidence\n\nBody");
     await settleMarkdown();
@@ -96,7 +230,7 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.find("article.deep-genome-document").exists()).toBe(true);
     expect(VIEWER_TEMPLATE).not.toContain("contentBlocks");
     expect(VIEWER_TEMPLATE).not.toContain('v-html="block');
-    expect(VIEWER_TEMPLATE.match(/\bv-html\s*=/g)).toHaveLength(1);
+    expect(VIEWER_TEMPLATE.match(/\bv-html\s*=/g)).toBeNull();
   });
 
   it("feeds shared heading metadata into the responsive TOC and keeps heading scroll ownership", async () => {
@@ -218,7 +352,15 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(
       wrapper.findAll(".scientific-citation").map((node) => node.text())
-    ).toEqual(["[1-3]", "1", "[1-3]"]);
+    ).toEqual(["1–3"]);
+    expect(
+      wrapper
+        .findAll(".scientific-inline--superscript")
+        .map((node) => node.text())
+    ).toEqual(["1", "[1-3]"]);
+    expect(wrapper.findAll(".scientific-inline--superscript a")).toHaveLength(
+      0
+    );
   });
 
   it("keeps hostile raw HTML inert while leaving only controlled resource nodes active", async () => {
@@ -300,6 +442,12 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
       1
     );
     expect(wrapper.find(".scientific-cif-viewer").exists()).toBe(true);
+    await flushPromises();
+    expect(
+      wrapper
+        .get(".scientific-cif-viewer")
+        .attributes("data-scientific-cif-ready")
+    ).toBe("true");
   });
 
   it("relays the shared citation activation without root anchor delegation", async () => {
@@ -335,6 +483,45 @@ describe("DeepGenomeResultViewer — shared document boundary", () => {
     expect(wrapper.emitted("resource-activate")).toEqual([
       [{ id: "report-1", kind: "attachment" }],
     ]);
+  });
+
+  it("focuses and highlights inline grouped destinations without crossing namespaces", async () => {
+    const references = [1, 2, 3].map((index) => ({
+      citation: { runs: [{ text: `Source ${index}.` }], links: [] },
+    }));
+    const first = render("Evidence [1-2], then [3].", { references });
+    const second = render("Evidence [1-2].", { references, ns: "other" });
+    document.body.append(first.element, second.element);
+    await settleMarkdown();
+
+    await first
+      .get('.scientific-citation__link[href="#deep-test-ref-1"]')
+      .trigger("click");
+    expect(document.activeElement).toBe(first.get("#deep-test-ref-1").element);
+    expect(first.get("#deep-test-ref-1").attributes("aria-current")).toBe(
+      "true"
+    );
+    expect(
+      first.findAll(".is-citation-target").map((row) => row.attributes("id"))
+    ).toEqual(["deep-test-ref-1", "deep-test-ref-2"]);
+    expect(second.findAll(".is-citation-target")).toHaveLength(0);
+
+    await first
+      .get('.scientific-citation__link[href="#deep-test-ref-3"]')
+      .trigger("click");
+    expect(document.activeElement).toBe(first.get("#deep-test-ref-3").element);
+    expect(
+      first.findAll(".is-citation-target").map((row) => row.attributes("id"))
+    ).toEqual(["deep-test-ref-3"]);
+    expect(
+      first.get("#deep-test-ref-1").attributes("aria-current")
+    ).toBeUndefined();
+    await first.setProps({ references: [...references] });
+    expect(first.findAll(".is-citation-target, [aria-current]")).toHaveLength(
+      0
+    );
+    first.element.remove();
+    second.element.remove();
   });
 
   it("exposes typed PDF and Markdown download methods", () => {

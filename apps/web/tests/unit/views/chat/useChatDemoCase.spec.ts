@@ -10,6 +10,26 @@ import { useChatStates } from "@/views/chat/composables/useChatStates";
 import { demoDialogueId } from "@/views/chat/demos/catalog";
 
 describe("useChatDemoCase", () => {
+  it("keeps the accepted DeepGenome demo explicitly final without changing its scientific text", async () => {
+    const { artifactPresentationForMessage } =
+      await import("@/views/chat/utils/artifact-policy");
+    const { reportLifecycleForMessage, reportPresentationFor } =
+      await import("@/views/chat/utils/report-presentation");
+    const { currentChatId, getChatState } = useChatStates();
+    applyAgentCaseDemo({ demoKey: "deep-genome", currentChatId, getChatState });
+    const message = getChatState(
+      currentChatId.value
+    ).renderedChat?.messages.find((entry) => entry.role === "assistant");
+    if (!message) throw new Error("Demo report is missing");
+    const selected = artifactPresentationForMessage(message);
+    expect(selected?.report).toBe(message.content);
+    expect(
+      reportPresentationFor(
+        reportLifecycleForMessage(message),
+        selected ?? undefined
+      ).state
+    ).toBe("complete");
+  });
   it("hydrates demo:knowledge from the catalog and does not touch chatList", () => {
     const { currentChatId, getChatState } = useChatStates();
     const chatList: unknown[] = [];

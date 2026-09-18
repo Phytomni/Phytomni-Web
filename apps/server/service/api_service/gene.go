@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 
+	"phytomni-server/common"
 	"phytomni-server/common/document_format"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -175,7 +175,18 @@ func parseGeneFile(filename string) *model.GeneExample {
 		// Id, CreatedAt, UpdatedAt, Content, DeleteAt are intentionally omitted.
 	}
 }
-func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
+func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*common.GeneDetailResponse, error) {
+	bundle, err := loadGeneReportBundle(ctx, fileName)
+	if err != nil {
+		return nil, err
+	}
+	return bundle.report, nil
+}
+
+func loadGeneReportBundle(ctx context.Context, fileName string) (*geneReportBundle, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	safeName, err := utils.CleanUploadFilename(fileName)
 	if err != nil {
 		return nil, err
@@ -186,28 +197,34 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 		return nil, errors.New("invalid gene file format")
 	}
 
-	var content []byte
-	if mount := geneObsfsDir(); mount != "" {
-		content, err = os.ReadFile(filepath.Join(mount, geneObsSubMd, safeName))
-		if err != nil {
-			return nil, err
+	bundle := &geneReportBundle{source: geneObjectSource{mount: geneObsfsDir()}}
+	reader, size, err := bundle.source.open(ctx, "md", safeName, geneCuratedID.MatchString(item.GeneId))
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
-	} else {
-		rc, _, rerr := rxBot.NewClient().GetObsObjectStream(ctx, geneRelayRoot+geneObsSubMd+safeName)
-		if rerr != nil {
-			return nil, friendlyRelayErr(rerr)
+		if errors.Is(err, ErrGeneResourceNotFound) {
+			return nil, ErrGeneResourceNotFound
 		}
-		defer rc.Close()
-		content, err = io.ReadAll(rc)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errGeneReportUnavailable
+	}
+	defer reader.Close()
+	content, err := readGeneReportText(ctx, reader, size)
+	if err != nil {
+		return nil, err
 	}
 
-	// The md already carries /api/v1/gene-images/<GENE>/<file> URLs, which the
-	// frontend pipeline passes through untouched — no backend image rewrite.
-	item.Content = string(content)
-	return item, nil
+	bundle.report, err = buildGeneReport(item, content)
+	if err != nil {
+		return nil, err
+	}
+	if err := bundle.loadManifest(ctx); err != nil {
+		return nil, err
+	}
+	if len(bundle.report.Resources) > maxGeneReferenceIndex {
+		return nil, ErrGeneManifestConflict
+	}
+	return bundle, nil
 }
 
 // friendlyRelayErr translates a Bot relay rejection for an out-of-prefix or
@@ -735,16 +752,53 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	return imageUrls, nil
 }
 
-func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
+var (
+	ErrRenderingDownloadUnauthorized = errors.New("rendering download requires an authenticated owner")
+	ErrRenderingDownloadNotFound     = errors.New("rendering download not found")
+)
+
+func (ps *Service) DownloadObsRenderingFile(ctx context.Context, username string, id int, format string) ([]byte, string, error) {
+	if strings.TrimSpace(username) == "" {
+		return nil, "", ErrRenderingDownloadUnauthorized
+	}
+	if id <= 0 {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
 
 	var questionAgentLog *model.QuestionAgentLog
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{})
 
-	if err := db.Where("id = ?", id).First(&questionAgentLog).Error; err != nil {
+	// Conversation deletion tombstones only the root, so a live child must
+	// still belong to a live root owned by the same user and dialogue.
+	err := db.Where("id = ? AND user_name = ? AND delete_at IS NULL", id, username).
+		Where(`(f_id = 0 OR EXISTS (
+			SELECT 1 FROM question_agent_logs AS conversation_root
+			WHERE conversation_root.id = question_agent_logs.f_id
+				AND conversation_root.f_id = 0
+				AND conversation_root.user_name = question_agent_logs.user_name
+				AND conversation_root.dialogue_id = question_agent_logs.dialogue_id
+				AND conversation_root.delete_at IS NULL
+		))`).First(&questionAgentLog).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
+	if err != nil {
 		return nil, "", err
+	}
+	if strings.TrimSpace(questionAgentLog.BotRunId) != "" {
+		projection, err := LoadBotRunProjection(ctx, username, questionAgentLog.Id)
+		if err != nil {
+			return nil, "", err
+		}
+		if projection.RunID == questionAgentLog.BotRunId {
+			if _, err := applyBotProjectionToHistoryRow(questionAgentLog, projection); err != nil {
+				return nil, "", err
+			}
+		}
 	}
 	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
 		FetchImage: newDocumentImageFetcher(ctx, questionAgentLog),
+		FontDir:    viper.GetString("document_export.font_dir"),
 	})
 	if err != nil {
 		return nil, "", err

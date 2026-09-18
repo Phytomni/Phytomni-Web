@@ -12,6 +12,7 @@ import {
   decodeCitationDocuments,
   decodeTableMessagePresentation,
 } from "../utils/format";
+import { executionReportProjection } from "../utils/report-presentation";
 import { splitSSEFrames } from "../streaming/aguiEvents";
 import {
   applyExecutionEvent,
@@ -202,11 +203,16 @@ function hydrateStreamProjection(
 ): ExecutionRunState {
   // A stream snapshot is a projection high-water mark, not proof that this
   // client has consumed the events up to that sequence. The server sends the
-  // snapshot before replaying events after the requested cursor, so advancing
-  // latestSeq here would make applyExecutionEvent discard that replay.
+  // snapshot before replaying events after the requested cursor. Keep both the
+  // cursor and terminal fold at the consumed event boundary so replayed
+  // message.completed and terminal facts are not discarded.
+  const replayPending = projection.latestSeq > state.latestSeq;
   return hydrateExecutionProjection(state, {
     ...projection,
     latestSeq: state.latestSeq,
+    ...(replayPending
+      ? { status: state.status, terminal: state.terminal }
+      : {}),
   });
 }
 
@@ -300,6 +306,9 @@ export function useExecutionEvents(options: {
       run.selectedAgentId,
       run.agentSlug
     );
+    const botProjection = toolName
+      ? executionReportProjection(run, toolName, run.outputText)
+      : undefined;
     messages.splice(index, 1, {
       ...current,
       ...(hasNewerContent
@@ -318,6 +327,7 @@ export function useExecutionEvents(options: {
       executionId: run.executionId,
       executionRun: run,
       ...(toolName ? { tool_name: toolName } : {}),
+      ...(botProjection ? { botProjection } : {}),
       ...(run.routeReasonCode
         ? { route_reason_code: run.routeReasonCode }
         : {}),
@@ -550,6 +560,7 @@ export function useExecutionEvents(options: {
                       ? parsed.delta
                       : current.outputText + parsed.delta
                     : current.outputText,
+                  outputCompleted: false,
                   delivery: contiguous ? "connected" : "gap",
                 } as ExecutionRunState;
                 subscription.projectRun(subscription.dialogueId, next);

@@ -102,6 +102,15 @@ describe("ScientificMarkdown completed surfaces", () => {
     );
   });
 
+  it("keeps report table columns readable before using local horizontal scrolling", () => {
+    expect(cssRuleBody(".phy-markdown :is(th, td)")).toMatch(
+      /min-width:\s*10ch/
+    );
+    expect(cssRuleBody(".phy-markdown table")).toMatch(
+      /max-width:\s*100%[\s\S]*overflow-x:\s*auto/
+    );
+  });
+
   it("forces artifact and document skins to collapse the same inherited pre-wrap", () => {
     const sharedRoot = cssRuleBody(
       ".phy-markdown--artifact,\n.phy-markdown--document"

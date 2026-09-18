@@ -188,6 +188,10 @@ func (w *wordWriter) writeInlines(p *docx.Paragraph, inlines []inline) error {
 }
 
 func (w *wordWriter) addPicture(p *docx.Paragraph, img *Image) error {
+	return w.addPictureWithin(p, img, wordMaxImageInchW, wordMaxImageInchH)
+}
+
+func (w *wordWriter) addPictureWithin(p *docx.Paragraph, img *Image, maxWidth, maxHeight float64) error {
 	path, err := w.tempImage(img)
 	if err != nil {
 		return err
@@ -195,11 +199,11 @@ func (w *wordWriter) addPicture(p *docx.Paragraph, img *Image) error {
 	pxW, pxH := imageSize(img)
 	var inchW, inchH float64
 	if pxW > 0 {
-		inchW, inchH = scaleTo(pxW, pxH, wordMaxImageInchW*96, wordMaxImageInchH*96)
+		inchW, inchH = scaleTo(pxW, pxH, maxWidth*96, maxHeight*96)
 		inchW /= 96
 		inchH /= 96
 	} else {
-		inchW, inchH = wordMaxImageInchW, wordMaxImageInchW*0.6
+		inchW, inchH = maxWidth, maxWidth*0.6
 	}
 	_, err = p.AddPicture(path, units.Inch(inchW), units.Inch(inchH))
 	return err

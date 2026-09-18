@@ -202,6 +202,91 @@ describe("useRemoteAgentLifecycle", () => {
     vi.restoreAllMocks();
   });
 
+  it("restarts a stopped direct-workspace watcher for a newer archive retry", async () => {
+    const delivery = {
+      schema_version: 1 as const,
+      required: true as const,
+      status: "failed" as const,
+      revision: 1,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_generation_failed" as const,
+      retryable: true,
+    };
+    const state = ref(runState());
+    mocks.getTaskLifecycle.mockResolvedValueOnce({
+      data: lifecycle({ phase: "SUCCEEDED", terminal: true, delivery }),
+    });
+    mocks.getAnswerCheck.mockResolvedValue({
+      code: 200,
+      data: [historyRow({ status: "SUCCEEDED" })],
+    });
+    const hydrate = vi.fn(() => {
+      state.value = {
+        ...state.value,
+        status: "SUCCEEDED",
+        phase: "succeeded",
+        delivery,
+      };
+    });
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      dialogueId: "dialogue-42",
+      run: { state, hydrate },
+    });
+    try {
+      await flushAsync();
+      await flushAsync();
+      expect(hydrate).toHaveBeenCalled();
+      expect(mocks.getTaskLifecycle).toHaveBeenCalledOnce();
+      state.value = {
+        ...state.value,
+        delivery: {
+          ...delivery,
+          status: "pending",
+          error_code: null,
+          retryable: false,
+        },
+      };
+      await flushAsync();
+      expect(mocks.getTaskLifecycle).toHaveBeenCalledOnce();
+      mocks.getTaskLifecycle.mockResolvedValueOnce({
+        data: lifecycle({
+          phase: "SUCCEEDED",
+          terminal: true,
+          delivery: {
+            ...delivery,
+            status: "ready",
+            revision: 2,
+            name: "results.zip",
+            size_bytes: 32,
+            error_code: null,
+            retryable: false,
+          },
+        }),
+      });
+      state.value = {
+        ...state.value,
+        delivery: {
+          ...delivery,
+          status: "pending",
+          revision: 2,
+          error_code: null,
+          retryable: false,
+        },
+      };
+      await flushAsync();
+      expect(mocks.getTaskLifecycle).toHaveBeenCalledTimes(2);
+      expect(controller.snapshot.value?.delivery).toMatchObject({
+        status: "ready",
+        revision: 2,
+      });
+      expect(state.value.status).toBe("SUCCEEDED");
+    } finally {
+      controller.dispose();
+    }
+  });
+
   it.each([
     ["InSilicoResearchAgent", "run-research", "dialogue-research"],
     ["GeneNetworkAgent", "run-network", "dialogue-network"],

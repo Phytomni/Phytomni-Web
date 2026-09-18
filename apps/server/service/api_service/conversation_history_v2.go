@@ -75,6 +75,16 @@ func (ps *Service) ConversationHistoryV2(ctx context.Context, username, dialogue
 		Order("message_index ASC").Find(&history.Messages).Error; err != nil {
 		return nil, err
 	}
+	for index := range history.Messages {
+		if history.Messages[index].References == nil {
+			continue
+		}
+		references, err := decodeProjectedCitationReferences(history.Messages[index].References)
+		if err != nil {
+			return nil, err
+		}
+		history.Messages[index].References = references
+	}
 	var admissions []model.QuestionAgentExecutionAdmission
 	if err := model.DB(ctx).WithContext(ctx).
 		Where("user_name = ? AND dialogue_id = ?", username, dialogueID).
@@ -100,6 +110,9 @@ func (ps *Service) ConversationHistoryV2(ctx context.Context, username, dialogue
 			}
 			if event.ExecutionID != admission.ExecutionID || event.EventID != row.EventID || event.Seq != row.Seq {
 				return nil, errors.New("persisted execution event identity mismatch")
+			}
+			if err := normalizeProjectedEventCitationReferences(&event); err != nil {
+				return nil, err
 			}
 			events = append(events, event)
 		}

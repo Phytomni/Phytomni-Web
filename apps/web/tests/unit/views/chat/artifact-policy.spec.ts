@@ -63,6 +63,21 @@ const artifactByTool: Record<
 };
 
 describe("artifact policy", () => {
+  it("uses a runtime-only Case identity without a persisted row or stream identity", () => {
+    const message = {
+      role: "assistant",
+      tool_name: "DeepGenomeAgent",
+      content:
+        "# Deep Genome report\n\nA substantive gene analysis with evidence.",
+      casePresentationKey: "deep-genome-os01g0177400",
+    };
+    expect(artifactIdentityForMessage(message)).toBe(
+      "case:deep-genome-os01g0177400"
+    );
+    expect(artifactPresentationForMessage(message)?.kind).toBe("deep-genome");
+    expect(message).not.toHaveProperty("id");
+    expect(message).not.toHaveProperty("streamPresentationKey");
+  });
   const reportTools = [
     "KnowledgeAgent",
     "BriefGeneAgent",
@@ -785,7 +800,7 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     }
   );
 
-  it("titles a succeeded Research preview Finished", () => {
+  it("does not promote an unclassified Research body to ready merely from success", () => {
     const message = {
       ...ELIGIBLE_MESSAGE,
       tool_name: "InSilicoResearchAgent",
@@ -794,6 +809,6 @@ The analysis of chromatin accessibility for the Os01g0822900 promoter.`;
     };
     expect(
       artifactPreviewTitleKey(message, { phase: "SUCCEEDED", terminal: true })
-    ).toBe("common.finished");
+    ).toBe("chat.botReport.partial");
   });
 });

@@ -147,7 +147,8 @@ describe("ScientificMarkdownTypewriter", () => {
   it("matches the direct ScientificMarkdown semantic DOM at completion", async () => {
     vi.useFakeTimers();
     useControlledFrames();
-    const source = "# Heading\n\nEvidence [1] and **bold**";
+    const source =
+      "# Heading\n\nEvidence [1] and **bold** H<sub>2</sub>O <sup>*n*</sup> <i>FLC</i>";
     const typed = mountWithApp(ScientificMarkdownTypewriter, {
       props: { source, citationNamespace: "m1", referenceCount: 1 },
     });
@@ -161,6 +162,9 @@ describe("ScientificMarkdownTypewriter", () => {
     expect(typed.find(".phy-markdown").html()).toBe(
       direct.find(".phy-markdown").html()
     );
+    expect(typed.get(".scientific-inline--subscript").text()).toBe("2");
+    expect(typed.get(".scientific-inline--superscript em").text()).toBe("n");
+    expect(typed.findAll(".scientific-citation__link")).toHaveLength(1);
   });
 
   it("contains no HTML sink or markdown-it renderer", () => {

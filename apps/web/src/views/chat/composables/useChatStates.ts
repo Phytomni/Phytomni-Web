@@ -50,6 +50,7 @@ function createDefaultChatUIState(): ChatUIState {
     executionTargetDetails: {},
     executionTargetLoading: {},
     executionTargetErrors: {},
+    materialDetailsByArtifact: {},
   };
 }
 

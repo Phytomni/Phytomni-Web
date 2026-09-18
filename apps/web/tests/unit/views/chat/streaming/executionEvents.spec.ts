@@ -36,7 +36,7 @@ describe("execution event V1 decoder", () => {
   });
 
   it("decodes and hydrates the selected agent identity from a V2 projection", () => {
-    const decoded = decodeExecutionProjection({
+    const rawProjection = {
       schema_version: 2,
       execution_id: "turn-network",
       agent_slug: "network",
@@ -52,7 +52,11 @@ describe("execution event V1 decoder", () => {
       results: [],
       targets: [],
       failed_work_unit_ids: [],
-      warnings: [],
+      warnings: [
+        { code: "report_context_truncated", work_unit_id: null },
+        { code: "future_safe_warning", work_unit_id: "work-1" },
+        { code: "report_context_truncated", work_unit_id: null },
+      ],
       input_required: null,
       context_stage: {
         schema_version: 1,
@@ -71,7 +75,8 @@ describe("execution event V1 decoder", () => {
         event_id: "event-terminal",
         result_revision: 1,
       },
-    });
+    };
+    const decoded = decodeExecutionProjection(rawProjection);
 
     expect(decoded).toMatchObject({
       ok: true,
@@ -79,6 +84,7 @@ describe("execution event V1 decoder", () => {
         agentSlug: "network",
         selectedAgentId: "GeneNetworkAgent",
         routeReasonCode: "DOMAIN_RESOLVER_SELECTED",
+        reportWarningCodes: ["report_context_truncated"],
       },
     });
     if (!decoded.ok) throw new Error(decoded.reason);
@@ -91,7 +97,20 @@ describe("execution event V1 decoder", () => {
       agentSlug: "network",
       selectedAgentId: "GeneNetworkAgent",
       routeReasonCode: "DOMAIN_RESOLVER_SELECTED",
+      reportWarningCodes: ["report_context_truncated"],
     });
+    expect(
+      decodeExecutionProjection({
+        ...rawProjection,
+        warnings: [
+          {
+            code: "report_context_truncated",
+            work_unit_id: null,
+            provider_detail: "must not cross the boundary",
+          },
+        ],
+      })
+    ).toMatchObject({ ok: false, reason: "invalid_projection" });
   });
 
   it("hydrates grouped operations and keeps semantic/provider/stream clocks distinct", () => {
@@ -403,7 +422,16 @@ describe("execution run reducer", () => {
         text: firstText,
       },
     });
-    const second = decodeExecutionEvent({
+    const canonicalCitation = {
+      runs: [{ text: "Drought epigenetics", italic: true }],
+      links: [
+        {
+          label: "Article",
+          href: "https://doi.org/10.1000/safe-doi",
+        },
+      ],
+    };
+    const secondRaw = {
       ...base,
       event_id: "event-message-2",
       seq: 2,
@@ -421,15 +449,47 @@ describe("execution run reducer", () => {
         chunk_count: 2,
         content_sha256: "a".repeat(64),
         text: lastText,
+        references: [
+          {
+            title: "Drought epigenetics",
+            di: "10.1000/safe-doi",
+            formatted_citation: "Drought epigenetics.",
+            doi_missing: false,
+            citation: canonicalCitation,
+          },
+        ],
       },
-    });
+    };
+    const second = decodeExecutionEvent(secondRaw);
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
+    expect(second).toMatchObject({
+      ok: true,
+      value: {
+        payload: { references: [{ citation: canonicalCitation }] },
+      },
+    });
+    expect(
+      decodeExecutionEvent({
+        ...secondRaw,
+        event_id: "event-message-malformed",
+        public_payload: {
+          ...secondRaw.public_payload,
+          references: [
+            {
+              title: "Drought epigenetics",
+              citation: { ...canonicalCitation, private_provider_field: true },
+            },
+          ],
+        },
+      })
+    ).toMatchObject({ ok: false, reason: "invalid_public_payload" });
     let state = createExecutionRunState("turn-message", 2);
     if (first.ok) state = applyExecutionEvent(state, first.value);
     if (second.ok) state = applyExecutionEvent(state, second.value);
     expect(state.outputText).toBe(firstText + lastText);
     expect(state.outputOffset).toBe(totalLength);
+    expect(state.outputCompleted).toBe(true);
   });
 
   it("deduplicates sequences, replaces Todo atomically and orders results", () => {

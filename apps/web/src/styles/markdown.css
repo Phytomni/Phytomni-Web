@@ -501,14 +501,40 @@
   overflow-x: auto;
 }
 
+.phy-markdown :is(th, td) {
+  min-width: 10ch;
+}
+
 .phy-markdown .scientific-citation {
   vertical-align: super;
   font-size: 0.78em;
   line-height: 0;
 }
 
+.phy-markdown .scientific-citation--adjacent::before {
+  content: ",";
+}
+
 .phy-markdown .scientific-citation__link {
   color: var(--phy-color-action-text);
+}
+
+.phy-markdown .scientific-inline--superscript,
+.phy-markdown .scientific-inline--subscript,
+.citation-reference-row .scientific-inline--superscript,
+.citation-reference-row .scientific-inline--subscript {
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+.phy-markdown .scientific-inline--superscript,
+.citation-reference-row .scientific-inline--superscript {
+  vertical-align: super;
+}
+
+.phy-markdown .scientific-inline--subscript,
+.citation-reference-row .scientific-inline--subscript {
+  vertical-align: sub;
 }
 
 .phy-markdown .katex-display {
@@ -578,22 +604,6 @@
   max-width: 100%;
   max-height: var(--phy-layout-scientific-media-max-height);
   height: auto;
-}
-
-.phy-markdown .scientific-cif-viewer {
-  position: relative;
-  width: 100%;
-  height: var(--phy-layout-scientific-media-max-height);
-  margin: var(--phy-space-12) 0;
-  overflow: hidden;
-  border: 1px solid var(--phy-color-border-subtle);
-  border-radius: var(--phy-radius-sm);
-  background: var(--phy-color-fill-subtle);
-}
-
-.phy-markdown .scientific-cif-viewer > canvas {
-  max-width: 100%;
-  max-height: 100%;
 }
 
 /* The static renderer preserves source newlines as <br>. As on Chat, CSS owns

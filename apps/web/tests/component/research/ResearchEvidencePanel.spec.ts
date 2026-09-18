@@ -46,8 +46,15 @@ function mountArtifactHarness(content = "Namespaced finding [2].") {
       so: "Plant Journal",
       dl: "https://doi.org/10.1000/evidence",
       pm: "123456",
+      citation: {
+        runs: [{ text: "Namespaced evidence" }],
+        links: [
+          { label: "Article", href: "https://doi.org/10.1000/evidence" },
+          { label: "PubMed", href: "https://pubmed.ncbi.nlm.nih.gov/123456/" },
+        ],
+      },
     },
-    { title: "Exact target reference" },
+    { citation: { runs: [{ text: "Exact target reference" }], links: [] } },
   ];
   const handleActivate = async (activation: { indices: readonly number[] }) => {
     order.push("activate");
@@ -105,10 +112,17 @@ function mountArtifactHarness(content = "Namespaced finding [2].") {
 describe("ResearchEvidencePanel", () => {
   it("renders namespaced helper output as programmatically focusable rows", () => {
     const references = Array.from({ length: 10 }, (_, index) => ({
-      title:
-        index === 9
-          ? "A deliberately long reference title that must remain readable in a narrow artifact"
-          : `Reference ${index + 1}`,
+      citation: {
+        runs: [
+          {
+            text:
+              index === 9
+                ? "A deliberately long reference title that must remain readable in a narrow artifact"
+                : `Reference ${index + 1}`,
+          },
+        ],
+        links: [],
+      },
     }));
     const wrapper = mountPanel(references, "artifact-a");
     const rows = wrapper.findAll(".research-evidence-panel__item");
@@ -152,23 +166,40 @@ describe("ResearchEvidencePanel", () => {
         so: "Plant Journal",
         dl: "https://doi.org/10.1000/safe",
         pm: "123456",
+        citation: {
+          runs: [
+            { text: "A. Author. Safe source. " },
+            { text: "Plant Journal", italic: true },
+          ],
+          links: [
+            { label: "Article", href: "https://doi.org/10.1000/safe" },
+            {
+              label: "PubMed",
+              href: "https://pubmed.ncbi.nlm.nih.gov/123456/",
+            },
+          ],
+        },
       },
       {
         au: '<img src=x onerror="alert(1)">',
         ti: "Hostile source",
         dl: 'javascript:alert(1)" onmouseover="alert(2)',
+        citation: {
+          runs: [{ text: '<img src=x onerror="alert(1)">' }],
+          links: [{ label: "Article", href: "javascript:alert(1)" }],
+        },
       },
     ]);
-    const doiLinks = wrapper.findAll("a.doi-link");
-    const pmidLink = wrapper.get("a.pmid-link");
+    const doiLinks = wrapper.findAll("a");
+    const pmidLink = doiLinks[1];
 
     expect(doiLinks[0].attributes("href")).toBe("https://doi.org/10.1000/safe");
     expect(doiLinks[0].attributes("target")).toBe("_blank");
     expect(pmidLink.attributes("href")).toBe(
-      "https://pubmed.ncbi.nlm.nih.gov/123456"
+      "https://pubmed.ncbi.nlm.nih.gov/123456/"
     );
     expect(pmidLink.attributes("target")).toBe("_blank");
-    expect(doiLinks[1].attributes("href")).toBe("#");
+    expect(doiLinks).toHaveLength(2);
     expect(wrapper.find("img").exists()).toBe(false);
     expect(wrapper.html()).not.toMatch(/<a[^>]+\son\w+=/i);
   });
@@ -314,8 +345,8 @@ describe("ResearchEvidencePanel", () => {
       [wrapper.get("[data-test=modified-citation]"), { ctrlKey: true }],
       [wrapper.get("[data-test=foreign-citation]"), {}],
       [wrapper.get("[data-test=external-link]"), {}],
-      [wrapper.get("a.doi-link"), {}],
-      [wrapper.get("a.pmid-link"), {}],
+      [wrapper.get('a[href="https://doi.org/10.1000/evidence"]'), {}],
+      [wrapper.get('a[href="https://pubmed.ncbi.nlm.nih.gov/123456/"]'), {}],
     ] as const;
 
     for (const [link, init] of cases) {
@@ -339,10 +370,9 @@ describe("ResearchEvidencePanel", () => {
     }
   });
 
-  it("locks the helper-only v-html boundary and visible focus treatment", () => {
+  it("locks the typed reference boundary and visible focus treatment", () => {
     expect(SOURCE).toContain("buildDisplayReferences");
-    expect(SOURCE.match(/v-html=/g)).toHaveLength(1);
-    expect(SOURCE).toContain('v-html="ref.html"');
+    expect(SOURCE.match(/v-html=/g)).toBeNull();
     expect(SOURCE).toMatch(/\.research-evidence-panel__item:focus-visible/);
     expect(SOURCE).toMatch(/:deep\(a:focus-visible\)/);
     expect(SOURCE).toMatch(/overflow-wrap:\s*anywhere/);

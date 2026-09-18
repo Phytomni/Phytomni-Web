@@ -4,13 +4,48 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/service/api_service"
 
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
+
+func TestCitationProjectionQueryHandler502(t *testing.T) {
+	gdb := setupRemoteProductHandlerDB(t)
+	if err := gdb.Exec("INSERT INTO users (email, code) VALUES ('alice', 'admin')").Error; err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-citation","run_id":"run-citation","object":"agent.run","agent":"knowledge","status":"succeeded","result":{"formatted":{"answer":"body","references":{"bad":"private-source"}}}}`))
+	}))
+	t.Cleanup(server.Close)
+	old := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = old })
+	quota := viper.Get("chatlimit.enforce")
+	viper.Set("chatlimit.enforce", false)
+	t.Cleanup(func() { viper.Set("chatlimit.enforce", quota) })
+	ctx, recorder := newChatQueryHandlerRequest(t, map[string]string{"query": "q", "mode": "expert", "tool": "KnowledgeAgent"})
+	ctx.Set("username", "alice")
+	NewHandler().Query(ctx)
+	if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), "upstream service failed") || strings.Contains(recorder.Body.String(), "private-source") {
+		t.Fatalf("HTTP %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var count int64
+	if err := gdb.Table("question_agent_logs").Where("status = ?", "SUCCEEDED").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("corrupt successful answer saved")
+	}
+}
 
 // TestQueryErrorStatus pins the /query error contract: a disabled gateway is a
 // 503, an unknown tool is a 400, a client-correctable Bot 4xx surfaces its
@@ -23,6 +58,12 @@ func TestQueryErrorStatus(t *testing.T) {
 		wantStatus int
 		wantMsg    string
 	}{
+		{
+			name:       "invalid references -> opaque 502",
+			err:        fmt.Errorf("projection: %w", citation.ErrInvalidReferences),
+			wantStatus: http.StatusBadGateway,
+			wantMsg:    "upstream service failed",
+		},
 		{
 			name:       "disabled gateway -> 503",
 			err:        api_service.ErrGatewayDisabled,

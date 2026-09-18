@@ -22,7 +22,7 @@ const FIXTURE = [
   "",
   "$$E = mc^2$$",
   "",
-  "<sup>[1-3]</sup> [2024](https://example.org/2024)",
+  "<sup>[1-3]</sup> H<sub>2</sub>O <i>FLC</i> <sup>*n*</sup> [2024](https://example.org/2024)",
   "",
   '<img src=x onerror="alert(1)"><script>alert(1)</script>',
 ].join("\n");
@@ -36,7 +36,7 @@ function markdownBlock(text: string): ContentBlock {
 function semanticSignature(root: Element): string[] {
   return Array.from(
     root.querySelectorAll(
-      "table, th, td, pre > code, .katex, .scientific-citation__link, a[href]"
+      "table, th, td, pre > code, .katex, .scientific-citation__link, .scientific-inline--superscript, .scientific-inline--subscript, em, a[href]"
     )
   ).map((node) => {
     const tag = node.tagName.toLowerCase();
@@ -113,7 +113,13 @@ describe("ScientificMarkdown parity across AG-UI streaming surfaces", () => {
     expect(direct.emitted("citation-activate")).toEqual([
       [{ namespace: CITATION_NAMESPACE, indices: [1, 2, 3] }],
     ]);
-    expect(hydrated.findAll(".scientific-citation__link")).toHaveLength(2);
+    expect(hydrated.findAll(".scientific-citation__link")).toHaveLength(1);
+    expect(
+      hydrated
+        .findAll(".scientific-inline--superscript")
+        .map((node) => node.text())
+    ).toEqual(["[1-3]", "n"]);
+    expect(hydrated.get(".scientific-inline--subscript").text()).toBe("2");
   });
 
   it("keeps incomplete parser boundaries visible, inert, and convergent", async () => {

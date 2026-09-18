@@ -1,5 +1,21 @@
 // English language pack.
 export default {
+  scientificCif: {
+    title: "Protein structure",
+    surface: "Surface",
+    on: "On",
+    off: "Off",
+    reset: "Reset view",
+    enlarge: "Enlarge",
+    close: "Close structure view",
+    keyboardHelp:
+      "Use arrow keys to rotate, Shift and arrow keys to pan, and plus or minus to zoom while the structure is focused.",
+    label: "Interactive protein structure",
+    loadingSource: "Loading structure",
+    buildingSurface: "Building molecular surface",
+    error: "Structure unavailable",
+    unavailable: "Resource unavailable",
+  },
   // Common parts
   common: {
     confirm: "Confirm",
@@ -347,6 +363,7 @@ export default {
     useTool: "Use Tool",
     stepResult: "Step Result",
     resultImageAlt: "Result image {index}",
+    tableRowCount: "{count} rows",
     sendFailed: "Failed to send message, please try again later.",
     timeoutFailed:
       "The request timed out. Try narrowing your query or retry later.",
@@ -359,6 +376,27 @@ export default {
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",
     botReport: {
+      unavailable: "Scientific report unavailable",
+      executionFailed:
+        "Execution failed; the available partial report is retained.",
+      warnings: {
+        report_artifact_count_capped:
+          "Some scientific artifacts were not included in the report.",
+        report_context_truncated:
+          "Some scientific context was shortened for the report.",
+        report_artifact_size_exceeded:
+          "A scientific artifact exceeded the report size limit.",
+        report_artifact_read_failed:
+          "A scientific artifact could not be read for the report.",
+        report_artifact_empty:
+          "A scientific artifact contained no report text.",
+        report_no_scientific_text:
+          "No validated scientific text was available for synthesis.",
+        report_synthesis_failed:
+          "Final report synthesis was unavailable. Available scientific content and result files are retained.",
+        deep_genome_report_degraded:
+          "Some analyses were unavailable. Available scientific content is retained.",
+      },
       waiting: "Preparing the report",
       partial: "Partial report available",
       degraded: "Some analysis is unavailable",
@@ -369,6 +407,7 @@ export default {
     },
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
+    referenceUnavailable: "Reference details unavailable.",
     welcomeTitle: "What would you like to explore?",
     history: {
       loading: "Loading conversation history",
@@ -880,6 +919,8 @@ export default {
     transferProgressText: "{phase}: {loaded} / {total} ({percent}%)",
     transferProgressIndeterminate: "{phase}: {loaded} transferred",
     downloadCancelled: "Download cancelled",
+    pdfFontsUnavailable:
+      "PDF export is temporarily unavailable. You can still download Word or Markdown.",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
     resultArchive: {
@@ -1123,6 +1164,15 @@ export default {
       imageViewerTitle: "Image Viewer",
       references: "References",
       noReferences: "No references available.",
+      material: {
+        back: "Back to report",
+        download: "Download original",
+        excerpt: "View source excerpt",
+        excerptTitle: "Source excerpt · Reference {index}",
+        loading: "Opening material…",
+        unavailable: "This material is not available for this report.",
+        failed: "This material could not be opened. Please try again.",
+      },
     },
     geneNetwork: {
       title: "Gene Network Agent",

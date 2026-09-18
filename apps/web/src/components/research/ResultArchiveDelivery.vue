@@ -31,7 +31,7 @@
       </el-tooltip>
     </template>
 
-    <template v-else-if="delivery?.status === 'failed' && delivery.retryable">
+    <template v-else-if="delivery?.status === 'failed' && canRetryDelivery">
       <span>{{ t("chat.resultArchive.generationFailed") }}</span>
       <el-tooltip :content="retryLabel" placement="top">
         <el-button
@@ -126,6 +126,11 @@ const downloadLabel = computed(() =>
 );
 const retryLabel = computed(() => t("chat.resultArchive.retry"));
 const retryingLabel = computed(() => t("chat.resultArchive.retrying"));
+const canRetryDelivery = computed(
+  () =>
+    props.delivery?.retryable === true ||
+    props.delivery?.error_code === "archive_inventory_limit_exceeded"
+);
 </script>
 
 <style scoped>

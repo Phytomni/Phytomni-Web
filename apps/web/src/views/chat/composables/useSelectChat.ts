@@ -38,8 +38,9 @@ import {
   isSafeAssetId,
   type AttachmentMetadata,
 } from "../utils/asset-attachments";
-import { isPollableChatAgentTool } from "../utils/async-agent-policy";
+import { isPollableWaitTool } from "../utils/async-agent-policy";
 import { artifactPresentationForMessage } from "../utils/artifact-policy";
+import { executionReportProjection } from "../utils/report-presentation";
 import {
   applyExecutionEvent,
   createExecutionRunState,
@@ -56,23 +57,37 @@ export function historyAssistantMetadata(
     ChatResponse,
     | "artifacts"
     | "delivery"
+    | "projection"
     | "context_rebuilt"
     | "context_degraded"
     | "bot_run_id"
     | "execution_id"
-  >
+  > & { created_at?: string }
 ): Pick<
   ChatMessage,
-  "artifacts" | "delivery" | "contextNotice" | "botRunId" | "executionId"
+  | "artifacts"
+  | "delivery"
+  | "botProjection"
+  | "contextNotice"
+  | "botRunId"
+  | "executionId"
+  | "created_at"
 > {
   const metadata: Pick<
     ChatMessage,
-    "artifacts" | "delivery" | "contextNotice" | "botRunId" | "executionId"
+    | "artifacts"
+    | "delivery"
+    | "botProjection"
+    | "contextNotice"
+    | "botRunId"
+    | "executionId"
+    | "created_at"
   > = {};
   if (Array.isArray(item.artifacts)) {
     metadata.artifacts = item.artifacts.map((artifact) => ({ ...artifact }));
   }
   if (item.delivery) metadata.delivery = { ...item.delivery };
+  if (item.projection) metadata.botProjection = item.projection;
   const contextNotice = normalizeChatContextNotice(item);
   if (contextNotice) metadata.contextNotice = contextNotice;
   if (typeof item.bot_run_id === "string" && item.bot_run_id) {
@@ -80,6 +95,9 @@ export function historyAssistantMetadata(
   }
   if (typeof item.execution_id === "string" && item.execution_id) {
     metadata.executionId = item.execution_id;
+  }
+  if (typeof item.created_at === "string" && item.created_at) {
+    metadata.created_at = item.created_at;
   }
   return metadata;
 }
@@ -133,8 +151,14 @@ function blankBackgroundAssistantRow(item: Partial<ChatResponse>): boolean {
   if (typeof item.execution_id === "string" && item.execution_id.trim()) {
     return true;
   }
-  if (!isPollableChatAgentTool(item.tool_name)) return false;
-  if (isSuccessfulHistoryStatus(item.status)) return false;
+  if (
+    isSuccessfulHistoryStatus(item.status) &&
+    !item.projection &&
+    !item.delivery
+  ) {
+    return false;
+  }
+  if (!isPollableWaitTool(item.tool_name)) return false;
   try {
     normalizePositiveTaskRowId(item.id ?? "");
     return true;
@@ -455,6 +479,10 @@ export function useSelectChat(opts: {
           );
           assistant.executionRun = run;
           if (toolName) assistant.tool_name = toolName;
+          const botProjection = toolName
+            ? executionReportProjection(run, toolName, run.outputText)
+            : undefined;
+          if (botProjection) assistant.botProjection = botProjection;
           if (run.routeReasonCode) {
             assistant.route_reason_code = run.routeReasonCode;
           }
@@ -762,6 +790,7 @@ export function useSelectChat(opts: {
                       prop: header.replace(/\s+/g, "_").toLowerCase(),
                       label: header,
                     })),
+                    tableCaption: tableInput.title,
                     status: item?.status || "",
                     upload_path: item?.upload_path || "",
                     download_path: item?.download_path || "",

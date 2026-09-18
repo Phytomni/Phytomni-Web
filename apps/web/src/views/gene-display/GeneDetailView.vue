@@ -27,8 +27,13 @@
       <template #ready>
         <DeepGenomeArtifact
           class="gene-detail-artifact"
-          :markdown="processedContent"
+          :markdown="MDContent"
           :references="references"
+          :resources="renderResources"
+          :reference-materials="report?.reference_materials ?? []"
+          :report-key="`${fileName}:${report?.report_revision ?? ''}`"
+          :detail-state="materialDetail"
+          :read-resource="readResource"
           ns="gene-detail"
           :title="pageTitle"
           :metadata="artifactMetadata"
@@ -51,10 +56,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { getGeneDetails } from "@/api/gene-display";
+import {
+  getGeneDetails,
+  getGeneResourceCif,
+  getGeneResourceMarkdown,
+} from "@/api/gene-display";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
+import { createDeepGenomeMaterialDetailState } from "@/components/research/deep-genome-report";
+import type { GeneDetail } from "@/api/types";
 import { isRecord } from "@/api/contracts";
 import { DeepGenomeArtifact } from "@/components/research";
 import { copyDownloadCloseArtifactMenuItems } from "@/components/research/artifact-overflow";
@@ -63,16 +75,10 @@ import {
   artifactDownloadFormat,
 } from "@/views/chat/utils/artifact-chrome";
 import { useI18n } from "vue-i18n";
-import { buildDisplayContent } from "./gene-markdown";
 import { PhyEmptyState } from "@/components/shell";
 import { PhyAsyncState, PhyErrorState, PhySkeleton } from "@/components/state";
 
 type AsyncState = "loading" | "empty" | "error" | "ready";
-
-interface GeneReference {
-  title: string;
-  [key: string]: unknown;
-}
 
 const { t } = useI18n();
 
@@ -80,13 +86,54 @@ const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const requestFailed = ref(false);
-const MDContent = ref("");
-const references = ref<GeneReference[]>([]);
+const report = ref<GeneDetail | null>(null);
+const materialDetail = reactive(createDeepGenomeMaterialDetailState());
+const readResource = (id: string, signal: AbortSignal) => {
+  if (
+    !report.value?.resources.some(
+      (resource) => resource.id === id && resource.kind === "markdown"
+    )
+  ) {
+    return Promise.reject(new Error("Gene resource unavailable"));
+  }
+  return getGeneResourceMarkdown(fileName.value, id, signal);
+};
+const MDContent = computed(() => report.value?.content ?? "");
+const references = computed(() => report.value?.references ?? []);
 let activeRequest = 0;
 
 const fileName = computed(() => {
   const value = route.query.file_name;
   return typeof value === "string" ? value : "";
+});
+
+const renderResources = computed<AuthorizedScientificResource[]>(() => {
+  const currentReport = report.value;
+  const reportFile = fileName.value;
+  const revision = currentReport?.report_revision;
+  return (currentReport?.resources ?? []).map((resource) => {
+    if (resource.kind !== "cif") return resource;
+    return {
+      id: resource.id,
+      name: resource.name,
+      kind: resource.kind,
+      markdownHref: resource.markdownHref,
+      renderSource: {
+        kind: "cif-text",
+        read: (signal: AbortSignal) => {
+          if (
+            fileName.value !== reportFile ||
+            report.value?.report_revision !== revision ||
+            !report.value?.resources.some(
+              (item) => item.id === resource.id && item.kind === "cif"
+            )
+          )
+            return Promise.reject(new Error("Gene resource unavailable"));
+          return getGeneResourceCif(reportFile, resource.id, signal);
+        },
+      },
+    };
+  });
 });
 
 const pageTitle = computed(() => fileName.value || t("gene.detailTitle"));
@@ -121,41 +168,6 @@ const asyncState = computed<AsyncState>(() => {
   return "ready";
 });
 
-// Parse DOC TITLES into references
-const parseDocTitles = (
-  content: string
-): { mainContent: string; refs: GeneReference[] } => {
-  const separator = "--- DOC TITLES ---";
-  const separatorIndex = content.indexOf(separator);
-
-  if (separatorIndex === -1) {
-    return { mainContent: content, refs: [] };
-  }
-
-  const mainContent = content.substring(0, separatorIndex).trim();
-  const docTitlesSection = content
-    .substring(separatorIndex + separator.length)
-    .trim();
-
-  // Parse the reference list (format: number. title)
-  const refs = docTitlesSection
-    .split("\n")
-    .filter((line) => line.trim())
-    .map((line) => {
-      // Match the format: 1. title
-      const match = line.match(/^\d+\.\s+(.+)$/);
-      if (match) {
-        return { title: match[1].trim() };
-      }
-      return null;
-    })
-    .filter((ref): ref is GeneReference => ref !== null);
-
-  return { mainContent, refs };
-};
-
-const processedContent = computed(() => buildDisplayContent(MDContent.value));
-
 // Fetch gene details
 const fetchGeneDetail = async (file_name: string) => {
   const requestId = ++activeRequest;
@@ -167,26 +179,16 @@ const fetchGeneDetail = async (file_name: string) => {
     if (requestId !== activeRequest) return;
 
     if (res.code === 200 && res.data) {
-      const content =
-        typeof res.data.content === "string" ? res.data.content : "";
-      const { mainContent, refs } = parseDocTitles(content);
-
-      MDContent.value = mainContent;
-      references.value =
-        Array.isArray(res.data.references) && res.data.references.length > 0
-          ? res.data.references
-          : refs;
+      report.value = res.data;
     } else {
-      MDContent.value = "";
-      references.value = [];
+      report.value = null;
       requestFailed.value = true;
       ElMessage.error(res.message || t("gene.getFailed"));
     }
   } catch (error) {
     if (requestId !== activeRequest) return;
     console.error(t("gene.logs.fetchDetailFailed"), error);
-    MDContent.value = "";
-    references.value = [];
+    report.value = null;
     requestFailed.value = true;
     ElMessage.error(t("gene.getFailed"));
   } finally {
@@ -235,7 +237,7 @@ const onArtifactMenu = (command: string) => {
     return;
   }
   if (command !== "copy") return;
-  const text = processedContent.value.trim();
+  const text = MDContent.value.trim();
   if (!text) {
     ElMessage.error(t("chat.copyFailed"));
     return;
@@ -253,8 +255,7 @@ const onArtifactMenu = (command: string) => {
 watch(
   fileName,
   (nextFileName) => {
-    MDContent.value = "";
-    references.value = [];
+    report.value = null;
     requestFailed.value = false;
 
     if (nextFileName) {

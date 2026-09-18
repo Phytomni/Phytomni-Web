@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mountWithApp } from "../../helpers/test-app-context";
 import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
@@ -24,6 +24,63 @@ describe("PhyAdaptiveShell", () => {
     expect(wrapper.find("[data-test=sidebar]").exists()).toBe(true);
     expect(wrapper.find("[data-test=main]").exists()).toBe(true);
     expect(wrapper.find("[data-test=artifact]").exists()).toBe(false);
+  });
+
+  it("lets nested modal Tab reach document without moving focus into the parent", async () => {
+    const onDocumentKey = vi.fn();
+    document.addEventListener("keydown", onDocumentKey);
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      attachTo: document.body,
+      props: { artifactFullscreen: true },
+      slots: {
+        artifact:
+          '<button>Parent control</button><div role="dialog" aria-modal="true"><button data-test="child">Child control</button></div>',
+      },
+    });
+    try {
+      await nextTick();
+      const child = wrapper.get('[data-test="child"]').element as HTMLElement;
+      child.focus();
+      const event = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      child.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(child);
+      expect(onDocumentKey).toHaveBeenCalledOnce();
+    } finally {
+      document.removeEventListener("keydown", onDocumentKey);
+      wrapper.unmount();
+    }
+  });
+
+  it("respects an already handled Tab in the artifact", async () => {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      attachTo: document.body,
+      props: { artifactFullscreen: true },
+      slots: {
+        artifact:
+          '<button data-test="first">First</button><button>Last</button>',
+      },
+    });
+    try {
+      await nextTick();
+      const first = wrapper.get('[data-test="first"]').element as HTMLElement;
+      first.focus();
+      const event = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      event.preventDefault();
+      first.dispatchEvent(event);
+      expect(document.activeElement).toBe(first);
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("renders the artifact split modifier and artifact slot", () => {

@@ -1,55 +1,82 @@
 <template>
   <div class="deep-genome-artifact" data-testid="deep-genome-artifact">
-    <ResearchArtifactShell
-      :title="title"
-      :metadata="metadata"
-      :status="status"
-      :tab="selectedTab"
-      :tabs="visibleTabs"
-      :tab-labels="tabLabels"
-      content-layout="wide"
-      :tablist-label="tablistLabel"
-      :artifact-id="artifactId"
-      :back-label="backLabel"
-      :close-label="closeLabel"
-      :action-label="actionLabel"
-      :menu-items="menuItems"
-      @back="emit('back')"
-      @close="emit('close')"
-      @action="emit('action', $event)"
-      @tab="handleTab"
+    <DeepGenomeMaterialDetail
+      v-if="detailState.selection"
+      :state="detailState"
+      :title="materialTitle"
+      :downloadable="Boolean(materialDetail.download.value)"
+      @back="backFromMaterial"
+      @retry="materialDetail.retry"
+      @download="downloadMaterial"
+    />
+    <div
+      ref="parentReport"
+      class="deep-genome-artifact__parent"
+      data-testid="deep-genome-parent"
+      :hidden="Boolean(detailState.selection)"
+      :inert="Boolean(detailState.selection)"
     >
-      <template #content>
-        <DeepGenomeResultViewer
-          ref="viewerRef"
-          :markdown="markdown"
-          :references="references"
-          :resources="resources"
-          :ns="ns"
-          :rendering-file-id="renderingFileId"
-          :show-actions="false"
-          :show-references="false"
-          @citation-activate="activateEvidence"
-          @resource-activate="emit('resource-activate', $event)"
-        />
-      </template>
+      <ResearchArtifactShell
+        :title="title"
+        :metadata="metadata"
+        :status="status"
+        :report-status="reportPresentation?.state"
+        :tab="selectedTab"
+        :tabs="visibleTabs"
+        :tab-labels="tabLabels"
+        content-layout="wide"
+        :tablist-label="tablistLabel"
+        :artifact-id="artifactId"
+        :back-label="backLabel"
+        :close-label="closeLabel"
+        :action-label="actionLabel"
+        :menu-items="menuItems"
+        @back="emit('back')"
+        @close="emit('close')"
+        @action="emit('action', $event)"
+        @tab="handleTab"
+      >
+        <template #content>
+          <BotReportWarnings
+            :warning-keys="reportPresentation?.warningKeys ?? []"
+          />
+          <DeepGenomeResultViewer
+            ref="viewerRef"
+            :markdown="markdown"
+            :references="references"
+            :resources="resources"
+            :registered-resources-only="true"
+            :ns="ns"
+            :rendering-file-id="renderingFileId"
+            :show-actions="false"
+            :show-references="false"
+            :print-references-root="() => evidencePanelRef?.$el ?? null"
+            @citation-activate="activateEvidence"
+            @resource-activate="activateResource"
+          />
+        </template>
 
-      <template #evidence>
-        <ResearchEvidencePanel
-          ref="evidencePanelRef"
-          :references="references"
-          :ns="ns"
-        />
-      </template>
+        <template #evidence>
+          <ResearchEvidencePanel
+            ref="evidencePanelRef"
+            :references="references"
+            :ns="ns"
+            :reference-materials="referenceMaterials"
+            @material-activate="openMaterial"
+          />
+        </template>
 
-      <template #activity>{{ $t("common.noData") }}</template>
-      <template #downloads>{{ $t("common.noData") }}</template>
-    </ResearchArtifactShell>
+        <template #activity>{{ $t("common.noData") }}</template>
+        <template #downloads>{{ $t("common.noData") }}</template>
+      </ResearchArtifactShell>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { saveAs } from "file-saver";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import type {
   DeepGenomeDownloadFormat,
@@ -57,8 +84,20 @@ import type {
 } from "./deep-genome-types";
 import type { ArtifactOverflowItem } from "./artifact-overflow";
 import ResearchArtifactShell from "./ResearchArtifactShell.vue";
+import BotReportWarnings from "./BotReportWarnings.vue";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
+import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import { artifactChrome } from "@/views/chat/utils/artifact-chrome";
 import ResearchEvidencePanel from "./ResearchEvidencePanel.vue";
+import DeepGenomeMaterialDetail from "./DeepGenomeMaterialDetail.vue";
+import { useDeepGenomeMaterialDetail } from "./useDeepGenomeMaterialDetail";
+import {
+  createDeepGenomeMaterialDetailState,
+  type DeepGenomeMaterialDetailState,
+  type DeepGenomeMaterialSelection,
+  type DeepGenomeReferenceMaterial,
+  type DeepGenomeResourceReader,
+} from "./deep-genome-report";
 import type {
   AuthorizedScientificResource,
   ScientificCitationActivation,
@@ -73,11 +112,16 @@ const props = withDefaults(
     markdown?: string;
     references?: readonly unknown[];
     resources?: readonly AuthorizedScientificResource[];
+    referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
+    detailState?: DeepGenomeMaterialDetailState;
+    reportKey?: string;
+    readResource?: DeepGenomeResourceReader;
     ns: string;
     renderingFileId?: string;
     title: string;
     metadata?: string | string[];
     status?: string;
+    reportState?: BotLifecycleState;
     tab?: ArtifactTab;
     tabs?: readonly ArtifactTab[];
     tabLabels?: ArtifactTabLabels;
@@ -92,6 +136,9 @@ const props = withDefaults(
     markdown: "",
     references: () => [],
     resources: () => [],
+    referenceMaterials: () => [],
+    detailState: () => reactive(createDeepGenomeMaterialDetailState()),
+    reportKey: "",
     tab: "content",
     tabLabels: () => ({}),
     tablistLabel: "Report sections",
@@ -108,7 +155,101 @@ const emit = defineEmits<{
 }>();
 
 const viewerRef = ref<DeepGenomeViewerHandle | null>(null);
+const reportPresentation = computed(() =>
+  props.reportState
+    ? reportPresentationFor(
+        props.reportState,
+        {
+          report: props.markdown,
+          source:
+            props.markdown === props.reportState.finalReport
+              ? "final"
+              : "intermediate",
+        },
+        "DeepGenomeAgent"
+      )
+    : null
+);
+const { t } = useI18n();
+const parentReport = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
+let previousScroll: Array<{ element: HTMLElement; top: number; left: number }> =
+  [];
+const materialDetail = useDeepGenomeMaterialDetail({
+  state: () => props.detailState,
+  reportKey: () => props.reportKey || props.ns,
+  resources: () => props.resources,
+  materials: () => props.referenceMaterials,
+  readResource: () => props.readResource,
+});
+const materialTitle = computed(() => {
+  const selection = props.detailState.selection;
+  return selection?.kind === "excerpt"
+    ? t("agents.deepGenome.material.excerptTitle", {
+        index: selection.referenceIndex,
+      })
+    : materialDetail.selectedResource.value?.name ||
+        t("agents.deepGenome.material.unavailable");
+});
+watch(
+  () => props.markdown,
+  () => materialDetail.back()
+);
+
+async function openMaterial(
+  selection: DeepGenomeMaterialSelection
+): Promise<void> {
+  if (!props.detailState.selection && parentReport.value) {
+    previousFocus = parentReport.value.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement)
+      : null;
+    previousScroll = Array.from(
+      parentReport.value.querySelectorAll<HTMLElement>("*")
+    )
+      .filter((element) => element.scrollTop !== 0 || element.scrollLeft !== 0)
+      .map((element) => ({
+        element,
+        top: element.scrollTop,
+        left: element.scrollLeft,
+      }));
+  }
+  await materialDetail.open(selection);
+}
+
+async function activateResource(
+  activation: ScientificResourceActivation
+): Promise<void> {
+  if (activation.kind === "markdown" && props.readResource) {
+    await openMaterial({ kind: "resource", resourceId: activation.id });
+  } else {
+    emit("resource-activate", activation);
+  }
+}
+
+async function backFromMaterial(): Promise<void> {
+  materialDetail.back();
+  await nextTick();
+  for (const { element, top, left } of previousScroll) {
+    element.scrollTop = top;
+    element.scrollLeft = left;
+  }
+  if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  previousFocus = null;
+  previousScroll = [];
+}
+
+function downloadMaterial(): void {
+  const download = materialDetail.download.value;
+  if (!download) return;
+  saveAs(
+    new Blob([Uint8Array.from(download.bytes)], {
+      type: "text/markdown;charset=utf-8",
+    }),
+    download.name
+  );
+}
 const evidencePanelRef = ref<{
+  $el?: HTMLElement;
   focusReferences(indices: readonly number[]): boolean;
 } | null>(null);
 const visibleTabs = computed<readonly ArtifactTab[]>(() => {
@@ -165,6 +306,16 @@ defineExpose({ download: delegateDownload });
   width: 100%;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+}
+
+.deep-genome-artifact__parent {
+  height: 100%;
+  min-height: 0;
+}
+
+.deep-genome-artifact__parent[hidden] {
+  display: none;
 }
 
 .deep-genome-artifact :deep(.research-artifact-shell__panel) {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
 import {
   parseCitationBody,
   requireCitationNamespace,
@@ -14,6 +16,8 @@ describe("parseCitationBody", () => {
     ["[1, 2-3]", [1, 2, 3]],
     ["1-4", [1, 2, 3, 4]],
     ["[1-4]", [1, 2, 3, 4]],
+    ["999", [999]],
+    ["1-100", Array.from({ length: 100 }, (_, index) => index + 1)],
     ["1-3,7,9-10", [1, 2, 3, 7, 9, 10]],
     ["[document:21]", [21]],
     ["[document 3, 4, 21, 23]", [3, 4, 21, 23]],
@@ -34,6 +38,8 @@ describe("parseCitationBody", () => {
     "4-1",
     "1,,2",
     "2024",
+    "1000",
+    "1-101",
     "1-9999",
     "1,a",
     "1,1",
@@ -57,6 +63,45 @@ describe("requireCitationNamespace", () => {
 
 describe("transformScientificCitations", () => {
   const options = { namespace: "report", referenceCount: 10 };
+
+  it("renders compact citation numbers while retaining target navigation", () => {
+    const source = "[1] [1,2] [1-4] <sup>[1]</sup> [11]";
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", value: "[1] [1,2] [1-4] " },
+            { type: "html", value: "<sup>" },
+            { type: "text", value: "[1]" },
+            { type: "html", value: "</sup>" },
+            { type: "text", value: " [11]" },
+          ],
+        },
+      ],
+    };
+
+    Object.assign(tree, unified().use(remarkParse).parse(source));
+    transformScientificCitations(tree, options, source);
+
+    const citations = tree.children[0].children.filter(
+      (node: { type: string }) => node.type === "scientificCitation"
+    );
+    expect(citations).toHaveLength(4);
+    expect(
+      citations.map(
+        (citation) =>
+          citation.data?.hChildren[0]?.children?.[0]?.value ??
+          citation.data?.hChildren[0]?.value
+      )
+    ).toEqual(["1", "1,2", "1–4", "11"]);
+    expect(
+      citations.map(
+        (citation) => citation.data?.hChildren[0]?.properties?.href ?? null
+      )
+    ).toEqual(["#report-ref-1", "#report-ref-1", "#report-ref-1", null]);
+  });
 
   it("rejects malformed and missing referenced namespaces", () => {
     const tree = {
@@ -97,7 +142,9 @@ describe("transformScientificCitations", () => {
     expect(JSON.stringify(tree)).not.toContain('"href"');
   });
 
-  it("recognizes exact superscript triplets and preserves all other raw HTML as text", () => {
+  it("recognizes ordinary superscript spans and preserves malformed raw HTML as text", () => {
+    const source =
+      "<sup>1</sup> <sup>[1-4]</sup> <sup class=x>[1]</sup> <sup><em>1</em></sup> <sup>not a citation</sup broken>";
     const tree = {
       type: "root",
       children: [
@@ -130,24 +177,26 @@ describe("transformScientificCitations", () => {
       ],
     };
 
-    transformScientificCitations(tree, options);
+    Object.assign(tree, unified().use(remarkParse).parse(source));
+    transformScientificCitations(tree, options, source);
 
     const children = tree.children[0].children;
     expect(
       children.filter(
         (node: { type: string }) => node.type === "scientificCitation"
       )
-    ).toHaveLength(2);
-    expect(children).toContainEqual({
-      type: "text",
-      value: "<sup class=x>",
-      data: { scientificRawHtml: true },
-    });
-    expect(children).toContainEqual({
-      type: "text",
-      value: "</sup broken>",
-      data: { scientificRawHtml: true },
-    });
+    ).toHaveLength(0);
+    expect(
+      children.filter((node) => node.type === "scientificInline")
+    ).toHaveLength(3);
+    expect(children).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        value: "<sup class=x>",
+        data: { scientificRawHtml: true },
+      })
+    );
+    expect(JSON.stringify(children)).toContain("</sup broken>");
   });
 
   it("does not rewrite protected markdown node types", () => {
@@ -294,6 +343,7 @@ describe("transformScientificCitations", () => {
   });
 
   it("keeps exact superscript triplets inert inside nested raw HTML", () => {
+    const source = "Before <span><sup>1</sup></span> <sup>2</sup>";
     const tree = {
       type: "root",
       children: [
@@ -314,11 +364,13 @@ describe("transformScientificCitations", () => {
       ],
     };
 
-    transformScientificCitations(tree, options);
+    Object.assign(tree, unified().use(remarkParse).parse(source));
+    transformScientificCitations(tree, options, source);
 
     const serialized = JSON.stringify(tree);
-    expect(serialized.match(/scientificCitation/g)).toHaveLength(1);
-    expect(serialized).toContain("Citation 2");
+    expect(serialized).not.toContain("scientificCitation");
+    expect(serialized.match(/scientificVertical/g)).toHaveLength(1);
+    expect(serialized).toContain('"value":"2"');
     expect(serialized).toContain('"value":"1"');
   });
 
@@ -350,7 +402,7 @@ describe("transformScientificCitations", () => {
     expect(citation?.data?.hChildren[0].type).toBe("text");
   });
 
-  it("rewrites Bot document markers and preserves their source spelling", () => {
+  it("rewrites Bot document markers to compact display without changing targets", () => {
     const tree = {
       type: "root",
       children: [
@@ -380,14 +432,14 @@ describe("transformScientificCitations", () => {
         href: "#report-ref-1",
         ariaLabel: "Citation 1",
       },
-      children: [{ type: "text", value: "[document:1]" }],
+      children: [{ type: "text", value: "1" }],
     });
     expect(citations[1]?.data?.hChildren[0]).toMatchObject({
       properties: {
         href: "#report-ref-3",
         ariaLabel: "Citation 3,4",
       },
-      children: [{ type: "text", value: "[document 3, 4]" }],
+      children: [{ type: "text", value: "3,4" }],
     });
   });
 });

@@ -86,6 +86,29 @@ func TestRetryConversationResultArchiveRetriesOnlyOwnerScopedRetryableFailure(t 
 	}
 }
 
+func TestRetryConversationResultArchiveReconcilesLegacyInventoryFailure(t *testing.T) {
+	setupTestDB(t)
+	seedResultDeliveryRow(t, 703, "alice", "dlg-legacy", "SUCCEEDED", &ProjectionDelivery{
+		SchemaVersion: 1, Required: true, Status: "failed", Revision: 1,
+		ErrorCode: "archive_inventory_limit_exceeded", Retryable: false,
+	})
+	fake := &resultDeliveryClientFake{result: &rxBot.RunDelivery{
+		SchemaVersion:   1,
+		Required:        true,
+		Status:          "pending",
+		Revision:        2,
+		InventoryDigest: resultDeliveryTestDigest,
+	}}
+
+	delivery, err := (&Service{deliveryClient: fake}).RetryConversationResultArchive(context.Background(), "alice", "dlg-legacy", 703)
+	if err != nil {
+		t.Fatalf("legacy retry: %v", err)
+	}
+	if delivery.Status != "pending" || delivery.Revision != 2 {
+		t.Fatalf("delivery=%+v", delivery)
+	}
+}
+
 func TestRetryConversationResultArchiveReturnsPendingWithoutBotCall(t *testing.T) {
 	setupTestDB(t)
 	seedResultDeliveryRow(t, 702, "alice", "dlg-pending", "RUNNING", testPendingDelivery(3, resultDeliveryTestDigest))

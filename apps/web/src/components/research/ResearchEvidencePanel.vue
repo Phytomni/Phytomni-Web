@@ -29,8 +29,23 @@
         role="listitem"
         tabindex="-1"
         :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
-        v-html="ref.html"
-      ></div>
+      >
+        <CitationReferenceRow :index="ref.index" :citation="ref.citation" />
+        <button
+          v-if="materialFor(ref.index)?.excerpt"
+          type="button"
+          class="research-evidence-panel__material"
+          data-testid="material-excerpt"
+          @click="
+            emit('material-activate', {
+              kind: 'excerpt',
+              referenceIndex: ref.index,
+            })
+          "
+        >
+          {{ $t("agents.deepGenome.material.excerpt") }}
+        </button>
+      </div>
     </div>
     <p v-else class="research-evidence-panel__empty">
       {{ $t("common.noData") }}
@@ -48,15 +63,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
 import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
+import type {
+  DeepGenomeMaterialSelection,
+  DeepGenomeReferenceMaterial,
+} from "./deep-genome-report";
 
-// Agent-influenced references cross the v-html boundary only after the existing
-// canonical helper escapes text and sanitizes external URLs.
+// Parent rows own namespace, focus and grouped highlighting; content is typed.
 const props = defineProps<{
   references?: readonly unknown[];
   ns: string;
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
 }>();
+const emit = defineEmits<{
+  "material-activate": [selection: DeepGenomeMaterialSelection];
+}>();
+function materialFor(index: number) {
+  return props.referenceMaterials?.find(
+    (material) => material.referenceIndex === index
+  );
+}
 
 const displayReferences = computed(() =>
   buildDisplayReferences(props.references || [], props.ns)
@@ -154,12 +182,20 @@ defineExpose({ focusReferences });
   color: var(--phy-color-text-muted);
 }
 
-:deep(.doc-citation) {
-  line-height: inherit;
+.research-evidence-panel__material {
+  min-height: var(--phy-control-height-default);
+  margin-block-start: var(--phy-space-8);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+  font: inherit;
+  cursor: pointer;
 }
-
-:deep(.doc-link-inline) {
-  overflow-wrap: anywhere;
+.research-evidence-panel__material:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 :deep(a) {

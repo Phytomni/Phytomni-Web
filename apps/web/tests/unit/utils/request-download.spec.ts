@@ -12,8 +12,11 @@ const mocks = vi.hoisted(() => {
     elMessage: vi.fn(),
     elMessageError: vi.fn(),
     elMessageInfo: vi.fn(),
+    alert: vi.fn(() => Promise.resolve()),
+    logout: vi.fn(() => Promise.resolve()),
     loadingService: vi.fn(() => ({ close: vi.fn() })),
     CanceledError,
+    responseSuccess: undefined as undefined | ((response: unknown) => unknown),
     responseError: undefined as
       undefined | ((error: unknown) => Promise<never>),
   };
@@ -36,7 +39,8 @@ vi.mock("axios", () => ({
           interceptors: {
             request: { use: vi.fn() },
             response: {
-              use: vi.fn((_success, error) => {
+              use: vi.fn((success, error) => {
+                mocks.responseSuccess = success;
                 mocks.responseError = error;
               }),
             },
@@ -57,12 +61,12 @@ vi.mock("element-plus", () => ({
     error: mocks.elMessageError,
     info: mocks.elMessageInfo,
   }),
-  ElMessageBox: { alert: vi.fn() },
+  ElMessageBox: { alert: mocks.alert },
   ElLoading: { service: mocks.loadingService },
 }));
 
 vi.mock("@/stores", () => ({
-  userStore: () => ({ FedLogOut: vi.fn(() => Promise.resolve()) }),
+  userStore: () => ({ FedLogOut: mocks.logout }),
 }));
 
 vi.mock("@/utils/auth", () => ({ getToken: vi.fn(() => "token") }));
@@ -97,7 +101,9 @@ vi.mock("@/locales", () => ({
   },
 }));
 
-import { download } from "@/utils/request";
+import { download, isRelogin } from "@/utils/request";
+import { downloadRenderingFile } from "@/utils/download-rendering-file";
+import { getFileDownUrlApi } from "@/api/chat";
 import {
   clearDownloadTransfers,
   listDownloadTransfers,
@@ -108,6 +114,7 @@ describe("download", () => {
     clearDownloadTransfers();
     vi.clearAllMocks();
     mocks.blobValidate.mockResolvedValue(true);
+    isRelogin.show = false;
   });
 
   it("tracks progress while saving a valid blob", async () => {
@@ -183,5 +190,76 @@ describe("download", () => {
 
     expect(mocks.elMessage).not.toHaveBeenCalled();
     expect(mocks.elMessageError).not.toHaveBeenCalled();
+  });
+
+  it.each(["object", "blob"])(
+    "the rendering helper owns one notification through the real API and error interceptor (%s)",
+    async (kind) => {
+      const body = {
+        code: 503,
+        reason: "academic_report_fonts_unavailable",
+        message: "artifact download unavailable",
+      };
+      mocks.post.mockImplementation((_url, _params, config) => {
+        const error = {
+          config,
+          message: "Request failed with status code 503",
+          response: {
+            status: 503,
+            headers: { "content-type": "application/json" },
+            data:
+              kind === "blob"
+                ? new Blob([JSON.stringify(body)], { type: "application/json" })
+                : body,
+          },
+        };
+        return mocks.responseError?.(error);
+      });
+
+      await downloadRenderingFile("100", "PDF", (key) => key);
+
+      expect(mocks.post).toHaveBeenCalledWith(
+        "/api/v1/downloads/rendering-file",
+        expect.any(FormData),
+        expect.objectContaining({ suppressErrorToast: true })
+      );
+      expect(mocks.elMessage).not.toHaveBeenCalled();
+      expect(mocks.elMessageError).toHaveBeenCalledExactlyOnceWith(
+        "chat.downloadError"
+      );
+      expect(mocks.alert).not.toHaveBeenCalled();
+      expect(mocks.logout).not.toHaveBeenCalled();
+    }
+  );
+
+  it("leaves default API toast ownership unchanged", async () => {
+    const error = {
+      message: "unavailable",
+      response: { status: 500, data: { code: 500, message: "unavailable" } },
+    };
+    mocks.post.mockImplementation((_url, _params, config) =>
+      mocks.responseError?.({ ...error, config })
+    );
+
+    await expect(getFileDownUrlApi(new FormData())).rejects.toMatchObject(
+      error
+    );
+
+    expect(mocks.elMessage).toHaveBeenCalledOnce();
+    expect(mocks.elMessageError).not.toHaveBeenCalled();
+  });
+
+  it("toast suppression does not suppress session expiry", async () => {
+    const rejection = mocks.responseSuccess?.({
+      data: { code: 401 },
+      headers: {},
+      config: { suppressErrorToast: true },
+    });
+
+    await expect(rejection).rejects.toBe("request.sessionInvalid");
+
+    expect(isRelogin.show).toBe(true);
+    expect(mocks.alert).toHaveBeenCalledOnce();
+    expect(mocks.elMessage).not.toHaveBeenCalled();
   });
 });

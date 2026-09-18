@@ -728,15 +728,19 @@ func (ps *Service) queryDataFromStoredRowWithDB(
 	if err := ps.decorateConversationQueryData(ctx, username, out); err != nil {
 		return nil, err
 	}
+	out.Answer, err = normalizeCitationAnswerForTool(out.ToolName, out.Answer)
+	if err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
 func queryDataFromReplacementTerminal(
 	row model.QuestionAgentLog,
 	replacement *persistedConversationReplacement,
-) *QueryData {
+) (*QueryData, error) {
 	if replacement == nil || replacement.TerminalResult == nil {
-		return nil
+		return nil, nil
 	}
 	terminal := replacement.TerminalResult
 	out := &QueryData{
@@ -758,7 +762,12 @@ func queryDataFromReplacementTerminal(
 		interop := *terminal.Interop
 		out.InterOp = &interop
 	}
-	return out
+	answer, err := normalizeCitationAnswerForTool(out.ToolName, out.Answer)
+	if err != nil {
+		return nil, err
+	}
+	out.Answer = answer
+	return out, nil
 }
 
 func queryDataFromReplacementCandidate(
@@ -1052,11 +1061,11 @@ func (ps *Service) resolveExistingV1SubmissionWithDB(
 			return nil, ErrDuplicateClientTurn
 		}
 		if match.private.Replacement.TerminalResult != nil {
-			submission.duplicate = queryDataFromReplacementTerminal(
+			submission.duplicate, err = queryDataFromReplacementTerminal(
 				match.row,
 				match.private.Replacement,
 			)
-			return submission, nil
+			return submission, err
 		}
 		submission.duplicate = queryDataFromReplacementCandidate(
 			match.row,
@@ -1485,6 +1494,7 @@ type QueryData struct {
 	ContextRebuilt     bool                       `json:"context_rebuilt,omitempty"`
 	ContextDegraded    bool                       `json:"context_degraded,omitempty"`
 	RouteReasonCode    string                     `json:"route_reason_code,omitempty"`
+	Projection         map[string]interface{}     `json:"projection,omitempty"`
 	SchemaVersion      int                        `json:"schema_version,omitempty"`
 	ExecutionID        string                     `json:"execution_id,omitempty"`
 	UserMessageID      string                     `json:"user_message_id,omitempty"`
@@ -1510,6 +1520,8 @@ func (ps *Service) decorateConversationQueryData(
 	if projectionErr == nil {
 		out.ResultArchiveV1 = projection.ResultArchiveV1
 		out.Delivery = agentTaskDeliveryDTO(projection)
+		out.Projection = publicBotProjection(projection)
+		out.ReportRevision = projection.ReportRevision
 	} else if !errors.Is(projectionErr, ErrBotProjectionNotFound) {
 		return projectionErr
 	}
@@ -2159,11 +2171,13 @@ func (ps *Service) QueryStream(
 // splitting on the blank-line (LF or CRLF) separator. The trailing separator is
 // included in the token so forwarding can preserve Bot's bytes exactly.
 func splitSSEFrames(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
-		return i + 4, data[:i+4], nil
+	crlf := bytes.Index(data, []byte("\r\n\r\n"))
+	lf := bytes.Index(data, []byte("\n\n"))
+	if crlf >= 0 && (lf < 0 || crlf < lf) {
+		return crlf + 4, data[:crlf+4], nil
 	}
-	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
-		return i + 2, data[:i+2], nil
+	if lf >= 0 {
+		return lf + 2, data[:lf+2], nil
 	}
 	if atEOF && len(data) > 0 {
 		return len(data), data, nil

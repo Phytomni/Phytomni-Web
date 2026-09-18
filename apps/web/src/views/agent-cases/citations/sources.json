@@ -1,0 +1,1408 @@
+{
+  "knowledge": {
+    "references": [
+      {
+        "file_id": "a701c6cb-ce12-4e75-84cd-7aa27afbc1a8",
+        "title": "Delineating the epigenetic regulation of heat and drought response in plants.",
+        "formatted_citation": "Delineating the epigenetic regulation of heat and drought response in plants.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "c426d53af1c6d65785a34b587d2e8145",
+        "title": "Plant Tolerance to Drought Stress with Emphasis on Wheat",
+        "formatted_citation": "Adel, S. & Carels, N. Plant Tolerance to Drought Stress with Emphasis on Wheat. *PLANTS-BASEL* **12,** 2170 (2023). [https://doi.org/10.3390/plants12112170](https://doi.org/10.3390/plants12112170)",
+        "ar": "2170",
+        "au": "Adel, S; Carels, N",
+        "ti": "Plant Tolerance to Drought Stress with Emphasis on Wheat",
+        "so": "PLANTS-BASEL",
+        "vl": "12",
+        "py": "2023",
+        "di": "10.3390/plants12112170",
+        "pm": "37299149"
+      },
+      {
+        "file_id": "b14838a057fa95afa797581558539b19",
+        "title": "Exploration of Epigenetics for Improvement of Drought and Other Stress Resistance in Crops A Review",
+        "formatted_citation": "Sun, C. et al. Exploration of Epigenetics for Improvement of Drought and Other Stress Resistance in Crops: A Review. *PLANTS-BASEL* **10,** 1226 (2021). [https://doi.org/10.3390/plants10061226](https://doi.org/10.3390/plants10061226)",
+        "ar": "1226",
+        "au": "Sun, C; Ali, K; Yan, K; Fiaz, S; Dormatey, R; Bi, ZZ; Bai, JP",
+        "ti": "Exploration of Epigenetics for Improvement of Drought and Other Stress Resistance in Crops: A Review",
+        "so": "PLANTS-BASEL",
+        "vl": "10",
+        "py": "2021",
+        "di": "10.3390/plants10061226",
+        "pm": "34208642"
+      },
+      {
+        "file_id": "824f0ba2a8a1be80c960ce849f6a5282",
+        "title": "DNA Methylation Dynamics in Response to Drought Stress in Crops",
+        "formatted_citation": "DNA Methylation Dynamics in Response to Drought Stress in Crops",
+        "doi_missing": true
+      },
+      {
+        "file_id": "34c29df259f2c69f060667a9e35c7c07",
+        "title": "Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security",
+        "formatted_citation": "Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security",
+        "doi_missing": true
+      },
+      {
+        "file_id": "16bbe6bbaaf4d6778c34927dcdfe7248",
+        "title": "Transcriptomics Analysis Reveals a More Refined Regulation Mechanism of Methylation in a Drought-Tolerant Variety of Potato",
+        "formatted_citation": "Bi, Z. Z. et al. Transcriptomics Analysis Reveals a More Refined Regulation Mechanism of Methylation in a Drought-Tolerant Variety of Potato. *GENES* **13,** 2260 (2022). [https://doi.org/10.3390/genes13122260](https://doi.org/10.3390/genes13122260)",
+        "ar": "2260",
+        "au": "Bi, ZZ; Wang, YH; Li, PC; Li, CJ; Liu, YD; Sun, C; Yao, PF; Liu, YH; Liu, Z; Bai, JP",
+        "ti": "Transcriptomics Analysis Reveals a More Refined Regulation Mechanism of Methylation in a Drought-Tolerant Variety of Potato",
+        "so": "GENES",
+        "vl": "13",
+        "py": "2022",
+        "di": "10.3390/genes13122260",
+        "pm": "36553527"
+      },
+      {
+        "file_id": "0a912120ae5ed8a55253c820f93e9bd3",
+        "title": "Genomics-based precision breeding approaches to improve drought tolerance in rice",
+        "formatted_citation": "Swamy, B. P. M. & Kumar, A. Genomics-based precision breeding approaches to improve drought tolerance in rice. *BIOTECHNOLOGY ADVANCES* **31,** 1308–1318 (2013). [https://doi.org/10.1016/j.biotechadv.2013.05.004](https://doi.org/10.1016/j.biotechadv.2013.05.004)",
+        "au": "Swamy, BPM; Kumar, A",
+        "ti": "Genomics-based precision breeding approaches to improve drought tolerance in rice",
+        "so": "BIOTECHNOLOGY ADVANCES",
+        "vl": "31",
+        "bp": "1308",
+        "ep": "1318",
+        "py": "2013",
+        "di": "10.1016/j.biotechadv.2013.05.004",
+        "pm": "23702083"
+      },
+      {
+        "file_id": "5f81a0843060f40827058a1941227903",
+        "title": "DNA methylation regulates the secondary metabolism of saponins to improve the adaptability of Eleutherococcus senticosus during drought stress",
+        "formatted_citation": "DNA methylation regulates the secondary metabolism of saponins to improve the adaptability of Eleutherococcus senticosus during drought stress",
+        "doi_missing": true
+      },
+      {
+        "file_id": "ecabc7054cba0bbcb29baaa1bb445f98",
+        "title": "Somatic drought stress memory affects leaf morpho-physiological traits of plants via epigenetic mechanisms and phytohormonal signalling",
+        "formatted_citation": "Somatic drought stress memory affects leaf morpho-physiological traits of plants via epigenetic mechanisms and phytohormonal signalling",
+        "doi_missing": true
+      },
+      {
+        "file_id": "5ade877499d7da3d47b0af30ff2dfa0f",
+        "title": "Exploitation of Drought Tolerance-Related Genes for Crop Improvement",
+        "formatted_citation": "Wang, J. Y. et al. Exploitation of Drought Tolerance-Related Genes for Crop Improvement. *INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES* **22,** 10265 (2021). [https://doi.org/10.3390/ijms221910265](https://doi.org/10.3390/ijms221910265)",
+        "ar": "10265",
+        "au": "Wang, JY; Li, CN; Li, L; Reynolds, M; Mao, XG; Jing, RL",
+        "ti": "Exploitation of Drought Tolerance-Related Genes for Crop Improvement",
+        "so": "INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES",
+        "vl": "22",
+        "py": "2021",
+        "di": "10.3390/ijms221910265",
+        "pm": "34638606"
+      },
+      {
+        "file_id": "23fb2dbecfc9d9eaae96f430246547d8",
+        "title": "Decoding phytohormone signaling in plant stress physiology: Insights, challenges, and future directions",
+        "formatted_citation": "Decoding phytohormone signaling in plant stress physiology: Insights, challenges, and future directions",
+        "doi_missing": true
+      },
+      {
+        "file_id": "6f1ef57ce4781895ce6952e1a53cc428",
+        "title": "Epigenetics_ Epigenomics and Crop Improvement",
+        "formatted_citation": "Kapazoglou, A., Ganopoulos, I., Tani, E. & Tsaftaris, A. Epigenetics, Epigenomics and Crop Improvement. *TRANSGENIC PLANTS AND BEYOND* **86,** 287–324 (2018). [https://doi.org/10.1016/bs.abr.2017.11.007](https://doi.org/10.1016/bs.abr.2017.11.007)",
+        "au": "Kapazoglou, A; Ganopoulos, I; Tani, E; Tsaftaris, A",
+        "ti": "Epigenetics, Epigenomics and Crop Improvement",
+        "so": "TRANSGENIC PLANTS AND BEYOND",
+        "vl": "86",
+        "bp": "287",
+        "ep": "324",
+        "py": "2018",
+        "di": "10.1016/bs.abr.2017.11.007"
+      },
+      {
+        "file_id": "50b80804eedeac524ae47e1dacccf927",
+        "title": "Echoes of a Stressful Past Abiotic Stress Memory in Crop Plants towards Enhanced Adaptation",
+        "formatted_citation": "Lagiotis, G., Madesis, P. & Stavridou, E. Echoes of a Stressful Past: Abiotic Stress Memory in Crop Plants towards Enhanced Adaptation. *AGRICULTURE-BASEL* **13,** 2090 (2023). [https://doi.org/10.3390/agriculture13112090](https://doi.org/10.3390/agriculture13112090)",
+        "ar": "2090",
+        "au": "Lagiotis, G; Madesis, P; Stavridou, E",
+        "ti": "Echoes of a Stressful Past: Abiotic Stress Memory in Crop Plants towards Enhanced Adaptation",
+        "so": "AGRICULTURE-BASEL",
+        "vl": "13",
+        "py": "2023",
+        "di": "10.3390/agriculture13112090"
+      },
+      {
+        "file_id": "59ccce1b-c36d-469f-8b35-540469f8e00a",
+        "title": "Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security.",
+        "formatted_citation": "Epigenetic Modifications of Hormonal Signaling Pathways in Plant Drought Response and Tolerance for Sustainable Food Security.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "ed915409c1168db5dbd1356b52e39226",
+        "title": "Biochemical and Epigenetic Modulations under Drought Remembering the Stress Tolerance Mechanism in Rice",
+        "formatted_citation": "Kumar, S., Seem, K. & Mohapatra, T. Biochemical and Epigenetic Modulations under Drought: Remembering the Stress Tolerance Mechanism in Rice. *LIFE-BASEL* **13,** 1156 (2023). [https://doi.org/10.3390/life13051156](https://doi.org/10.3390/life13051156)",
+        "ar": "1156",
+        "au": "Kumar, S; Seem, K; Mohapatra, T",
+        "ti": "Biochemical and Epigenetic Modulations under Drought: Remembering the Stress Tolerance Mechanism in Rice",
+        "so": "LIFE-BASEL",
+        "vl": "13",
+        "py": "2023",
+        "di": "10.3390/life13051156",
+        "pm": "37240801"
+      },
+      {
+        "file_id": "4b6b12f3a9f057bc9510e68c9fb909f0",
+        "title": "Drought stress memory in maize understanding and harnessing the past for future resilience",
+        "formatted_citation": "Drought stress memory in maize understanding and harnessing the past for future resilience",
+        "doi_missing": true
+      },
+      {
+        "file_id": "3fdcd388b2a28f36a3cbe3c21cc93a2e",
+        "title": "Dynamic regulation of DNA methylation and histone modifications in response to abiotic stresses in plants",
+        "formatted_citation": "Liu, Y. T., Wang, J., Liu, B. & Xu, Z. Y. Dynamic regulation of DNA methylation and histone modifications in response to abiotic stresses in plants. *JOURNAL OF INTEGRATIVE PLANT BIOLOGY* **64,** 2252–2274 (2022). [https://doi.org/10.1111/jipb.13368](https://doi.org/10.1111/jipb.13368)",
+        "au": "Liu, YT; Wang, J; Liu, B; Xu, ZY",
+        "ti": "Dynamic regulation of DNA methylation and histone modifications in response to abiotic stresses in plants",
+        "so": "JOURNAL OF INTEGRATIVE PLANT BIOLOGY",
+        "vl": "64",
+        "bp": "2252",
+        "ep": "2274",
+        "py": "2022",
+        "di": "10.1111/jipb.13368",
+        "pm": "36149776"
+      }
+    ]
+  },
+  "review": {
+    "references": [
+      {
+        "file_id": "423d3090cae1246350dc16a42bb87f5c",
+        "title": "The transcriptional integration of environmental cues with root cell type development",
+        "formatted_citation": "The transcriptional integration of environmental cues with root cell type development",
+        "doi_missing": true
+      },
+      {
+        "file_id": "12450da41aedd76e176484b3cb5a9152",
+        "title": "Cell-Type Specific miRNA Regulatory Network Responses to ABA Stress Revealed by Time Series Transcriptional Atlases in Arabidopsis",
+        "formatted_citation": "Cell-Type Specific miRNA Regulatory Network Responses to ABA Stress Revealed by Time Series Transcriptional Atlases in Arabidopsis",
+        "doi_missing": true
+      },
+      {
+        "file_id": "d311522d1f8da46b0f3e25bc86b0e42e",
+        "title": "Single-Cell RNA Sequencing for Plant Research Insights and Possible Benefits",
+        "formatted_citation": "Bawa, G., Liu, Z. X., Yu, X. L., Qin, A. Z. & Sun, X. W. Single-Cell RNA Sequencing for Plant Research: Insights and Possible Benefits. *INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES* **23,** 4497 (2022). [https://doi.org/10.3390/ijms23094497](https://doi.org/10.3390/ijms23094497)",
+        "ar": "4497",
+        "au": "Bawa, G; Liu, ZX; Yu, XL; Qin, AZ; Sun, XW",
+        "ti": "Single-Cell RNA Sequencing for Plant Research: Insights and Possible Benefits",
+        "so": "INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES",
+        "vl": "23",
+        "py": "2022",
+        "di": "10.3390/ijms23094497",
+        "pm": "35562888"
+      },
+      {
+        "file_id": "efebb308-5d5a-47b1-ae32-3de8888efe18",
+        "title": "Spatially resolved gene regulatory networks in Asian rice (Oryza sativa cv. Nipponbare) leaves.",
+        "formatted_citation": "Spatially resolved gene regulatory networks in Asian rice \\(Oryza sativa cv. Nipponbare\\) leaves.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "93e52ab81675eb989bb0423f81410871",
+        "title": "Spatially resolved gene regulatory networks in Asian rice _Oryza sativa cv. Nipponbare_ leaves",
+        "formatted_citation": "Robertson, S. M. & Wilkins, O. Spatially resolved gene regulatory networks in Asian rice (*Oryza sativa* cv. Nipponbare) leaves. *PLANT JOURNAL* **116,** 269–281 (2023). [https://doi.org/10.1111/tpj.16375](https://doi.org/10.1111/tpj.16375)",
+        "au": "Robertson, SM; Wilkins, O",
+        "ti": "Spatially resolved gene regulatory networks in Asian rice (Oryza sativa cv. Nipponbare) leaves",
+        "so": "PLANT JOURNAL",
+        "vl": "116",
+        "bp": "269",
+        "ep": "281",
+        "py": "2023",
+        "di": "10.1111/tpj.16375",
+        "pm": "37390084"
+      },
+      {
+        "file_id": "336c39558d3edf71c8e400f5eafa1446",
+        "title": "Decipher the Molecular Response of Plant Single Cell Types to Environmental Stresses",
+        "formatted_citation": "Nourbakhsh-Rey, M. & Libault, M. Decipher the Molecular Response of Plant Single Cell Types to Environmental Stresses. *BIOMED RESEARCH INTERNATIONAL* **2016,** 4182071 (2016). [https://doi.org/10.1155/2016/4182071](https://doi.org/10.1155/2016/4182071)",
+        "ar": "4182071",
+        "au": "Nourbakhsh-Rey, M; Libault, M",
+        "ti": "Decipher the Molecular Response of Plant Single Cell Types to Environmental Stresses",
+        "so": "BIOMED RESEARCH INTERNATIONAL",
+        "vl": "2016",
+        "py": "2016",
+        "di": "10.1155/2016/4182071",
+        "pm": "27088086"
+      },
+      {
+        "file_id": "d15f5a625cb793b5c88b91362767c506",
+        "title": "Spatially resolved transcriptomics reveals plant host responses to pathogens",
+        "formatted_citation": "Giolai, M. et al. Spatially resolved transcriptomics reveals plant host responses to pathogens. *PLANT METHODS* **15,** 114 (2019). [https://doi.org/10.1186/s13007-019-0498-5](https://doi.org/10.1186/s13007-019-0498-5)",
+        "ar": "114",
+        "au": "Giolai, M; Verweij, W; Lister, A; Heavens, D; Macaulay, I; Clark, MD",
+        "ti": "Spatially resolved transcriptomics reveals plant host responses to pathogens",
+        "so": "PLANT METHODS",
+        "vl": "15",
+        "py": "2019",
+        "di": "10.1186/s13007-019-0498-5",
+        "pm": "31624491"
+      },
+      {
+        "file_id": "2af25e1d-30a1-44c1-be4e-3689a3ac5342",
+        "title": "Plant stress RNA-seq Nexus: a stress-specific transcriptome database in plant cells.",
+        "formatted_citation": "Plant stress RNA-seq Nexus: a stress-specific transcriptome database in plant cells.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "7386cd451a0ab81041cf4ba70ba914fb",
+        "title": "Harnessing Single-Cell and Spatial Transcriptomics for Crop Improvement",
+        "formatted_citation": "Harnessing Single-Cell and Spatial Transcriptomics for Crop Improvement",
+        "doi_missing": true
+      },
+      {
+        "file_id": "41071f4d578b3518163d8c25a8cc9ab4",
+        "title": "Bacterial droplet-based single-cell RNA-seq reveals antibiotic-associated heterogeneous cellular states",
+        "formatted_citation": "Ma, P. J. et al. Bacterial droplet-based single-cell RNA-seq reveals antibiotic-associated heterogeneous cellular states. *CELL* **186,** 877–\\+ (2023). [https://doi.org/10.1016/j.cell.2023.01.002](https://doi.org/10.1016/j.cell.2023.01.002)",
+        "au": "Ma, PJ; Amemiya, HM; He, LL; Gandhi, SJ; Nicol, R; Bhattacharyya, RP; Smillie, CS; Hung, DT",
+        "ti": "Bacterial droplet-based single-cell RNA-seq reveals antibiotic-associated heterogeneous cellular states",
+        "so": "CELL",
+        "vl": "186",
+        "bp": "877",
+        "ep": "+",
+        "py": "2023",
+        "di": "10.1016/j.cell.2023.01.002",
+        "pm": "36708705"
+      },
+      {
+        "file_id": "d021f7ae09886d8f2538ef2aa008cdbb",
+        "title": "Transcription factors - Insights into abiotic and biotic stress resilience and crop improvement",
+        "formatted_citation": "Transcription factors - Insights into abiotic and biotic stress resilience and crop improvement",
+        "doi_missing": true
+      },
+      {
+        "file_id": "25119d69-df9e-421d-b68d-6f37d3d19c39",
+        "title": "Protoplast Isolation for Plant Single-Cell RNA-seq.",
+        "formatted_citation": "Protoplast Isolation for Plant Single-Cell RNA-seq.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "13ce5a78f26677e79775fa5dec9afd2b",
+        "title": "Isolation_ Purification_ and Application of Protoplasts and Transient Expression Systems in Plants",
+        "formatted_citation": "Chen, K. B., Chen, J. L., Pi, X., Huang, L. J. & Li, N. Isolation, Purification, and Application of Protoplasts and Transient Expression Systems in Plants. *INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES* **24,** 16892 (2023). [https://doi.org/10.3390/ijms242316892](https://doi.org/10.3390/ijms242316892)",
+        "ar": "16892",
+        "au": "Chen, KB; Chen, JL; Pi, X; Huang, LJ; Li, N",
+        "ti": "Isolation, Purification, and Application of Protoplasts and Transient Expression Systems in Plants",
+        "so": "INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES",
+        "vl": "24",
+        "py": "2023",
+        "di": "10.3390/ijms242316892",
+        "pm": "38069215"
+      },
+      {
+        "file_id": "73ca04ea00463215e2f78f70e0e41b5e",
+        "title": "Establishment of an efficient cotton root protoplast isolation protocol suitable for single-cell RNA sequencing and transient gene expression analysis",
+        "formatted_citation": "Zhang, K. et al. Establishment of an efficient cotton root protoplast isolation protocol suitable for single-cell RNA sequencing and transient gene expression analysis. *PLANT METHODS* **19,** 5 (2023). [https://doi.org/10.1186/s13007-023-00983-6](https://doi.org/10.1186/s13007-023-00983-6)",
+        "ar": "5",
+        "au": "Zhang, K; Liu, SH; Fu, YZ; Wang, ZX; Yang, XB; Li, WJ; Zhang, CH; Zhang, DM; Li, J",
+        "ti": "Establishment of an efficient cotton root protoplast isolation protocol suitable for single-cell RNA sequencing and transient gene expression analysis",
+        "so": "PLANT METHODS",
+        "vl": "19",
+        "py": "2023",
+        "di": "10.1186/s13007-023-00983-6",
+        "pm": "36653863"
+      },
+      {
+        "file_id": "59e52822153f6ae88eb4b2b6f7b7bcdd",
+        "title": "Advances in Single-Cell Transcriptome Sequencing and Spatial Transcriptome Sequencing in Plants",
+        "formatted_citation": "Lv, Z. et al. Advances in Single-Cell Transcriptome Sequencing and Spatial Transcriptome Sequencing in Plants. *PLANTS-BASEL* **13,** 1679 (2024). [https://doi.org/10.3390/plants13121679](https://doi.org/10.3390/plants13121679)",
+        "ar": "1679",
+        "au": "Lv, Z; Jiang, SJ; Kong, SX; Zhang, X; Yue, JH; Zhao, WQ; Li, L; Lin, SY",
+        "ti": "Advances in Single-Cell Transcriptome Sequencing and Spatial Transcriptome Sequencing in Plants",
+        "so": "PLANTS-BASEL",
+        "vl": "13",
+        "py": "2024",
+        "di": "10.3390/plants13121679",
+        "pm": "38931111"
+      },
+      {
+        "file_id": "e7b96e381159b5d1e551d27414ba7b0c",
+        "title": "Cell-Type Specific miRNA Regulatory Network Responses to ABA Stress Revealed by Time Series Transcriptional Atlases in Arabidopsis",
+        "formatted_citation": "Cell-Type Specific miRNA Regulatory Network Responses to ABA Stress Revealed by Time Series Transcriptional Atlases in Arabidopsis",
+        "doi_missing": true
+      },
+      {
+        "file_id": "ff92828b91abdbc14f1e4041c8a5bb56",
+        "title": "Single-cell RNA sequencing opens a new era for cotton genomic research and gene functional analysis",
+        "formatted_citation": "Single-cell RNA sequencing opens a new era for cotton genomic research and gene functional analysis",
+        "doi_missing": true
+      },
+      {
+        "file_id": "1c8afe2484f694589645166912395d71",
+        "title": "An Efficient and Universal Protoplast Isolation Protocol Suitable for Transient Gene Expression Analysis and Single-Cell RNA Sequencing",
+        "formatted_citation": "Wang, J. J. et al. An Efficient and Universal Protoplast Isolation Protocol Suitable for Transient Gene Expression Analysis and Single-Cell RNA Sequencing. *INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES* **23,** 3419 (2022). [https://doi.org/10.3390/ijms23073419](https://doi.org/10.3390/ijms23073419)",
+        "ar": "3419",
+        "au": "Wang, JJ; Wang, Y; Lü, TF; Yang, X; Liu, J; Dong, Y; Wang, YZ",
+        "ti": "An Efficient and Universal Protoplast Isolation Protocol Suitable for Transient Gene Expression Analysis and Single-Cell RNA Sequencing",
+        "so": "INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES",
+        "vl": "23",
+        "py": "2022",
+        "di": "10.3390/ijms23073419",
+        "pm": "35408780"
+      },
+      {
+        "file_id": "886bc8a38a6ef7ee51123a512e66f9a4",
+        "title": "Research Progress of Single-Cell Transcriptome Sequencing Technology in Plants",
+        "formatted_citation": "Research Progress of Single-Cell Transcriptome Sequencing Technology in Plants",
+        "doi_missing": true
+      },
+      {
+        "file_id": "df20e0905cf719c4055176f06b99fcea",
+        "title": "Single-cell transcriptomes reveal spatiotemporal heat stress response in maize roots",
+        "formatted_citation": "Single-cell transcriptomes reveal spatiotemporal heat stress response in maize roots",
+        "doi_missing": true
+      },
+      {
+        "file_id": "1ad02c251527a14bde634ff36ee1250a",
+        "title": "Decoding phytohormone signaling in plant stress physiology Insights, challenges, and future directions",
+        "formatted_citation": "Decoding phytohormone signaling in plant stress physiology Insights, challenges, and future directions",
+        "doi_missing": true
+      },
+      {
+        "file_id": "d52b941c36d1d93b92b2200071bfcf68",
+        "title": "Multi-Omics Approaches in Oil Palm Research A Comprehensive Review of Metabolomics, Proteomics, and Transcriptomics Based on Low-Temperature Stress",
+        "formatted_citation": "Multi-Omics Approaches in Oil Palm Research A Comprehensive Review of Metabolomics, Proteomics, and Transcriptomics Based on Low-Temperature Stress",
+        "doi_missing": true
+      },
+      {
+        "file_id": "4c30c6bb-c774-4354-a407-de6bf9dc3851",
+        "title": "Genetic dissection of the biotic stress response using a genome-scale gene network for rice.",
+        "formatted_citation": "Genetic dissection of the biotic stress response using a genome-scale gene network for rice.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "d0c98b48c45127d1164f96e2650ea439",
+        "title": "Prediction of protein-protein interactions between fungus _Magnaporthe grisea_ and rice _Oryza sativa L._",
+        "formatted_citation": "Ma, S. W. et al. Prediction of protein-protein interactions between fungus \\(Magnaporthe grisea\\) and rice \\(Oryza sativa L.\\). *BRIEFINGS IN BIOINFORMATICS* **20,** 448–456 (2019). [https://doi.org/10.1093/bib/bbx132](https://doi.org/10.1093/bib/bbx132)",
+        "au": "Ma, SW; Song, Q; Tao, H; Harrison, A; Wang, SB; Liu, W; Lin, SK; Zhang, ZD; Ai, YF; He, HQ",
+        "ti": "Prediction of protein-protein interactions between fungus (Magnaporthe grisea) and rice (Oryza sativa L.)",
+        "so": "BRIEFINGS IN BIOINFORMATICS",
+        "vl": "20",
+        "bp": "448",
+        "ep": "456",
+        "py": "2019",
+        "di": "10.1093/bib/bbx132",
+        "pm": "29040362"
+      },
+      {
+        "file_id": "98ad2d7afe632a40a4b2e5b143ca3611",
+        "title": "Single cell gene regulatory networks in plants Opportunities for enhancing climate change stress resilience",
+        "formatted_citation": "Tripathi, R. K. & Wilkins, O. Single cell gene regulatory networks in plants: Opportunities for enhancing climate change stress resilience. *PLANT CELL AND ENVIRONMENT* **44,** 2006–2017 (2021). [https://doi.org/10.1111/pce.14012](https://doi.org/10.1111/pce.14012)",
+        "au": "Tripathi, RK; Wilkins, O",
+        "ti": "Single cell gene regulatory networks in plants: Opportunities for enhancing climate change stress resilience",
+        "so": "PLANT CELL AND ENVIRONMENT",
+        "vl": "44",
+        "bp": "2006",
+        "ep": "2017",
+        "py": "2021",
+        "di": "10.1111/pce.14012",
+        "pm": "33522607"
+      },
+      {
+        "file_id": "50d5e32a72e1134c15b4b2e785f96fea",
+        "title": "Metabolomics-assisted breeding a viable option for crop improvement",
+        "formatted_citation": "Fernie, A. R. & Schauer, N. Metabolomics-assisted breeding: a viable option for crop improvement? *TRENDS IN GENETICS* **25,** 39–48 (2009). [https://doi.org/10.1016/j.tig.2008.10.010](https://doi.org/10.1016/j.tig.2008.10.010)",
+        "au": "Fernie, AR; Schauer, N",
+        "ti": "Metabolomics-assisted breeding: a viable option for crop improvement?",
+        "so": "TRENDS IN GENETICS",
+        "vl": "25",
+        "bp": "39",
+        "ep": "48",
+        "py": "2009",
+        "di": "10.1016/j.tig.2008.10.010",
+        "pm": "19027981"
+      },
+      {
+        "file_id": "4dfcf917-f3ef-4e0d-9ba9-2f0f52648c17",
+        "title": "Integration of multi-omics technologies for crop improvement: Status and prospects.",
+        "formatted_citation": "Integration of multi-omics technologies for crop improvement: Status and prospects.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "ae08866534e852bf3494a943b7c1fa7c",
+        "title": "A robust method of nuclei isolation for single-cell RNA sequencing of solid tissues from the plant genus Populus",
+        "formatted_citation": "Conde, D. et al. A robust method of nuclei isolation for single-cell RNA sequencing of solid tissues from the plant genus *Populus*. *PLOS ONE* **16,** e0251149 (2021). [https://doi.org/10.1371/journal.pone.0251149](https://doi.org/10.1371/journal.pone.0251149)",
+        "ar": "e0251149",
+        "au": "Conde, D; Triozzi, PM; Balmant, KM; Doty, AL; Miranda, M; Boullosa, A; Schmidt, HW; Pereira, WJ; Dervinis, C; Kirst, M",
+        "ti": "A robust method of nuclei isolation for single-cell RNA sequencing of solid tissues from the plant genus Populus",
+        "so": "PLOS ONE",
+        "vl": "16",
+        "py": "2021",
+        "di": "10.1371/journal.pone.0251149",
+        "pm": "33974645"
+      },
+      {
+        "file_id": "5cc7e06d7f6b00b4d470c8545393b9db",
+        "title": "Direct RNA sequencing in plants Practical applications and future perspectives",
+        "formatted_citation": "Direct RNA sequencing in plants Practical applications and future perspectives",
+        "doi_missing": true
+      },
+      {
+        "file_id": "7ac07cdfb613e643ec7ab638bc75baa9",
+        "title": "Quantitative imaging of RNA polymerase II activity in plants reveals the single-cell basis of tissue-wide transcriptional dynamics",
+        "formatted_citation": "Alamos, S., Reimer, A., Niyogi, K. K. & Garcia, H. G. Quantitative imaging of RNA polymerase II activity in plants reveals the single-cell basis of tissue-wide transcriptional dynamics. *NATURE PLANTS* **7,** 1037–\\+ (2021). [https://doi.org/10.1038/s41477-021-00976-0](https://doi.org/10.1038/s41477-021-00976-0)",
+        "au": "Alamos, S; Reimer, A; Niyogi, KK; Garcia, HG",
+        "ti": "Quantitative imaging of RNA polymerase II activity in plants reveals the single-cell basis of tissue-wide transcriptional dynamics",
+        "so": "NATURE PLANTS",
+        "vl": "7",
+        "bp": "1037",
+        "ep": "+",
+        "py": "2021",
+        "di": "10.1038/s41477-021-00976-0",
+        "pm": "34373604"
+      },
+      {
+        "file_id": "ecdfe8650227dc2e30af26cef7a027a1",
+        "title": "Recent progress in single-cell transcriptomic studies in plants",
+        "formatted_citation": "Recent progress in single-cell transcriptomic studies in plants",
+        "doi_missing": true
+      },
+      {
+        "file_id": "5f588ff7-612b-409a-8a12-53cc9304e28a",
+        "title": "ScInfeR: an efficient method for annotating cell types and sub-types in single-cell RNA-seq, ATAC-seq, and spatial omics.",
+        "formatted_citation": "ScInfeR: an efficient method for annotating cell types and sub-types in single-cell RNA-seq, ATAC-seq, and spatial omics.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "765a5c6a712b38da4ae06b40a4b73ea2",
+        "title": "Long-term balancing selection at the Phosphorus Starvation Tolerance 1 _PSTOL1_ locus in wild_ domesticated and weedy rice _Oryza_",
+        "formatted_citation": "Long-term balancing selection at the Phosphorus *Starvation Tolerance 1* (*PSTOL1*) locus in wild, domesticated and weedy rice (*Oryza*). *BMC PLANT BIOLOGY* **16,** 101 (2016). [https://doi.org/10.1186/s12870-016-0783-7](https://doi.org/10.1186/s12870-016-0783-7)",
+        "ar": "101",
+        "ti": "Long-term balancing selection at the Phosphorus Starvation Tolerance 1 (PSTOL1) locus in wild, domesticated and weedy rice (Oryza)",
+        "so": "BMC PLANT BIOLOGY",
+        "vl": "16",
+        "py": "2016",
+        "di": "10.1186/s12870-016-0783-7",
+        "pm": "27101874"
+      },
+      {
+        "file_id": "b77f5a6f3f71f40032b60830bc7161da",
+        "title": "Abiotic and biotic stresses induce a core transcriptome response in rice",
+        "formatted_citation": "Cohen, S. P. & Leach, J. E. Abiotic and biotic stresses induce a core transcriptome response in rice. *SCIENTIFIC REPORTS* **9,** 6273 (2019). [https://doi.org/10.1038/s41598-019-42731-8](https://doi.org/10.1038/s41598-019-42731-8)",
+        "ar": "6273",
+        "au": "Cohen, SP; Leach, JE",
+        "ti": "Abiotic and biotic stresses induce a core transcriptome response in rice",
+        "so": "SCIENTIFIC REPORTS",
+        "vl": "9",
+        "py": "2019",
+        "di": "10.1038/s41598-019-42731-8",
+        "pm": "31000746"
+      },
+      {
+        "file_id": "95e630e46273b80425eed786dcdb4903",
+        "title": "单细胞转录组测序技术发展及其在甘薯中的应用（赵楠）",
+        "formatted_citation": "单细胞转录组测序技术发展及其在甘薯中的应用（赵楠）",
+        "doi_missing": true
+      },
+      {
+        "title": "Unknown Document",
+        "formatted_citation": "Unknown Document.",
+        "doi_missing": true
+      },
+      {
+        "file_id": "a5db7dee-e1f4-4f4e-adfe-68b8b58a4100",
+        "title": "Plant cells and plants with increased tolerance to environmental stress",
+        "formatted_citation": "Plant cells and plants with increased tolerance to environmental stress",
+        "doi_missing": true
+      },
+      {
+        "file_id": "39720322473da5ad5b1c31a3cee79e58",
+        "title": "Biotechnological Advances to Improve Abiotic Stress Tolerance in Crops",
+        "formatted_citation": "Villalobos-López, M. A., Arroyo-Becerra, A., Quintero-Jiménez, A. & Iturriaga, G. Biotechnological Advances to Improve Abiotic Stress Tolerance in Crops. *INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES* **23,** 12053 (2022). [https://doi.org/10.3390/ijms231912053](https://doi.org/10.3390/ijms231912053)",
+        "ar": "12053",
+        "au": "Villalobos-López, MA; Arroyo-Becerra, A; Quintero-Jiménez, A; Iturriaga, G",
+        "ti": "Biotechnological Advances to Improve Abiotic Stress Tolerance in Crops",
+        "so": "INTERNATIONAL JOURNAL OF MOLECULAR SCIENCES",
+        "vl": "23",
+        "py": "2022",
+        "di": "10.3390/ijms231912053",
+        "pm": "36233352"
+      },
+      {
+        "file_id": "1a8f2be43bcfd346d312bf1bbb0a4f36",
+        "title": "Impact of Nanomaterials on the Regulation of Gene Expression and Metabolomics of Plants under Salt Stress",
+        "formatted_citation": "Abideen, Z., Hanif, M., Munir, N. & Nielsen, B. L. Impact of Nanomaterials on the Regulation of Gene Expression and Metabolomics of Plants under Salt Stress. *PLANTS-BASEL* **11,** 691 (2022). [https://doi.org/10.3390/plants11050691](https://doi.org/10.3390/plants11050691)",
+        "ar": "691",
+        "au": "Abideen, Z; Hanif, M; Munir, N; Nielsen, BL",
+        "ti": "Impact of Nanomaterials on the Regulation of Gene Expression and Metabolomics of Plants under Salt Stress",
+        "so": "PLANTS-BASEL",
+        "vl": "11",
+        "py": "2022",
+        "di": "10.3390/plants11050691",
+        "pm": "35270161"
+      },
+      {
+        "file_id": "79351a24e3f755d215f106eab8655b53",
+        "title": "Recent progress on molecular breeding of rice in China",
+        "formatted_citation": "Rao, Y. C., Li, Y. Y. & Qian, Q. Recent progress on molecular breeding of rice in China. *PLANT CELL REPORTS* **33,** 551–564 (2014). [https://doi.org/10.1007/s00299-013-1551-x](https://doi.org/10.1007/s00299-013-1551-x)",
+        "au": "Rao, YC; Li, YY; Qian, Q",
+        "ti": "Recent progress on molecular breeding of rice in China",
+        "so": "PLANT CELL REPORTS",
+        "vl": "33",
+        "bp": "551",
+        "ep": "564",
+        "py": "2014",
+        "di": "10.1007/s00299-013-1551-x",
+        "pm": "24442397"
+      },
+      {
+        "file_id": "5cee403e00826419397871cc8d8e66a9",
+        "title": "Multi-Omics Techniques in Genetic Studies and Breeding of Forest Plants",
+        "formatted_citation": "Wang, M. C., Li, R. & Zhao, Q. Multi-Omics Techniques in Genetic Studies and Breeding of Forest Plants. *FORESTS* **14,** 1196 (2023). [https://doi.org/10.3390/f14061196](https://doi.org/10.3390/f14061196)",
+        "ar": "1196",
+        "au": "Wang, MC; Li, R; Zhao, Q",
+        "ti": "Multi-Omics Techniques in Genetic Studies and Breeding of Forest Plants",
+        "so": "FORESTS",
+        "vl": "14",
+        "py": "2023",
+        "di": "10.3390/f14061196"
+      },
+      {
+        "file_id": "bb3e83edba074e1735e4e395f6721249",
+        "title": "Genetic architecture of plant stress resistance multi-trait genome-wide association mapping",
+        "formatted_citation": "Thoen, M. P. M. et al. Genetic architecture of plant stress resistance: multi-trait genome-wide association mapping. *NEW PHYTOLOGIST* **213,** 1346–1362 (2017). [https://doi.org/10.1111/nph.14220](https://doi.org/10.1111/nph.14220)",
+        "au": "Thoen, MPM; Olivas, NHD; Kloth, KJ; Coolen, S; Huang, PP; Aarts, MGM; Bac-Molenaar, JA; Bakker, J; Bouwmeester, HJ; Broekgaarden, C; Bucher, J; Busscher-Lange, J; Cheng, X; Fradin, EF; Jongsma, MA; Julkowska, MM; Keurentjes, JJB; Ligterink, W; Pieterse, CMJ; Ruyter-Spira, C; Smant, G; Testerink, C; Usadel, B; van Loon, JJA; van Pelt, JA; van Schaik, CC; van Wees, SCM; Visser, RGF; Voorrips, R; Vosman, B; Vreugdenhil, D; Warmerdam, S; Wiegers, GL; van Heerwaarden, J; Kruijer, W; van Eeuwijk, FA; Dicke, M",
+        "ti": "Genetic architecture of plant stress resistance: multi-trait genome-wide association mapping",
+        "so": "NEW PHYTOLOGIST",
+        "vl": "213",
+        "bp": "1346",
+        "ep": "1362",
+        "py": "2017",
+        "di": "10.1111/nph.14220",
+        "pm": "27699793"
+      },
+      {
+        "file_id": "9a76eee3063be00cb9212634fe2ac200",
+        "title": "Abiotic stress tolerance Genetics_ genomics_ and breeding",
+        "formatted_citation": "Xu, Y. B., Qin, F., Chu, C. C. & Varshney, R. K. Abiotic stress tolerance: Genetics, genomics, and breeding. *CROP JOURNAL* **11,** 969–974 (2023). [https://doi.org/10.1016/j.cj.2023.07.002](https://doi.org/10.1016/j.cj.2023.07.002)",
+        "au": "Xu, YB; Qin, F; Chu, CC; Varshney, RK",
+        "ti": "Abiotic stress tolerance: Genetics, genomics, and breeding",
+        "so": "CROP JOURNAL",
+        "vl": "11",
+        "bp": "969",
+        "ep": "974",
+        "py": "2023",
+        "di": "10.1016/j.cj.2023.07.002"
+      },
+      {
+        "file_id": "96dae60cf7c1a30dd16168a7fce650bf",
+        "title": "Multi-Omics Approaches in Oil Palm Research: A Comprehensive Review of Metabolomics, Proteomics, and Transcriptomics Based on Low-Temperature Stress",
+        "formatted_citation": "Multi-Omics Approaches in Oil Palm Research: A Comprehensive Review of Metabolomics, Proteomics, and Transcriptomics Based on Low-Temperature Stress",
+        "doi_missing": true
+      }
+    ]
+  },
+  "brief_gene": {
+    "references": [
+      {
+        "file_id": "a0ca70a3f86c7a3d0e0a2b56a3c58896",
+        "title": "Modification of Rice Plant Height by Suppressing the Height-Controlling Gene, D18, in Rice",
+        "formatted_citation": "Modification of Rice Plant Height by Suppressing the Height-Controlling Gene, D18, in Rice",
+        "doi_missing": true
+      },
+      {
+        "file_id": "6540b7d2f5640f39a93f10c7dbb5d572",
+        "title": "Manipulating osa-MIR156f Expression by D18 Promoter to Regulate Plant Architecture and Yield Traits both in Seasonal and Ratooning Rice",
+        "formatted_citation": "Liu, Q. et al. Manipulating *osa-MIR156f* Expression by *D18* Promoter to Regulate Plant Architecture and Yield Traits both in Seasonal and Ratooning Rice. *BIOLOGICAL PROCEDURES ONLINE* **21,** 21 (2019). [https://doi.org/10.1186/s12575-019-0110-4](https://doi.org/10.1186/s12575-019-0110-4)",
+        "ar": "21",
+        "au": "Liu, Q; Su, Y; Zhu, YH; Peng, KQ; Hong, B; Wang, RZ; Gaballah, M; Xiao, LT",
+        "ti": "Manipulating osa-MIR156f Expression by D18 Promoter to Regulate Plant Architecture and Yield Traits both in Seasonal and Ratooning Rice",
+        "so": "BIOLOGICAL PROCEDURES ONLINE",
+        "vl": "21",
+        "py": "2019",
+        "di": "10.1186/s12575-019-0110-4",
+        "pm": "31700499"
+      },
+      {
+        "file_id": "eb8977bdbca68072adf8d19500a6f91c",
+        "title": "Pleiotropic effect of the dwarfing gene d18-k on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice",
+        "formatted_citation": "Murai, M., Kc, H. B. & Gima, N. Pleiotropic effect of the dwarfing gene *d18-k* on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice. *PLANT BREEDING* **122,** 410–415 (2003). [https://doi.org/10.1046/j.1439-0523.2003.00843.x](https://doi.org/10.1046/j.1439-0523.2003.00843.x)",
+        "au": "Murai, M; Kc, HB; Gima, N",
+        "ti": "Pleiotropic effect of the dwarfing gene d18-k on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice",
+        "so": "PLANT BREEDING",
+        "vl": "122",
+        "bp": "410",
+        "ep": "415",
+        "py": "2003",
+        "di": "10.1046/j.1439-0523.2003.00843.x"
+      }
+    ]
+  },
+  "deep_genome": {
+    "body": "# Deep Genome Analysis of Os01g0177400\n\nGA3ox-2|D18|GA3OX2|dwf15|OsGA3ox-2|d18h|GA3ox1|d18-k|d18-I|ga3ox2|d18|OsGA3ox2|d18-h|OsGA3OX2|d18-dy|d18-AD|d25|Os01g0177400 in rice (Oryza sativa) encodes a gibberellin 3-beta-hydroxylase, a crucial enzyme in the biosynthesis of gibberellins, which are plant hormones essential for growth regulation. This gene converts GA20 and GA9 to the bioactive forms GA1 and GA4, playing a pivotal role in the final step of gibberellin biosynthesis. The discovery of this gene has been instrumental in understanding plant hormone regulation and its impact on plant stature, particularly in the context of the Green Revolution where semi-dwarf varieties were developed to improve yield by reducing lodging [document:5][document:14][document:18].\n\nGenetic mapping has localized GA3ox-2/D18 to chromosome 1, associating it with dwarfism and gibberellin biosynthesis pathways. The gene's alleles show significant pleiotropic effects on plant height, cool tolerance, and stress responses, making it a major contributor to these phenotypic traits [document:1][document:14]. Its cloning through map-based techniques has further elucidated its role in gibberellin biosynthesis and regulation, revealing a structure with three exons and two introns, encoding a protein with conserved domains typical of 2-oxoglutarate-dependent dioxygenases, crucial for enzymatic activity [document:5][document:39].\n\nFunctional analysis indicates that GA3ox-2/D18 is expressed in various tissues, including leaves, flowers, and seeds, with expression levels influenced by developmental stages and environmental conditions. Mutants of this gene exhibit dwarfism and altered gibberellin levels, underscoring its critical role in plant growth regulation. The gene's activity is modulated by feedback mechanisms involving gibberellin levels, ensuring hormonal homeostasis [document:18][document:72]. Its manipulation has been pivotal in developing semi-dwarf rice varieties, enhancing yield and stress tolerance, and its role in gibberellin regulation makes it a key target in rice breeding programs for improved productivity and resilience [document:5][document:14].\n\n## Gene Profiles\n\n### 1. Gene Discovery, Family, and Localization\n\n#### 1.1. Discovery History and Nomenclature\n\nThe gene aliases GA3ox-2, D18, GA3OX2, dwf15, OsGA3ox-2, d18h, GA3ox1, d18-k, d18-I, ga3ox2, d18, OsGA3ox2, d18-h, OsGA3OX2, d18-dy, d18-AD, d25, and Os01g0177400 collectively refer to the gibberellin 3-beta-hydroxylase gene in rice (Oryza sativa), which plays a crucial role in the biosynthesis of gibberellins, a class of plant hormones essential for growth regulation. The gene was initially identified due to its involvement in the final step of gibberellin biosynthesis, converting GA20 and GA9 to the bioactive forms GA1 and GA4, respectively. The discovery of this gene has been pivotal in understanding plant hormone regulation and its impact on plant stature, particularly in the context of the Green Revolution where semi-dwarf varieties were developed to improve yield by reducing lodging [document:5][document:14][document:18].\n\n#### 1.2. Genetic Mapping\n\nThe gene is located on chromosome 1 of the rice genome. Genetic mapping studies have localized this gene to a region associated with dwarfism and gibberellin biosynthesis pathways. Quantitative Trait Loci (QTL) mapping has identified this gene as a major contributor to plant height and growth regulation, with its alleles showing significant pleiotropic effects on various phenotypic traits, including cool tolerance and stress responses [document:1][document:14].\n\n### 2. Gene Cloning and Structural Analysis\n\n#### 2.1. Cloning Information\n\nThe cloning of GA3ox-2/D18 was achieved through map-based cloning techniques, involving the isolation of genomic DNA and subsequent sequencing to identify the gene responsible for the dwarf phenotype in rice varieties. This process has been instrumental in understanding the genetic basis of gibberellin biosynthesis and its regulation [document:5][document:18].\n\n#### 2.2. Structural Characteristics\n\nGA3ox-2/D18 consists of three exons and two introns, with the coding sequence encoding a protein with conserved domains typical of 2-oxoglutarate-dependent dioxygenases. The structural features include a non-haem dioxygenase N-terminal domain and an isopenicillin N synthase-like Fe(2+) 2OG dioxygenase domain, crucial for its enzymatic activity [document:5][document:39].\n\n#### 2.3. Protein Stability or Enzyme Activity Analysis\n\nThe enzyme activity of GA3ox-2/D18 is influenced by various conditions, including the presence of gibberellins and environmental factors. The protein's stability and activity are regulated through feedback mechanisms involving gibberellin levels, with increased GA levels leading to decreased enzyme activity, maintaining hormonal homeostasis [document:18][document:72].\n\n### 3. Functional Analysis\n\n#### 3.1. Expression Patterns\n\nGA3ox-2/D18 is expressed in various tissues, including leaves, flowers, and seeds, with its expression levels influenced by developmental stages and environmental conditions. The gene's expression is upregulated in response to gibberellin application, indicating its role in gibberellin homeostasis [document:18][document:39].\n\n#### 3.2. Phenotypic Characteristics and Biological Functions\n\nMutants of GA3ox-2/D18 exhibit dwarfism, reduced plant height, and altered gibberellin levels, demonstrating the gene's critical role in plant growth regulation. These mutants have been used to develop semi-dwarf rice varieties that are less prone to lodging, contributing to higher grain yields [document:1][document:5][document:14].\n\n#### 3.3. The Underlying Mechanism, Pathways, and Networks\n\nGA3ox-2/D18 functions in the gibberellin biosynthesis pathway, converting precursors to active gibberellins. It interacts with other genes in the pathway, such as GA20ox and GA2ox, to regulate gibberellin levels and plant growth. The gene's activity is modulated by feedback mechanisms involving gibberellin levels, ensuring proper growth regulation [document:5][document:72].\n\n#### 3.4. QTL Interactions\n\nThe gene is linked to QTLs associated with plant height and stress responses, indicating its role in multiple physiological pathways. Its interaction with other QTLs suggests a complex regulatory network involving gibberellin biosynthesis and response to environmental stimuli [document:1][document:14].\n\n### 4. Application and Evolutionary Analysis\n\n#### 4.1. Domestication Studies\n\nGA3ox-2/D18 has been a target in rice breeding programs for developing semi-dwarf varieties, which have significantly contributed to increased yields and reduced lodging. Its role in gibberellin regulation makes it a key gene in rice domestication and improvement [document:5][document:14].\n\n#### 4.2. Genetic Diversity\n\nNatural variations in the GA3ox-2/D18 gene, including SNPs and alleles, contribute to the diversity in plant height and stress responses among rice varieties. These variations have been exploited in breeding programs to enhance yield and adaptability to different environments [document:1][document:14].\n\n#### 4.3. Improvement\n\nThe gene's manipulation has led to the development of rice varieties with improved growth characteristics, including enhanced yield and stress tolerance. Its role in gibberellin regulation makes it a valuable target for genetic engineering and breeding strategies aimed at improving rice productivity and resilience [document:5][document:14].\n\n**Table: Key Mutations in the GA3ox-2/D18 Gene and Their Phenotypic Effects**\n| Allele      | Background Cultivar | Phenotypic Effect                                   | Molecular Basis                                                               | Reference(s)        |\n|-------------|-------------------|---------------------------------------------------|-------------------------------------------------------------------------------|---------------------|\n| d18-AD      | Akibare           | Severe dwarfism (~15 cm), GA-responsive                 | 7-kbp deletion encompassing the entire gene; no PCR product detectable                | [document:2]        |\n| d18-dy      | Waito-C           | Milder dwarfism                                     | In-frame 9-base deletion in exon 1 (positions 181–189)                               | [document:2][document:4] |\n| d18-h       | Nosetsu-waisei     | Severe dwarfism, complete loss of enzyme activity         | Single base deletion at position 750, causing a frameshift and premature stop           | [document:4]        |\n| d18-k       | Kotaketamanishiki  | Dwarfism, associated with cool tolerance               | Not fully characterized at the molecular level                                  | [document:5]        |\n\nThis comprehensive overview of the GA3ox-2/D18 gene in rice highlights its significance in plant growth regulation, its application in breeding programs, and its role in gibberellin biosynthesis and homeostasis. The gene's manipulation has led to significant advancements in rice agriculture, demonstrating the importance of understanding gene function and regulation in crop improvement.\n\n## Bioinformatic Analysis and Molecular Design\n\n### 1. Phylogenetic Analysis\n\n![Tree Image](./.out/Os01g0177400/Os01g0177400_tree.png)\n\n**Figure 1. Phylogenetic relationships of selected protein sequences.** The evolutionary history was inferred and is represented as a circular phylogram. The branch lengths are proportional to the amount of evolutionary divergence between sequences. Each leaf of the tree is labeled with the corresponding protein accession number, and the branching pattern illustrates the clustering of evolutionarily related sequences.\n\nTo elucidate the evolutionary relationships among the identified protein homologs, a phylogenetic analysis was conducted. The resulting circular phylogram reveals the clustering of the sequences into several distinct monophyletic clades, with varying degrees of statistical support for the internal nodes.\n\nThe analysis robustly resolved multiple subclades with high confidence values. For instance, a major clade encompassing sequences from `NP_001266453.1` to `OEL23979.1` was recovered. Within this group, several sister-pair relationships were strongly supported, such as `XP_039813942.1` and `XP_039813941.1` (node support: 0.999), and `NP_001266453.1` and `PWZ31809.1` (node support: 0.993). Another well-defined clade includes sequences `BAB62154.1` through `KAG8045865.1`. Notably, within this clade, sequences `BAB62154.1` and `Os01t0177400-01` exhibit a branch length of zero, suggesting they are identical in the analyzed regions, and form a sister group to the `(EAY72759.1, XP_015634638.1)` pair with maximum support (1.000).\n\nSimilarly, other terminal clades, including the pair `XP_025817657.1` and `XP_025817658.1`, and the pair `KAF0916129.1` and `KAF0916130.1` (node support: 0.951), demonstrate close evolutionary relationships characterized by short branch lengths. While many terminal and intermediate nodes are well-supported, some of the deeper nodes that define the relationships between the major clades show lower statistical confidence (e.g., 0.760, 0.745), indicating some uncertainty in the earliest branching events within this protein family.\n\n### 2. Transcriptomic Profiling\n\n#### 2.1. Expression Profile in Different Tissues\n\n![Tissue Image](./.out/Os01g0177400/LOC_Os01g08220_tissues.png)\n\n**Figure 2. Gene expression profile across various plant tissues.** Boxplot analysis of transcript abundance, quantified as Fragments Per Kilobase of transcript per Million mapped reads (FPKM), in eleven different tissue types. Boxes represent the interquartile range (IQR) with the median shown as a horizontal line, and whiskers extend to 1.5×IQR. Individual data points are overlaid. The analysis reveals significantly higher expression levels in Flower and Panicle tissues, while Meristem tissue exhibits the lowest expression.\n\nTo characterize the expression profile across different developmental stages and tissues, we analyzed transcript abundance, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM). The analysis revealed a distinct tissue-specific expression pattern. The highest expression levels were observed in flower tissues, exhibiting a mean FPKM of 23.55 (SD = 20.37). Panicle tissues also demonstrated substantial expression, with the second-highest mean FPKM of 18.86 (SD = 18.72). Conversely, the lowest expression was detected in the meristem, with a mean FPKM of only 2.45 (SD = 3.19). Most other tissues, including leaf, root, seed, and shoot, displayed moderate to low expression, with mean FPKM values ranging from approximately 5.0 to 10.0. The data also indicated considerable expression variability within several tissue types, particularly in flower, panicle, and the \"Others\" category, as evidenced by large standard deviations and the wide distribution of individual data points.\n\n#### 2.2. Expression Profile across Different Cultivars\n\n![Cultivar Image](./.out/Os01g0177400/LOC_Os01g08220_cultivars.png)\n\n**Figure 3. Distribution of gene expression levels across five rice cultivars.** Boxplot analysis comparing gene expression, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM), across five rice (*Oryza sativa*) cultivars: 9311, Zh11, Nipponbare, Dongjin, and Ir29. Each box represents the interquartile range (IQR), with the median indicated by the central line. Whiskers extend to 1.5 times the IQR, and individual data points are overlaid as a swarm plot.\n\nThe expression levels of the analyzed genes, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM), showed notable variation across the five rice varieties. The Ir29 variety exhibited the highest average expression level with a mean FPKM of 14.04 ± 6.52. In contrast, the Dongjin and Nipponbare varieties displayed the lowest expression, with mean FPKM values of 6.33 ± 7.86 and 6.75 ± 9.52, respectively. The 9311 and Zh11 varieties showed intermediate expression levels (mean FPKM = 11.95 and 10.02, respectively). Notably, the 9311 variety demonstrated the greatest variability in gene expression, as indicated by the largest standard deviation (18.47) and the presence of numerous high-value outliers.\n\n#### 2.3. Expression Profile under Different kinds of Stresses\n\n![Treatment Image](./.out/Os01g0177400/LOC_Os01g08220_treatments.png)\n\n**Figure 4. Gene expression profiles under varying environmental stress and nutrient conditions.** Boxplots illustrating the distribution of gene expression levels, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM), across eight experimental groups. The conditions include heat stress, drought stress, well-watered, four combinations of high/low water and nitrogen availability, and a control group. Each box represents the interquartile range (IQR), with the central line indicating the median value. Whiskers extend to 1.5 times the IQR, and individual data points for each sample are overlaid.\n\nAnalysis of transcript abundance, quantified as Fragments Per Kilobase of transcript per Million mapped reads (FPKM), revealed differential expression across eight experimental conditions. A substantial increase in transcript levels was observed in all treatments combining varied water and nitrogen availability. Specifically, the highest mean expression was recorded under high water and low nitrogen conditions (mean FPKM = 65.47 ± 40.70), followed by the high water and high nitrogen group (mean FPKM = 56.93 ± 38.77). The low-water treatments also showed markedly elevated expression (mean FPKM = 49.60 for low nitrogen and 41.06 for high nitrogen). In comparison, heat stress induced a moderate increase in expression (mean FPKM = 20.00 ± 26.19) relative to the control group (mean FPKM = 9.94 ± 13.42). The lowest expression levels were observed under drought stress (mean FPKM = 3.44 ± 4.68) and well-watered conditions (mean FPKM = 2.88 ± 3.94). High variability in expression was evident across all groups, particularly in the water and nitrogen treatments.\n\n### 3. The Genetic Relationship and its Counterparts\n\n![Genotype Image](./.out/Os01g0177400/LOC_Os01g08220_genotypes.png)\n\n**Figure 5. Comparative expression analysis of a target gene in various genetic backgrounds.** Box plot illustrating the distribution of transcript expression levels, quantified as Fragments Per Kilobase of transcript per Million mapped reads (FPKM). The analysis includes wildtype, six different mutant lines (`Cerk1`, `Cslf6`, `D056`, `D11`, `Eat1`, `Mel11`), and one overexpression line (`Fnrp_oe`). The central line in each box indicates the median, box boundaries represent the 25th and 75th percentiles, and whiskers extend to 1.5 times the interquartile range. Data points outside this range are shown as individual dots.\n\nThe expression of the target gene was quantified across wildtype, six mutant lines, and one overexpression line, measured in Fragments Per Kilobase of transcript per Million mapped reads (FPKM). The wildtype control exhibited a mean expression of 10.25 FPKM, characterized by substantial variability (SD = 14.53). The `Cslf6_mutant` line displayed the highest average expression level at 15.29 FPKM, accompanied by the largest standard deviation (SD = 22.02), indicating significant expression heterogeneity. In contrast, several genotypes showed markedly lower expression compared to the wildtype. The `Mel11_mutant` exhibited the lowest mean expression (0.85 FPKM), with similarly low levels observed in the `D11_mutant` (1.29 FPKM) and `Eat1_mutant` (1.33 FPKM). The `Fnrp_oe` line also demonstrated reduced expression (mean = 2.23 FPKM). The `Cerk1_mutant` and `D056_mutant` lines displayed intermediate expression levels, with mean values of 3.83 and 4.03 FPKM, respectively.\n\n### 4. Single-Cell Transcriptomic Atlas\n\n![Single_cell Umap Image](./.out/Os01g0177400/Os01g0177400_umap.png)\n![Single_cell Violin Image](./.out/Os01g0177400/Os01g0177400_violin_plot.png)\n\n**Figure 6. Expression profile of *Os01g0177400* across diverse rice tissues and cell types.** Violin plots illustrating the distribution of normalized expression levels for the gene *Os01g0177400* across 56 distinct cell types identified from single-cell RNA sequencing data. The y-axis represents the gene expression level, and the x-axis lists the cell types, grouped by their tissue of origin. The analysis reveals a highly specific expression pattern, with prominent expression observed in the stigmata and filament of the panicle, and in the shoot apex meristem. Expression is minimal or undetectable in the majority of other cell types analyzed.\n\nTo investigate the expression profile of the gene *Os01g0177400*, its transcript abundance was analyzed across 56 distinct cell types derived from multiple rice tissues. The analysis revealed a highly specific expression pattern, with the highest levels concentrated in reproductive and meristematic tissues. Specifically, the most significant expression was observed in the Panicle, with Stigmata cells showing the highest mean expression (0.1653) and the largest fraction of expressing cells (8.97%). Substantial expression was also detected in the Panicle Filament (mean expression = 0.1187; 6.40% of cells) and the Shoot apex Meristem (mean expression = 0.1029; 5.94% of cells). Lower, yet notable, expression was present in several Crown Root cell types, including the Cortex and Sclerenchyma, with expression fractions of 1.94% and 2.00%, respectively. In contrast, expression of *Os01g0177400* was largely negligible or undetectable in most cell types of the Flag Leaf, Seed, and Tiller Bud. These results indicate a specialized role for *Os01g0177400*, primarily associated with floral development and meristematic functions.\n\n### 5. Haplotype analysis\n\n![Haplotype Image](./.out/Os01g0177400/Os01g0177400_promoter_hap.png)\n\n**Figure 7. Haplotype analysis of the rice gene *Os01g0177400*.** Visualization of 15 distinct haplotypes identified within the gene region based on single nucleotide polymorphisms (SNPs). Each row represents a unique haplotype (Hap001–Hap015), and columns correspond to specific SNP positions, labeled by their chromosomal coordinates. The nucleotide base (A, T, C, or G) at each SNP locus is indicated within the cells and is color-coded for visual clarity. The rightmost column (\"freq\") shows the frequency, or the total number of individuals, carrying each haplotype within the analyzed population. Hap001 represents the most prevalent haplotype in the collection.\n\nHaplotype analysis of the *Os01g0177400* gene region identified 15 distinct haplotypes across the surveyed accessions. A skewed frequency distribution was observed among the identified haplotypes. Hap001 was the predominant haplotype, found in 501 accessions. The next most abundant haplotypes were Hap002 and Hap003, present in 175 and 141 accessions, respectively. Collectively, these three haplotypes constituted the genetic background for the majority (84.0%) of the panel. Hap004 and Hap005 were also relatively common, identified in 80 and 42 accessions, respectively. In contrast, the remaining ten haplotypes (Hap006–Hap015) occurred at low frequencies. Specifically, four of these haplotypes (Hap012, Hap013, Hap014, and Hap015) were unique, each represented by a single accession. \n\n### 6. cis-Regulatory Landscape\n\n#### 6.1. Motif Analysis\n\n![Motif Image](./.out/Os01g0177400/motif_all_logo.png)\n\n**Figure 8. Identification of conserved motifs in selected *Oryza sativa* promoter sequences.** Sequence logos for the five most statistically significant DNA motifs discovered by the MEME suite. The analysis was conducted on a set of ten 2000 bp promoter sequences. For each logo, the x-axis represents the position within the motif, and the overall height of the stack of letters indicates the degree of sequence conservation in bits. The relative height of each letter represents the probability of that nucleotide at the given position. The motifs are presented in order of statistical significance, with their respective E-values: Motif 1 (E = 3.8e-32), Motif 2 (E = 4.9e-24), Motif 3 (E = 1.2e-23), Motif 4 (E = 3.4e-14), and Motif 5 (E = 1.0e-12).\n\nA *de novo* motif discovery analysis was performed on a set of 10 gene promoter sequences using the MEME suite to identify putative shared regulatory elements. The analysis identified five statistically significant motifs, each 20 bp in length. The sequence logos for these motifs are depicted, showing the relative frequency of nucleotides at each position.\n\nMotif 1 was the most statistically significant finding (E-value = 3.8e-032), identified in all 10 input sequences, with a consensus sequence of CTCCCTCCGTTTCAGGTTAT. Motif 2 was identified in 9 sequences (E-value = 4.9e-024) with a consensus of ACTTTGGTCAAAGTCAAACT. Motif 3 was also found in all 10 sequences (E-value = 1.2e-023) and displayed a consensus of AAGTTTGACTAATTTTATAG. Two additional significant motifs were identified: Motif 4 (consensus: TTTTCTATAAAATTAGTCAA; E-value = 3.4e-014), found in 10 sequences, and Motif 5 (consensus: TGACTTTGACTAAAGTCAAA; E-value = 1.0e-012), found in 9 sequences. The high degree of conservation and low E-values suggest these motifs represent potential functional cis-regulatory elements common to the analyzed gene set.\n\n#### 6.2. Gene Epigenetic Predictions\n\n![SMEP Image](./.out/Os01g0177400/Os01g0177400_6mA_smep.png)\n\n**Figure 9. Predicted N6-methyladenosine (6mA) modification profile in the promoter region of *Oryza sativa* gene Os01g0177400.** The plot displays the probability of 6mA modification at single-nucleotide resolution across a 2000 bp promoter sequence. The x-axis represents the nucleotide position, and the y-axis indicates the predicted modification probability for each adenine residue. The height of each vertical line corresponds to the probability of 6mA occurring at that specific site.\n\n![SMOC Image](./.out/Os01g0177400/Os01g0177400_smoc.png)\n\n**Figure 10. Predicted chromatin accessibility profile for the promoter region of gene Os01g0177400.** The plot illustrates the probability of chromatin accessibility across the 2000 bp promoter sequence upstream of the *Oryza sativa* gene Os01g0177400. The x-axis denotes the nucleotide position in base pairs (bp), and the y-axis represents the probability score from a computational model predicting DNA modification status. Probability values approaching 1.0 are indicative of open, accessible chromatin, while lower values suggest a closed, inaccessible chromatin state.\n\nTo investigate the epigenetic landscape of the *Oryza sativa* gene *Os01g0177400*, we profiled the N6-methyladenosine (6mA) modification status across its 2000 bp promoter region. The analysis revealed a heterogeneous distribution of 6mA modifications, with the majority of adenine residues showing negligible modification probability (Figure 1). However, a distinct set of sites exhibited high-confidence methylation signals. Across the analyzed region, we identified 21 sites with a modification probability greater than 0.70. Of these, 18 sites surpassed a probability of 0.80, and 12 sites exceeded a probability of 0.90, indicating strong evidence of 6mA modification. The most prominent peaks were observed at nucleotide positions 1404 (P = 0.994), 1442 (P = 0.994), 1346 (P = 0.993), and 216 (P = 0.990). These high-probability 6mA sites are distributed throughout the promoter, suggesting the presence of multiple, discrete epigenetic regulatory marks within this region.\n\nThe chromatin accessibility profile of the 2000 bp promoter region for gene Os01g0177400 was computationally predicted. The analysis revealed a predominantly open chromatin state, with accessibility scores maintained near a maximal value of 1.0 for the majority of the region (Figure 1). A significant and localized domain of reduced accessibility was identified between approximately 500 bp and 650 bp, where the accessibility score dropped sharply to a minimum of approximately 0.2. Following this region of low accessibility, the chromatin state gradually returned to a fully accessible conformation, reaching a score of nearly 1.0 by position 950 bp, which was sustained for the remainder of the analyzed promoter. Sequence-based predictions corroborated these findings, classifying most segments of the promoter as modified with high probability (P > 0.9), consistent with an open and accessible chromatin structure.\n\n### 7. Protein Characterization\n\n#### 7.1. Domain Architecture Evolution\n\n| target name  | accession  | query name      | E-value | description of target                                 |\n|:------------ |:---------- |:--------------- | -------:|:----------------------------------------------------- |\n| 2OG-FeII_Oxy | PF03171.25 | Os01t0177400-01 | 3.4e-27 | 2OG-Fe(II) oxygenase superfamily                      |\n| DIOX_N       | PF14226.11 | Os01t0177400-01 | 3.1e-15 | non-haem dioxygenase in morphine synthesis N-terminal |\n\n**Table 1. Conserved protein domains identified in the *Oryza sativa* protein Os01t0177400-01.** The table presents the results of a search against the Pfam database. For each significant match, the identified domain (target name), its Pfam accession number, the statistical significance of the alignment (E-value), and a functional description are shown.\n\n*This tabular output delineates the results of a sequence or profile homology search, comprising 23 columns that report both global and domain-specific alignment metrics. The initial six columns specify identifiers and lengths for the target (subject) sequence/profile (target_name, target_accession, tlen) and the query profile/sequence (query_name, accession, qlen). Subsequent columns provide statistical evaluations of the full match: full_evalue denotes the expectation value for the entire comparison, full_score represents the composition bias-corrected bit score, and full_bias quantifies the magnitude of this correction. Per-domain annotations include the domain index (domain_num), total domains detected (domain_total), reliability estimates (domain_cevalue reflecting permissive conditional E-value and domain_ievalue indicating stringent independent E-value), domain-specific bit score (domain_score), and its associated bias correction (domain_bias). Structural coordinates delineate the domain’s alignment to the query profile (hmm_from, hmm_to), the optimal (MEA) alignment to the target sequence (ali_from, ali_to), and the broader probabilistic envelope on the target (env_from, env_to). The mean posterior probability of residue alignment reliability (acc) and a free-text description of target complete the record, collectively enabling rigorous interpretation of domain architecture and evolutionary relationships.*\n\nA bioinformatic analysis was performed to identify conserved domains within the protein sequence of Os01t0177400-01. The search revealed the presence of two significant domains. A highly significant match was found to the 2OG-Fe(II) oxygenase superfamily domain (2OG-FeII_Oxy; PF03171.25) with an E-value of 3.4e-27. Furthermore, the N-terminal region of the protein showed significant homology to the DIOX_N domain (PF14226.11), characteristic of non-haem dioxygenases, with an E-value of 3.1e-15. The presence of these domains strongly indicates that Os01t0177400-01 functions as a 2-oxoglutarate/Fe(II)-dependent oxygenase.\n\n#### 7.2. 3D Structure Prediction\n\n![Sturcture Image](./.out/Os01g0177400/Os01t0177400-01_seed_101_sample_0.cif)\n\n**Figure 11. Predicted three-dimensional structure and associated quality metrics.** The figure displays the predicted tertiary structure of the protein monomer. The model exhibits high overall confidence, achieving an average predicted Local Distance Difference Test (pLDDT) score of 84.5. The global accuracy of the fold is strongly supported by a predicted TM-score (pTM) of 0.918. The prediction corresponds to a monomeric state, and the final relaxed structure is free of significant steric clashes.\n\nThe secondary structure analysis of the 370-residue polypeptide (Chain A) revealed a structure composed of multiple α-helical domains interspersed with loop regions and short bends. The protein exhibits significant α-helical content distributed across fourteen distinct helical segments. The most prominent of these is a long, continuous α-helix spanning 32 residues from Asp-149 to Leu-180. Other significant helical regions were identified, including segments at residues Ala-77–Ser-92 and Val-187–Arg-199. These ordered domains are connected by multiple bend structures, such as those located at residues Val-49–Asp-51, Met-201–Tyr-209, and Arg-292–Gly-300, which facilitate turns in the polypeptide chain. The remaining residues, which constitute a substantial portion of the sequence, were characterized as unstructured loop or coil regions, linking the defined secondary structural elements.\n\n### 8. Artificial Intelligence Design\n\n#### 8.1. Promoter Design\n\n![Promoter Design](./.out/Os01g0177400/promoter_design.png)\n**Figure 12. Aggregate score profile across the genomic locus of *PNN* (LOC_Os01g08220).** The plot illustrates the distribution of a composite score along the genomic coordinates of the *PNN* gene on chromosome 1 (Chr1). The y-axis shows the normalized score, and the x-axis represents the genomic position. Each point corresponds to the score calculated for a 10-bp window. The dashed line indicates a significance threshold of 0.2, and the shaded area highlights regions exceeding this value. Prominent peaks in the profile suggest putative regions of functional importance within the gene.\n\nBioinformatic analysis of the genomic locus for the *PNN* gene (*LOC_Os01g08220*) on chromosome 1 revealed significant variation in the aggregate score across the region from position 4,004,888 to 4,006,888. The analysis identified multiple distinct regions with scores exceeding a significance threshold of 0.2. Two prominent peaks were observed: the first reached a score of 0.946 at position 4,005,088, while the second, and highest, peak achieved a maximal score of 1.0 at position 4,005,238. A third significant peak was identified with a score of 0.959 at position 4,006,338. These high-scoring regions were interspersed with segments where the score fell below the 0.2 threshold, indicating localized areas of potential functional importance within the gene locus.\n\n#### 8.2. Protein Design\n\n![Protein Design](./.out/Os01g0177400/psap_scores.png)\n\n**Figure 12. Comprehensive in silico mutational landscape of the protein.** The heatmap illustrates the predicted functional effect of all possible single amino acid substitutions across the entire protein sequence. The x-axis represents the residue position, and the y-axis indicates the 20 possible amino acid variants for substitution. Each cell is colored according to a calculated mutation score, where red denotes a predicted positive or beneficial effect on function (highest score: F161Y at 0.83) and blue denotes a predicted negative or deleterious effect (lowest score: G220A at -0.99). Scores near zero, represented by lighter shades, indicate a neutral impact. This analysis provides a global view of functional constraints and identifies potential hotspots for targeted mutagenesis.\n\nTo comprehensively assess the functional impact of all possible single amino acid substitutions, we conducted an in silico saturation mutagenesis analysis. The predicted effect of each mutation was quantified using a mutation score, with the results visualized as a heatmap. The scores exhibited a broad distribution, ranging from a maximum of 0.8335 to a minimum of -0.9944, where positive and negative values are indicative of deleterious and neutral/tolerated mutations, respectively.\n\nOur analysis identified several mutations predicted to be highly impactful. The substitution F161Y yielded the highest positive score (0.8335), followed by V233L (0.7725), G296A (0.7556), A256P (0.6742), and G72N (0.6726). These mutations, represented by dark red signals in the heatmap, are located in positions likely critical for protein function or stability.\n\nConversely, a large number of substitutions were predicted to be functionally benign, characterized by strongly negative scores. The mutations with the most negative scores were G220A (-0.9944), H224L (-0.9923), W251Y (-0.9913), and D226P (-0.9913). These positions, visualized as dark blue signals, represent sites that are highly tolerant to amino acid changes. The majority of mutations displayed scores near zero, suggesting a minor or negligible effect on protein function.\n\n## Recommended experiments\n\nTo validate computational findings and explore the molecular mechanisms underlying gene function, the following experiments are recommended.\n\n1. **Quantitative RT-PCR** This assay quantifies transcript abundance to validate differential gene expression. It directly tests patterns highlighted in the Expression Profile in Different Tissues analysis by confirming up- and down-regulated targets at key developmental stages, lending support to observed transitions [Figure 2]. It also cross-checks temporal inflection points inferred from trajectory modeling to ensure that computational shifts reflect real transcriptional changes, providing orthogonal confirmation of the magnitude and directionality reported [Figure 3].\n\n2. **Western Blotting** This protocol detects protein expression levels and modifications, validating the protein abundance and post-translational changes inferred from the Protein Stability or Enzyme Activity Analysis. It corroborates the presence and stability of GA3ox-2/D18 protein under various conditions, supporting the enzyme activity data [document:18][document:72].\n\n3. **Chromatin Immunoprecipitation (ChIP)** This protocol measures factor occupancy or histone marks at selected loci. It probes Chromatin State Dynamics by validating promoter and enhancer states at regions predicted to switch activity, testing the concordance of active versus repressed marks across conditions [Figure 4]. By focusing on peaks near signature genes, it further substantiates regulatory models and pinpoints causal elements underlying expression changes discussed in the regulatory network analysis [Figure 7].\n\n4. **CRISPR/Cas9 Genome Editing** This protocol enables targeted gene modifications to dissect functional roles of GA3ox-2/D18. It can create knockouts or knock-ins to validate phenotypic predictions from QTL Interactions and Genetic Diversity analyses, providing empirical validation of gene function in plant height and stress responses [document:1][document:14].\n\n5. **In Situ Hybridization** This method localizes gene expression within tissues, providing spatial context to the Expression Profile in Different Tissues analysis. It confirms the tissue-specific expression patterns observed in single-cell RNA-seq data, particularly in reproductive and meristematic tissues [Figure 6].\n\n6. **Subcellular Localization** This protocol determines the intracellular distribution of GA3ox-2/D18 protein, validating predictions from Protein Characterization. It confirms the protein's localization in specific cellular compartments, supporting functional inferences from domain architecture and 3D structure predictions [Figure 11].\n\n7. **Yeast One-Hybrid Assay** This assay identifies protein-DNA interactions, validating the cis-Regulatory Landscape analysis. It confirms the binding of transcription factors to conserved motifs identified in promoter sequences, supporting the functional relevance of these elements [Figure 8].\n\n8. **Dual-Luciferase Reporter Assay** This protocol measures promoter activity, validating the cis-Regulatory Landscape analysis. It assesses the regulatory potential of identified motifs and haplotypes, providing functional insights into their role in gene expression [Figure 7].\n\n9. **RNA-Seq** This high-throughput sequencing method captures transcriptomic changes, validating the Transcriptomic Profiling analysis. It provides comprehensive expression data across different conditions, supporting the observed patterns in various tissues and stress responses [Figure 4].\n\n10. **Co-Immunoprecipitation (Co-IP)** This protocol identifies protein-protein interactions, validating the Phenotypic Characteristics and Biological Functions analysis. It confirms the interaction networks and regulatory mechanisms involving GA3ox-2/D18, supporting the inferred pathways and networks [document:5][document:72].\n\n[Protocol Details](./Os01g0177400_result-experiments.md)\n\n## Disscussion\n\n**GA3ox-2/D18 in rice (Oryza sativa) is pivotal in the biosynthesis of gibberellins, essential plant hormones regulating growth.** This gene encodes a gibberellin 3-beta-hydroxylase, which catalyzes the conversion of GA20 and GA9 to the bioactive forms GA1 and GA4, playing a crucial role in the final step of gibberellin biosynthesis [document:5][document:14][document:18]. The discovery of GA3ox-2/D18 has been instrumental in understanding plant hormone regulation, particularly in the context of the Green Revolution, where semi-dwarf varieties were developed to improve yield by reducing lodging [document:5][document:14][document:18].\n\n**Genetic mapping and cloning efforts have elucidated the structural and functional characteristics of GA3ox-2/D18.** The gene is located on chromosome 1 and is associated with dwarfism and gibberellin biosynthesis pathways, showing pleiotropic effects on plant height, cool tolerance, and stress responses [document:1][document:14]. Its cloning through map-based techniques has revealed a structure with three exons and two introns, encoding a protein with conserved domains typical of 2-oxoglutarate-dependent dioxygenases, crucial for its enzymatic activity [document:5][document:39]. These structural features underscore its role in gibberellin biosynthesis and regulation [document:5][document:18].\n\n**Functional analysis of GA3ox-2/D18 highlights its critical role in plant growth and stress responses.** The gene is expressed in various tissues, including leaves, flowers, and seeds, with expression levels influenced by developmental stages and environmental conditions [document:18][document:72]. Mutants of GA3ox-2/D18 exhibit dwarfism and altered gibberellin levels, underscoring its critical role in plant growth regulation. The gene's activity is modulated by feedback mechanisms involving gibberellin levels, ensuring hormonal homeostasis [document:18][document:72]. Its manipulation has been pivotal in developing semi-dwarf rice varieties, enhancing yield and stress tolerance, and its role in gibberellin regulation makes it a key target in rice breeding programs for improved productivity and resilience [document:5][document:14].\n\n## Conclusion and Future Outlook\n\n**GA3ox-2/D18 in rice (Oryza sativa) is pivotal in the biosynthesis of gibberellins, essential plant hormones regulating growth.** This gene encodes a gibberellin 3-beta-hydroxylase, which catalyzes the conversion of GA20 and GA9 to the bioactive forms GA1 and GA4, playing a crucial role in the final step of gibberellin biosynthesis [document:5][document:14][document:18]. The discovery of GA3ox-2/D18 has been instrumental in understanding plant hormone regulation, particularly in the context of the Green Revolution, where semi-dwarf varieties were developed to improve yield by reducing lodging [document:5][document:14][document:18].\n\n**Genetic mapping and cloning efforts have elucidated the structural and functional characteristics of GA3ox-2/D18.** The gene is located on chromosome 1 and is associated with dwarfism and gibberellin biosynthesis pathways, showing pleiotropic effects on plant height, cool tolerance, and stress responses [document:1][document:14]. Its cloning through map-based techniques has revealed a structure with three exons and two introns, encoding a protein with conserved domains typical of 2-oxoglutarate-dependent dioxygenases, crucial for its enzymatic activity [document:5][document:39]. These structural features underscore its role in gibberellin biosynthesis and regulation [document:5][document:18].\n\n**Functional analysis of GA3ox-2/D18 highlights its critical role in plant growth and stress responses.** The gene is expressed in various tissues, including leaves, flowers, and seeds, with expression levels influenced by developmental stages and environmental conditions [document:18][document:72]. Mutants of GA3ox-2/D18 exhibit dwarfism and altered gibberellin levels, underscoring its critical role in plant growth regulation. The gene's activity is modulated by feedback mechanisms involving gibberellin levels, ensuring hormonal homeostasis [document:18][document:72]. Its manipulation has been pivotal in developing semi-dwarf rice varieties, enhancing yield and stress tolerance, and its role in gibberellin regulation makes it a key target in rice breeding programs for improved productivity and resilience [document:5][document:14].\n\n**Future research should focus on resolving mechanistic uncertainties and exploring the gene's regulatory networks.** Detailed studies on the interaction of GA3ox-2/D18 with other genes in the gibberellin pathway, such as GA20ox and GA2ox, will provide deeper insights into its regulatory mechanisms [document:5][document:72]. Additionally, investigating the gene's response to various environmental stresses and its role in different developmental stages will enhance our understanding of its pleiotropic effects [document:1][document:14]. CRISPR/Cas9-based genome editing could be employed to create precise mutants, enabling the dissection of its specific functions and interactions [document:1][document:14].\n\n**Advanced transcriptomic and proteomic analyses could further elucidate the gene's regulatory landscape.** High-throughput sequencing and protein interaction studies will help identify novel regulatory elements and interaction partners, providing a comprehensive view of GA3ox-2/D18's role in plant growth and stress responses [document:18][document:72]. These approaches will also aid in identifying potential targets for genetic engineering to improve rice varieties for enhanced yield and resilience [document:5][document:14].\n\n## Reference:\n\n[1] Pleiotropic effect of the dwarfing gene d18-k on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice\n\n[2] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[3] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[4] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[5] The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism.\n\n[6] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[7] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[8] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[9] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[10] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[11] Oryza sativa mediator subunit OsMED25 interacts with OsBZR1 to regulate brassinosteroid signaling and plant architecture in rice.\n\n[12] Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)\n\n[13] Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)\n\n[14] Gibberellin 2-oxidase genes and uses thereof\n\n[15] Gibberellin 2-oxidase genes and uses thereof\n\n[16] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[17] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[18] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[19] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[20] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins\n\n[21] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[22] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[23] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[24] Gibberellin 2-oxidase genes and uses thereof\n\n[25] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[26] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[27] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[28] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[29] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[30] Enhanced expression of OsSPL14 gene and its association with yield components in rice (Oryza sativa) under low nitrogen conditions\n\n[31] Rice cultivar cll18\n\n[32] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[33] Rice cultivar cll18\n\n[34] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[35] Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)\n\n[36] Spark-based WOA-BP rice yield prediction\n\n[37] Deep Learning-Based Classification of Rice Varieties from Seed Coat Images\n\n[38] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[39] Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice\n\n[40] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[41] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[42] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[43] Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice\n\n[44] Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice\n\n[45] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[46] Rice cultivar cll18\n\n[47] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[48] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[49] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[50] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[51] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[52] Prediction of Heterosis for Agronomic Traits in Half-Diallel Cross of Rice (Oryza sativa L.) under Drought Stress Using Microsatellite Markers\n\n[53] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[54] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[55] Hybrid rice HR180001\n\n[56] Hybrid rice HR180001\n\n[57] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[58] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[59] The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity.\n\n[60] The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity.\n\n[61] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[62] Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)\n\n[63] Genetic mechanism of wide compatibility in rice and its utilization\n\n[64] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[65] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[66] Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)\n\n[67] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[68] Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants\n\n[69] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).\n\n[70] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).\n\n[71] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).\n\n[72] A common allosteric mechanism regulates homeostatic inactivation of auxin and gibberellin\n\n[73] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[74] NaCl-induced expression of glutathione reductase in roots of rice (Oryza sativa L.) seedlings is mediated through hydrogen peroxide but not abscisic acid\n\n[75] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[76] NaCl-induced expression of glutathione reductase in roots of rice (Oryza sativa L.) seedlings is mediated through hydrogen peroxide but not abscisic acid\n\n[77] CRISPRCas9-Induced Mutagenesis of TMS5 Confers Thermosensitive Genic Male Sterility by Influencing Protein Expression in Rice (Oryza sativa L.)\n\n[78] Rice cultivar cll18\n\n[79] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[80] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[81] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[82] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[83] Rice cultivar cl181-ar\n\n[84] Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.).\n\n[85] Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.).\n\n[86] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[87] Rice cultivar cl181-ar\n\n[88] 00002GOOLV3G7JP167507JP0MLR\n\n[89] Rice cultivar cl181-ar\n\n[90] 00002GOOLV3G7JP167507JP0MLR\n\n[91] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[92] Brassinosteroid Regulates Cell Elongation by Modulating Gibberellin Metabolism in Rice\n\n[93] Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.).\n\n[94] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).\n\n[95] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[96] OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities\n\n[97] OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities\n\n[98] Morphophysiological Changes During Vegetative Stage Drought Stress in the Local Pigmented Rice (Oryza sativa L.) from East Nusa Tenggara\n\n[99] The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity.\n\n[100] Genetic mechanism of wide compatibility in rice and its utilization\n\n[101] Genetic mechanism of wide compatibility in rice and its utilization\n\n[102] Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.).\n\n[103] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[104] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[105] mRNAs and a cloned histone gene are differentially expressed during anther and pollen development in rice (Oryza sativa L.).\n\n[106] OsGRETCHENHAGEN3-2 modulates rice seed storability via accumulation of abscisic acid and protective substances.\n\n[107] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[108] Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value\n\n[109] Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value\n\n[110] Isolated nucleic acid sequence conferring stress tolerance/susceptibility in rice\n\n[111] Physicochemical and nutritional properties of twenty three traditional rice (Oryza sativa L.) varieties of Sri Lanka\n\n[112] Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3\n\n[113] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[114] OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)\n\n[115] OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)\n\n[116] The effects of field pre-harvest sprouting on the morphological structure and physicochemical properties of rice (Oryza sativa L.) starch\n\n[117] Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)\n\n[118] Rice cultivar cl181-ar\n\n[119] 7100260181\n\n[120] Prediction and identification of the effectors of heterotrimeric G proteins in rice (Oryza sativa L.)\n\n[121] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[122] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[123] Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)\n\n[124] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[125] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[126] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[127] Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins.\n\n[128] Gibberellin indirectly promotes chloroplast biogenesis as a means to maintain the chloroplast population of expanded cells\n\n[129] Gibberellin indirectly promotes chloroplast biogenesis as a means to maintain the chloroplast population of expanded cells\n\n[130] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[131] Glufosinate tolerant rice\n\n[132] Glufosinate tolerant rice\n\n[133] OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)\n\n[134] Rice cultivar cl181-ar\n\n[135] Evaluation of japonica rice (Oryza sativa L.) varieties and their improvement in terms of stability, yield and cooking quality by pure-line selection in Thailand\n\n[136] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[137] Soybean cultivar 4980321658\n\n[138] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[139] Prediction and identification of the effectors of heterotrimeric G proteins in rice (Oryza sativa L.)\n\n[140] CRISPRCas9-Induced Mutagenesis of TMS5 Confers Thermosensitive Genic Male Sterility by Influencing Protein Expression in Rice (Oryza sativa L.)\n\n[141] Rice cultivar cl181-ar\n\n[142] Rice cultivar R031001\n\n[143] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[144] Cultivated oryza sativa plant having a partially or fully multiplied genome and uses of same\n\n[145] Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants\n\n[146] Generating high-yielding varieties by genetic manipulation of plant architecture\n\n[147] Hybrid rice HR180001\n\n[148] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[149] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[150] Expression and in silico structural analysis of a rice ( Oryza sativa ) hemoglobin 5\n\n[151] Response of yield and quality formation in double-cropping high-quality rice to open-field active warming\n\n[152] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[153] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[154] Chemical constituents of brown rice grain (Oryza sativa)\n\n[155] Genetic mechanism of wide compatibility in rice and its utilization\n\n[156] Genetic analysis of growth-period traits of the early-maturing restorer line DR02\n\n[157] Rice glutaredoxin GRXS15 confers broad-spectrum resistance to Xanthomonas oryzae pv. oryzae and Fusarium fujikuroi\n\n[158] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[159] Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice\n\n[160] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[161] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[162] Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress\n\n[163] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[164] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[165] The Mutation of Rice MEDIATOR25, OsMED25, Induces Rice Bacterial Blight Resistance through Altering Jasmonate- and Auxin-Signaling\n\n[166] Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)\n\n[167] Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)\n\n[168] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[169] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[170] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[171] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[172] Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)\n\n[173] The Foliar Application of Rice Phyllosphere Bacteria induces Drought-Stress Tolerance in Oryza sativa (L.)\n\n[174] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[175] Molecular cloning and characterization of a novel SNAP25-type protein gene OsSNAP32 in rice (Oryza sativa L.)\n\n[176] 667689184\n\n[177] Soybean variety RJS47001\n\n[178] Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3\n\n[179] Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3\n\n[180] Oryza sativa l18a and hsc71 expression elements useful for modulating gene expression in plants\n\n[181] The effects of field pre-harvest sprouting on the morphological structure and physicochemical properties of rice (Oryza sativa L.) starch\n\n[182] 00002GOOLV3G7JP167507JP0MLR\n\n[183] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[184] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[185] Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)\n\n[186] Glufosinate tolerant rice\n\n[187] Characterization of rice\n\n[188] Characterization of rice\n\n[189] 00002EGE45387JP0MPDO8JP16NR\n\n[190] Comparative transcriptome and genome analysis between susceptible Zhefang rice variety Diantun 502 and its resistance variety Diantun 506 upon Magnaporthe oryzae infection\n\n[191] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[192] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[193] cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer\n\n[194] Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 beta-glucosidase.\n\n[195] Comparative transcriptome analysis of Tilletia horrida infection in resistant and susceptible rice (Oryza sativa L.) male sterile lines reveals potential candidate genes and resistance mechanisms\n\n[196] Rice cultivar designated ‘CL152’\n\n[197] Integrative Transcriptomic and Proteomic Analysis Reveals an Alternative Molecular Network of Glutamine Synthetase 2 Corresponding to Nitrogen Deficiency in Rice (Oryza sativa L.)\n\n[198] Differential gene expression in an elite hybrid rice cultivar (Oryza sativa, L) and its parental lines based on SAGE data\n\n[199] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[200] Soybean variety RJS31002\n\n[201] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[202] Gibberellin 2-oxidase genes and uses thereof\n\n[203] Hybrid rice HR180001\n\n[204] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[205] 7100260181\n\n[206] 00002HUHLL7G7JP0MPDO7JP1M7R\n\n[207] Rice cultivar cl181-ar\n\n[208] 667689184\n\n[209] 667689184\n\n[210] Metabolism and Biological Activity of Gibberellin A4 in Vegetative Shoots of Zea mays, Oryza sativa, and Arabidopsis thaliana\n\n[211] Rice black streaked dwarf virus P7-2 forms a SCF complex through binding to Oryza sativa SKP1-like proteins, and interacts with GID2 involved in the gibberellin pathway\n\n[212] Morphophysiological Changes During Vegetative Stage Drought Stress in the Local Pigmented Rice (Oryza sativa L.) from East Nusa Tenggara\n\n[213] Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)\n\n[214] Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)\n\n[215] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[216] Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants\n\n[217] Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants\n\n[218] 48658213\n\n[219] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[220] Oryza sativa extensin promoters useful for modulating gene expression in plants\n\n[221] Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 β-glucosidase\n\n[222] Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots\n\n[223] Response of yield and quality formation in double-cropping high-quality rice to open-field active warming\n\n[224] Characterization and fine mapping of nonstop glumes 2 (nsg2) mutant in rice (Oryza sativa L.)\n\n[225] cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer\n\n[226] cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer\n\n[227] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[228] Soybean variety RJS38001\n\n[229] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[230] Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus\n\n[231] Effect of pre-germination at varying stages of embryonic growth length on chemical composition and protein profile of Thai rice (Oryza sativa L.)\n\n[232] A STRESS-RESPONSIVE NAC1-Regulated Protein Phosphatase Gene Rice Protein Phosphatase18 Modulates Drought and Oxidative Stress Tolerance through Abscisic Acid-Independent Reactive Oxygen Species Scavenging in Rice\n\n[233] A STRESS-RESPONSIVE NAC1-Regulated Protein Phosphatase Gene Rice Protein Phosphatase18 Modulates Drought and Oxidative Stress Tolerance through Abscisic Acid-Independent Reactive Oxygen Species Scavenging in Rice\n\n[234] Fine mapping and candidate gene analysis of qTAC8, a major quantitative trait locus controlling tiller angle in rice (Oryza sativa L.)\n\n[235] 00002EGE45387JP0MPDO8JP16NR\n\n[236] Rice black streaked dwarf virus P7-2 forms a SCF complex through binding to Oryza sativa SKP1-like proteins, and interacts with GID2 involved in the gibberellin pathway\n\n[237] 00002EGE45387JP0MPDO8JP16NR\n\n[238] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[239] Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)\n\n[240] 00002HUHLL7G7JP0MPDO7JP1M9R\n\n[241] Soybean variety RJS47001\n\n[242] identification and fine mapping of qgr6.2, a novel locus controlling rice seed germination under salt stress\n\n[243] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[244] Soybean variety RJS48001\n\n[245] Computational and Transcriptomic Analysis Unraveled OsMATE34 as a Putative Anthocyanin Transporter in Black Rice (Oryza sativa L.) Caryopsis\n\n[246] Genetic analysis of growth-period traits of the early-maturing restorer line DR02\n\n[247] Genetic mechanism of wide compatibility in rice and its utilization\n\n[248] Genetic analysis of growth-period traits of the early-maturing restorer line DR02\n\n[249] Hybrid rice HR180001\n\n[250] Soybean variety RJS28002\n\n[251] Rice cultivar cl181-ar\n\n[252] Effects of a plurality of mutations to improve herbicide resistance/tolerance in rice\n\n[253] Effects of a plurality of mutations to improve herbicide resistance/tolerance in rice\n\n[254] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n\n[255] Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 beta-glucosidase\n\n[256] Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage\n",
+    "references": [
+      {
+        "title": "Pleiotropic effect of the dwarfing gene d18-k on cool tolerance at booting stage under the genetic background of an extremely cool-tolerant line Norin-PL8 in rice"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism."
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Oryza sativa mediator subunit OsMED25 interacts with OsBZR1 to regulate brassinosteroid signaling and plant architecture in rice."
+      },
+      {
+        "title": "Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Gibberellin 2-oxidase genes and uses thereof"
+      },
+      {
+        "title": "Gibberellin 2-oxidase genes and uses thereof"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Gibberellin 2-oxidase genes and uses thereof"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Enhanced expression of OsSPL14 gene and its association with yield components in rice (Oryza sativa) under low nitrogen conditions"
+      },
+      {
+        "title": "Rice cultivar cll18"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Rice cultivar cll18"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)"
+      },
+      {
+        "title": "Spark-based WOA-BP rice yield prediction"
+      },
+      {
+        "title": "Deep Learning-Based Classification of Rice Varieties from Seed Coat Images"
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice"
+      },
+      {
+        "title": "Expression of a gibberellin 2-oxidase gene around the shoot apex is related to phase transition in rice"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "Rice cultivar cll18"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Prediction of Heterosis for Agronomic Traits in Half-Diallel Cross of Rice (Oryza sativa L.) under Drought Stress Using Microsatellite Markers"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Hybrid rice HR180001"
+      },
+      {
+        "title": "Hybrid rice HR180001"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity."
+      },
+      {
+        "title": "The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity."
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Application of sonication- and vacuum infiltration-assisted Agrobacterium-mediated transformation of rice embryo (Oryza sativa L.)"
+      },
+      {
+        "title": "Genetic mechanism of wide compatibility in rice and its utilization"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Genome-wide association mapping revealed a diverse genetic basis of seed dormancy across subpopulations in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants"
+      },
+      {
+        "title": "Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "A common allosteric mechanism regulates homeostatic inactivation of auxin and gibberellin"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "NaCl-induced expression of glutathione reductase in roots of rice (Oryza sativa L.) seedlings is mediated through hydrogen peroxide but not abscisic acid"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "NaCl-induced expression of glutathione reductase in roots of rice (Oryza sativa L.) seedlings is mediated through hydrogen peroxide but not abscisic acid"
+      },
+      {
+        "title": "CRISPRCas9-Induced Mutagenesis of TMS5 Confers Thermosensitive Genic Male Sterility by Influencing Protein Expression in Rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Rice cultivar cll18"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "00002GOOLV3G7JP167507JP0MLR"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "00002GOOLV3G7JP167507JP0MLR"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Brassinosteroid Regulates Cell Elongation by Modulating Gibberellin Metabolism in Rice"
+      },
+      {
+        "title": "Heterologous expression and antimicrobial activity of OsGASR3 from rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities"
+      },
+      {
+        "title": "OsGA3ox regulates rice fertility and plant height by synthesizing GAs of different activities"
+      },
+      {
+        "title": "Morphophysiological Changes During Vegetative Stage Drought Stress in the Local Pigmented Rice (Oryza sativa L.) from East Nusa Tenggara"
+      },
+      {
+        "title": "The crystal structure of rice (Oryza sativa L.) Os4BGlu12, an oligosaccharide and tuberonic acid glucoside-hydrolyzing β-glucosidase with significant thioglucohydrolase activity."
+      },
+      {
+        "title": "Genetic mechanism of wide compatibility in rice and its utilization"
+      },
+      {
+        "title": "Genetic mechanism of wide compatibility in rice and its utilization"
+      },
+      {
+        "title": "Genome-wide association study-based identification genes influencing agronomic traits in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "mRNAs and a cloned histone gene are differentially expressed during anther and pollen development in rice (Oryza sativa L.)."
+      },
+      {
+        "title": "OsGRETCHENHAGEN3-2 modulates rice seed storability via accumulation of abscisic acid and protective substances."
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value"
+      },
+      {
+        "title": "Creation of rice cytoplasmic male-sterile line 18A and a preliminary study of its application value"
+      },
+      {
+        "title": "Isolated nucleic acid sequence conferring stress tolerance/susceptibility in rice"
+      },
+      {
+        "title": "Physicochemical and nutritional properties of twenty three traditional rice (Oryza sativa L.) varieties of Sri Lanka"
+      },
+      {
+        "title": "Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)"
+      },
+      {
+        "title": "OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)"
+      },
+      {
+        "title": "The effects of field pre-harvest sprouting on the morphological structure and physicochemical properties of rice (Oryza sativa L.) starch"
+      },
+      {
+        "title": "Combining ability analysis of yield traits in rice restorer-line resources from China and South Asia (English)"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "7100260181"
+      },
+      {
+        "title": "Prediction and identification of the effectors of heterotrimeric G proteins in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "Expression of novel rice gibberellin 2-oxidase gene is under homeostatic regulation by biologically active gibberellins."
+      },
+      {
+        "title": "Gibberellin indirectly promotes chloroplast biogenesis as a means to maintain the chloroplast population of expanded cells"
+      },
+      {
+        "title": "Gibberellin indirectly promotes chloroplast biogenesis as a means to maintain the chloroplast population of expanded cells"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Glufosinate tolerant rice"
+      },
+      {
+        "title": "Glufosinate tolerant rice"
+      },
+      {
+        "title": "OsWOX3A is involved in negative feedback regulation of the gibberellic acid biosynthetic pathway in rice (Oryza sativa)"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "Evaluation of japonica rice (Oryza sativa L.) varieties and their improvement in terms of stability, yield and cooking quality by pure-line selection in Thailand"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Soybean cultivar 4980321658"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "Prediction and identification of the effectors of heterotrimeric G proteins in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "CRISPRCas9-Induced Mutagenesis of TMS5 Confers Thermosensitive Genic Male Sterility by Influencing Protein Expression in Rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "Rice cultivar R031001"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Cultivated oryza sativa plant having a partially or fully multiplied genome and uses of same"
+      },
+      {
+        "title": "Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants"
+      },
+      {
+        "title": "Generating high-yielding varieties by genetic manipulation of plant architecture"
+      },
+      {
+        "title": "Hybrid rice HR180001"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Expression and in silico structural analysis of a rice ( Oryza sativa ) hemoglobin 5"
+      },
+      {
+        "title": "Response of yield and quality formation in double-cropping high-quality rice to open-field active warming"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Chemical constituents of brown rice grain (Oryza sativa)"
+      },
+      {
+        "title": "Genetic mechanism of wide compatibility in rice and its utilization"
+      },
+      {
+        "title": "Genetic analysis of growth-period traits of the early-maturing restorer line DR02"
+      },
+      {
+        "title": "Rice glutaredoxin GRXS15 confers broad-spectrum resistance to Xanthomonas oryzae pv. oryzae and Fusarium fujikuroi"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "Hd18, Encoding Histone Acetylase Related to Arabidopsis FLOWERING LOCUS D, is Involved in the Control of Flowering Time in Rice"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Biochemical and physiological responses of rice (Oryza sativa L.) as influenced by Trichoderma harzianum under drought stress"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "The Mutation of Rice MEDIATOR25, OsMED25, Induces Rice Bacterial Blight Resistance through Altering Jasmonate- and Auxin-Signaling"
+      },
+      {
+        "title": "Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)"
+      },
+      {
+        "title": "Enhancing germination and early seedling growth of Malaysian indica rice (Oryza sativa L.) using hormonal priming with gibberellic acid (GAsub3sub)"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "The Foliar Application of Rice Phyllosphere Bacteria induces Drought-Stress Tolerance in Oryza sativa (L.)"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Molecular cloning and characterization of a novel SNAP25-type protein gene OsSNAP32 in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "667689184"
+      },
+      {
+        "title": "Soybean variety RJS47001"
+      },
+      {
+        "title": "Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3"
+      },
+      {
+        "title": "Characterization and gene cloning of the rice (Oryza sativa L.) dwarf and narrow-leaf mutant dnl3"
+      },
+      {
+        "title": "Oryza sativa l18a and hsc71 expression elements useful for modulating gene expression in plants"
+      },
+      {
+        "title": "The effects of field pre-harvest sprouting on the morphological structure and physicochemical properties of rice (Oryza sativa L.) starch"
+      },
+      {
+        "title": "00002GOOLV3G7JP167507JP0MLR"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Glufosinate tolerant rice"
+      },
+      {
+        "title": "Characterization of rice"
+      },
+      {
+        "title": "Characterization of rice"
+      },
+      {
+        "title": "00002EGE45387JP0MPDO8JP16NR"
+      },
+      {
+        "title": "Comparative transcriptome and genome analysis between susceptible Zhefang rice variety Diantun 502 and its resistance variety Diantun 506 upon Magnaporthe oryzae infection"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer"
+      },
+      {
+        "title": "Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 beta-glucosidase."
+      },
+      {
+        "title": "Comparative transcriptome analysis of Tilletia horrida infection in resistant and susceptible rice (Oryza sativa L.) male sterile lines reveals potential candidate genes and resistance mechanisms"
+      },
+      {
+        "title": "Rice cultivar designated ‘CL152’"
+      },
+      {
+        "title": "Integrative Transcriptomic and Proteomic Analysis Reveals an Alternative Molecular Network of Glutamine Synthetase 2 Corresponding to Nitrogen Deficiency in Rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Differential gene expression in an elite hybrid rice cultivar (Oryza sativa, L) and its parental lines based on SAGE data"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Soybean variety RJS31002"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Gibberellin 2-oxidase genes and uses thereof"
+      },
+      {
+        "title": "Hybrid rice HR180001"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "7100260181"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M7R"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "667689184"
+      },
+      {
+        "title": "667689184"
+      },
+      {
+        "title": "Metabolism and Biological Activity of Gibberellin A4 in Vegetative Shoots of Zea mays, Oryza sativa, and Arabidopsis thaliana"
+      },
+      {
+        "title": "Rice black streaked dwarf virus P7-2 forms a SCF complex through binding to Oryza sativa SKP1-like proteins, and interacts with GID2 involved in the gibberellin pathway"
+      },
+      {
+        "title": "Morphophysiological Changes During Vegetative Stage Drought Stress in the Local Pigmented Rice (Oryza sativa L.) from East Nusa Tenggara"
+      },
+      {
+        "title": "Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Plant architecture and grain yield are regulated by the novel DHHC-type zinc finger protein genes in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants"
+      },
+      {
+        "title": "Identification of Phenotypic Variation and Genetic Diversity in Rice (Oryza sativa L.) Mutants"
+      },
+      {
+        "title": "48658213"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Oryza sativa extensin promoters useful for modulating gene expression in plants"
+      },
+      {
+        "title": "Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 β-glucosidase"
+      },
+      {
+        "title": "Isolation of a novel auxin receptor from soluble fractions of rice (Oryza sativa L.) shoots"
+      },
+      {
+        "title": "Response of yield and quality formation in double-cropping high-quality rice to open-field active warming"
+      },
+      {
+        "title": "Characterization and fine mapping of nonstop glumes 2 (nsg2) mutant in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer"
+      },
+      {
+        "title": "cold sensitivity in rice (oryza sativa l.) is strongly correlated with a naturally occurring i99v mutation in the multifunctional glutathione transfer"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Soybean variety RJS38001"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Rice (Oryza sativa) contains a novel isoform of glutamate decarboxylase that lacks an authentic calmodulin-binding domain at the C-terminus"
+      },
+      {
+        "title": "Effect of pre-germination at varying stages of embryonic growth length on chemical composition and protein profile of Thai rice (Oryza sativa L.)"
+      },
+      {
+        "title": "A STRESS-RESPONSIVE NAC1-Regulated Protein Phosphatase Gene Rice Protein Phosphatase18 Modulates Drought and Oxidative Stress Tolerance through Abscisic Acid-Independent Reactive Oxygen Species Scavenging in Rice"
+      },
+      {
+        "title": "A STRESS-RESPONSIVE NAC1-Regulated Protein Phosphatase Gene Rice Protein Phosphatase18 Modulates Drought and Oxidative Stress Tolerance through Abscisic Acid-Independent Reactive Oxygen Species Scavenging in Rice"
+      },
+      {
+        "title": "Fine mapping and candidate gene analysis of qTAC8, a major quantitative trait locus controlling tiller angle in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "00002EGE45387JP0MPDO8JP16NR"
+      },
+      {
+        "title": "Rice black streaked dwarf virus P7-2 forms a SCF complex through binding to Oryza sativa SKP1-like proteins, and interacts with GID2 involved in the gibberellin pathway"
+      },
+      {
+        "title": "00002EGE45387JP0MPDO8JP16NR"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "Role of cyclic lipopeptides produced by Bacillus subtilis in mounting induced immunity in rice (Oryza sativa L.)"
+      },
+      {
+        "title": "00002HUHLL7G7JP0MPDO7JP1M9R"
+      },
+      {
+        "title": "Soybean variety RJS47001"
+      },
+      {
+        "title": "identification and fine mapping of qgr6.2, a novel locus controlling rice seed germination under salt stress"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Soybean variety RJS48001"
+      },
+      {
+        "title": "Computational and Transcriptomic Analysis Unraveled OsMATE34 as a Putative Anthocyanin Transporter in Black Rice (Oryza sativa L.) Caryopsis"
+      },
+      {
+        "title": "Genetic analysis of growth-period traits of the early-maturing restorer line DR02"
+      },
+      {
+        "title": "Genetic mechanism of wide compatibility in rice and its utilization"
+      },
+      {
+        "title": "Genetic analysis of growth-period traits of the early-maturing restorer line DR02"
+      },
+      {
+        "title": "Hybrid rice HR180001"
+      },
+      {
+        "title": "Soybean variety RJS28002"
+      },
+      {
+        "title": "Rice cultivar cl181-ar"
+      },
+      {
+        "title": "Effects of a plurality of mutations to improve herbicide resistance/tolerance in rice"
+      },
+      {
+        "title": "Effects of a plurality of mutations to improve herbicide resistance/tolerance in rice"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      },
+      {
+        "title": "Expression, purification, crystallization and preliminary X-ray analysis of rice (Oryza sativa L.) Os4BGlu12 beta-glucosidase"
+      },
+      {
+        "title": "Physiological and Transcriptome Analyses of Early Leaf Senescence for ospls1 Mutant Rice (Oryza sativa L.) during the Grain-Filling Stage"
+      }
+    ]
+  }
+}

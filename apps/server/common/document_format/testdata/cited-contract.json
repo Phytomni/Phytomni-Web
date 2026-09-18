@@ -1,0 +1,224 @@
+{
+  "content": "# Plant report\n\n## Abstract\n\nEvidence [1] supports the overview; paired evidence [2,4] adds context. Repeated evidence [1] remains mapped. Retained neutral evidence [3] remains addressable. A mixed invalid group [2,3,99] stays visible but inactive. A valid range [5-6] closes the report. Structured precedence [7] is retained. Duplicate bibliography entry [8] remains distinct. Body faces include **bold**, *italic*, and ***combined*** text. Literal code `[4]` and escaped \\[5\\] are not citations.",
+  "references": [
+    {
+      "au": "Doe, JA",
+      "ti": "A plant study",
+      "so": "Plant Journal",
+      "vl": "12",
+      "bp": "45",
+      "ep": "49",
+      "py": "2024"
+    },
+    {
+      "au": "Ng, L",
+      "py": "2022",
+      "formatted_citation": "Ng, L. Preserved field note. *Field Notes* **7**, 10–12 (2022)."
+    },
+    "malformed-reference-slot",
+    {
+      "title": "Rice \"atlas\" & dataset",
+      "dl": "https://example.org/rice-atlas"
+    },
+    {
+      "au": "Li, M",
+      "ti": "Root traits of *Arabidopsis thaliana*",
+      "so": "Plant Science",
+      "vl": "9",
+      "ar": "e101",
+      "py": "2023",
+      "di": "10.1000/root.101",
+      "pm": "12345678"
+    },
+    {
+      "title": "Unsafe protocol record",
+      "dl": "javascript:alert(1)",
+      "pm": "file:///etc/passwd"
+    },
+    {
+      "au": "Rao, P",
+      "ti": "Structured truth",
+      "so": "Crop Reports",
+      "vl": "3",
+      "bp": "7",
+      "ep": "7",
+      "py": "2020",
+      "formatted_citation": "Wrong, X. Conflicting citation. Wrong Journal 1, 1 (1900)."
+    },
+    {
+      "au": "Doe, JA",
+      "ti": "A plant study",
+      "so": "Plant Journal",
+      "vl": "12",
+      "bp": "45",
+      "ep": "49",
+      "py": "2024"
+    }
+  ],
+  "expected": {
+    "sentences": [
+      "Doe, J. A. A plant study. Plant Journal 12, 45–49 (2024).",
+      "Ng, L. Preserved field note. Field Notes 7, 10–12 (2022).",
+      "Reference details unavailable.",
+      "Rice \"atlas\" & dataset.",
+      "Li, M. Root traits of Arabidopsis thaliana. Plant Science 9, e101 (2023).",
+      "Unsafe protocol record.",
+      "Rao, P. Structured truth. Crop Reports 3, 7 (2020).",
+      "Doe, J. A. A plant study. Plant Journal 12, 45–49 (2024)."
+    ],
+    "emphasis": [
+      {
+        "index": 1,
+        "text": "Plant Journal",
+        "italic": true
+      },
+      {
+        "index": 1,
+        "text": "12",
+        "bold": true
+      },
+      {
+        "index": 2,
+        "text": "Field Notes",
+        "italic": true
+      },
+      {
+        "index": 2,
+        "text": "7",
+        "bold": true
+      },
+      {
+        "index": 5,
+        "text": "Arabidopsis thaliana",
+        "italic": true
+      },
+      {
+        "index": 5,
+        "text": "Plant Science",
+        "italic": true
+      },
+      {
+        "index": 5,
+        "text": "9",
+        "bold": true
+      },
+      {
+        "index": 7,
+        "text": "Crop Reports",
+        "italic": true
+      },
+      {
+        "index": 7,
+        "text": "3",
+        "bold": true
+      },
+      {
+        "index": 8,
+        "text": "Plant Journal",
+        "italic": true
+      },
+      {
+        "index": 8,
+        "text": "12",
+        "bold": true
+      }
+    ],
+    "links": [
+      {
+        "index": 1,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=A+plant+study"
+      },
+      {
+        "index": 4,
+        "label": "Article",
+        "href": "https://example.org/rice-atlas"
+      },
+      {
+        "index": 4,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=Rice+%22atlas%22+%26+dataset"
+      },
+      {
+        "index": 5,
+        "label": "Article",
+        "href": "https://doi.org/10.1000/root.101"
+      },
+      {
+        "index": 5,
+        "label": "PubMed",
+        "href": "https://pubmed.ncbi.nlm.nih.gov/12345678/"
+      },
+      {
+        "index": 5,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=Root+traits+of+Arabidopsis+thaliana"
+      },
+      {
+        "index": 6,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=Unsafe+protocol+record"
+      },
+      {
+        "index": 7,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=Structured+truth"
+      },
+      {
+        "index": 8,
+        "label": "Google Scholar",
+        "href": "https://scholar.google.com/scholar?q=A+plant+study"
+      }
+    ],
+    "citations": [
+      {
+        "before": "Evidence ",
+        "text": "1",
+        "indices": [1],
+        "active": true
+      },
+      {
+        "before": "paired evidence ",
+        "text": "2,4",
+        "indices": [2, 4],
+        "active": true
+      },
+      {
+        "before": "Repeated evidence ",
+        "text": "1",
+        "indices": [1],
+        "active": true
+      },
+      {
+        "before": "Retained neutral evidence ",
+        "text": "3",
+        "indices": [3],
+        "active": true
+      },
+      {
+        "before": "A mixed invalid group ",
+        "text": "2,3,99",
+        "indices": [2, 3, 99],
+        "active": false
+      },
+      {
+        "before": "A valid range ",
+        "text": "5–6",
+        "indices": [5, 6],
+        "active": true
+      },
+      {
+        "before": "Structured precedence ",
+        "text": "7",
+        "indices": [7],
+        "active": true
+      },
+      {
+        "before": "Duplicate bibliography entry ",
+        "text": "8",
+        "indices": [8],
+        "active": true
+      }
+    ]
+  }
+}

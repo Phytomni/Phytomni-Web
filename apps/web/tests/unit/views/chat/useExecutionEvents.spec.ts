@@ -701,6 +701,17 @@ describe("execution history and resume", () => {
                 {
                   title: "Drought epigenetics",
                   di: "10.1000/safe-doi",
+                  formatted_citation: "Drought epigenetics.",
+                  doi_missing: false,
+                  citation: {
+                    runs: [{ text: "Drought epigenetics", italic: true }],
+                    links: [
+                      {
+                        label: "Article",
+                        href: "https://doi.org/10.1000/safe-doi",
+                      },
+                    ],
+                  },
                 },
               ],
             }
@@ -770,6 +781,15 @@ describe("execution history and resume", () => {
         {
           title: "Drought epigenetics",
           di: "10.1000/safe-doi",
+          citation: {
+            runs: [{ text: "Drought epigenetics", italic: true }],
+            links: [
+              {
+                label: "Article",
+                href: "https://doi.org/10.1000/safe-doi",
+              },
+            ],
+          },
         },
       ],
       tableHeaders: [{ prop: "transcript_id_1", label: "transcript_id_1" }],
@@ -778,6 +798,141 @@ describe("execution history and resume", () => {
     expect(
       chatState.renderedChat.messages[0].executionRun?.terminal?.status
     ).toBe("succeeded");
+  });
+
+  it("projects a completed successful V2 scientific answer as a final report with allowlisted warnings", async () => {
+    const states = useChatStates();
+    const dialogueId = "dialogue-final-report";
+    const executionId = "turn-final-report";
+    const messageId = "msg-final-report";
+    const report =
+      "# Genomic analysis\n\nThe retained evidence supports a drought-response association [1].";
+    const reportLength = [...report].length;
+    const chatState = states.getChatState(dialogueId);
+    chatState.renderedChat = {
+      messages: [
+        {
+          role: "assistant",
+          id: messageId,
+          executionId,
+          content: "",
+          contentRevision: 0,
+          contentOffset: 0,
+          contentLength: 0,
+        },
+      ],
+    };
+    const snapshot = {
+      schema_version: 2,
+      execution_id: executionId,
+      agent_slug: "deep_genome",
+      status: "succeeded",
+      latest_seq: 2,
+      output_revision: 1,
+      output_offset: reportLength,
+      operation_revision: 0,
+      operations: [],
+      execution_stage: null,
+      tracking_health: "healthy",
+      active_span_ids: [],
+      todo_declared: false,
+      todos: [],
+      results: [],
+      targets: [],
+      failed_work_unit_ids: [],
+      warnings: [
+        { code: "report_context_truncated", work_unit_id: null },
+        { code: "future_safe_warning", work_unit_id: null },
+      ],
+      input_required: null,
+      context_stage: null,
+      terminal: {
+        status: "succeeded",
+        event_id: "event-report-succeeded",
+        result_revision: 1,
+      },
+    };
+    const base = {
+      schema_version: 2,
+      execution_id: executionId,
+      occurred_at: "2026-09-18T00:00:00Z",
+      span_id: "root",
+      parent_span_id: null,
+      work_unit_id: null,
+      attempt: 1,
+      target: null,
+      idempotency_key: null,
+    };
+    const completed = {
+      ...base,
+      event_id: "event-report-completed",
+      seq: 1,
+      type: "message.completed",
+      status: "succeeded",
+      source: "message",
+      summary: { key: "message.completed", text: "Answer completed" },
+      public_payload: {
+        output_revision: 1,
+        message_id: messageId,
+        source_message_id: messageId,
+        base_offset: 0,
+        offset: reportLength,
+        total_length: reportLength,
+        chunk_index: 0,
+        chunk_count: 1,
+        content_sha256: "a".repeat(64),
+        text: report,
+        references: [],
+      },
+    };
+    const succeeded = {
+      ...base,
+      event_id: "event-report-succeeded",
+      seq: 2,
+      type: "execution.succeeded",
+      status: "succeeded",
+      source: "runtime",
+      summary: {
+        key: "activity.execution.succeeded",
+        text: "Execution succeeded",
+      },
+      public_payload: {},
+    };
+    const openExecutionStream = vi
+      .fn()
+      .mockResolvedValue(
+        streamResponse([
+          `event: execution_snapshot\ndata: ${JSON.stringify(snapshot)}`,
+          `id: 1\nevent: execution_event\ndata: ${JSON.stringify(completed)}`,
+          `id: 2\nevent: execution_event\ndata: ${JSON.stringify(succeeded)}`,
+        ])
+      );
+    const execution = useExecutionEvents({
+      getChatState: states.getChatState,
+      client: {
+        getEvents: vi.fn(),
+        getProjection: vi.fn(),
+        openExecutionStream,
+      },
+      maxReconnectAttempts: 0,
+    });
+
+    await execution.attachExecution(dialogueId, executionId);
+
+    const message = chatState.renderedChat.messages[0];
+    expect(message.botProjection).toMatchObject({
+      agent: "DeepGenomeAgent",
+      status: "SUCCEEDED",
+      reportPresentation: true,
+      reportStage: "final",
+      reportCompleteness: "partial",
+      finalReport: report,
+      reportWarningCodes: ["report_context_truncated"],
+      degraded: true,
+      trackingDegraded: false,
+    });
+    expect(message.botProjection?.report).toBeUndefined();
+    expect(message.executionRun?.outputCompleted).toBe(true);
   });
 
   it("recovers an execution-addressed stream gap from the durable projection cursor", async () => {

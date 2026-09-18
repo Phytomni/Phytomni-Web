@@ -1,6 +1,8 @@
 package api_handler
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -387,7 +389,7 @@ func (ph *Handler) ExecutionEventStream(ctx *gin.Context) {
 		}
 	}
 	defer body.Close()
-	_, _ = copyExecutionStream(ctx.Writer, flusher, body)
+	_, _ = copyExecutionStream(ctx.Writer, flusher, body, executionID)
 }
 
 type executionFlushWriter struct {
@@ -411,8 +413,43 @@ func copyExecutionStream(
 	destination io.Writer,
 	flusher http.Flusher,
 	source io.Reader,
+	expectedExecutionID string,
 ) (int64, error) {
-	return io.Copy(executionFlushWriter{writer: destination, flusher: flusher}, source)
+	reader := bufio.NewReader(source)
+	writer := executionFlushWriter{writer: destination, flusher: flusher}
+	var frame bytes.Buffer
+	var written int64
+	flushFrame := func() error {
+		if frame.Len() == 0 {
+			return nil
+		}
+		normalized, err := rxBot.NormalizeExecutionEventFrameV2(frame.Bytes(), expectedExecutionID)
+		if err != nil {
+			return err
+		}
+		count, err := writer.Write(normalized)
+		written += int64(count)
+		frame.Reset()
+		return err
+	}
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		frame.Write(line)
+		if bytes.Equal(line, []byte("\n")) || bytes.Equal(line, []byte("\r\n")) {
+			if err := flushFrame(); err != nil {
+				return written, err
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				if err := flushFrame(); err != nil {
+					return written, err
+				}
+				return written, nil
+			}
+			return written, readErr
+		}
+	}
 }
 
 func (ph *Handler) ExecutionSnapshot(ctx *gin.Context) {

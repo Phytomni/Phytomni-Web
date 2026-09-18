@@ -211,7 +211,9 @@ describe("blocking Bot response identity", () => {
       doc_list: [{ title: "Review source" }],
     });
     expect(assistant.content).toBe(completeReviewAnswer);
-    expect(assistant.doc_list).toEqual([{ title: "Review source" }]);
+    expect(assistant.doc_list).toEqual([
+      { title: "Review source", citation: null },
+    ]);
     expect(assistant.status).toBe("SUCCEEDED");
     expect(assistant.blocks).toBeUndefined();
     expect(assistant.a2uiRuntime).toBeUndefined();

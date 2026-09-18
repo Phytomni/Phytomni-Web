@@ -138,7 +138,7 @@ describe("a2uiAction", () => {
     if (response.status === "succeeded") {
       expect(response.result.formatted).toEqual({
         answer,
-        references,
+        references: [{ title: "Transport source", citation: null }],
         follow_up_questions: followUpQuestions,
       });
     }

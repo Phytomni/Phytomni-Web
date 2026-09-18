@@ -1,4 +1,9 @@
 import type { Plugin } from "unified";
+import {
+  rawHtmlBoundary,
+  transformScientificInlineFormatting,
+} from "./inline-formatting";
+import type { ScientificMarkdownNode as MdNode } from "./types";
 
 export interface CitationOptions {
   namespace: string;
@@ -10,25 +15,8 @@ export interface ParsedCitation {
   indices: number[];
 }
 
-interface MdNode {
-  type: string;
-  value?: string;
-  children?: MdNode[];
-  data?: Record<string, unknown>;
-  position?: {
-    start?: { offset?: number };
-    end?: { offset?: number };
-  };
-  [key: string]: unknown;
-}
-
 interface MdParent extends MdNode {
   children: MdNode[];
-}
-
-interface RawHtmlBoundary {
-  kind: "open" | "close";
-  tagName: string;
 }
 
 const MAX_CITATION_INDEX = 999;
@@ -43,22 +31,6 @@ const PROTECTED_NODE_TYPES = new Set([
   "imageReference",
   "inlineMath",
   "math",
-]);
-const VOID_HTML_TAGS = new Set([
-  "area",
-  "base",
-  "br",
-  "col",
-  "embed",
-  "hr",
-  "img",
-  "input",
-  "link",
-  "meta",
-  "param",
-  "source",
-  "track",
-  "wbr",
 ]);
 
 export function requireCitationNamespace(namespace: string): string {
@@ -133,8 +105,9 @@ function isInteractiveCitation(
 function citationNode(
   parsed: ParsedCitation,
   options: CitationOptions,
-  display = `[${parsed.display}]`
+  adjacent: boolean
 ): MdNode {
+  const display = parsed.display.replace(/-/g, "–");
   const interactive = isInteractiveCitation(parsed, options);
   const hChildren = interactive
     ? [
@@ -155,46 +128,15 @@ function citationNode(
     type: "scientificCitation",
     data: {
       hName: "sup",
-      hProperties: { className: ["scientific-citation"] },
+      hProperties: {
+        className: [
+          "scientific-citation",
+          ...(adjacent ? ["scientific-citation--adjacent"] : []),
+        ],
+      },
       hChildren,
     },
   };
-}
-
-function rewriteSupTriplets(parent: MdParent, options: CitationOptions): void {
-  const rawTags: string[] = [];
-  for (let index = 0; index < parent.children.length; index += 1) {
-    const node = parent.children[index];
-    const boundary =
-      node.type === "html" ? rawHtmlBoundary(node.value ?? "") : null;
-    if (boundary?.kind === "close") {
-      if (rawTags.at(-1) === boundary.tagName) rawTags.pop();
-      continue;
-    }
-
-    if (rawTags.length === 0 && index <= parent.children.length - 3) {
-      const [open, body, close] = parent.children.slice(index, index + 3);
-      if (
-        open.type === "html" &&
-        open.value === "<sup>" &&
-        body.type === "text" &&
-        close.type === "html" &&
-        close.value === "</sup>"
-      ) {
-        const parsed = parseCitationBody(body.value?.trim() ?? "");
-        if (parsed) {
-          parent.children.splice(
-            index,
-            3,
-            citationNode(parsed, options, body.value?.trim() ?? "")
-          );
-          continue;
-        }
-      }
-    }
-
-    if (boundary?.kind === "open") rawTags.push(boundary.tagName);
-  }
 }
 
 function rewriteTextCitations(
@@ -270,7 +212,10 @@ function rewriteTextCitations(
           value: node.value.slice(offset, matchIndex),
         });
       }
-      parts.push(citationNode(parsed, options, match[0]));
+      const previous = parts.at(-1) ?? parent.children[index - 1];
+      parts.push(
+        citationNode(parsed, options, previous?.type === "scientificCitation")
+      );
       offset = matchIndex + match[0].length;
     }
     if (!parts.length) continue;
@@ -280,48 +225,6 @@ function rewriteTextCitations(
     parent.children.splice(index, 1, ...parts);
     index += parts.length - 1;
   }
-}
-
-function rawHtmlBoundary(value: string): RawHtmlBoundary | null {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("<")) return null;
-
-  let cursor = 1;
-  const closing = trimmed[cursor] === "/";
-  if (closing) cursor += 1;
-  if (!/[A-Za-z]/.test(trimmed[cursor] ?? "")) return null;
-
-  const nameStart = cursor;
-  cursor += 1;
-  while (/[A-Za-z0-9:-]/.test(trimmed[cursor] ?? "")) cursor += 1;
-  const tagName = trimmed.slice(nameStart, cursor).toLowerCase();
-  const nameEnd = cursor;
-  let quote: '"' | "'" | null = null;
-
-  for (; cursor < trimmed.length; cursor += 1) {
-    const character = trimmed[cursor];
-    if (quote) {
-      if (character === quote) quote = null;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character !== ">") continue;
-    if (trimmed.slice(cursor + 1).trim()) return null;
-
-    const suffix = trimmed.slice(nameEnd, cursor);
-    if (closing) {
-      return /^\s*$/.test(suffix) ? { kind: "close", tagName } : null;
-    }
-    if (suffix.trimEnd().endsWith("/") || VOID_HTML_TAGS.has(tagName)) {
-      return null;
-    }
-    return { kind: "open", tagName };
-  }
-
-  return null;
 }
 
 function rewriteHtmlNodes(parent: MdParent): void {
@@ -352,9 +255,9 @@ function visit(
   const protectedHere =
     protectedByAncestor ||
     PROTECTED_NODE_TYPES.has(parent.type) ||
+    Boolean(parent.data?.scientificVertical) ||
     parent.data?.scientificRawHtmlContent === true;
   if (!protectedHere) {
-    rewriteSupTriplets(parent, options);
     rewriteHtmlNodes(parent);
     rewriteTextCitations(parent, options, source);
   }
@@ -379,6 +282,7 @@ export function transformScientificCitations(
       ? requireCitationNamespace(options.namespace)
       : "",
   };
+  if (source !== undefined) transformScientificInlineFormatting(tree, source);
   if (tree.children) visit(tree as MdParent, validatedOptions, false, source);
 }
 

@@ -1,4 +1,5 @@
 import type { CitationDocument } from "../messageTypes";
+import { decodeCitationPresentation } from "@/utils/citation-presentation";
 
 // Check whether a string is valid JSON
 export const isValidJSON = (str: string): boolean => {
@@ -32,16 +33,75 @@ export function optionalStringValue(
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-/** Keep only object-shaped citation rows from an untrusted agent answer. */
+const CITATION_SCALAR_FIELDS = [
+  "title",
+  "au",
+  "ti",
+  "so",
+  "vl",
+  "bp",
+  "ep",
+  "ar",
+  "py",
+  "di",
+  "dl",
+  "pm",
+] as const;
+
+function citationScalar(value: unknown): string | number | null | undefined {
+  if (value === null) return null;
+  if (
+    typeof value === "string" &&
+    [...value].length <= 512 &&
+    !value.includes("\u0000")
+  ) {
+    return value;
+  }
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    (!Number.isInteger(value) || Number.isSafeInteger(value))
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function decodeCitationDocument(value: unknown): CitationDocument {
+  if (!isRecord(value)) return { citation: null };
+  const row: CitationDocument = { citation: null };
+  for (const key of CITATION_SCALAR_FIELDS) {
+    const field = citationScalar(value[key]);
+    if (field !== undefined) row[key] = field;
+  }
+  if (
+    typeof value.formatted_citation === "string" &&
+    [...value.formatted_citation].length <= 4096 &&
+    !value.formatted_citation.includes("\u0000")
+  ) {
+    row.formatted_citation = value.formatted_citation;
+  }
+  if (typeof value.doi_missing === "boolean") {
+    row.doi_missing = value.doi_missing;
+  }
+
+  // Presentation is server-derived. Metadata and formatted text are never
+  // reinterpreted as bibliography markup on the client.
+  row.citation = decodeCitationPresentation(value.citation);
+  return row;
+}
+
+/** Preserve source-array positions and expose only citation allowlist fields. */
 export function decodeCitationDocuments(
   value: unknown
 ): CitationDocument[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.filter((item): item is CitationDocument => isRecord(item));
+  return Array.from(value, decodeCitationDocument);
 }
 
 // Convert data into Element Plus Table format
 export interface TableDataInput {
+  title?: string;
   headers: readonly string[];
   rows: readonly unknown[][];
 }
@@ -134,7 +194,9 @@ export function decodeTableDataInput(value: unknown): TableDataInput {
   ) {
     return { headers: [], rows: [] };
   }
+  const title = optionalStringValue(value, "title")?.trim();
   return {
+    ...(title ? { title } : {}),
     headers,
     rows: rows.filter((item): item is unknown[] => Array.isArray(item)),
   };
@@ -153,6 +215,60 @@ export const convertToTableData = (
     return obj;
   });
 };
+
+const TABLE_HEADER_ACRONYMS = new Set([
+  "aa",
+  "bp",
+  "cds",
+  "dna",
+  "fpkm",
+  "go",
+  "gwas",
+  "id",
+  "ids",
+  "kb",
+  "kegg",
+  "lncrna",
+  "mb",
+  "mirna",
+  "mrna",
+  "ncbi",
+  "ncrna",
+  "orf",
+  "pdb",
+  "qtl",
+  "rna",
+  "snp",
+  "tpm",
+]);
+
+function formatTableHeaderToken(token: string, isFirst: boolean): string {
+  const lower = token.toLowerCase();
+  if (TABLE_HEADER_ACRONYMS.has(lower)) {
+    if (lower === "id") return "ID";
+    if (lower === "ids") return "IDs";
+    return lower.toUpperCase();
+  }
+  if (isFirst) {
+    return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+  }
+  return lower;
+}
+
+/** Turn machine column names into scanable labels. Leaves phrases with spaces. */
+export function humanizeTableHeaderLabel(label: string): string {
+  const trimmed = label.trim().replace(/\s+/g, " ");
+  if (!trimmed) return trimmed;
+  if (/\s/u.test(trimmed)) return trimmed;
+
+  const stripped = trimmed.replace(/_t\d+$/iu, "");
+  const tokens = stripped.split(/_+/u).filter(Boolean);
+  if (tokens.length === 0) return trimmed;
+
+  return tokens
+    .map((token, index) => formatTableHeaderToken(token, index === 0))
+    .join(" ");
+}
 
 export const formatFileSize = (size: number) => {
   if (size < 1024) {

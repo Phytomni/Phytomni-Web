@@ -111,6 +111,8 @@ type BotRunProjection struct {
 	ReportUpdatedAt      *time.Time
 	IntermediateReport   string
 	FinalReport          string
+	Report               *rxBot.RunReport
+	ReportWarningCodes   []string
 	Progress             ProjectionProgress
 	Degraded             bool
 	DegradedReason       string
@@ -147,14 +149,14 @@ func projectionDecodeError(field, reason string) error {
 	return &ProjectionDecodeError{Field: field, Reason: reason}
 }
 
-// VisibleReport prefers a non-blank final synthesis and otherwise returns the
-// latest non-empty intermediate report. The original report text is returned
+// VisibleReport prefers valid final science and otherwise returns the
+// latest valid intermediate report. The original report text is returned
 // unchanged so Markdown formatting is not rewritten at this boundary.
 func (p BotRunProjection) VisibleReport() string {
-	if strings.TrimSpace(p.FinalReport) != "" {
+	if validReportText(p.Agent, p.FinalReport) {
 		return p.FinalReport
 	}
-	return p.IntermediateReport
+	return normalizeReportText(p.Agent, p.IntermediateReport)
 }
 
 // DecodeRunProjection accepts only a pollable bot.RunRecord. A submission
@@ -220,8 +222,11 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	projection.Children = decodeBotRunChildren(envelope.Execution)
+	projection.Children = decodeBotRunChildrenForAgent(envelope.Execution, agent)
 	projection.ChildTaskCount = projectionChildTaskCount(len(record.TaskIDs), len(projection.Children))
+	if agent == "deep_genome" {
+		projection.ChildTaskCount = len(projection.Children)
+	}
 	projection.WorkStage = sanitizeRunWorkStage(record.Stage)
 	projection.TrackingDegraded = projection.TrackingDegraded || record.DegradedTracking
 	return normalizeCompletedReviewProjection(projection), nil
@@ -283,7 +288,7 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
 	}
 
-	children := decodeBotRunChildren(response.Result.Execution)
+	children := decodeBotRunChildrenForAgent(response.Result.Execution, agent)
 	projection := BotRunProjection{
 		RunID:            runID,
 		Agent:            agent,
@@ -299,6 +304,8 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		OutputDirectoryCount: execution.OutputDirectoryCount,
 		ResultArchiveV1:      execution.ResultArchiveV1,
 		Delivery:             projectRunDelivery(execution.Delivery),
+		Report:               cloneProjectionReport(execution.Report),
+		ReportWarningCodes:   cloneReportWarningCodes(execution.ReportWarningCodes),
 		DegradedInterop:      interopMetadata.DegradedInterop,
 		InterOp:              interopMetadata.projection(),
 	}
@@ -307,7 +314,24 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		projection.FinalReport = answer
+		projection.FinalReport = normalizeReportText(agent, answer)
+	}
+	if agent == "deep_genome" {
+		projection.ChildTaskCount = len(children)
+		formattedJSON, err := json.Marshal(response.Result.Formatted)
+		if err != nil {
+			return BotRunProjection{}, projectionDecodeError("formatted", "malformed formatted envelope")
+		}
+		canonical, err := buildProjectionFromEnvelope(runID, agent, status, "", projectionEnvelope{
+			Formatted: formattedJSON, Execution: response.Result.Execution,
+		}, len(response.TaskIDs) == 0)
+		if err != nil {
+			return BotRunProjection{}, err
+		}
+		canonical.Children = children
+		canonical.ChildTaskCount = len(children)
+		canonical.TrackingDegraded = trackingDegraded
+		projection = canonical
 	}
 	return normalizeCompletedReviewProjection(projection), nil
 }
@@ -573,6 +597,15 @@ func applyDeepGenomeMetadataFallback(envelope *projectionEnvelope) {
 	}
 	if len(bytes.TrimSpace(envelope.Progress)) == 0 {
 		envelope.Progress = meta.Progress
+		var counters map[string]json.RawMessage
+		if json.Unmarshal(meta.Progress, &counters) == nil && counters != nil {
+			// Bot's canonical work-item counters name successful work "succeeded".
+			// Normalize at this boundary; the public projection keeps "completed".
+			counters["completed"] = counters["succeeded"]
+			if normalized, err := json.Marshal(counters); err == nil {
+				envelope.Progress = normalized
+			}
+		}
 	}
 	if !envelope.Degraded && meta.Degraded {
 		envelope.Degraded = true
@@ -623,6 +656,9 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	intermediate = normalizeReportText(agent, intermediate)
+	finalReport = normalizeReportText(agent, finalReport)
+	formattedAnswerUsed := false
 	if strings.TrimSpace(intermediate) == "" && strings.TrimSpace(finalReport) == "" && len(envelope.Formatted) > 0 {
 		var formatted struct {
 			Answer string `json:"answer"`
@@ -634,14 +670,15 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		intermediate = formattedAnswer
+		intermediate = normalizeReportText(agent, formattedAnswer)
+		formattedAnswerUsed = intermediate != ""
 	}
 	if strings.TrimSpace(intermediate) == "" && strings.TrimSpace(finalReport) == "" {
 		legacy, err := boundProjectionText(legacyAnswer, rxBot.MaxProjectionReportLength, "answer")
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		intermediate = legacy
+		intermediate = normalizeReportText(agent, legacy)
 	}
 
 	updatedAt, err := parseProjectionTime(envelope.ReportUpdatedAt)
@@ -663,6 +700,9 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	executionDelivery, err := rxBot.DecodeRunExecutionDelivery(envelope.Execution, agent)
 	if err != nil {
 		return BotRunProjection{}, projectionDecodeError("execution.delivery", err.Error())
+	}
+	if formattedAnswerUsed && ((executionDelivery.Report != nil && executionDelivery.Report.State == "final") || (stage == "final" && completeness == "complete")) {
+		finalReport, intermediate = intermediate, ""
 	}
 	var runArtifacts []rxBot.BoundedRunArtifact
 	if !executionDelivery.ResultArchiveV1 {
@@ -742,6 +782,8 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		TrackingDegraded:     executionDelivery.TrackingDegraded,
 		ResultArchiveV1:      executionDelivery.ResultArchiveV1,
 		Delivery:             projectRunDelivery(executionDelivery.Delivery),
+		Report:               cloneProjectionReport(executionDelivery.Report),
+		ReportWarningCodes:   cloneReportWarningCodes(executionDelivery.ReportWarningCodes),
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
 		DegradedInterop: interopAgent(agent) && (envelope.DegradedInterop || formattedInterop.DegradedInterop),
@@ -988,7 +1030,7 @@ type botRunChildWire struct {
 	ErrorCode json.RawMessage `json:"error_code"`
 }
 
-func decodeBotRunChildren(execution json.RawMessage) []BotRunChild {
+func decodeBotRunChildrenForAgent(execution json.RawMessage, agent string) []BotRunChild {
 	trimmed := bytes.TrimSpace(execution)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil
@@ -1017,6 +1059,9 @@ func decodeBotRunChildren(execution json.RawMessage) []BotRunChild {
 		if !childTokenPattern.MatchString(kind) {
 			kind = ""
 		}
+		if agent == "deep_genome" && !isDeepGenomeAnalysisKind(kind) {
+			continue
+		}
 		children = append(children, BotRunChild{
 			Ordinal:   len(children) + 1,
 			Phase:     phase,
@@ -1031,6 +1076,47 @@ func decodeBotRunChildren(execution json.RawMessage) []BotRunChild {
 		return nil
 	}
 	return children
+}
+
+// publicBotProjection exposes validated scientific state without private
+// conversation context, child identities, storage paths, or archive resolvers.
+func publicBotProjection(p BotRunProjection) map[string]interface{} {
+	if p.RunID == "" && p.Report == nil && p.ReportWarningCodes == nil {
+		return nil
+	}
+	p = normalizeProjectionReports(p)
+	public := map[string]interface{}{
+		"run_id":              p.RunID,
+		"agent":               p.Agent,
+		"status":              p.Status,
+		"report_revision":     p.ReportRevision,
+		"intermediate_report": p.IntermediateReport,
+		"final_report":        p.FinalReport,
+		"progress": map[string]interface{}{
+			"completed": p.Progress.Completed, "total": p.Progress.Total,
+			"failed": p.Progress.Failed, "pending": p.Progress.Pending,
+			"brief_gene_status": p.Progress.BriefGeneStatus,
+		},
+		"degraded":          p.Degraded,
+		"tracking_degraded": p.TrackingDegraded,
+		"child_task_count":  p.ChildTaskCount,
+		"children":          cloneBotRunChildren(p.Children),
+	}
+	for key, value := range map[string]string{"work_stage": p.WorkStage, "report_stage": p.ReportStage, "report_completeness": p.ReportCompleteness} {
+		if value != "" {
+			public[key] = value
+		}
+	}
+	if p.ReportUpdatedAt != nil {
+		public["report_updated_at"] = cloneProjectionTime(p.ReportUpdatedAt)
+	}
+	if p.Report != nil {
+		public["report"] = cloneProjectionReport(p.Report)
+	}
+	if p.ReportWarningCodes != nil {
+		public["report_warning_codes"] = cloneReportWarningCodes(p.ReportWarningCodes)
+	}
+	return public
 }
 
 func childPhaseFromStatus(status string) string {

@@ -503,6 +503,7 @@ function walkFiles(dir: string, acc: string[] = []): string[] {
 describe("Chat visual fixture registry", () => {
   it("contains every exact frame, Phase 3B message-state, and Phase 3C key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
+      "report-integrity",
       "instant-empty",
       "expert-auto-empty",
       "expert-selected-empty",

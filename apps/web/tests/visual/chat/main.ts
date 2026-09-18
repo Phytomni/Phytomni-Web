@@ -10,6 +10,7 @@ import ElementPlus from "element-plus";
 import i18n, { setLanguage } from "@/locales";
 import { useThemeStore } from "@/stores";
 import ChatVisualFixtureApp from "./ChatVisualFixtureApp.vue";
+import ReportIntegrityFixture from "./ReportIntegrityFixture.vue";
 import { resolveChatVisualFixture } from "./fixture-registry";
 import { createChatVisualFixtureRouter } from "./fixture-router";
 
@@ -30,10 +31,15 @@ const resolved = resolveChatVisualFixture(
 const fixtureRouter = createChatVisualFixtureRouter();
 
 async function boot() {
-  const app = createApp(ChatVisualFixtureApp, {
-    fixture: resolved.ok ? resolved.fixture : null,
-    errorMessage: resolved.ok ? null : resolved.error,
-  });
+  const app = createApp(
+    resolved.ok && resolved.key === "report-integrity"
+      ? ReportIntegrityFixture
+      : ChatVisualFixtureApp,
+    {
+      fixture: resolved.ok ? resolved.fixture : null,
+      errorMessage: resolved.ok ? null : resolved.error,
+    }
+  );
 
   const pinia = createPinia();
   app.use(pinia);

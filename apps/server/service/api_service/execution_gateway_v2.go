@@ -133,10 +133,14 @@ func cachedExecutionEventsV2(ctx context.Context, username, executionID string, 
 	next := afterSeq
 	for _, row := range rows {
 		var event rxBot.ExecutionEventV2
-		if json.Unmarshal([]byte(row.EventJSON), &event) == nil {
-			items = append(items, event)
-			next = event.Seq
+		if json.Unmarshal([]byte(row.EventJSON), &event) != nil {
+			continue
 		}
+		if err := normalizeProjectedEventCitationReferences(&event); err != nil {
+			return nil, err
+		}
+		items = append(items, event)
+		next = event.Seq
 	}
 	return &WebExecutionEventPageV2{
 		ExecutionEventPageV2: rxBot.ExecutionEventPageV2{
@@ -155,6 +159,11 @@ func (ps *Service) ExecutionEventsPageV2(ctx context.Context, username, executio
 	if admission.RunID != nil {
 		page, _, botErr := ps.executionRuntimeClient().GetExecutionEventsV2(ctx, username, executionID, afterSeq, limit)
 		if botErr == nil {
+			for index := range page.Items {
+				if err := normalizeProjectedEventCitationReferences(&page.Items[index]); err != nil {
+					return nil, err
+				}
+			}
 			return &WebExecutionEventPageV2{ExecutionEventPageV2: *page, Source: "bot"}, nil
 		}
 	}
@@ -169,6 +178,9 @@ func (ps *Service) ExecutionEventDetailV2(ctx context.Context, username, executi
 	if admission.RunID != nil {
 		event, _, botErr := ps.executionRuntimeClient().GetExecutionEventV2(ctx, username, executionID, eventID)
 		if botErr == nil {
+			if err := normalizeProjectedEventCitationReferences(event); err != nil {
+				return nil, err
+			}
 			return event, nil
 		}
 	}
@@ -182,6 +194,9 @@ func (ps *Service) ExecutionEventDetailV2(ctx context.Context, username, executi
 	}
 	var event rxBot.ExecutionEventV2
 	if err := json.Unmarshal([]byte(row.EventJSON), &event); err != nil {
+		return nil, err
+	}
+	if err := normalizeProjectedEventCitationReferences(&event); err != nil {
 		return nil, err
 	}
 	return &event, nil

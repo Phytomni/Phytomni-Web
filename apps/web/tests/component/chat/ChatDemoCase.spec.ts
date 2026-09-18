@@ -8,6 +8,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import type { BotCapabilityByTool } from "@/views/chat/composables/useBotCapabilities";
 import type { BotUploadCapability } from "@/api/types";
 import ChatView from "@/views/chat/ChatView.vue";
+import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
 import ChatDemoAskCta from "@/views/chat/components/ChatDemoAskCta.vue";
 import { userStore } from "@/stores";
 import { KNOWLEDGE_CASE } from "@/views/knowledge-agent/knowledge-case";
@@ -30,7 +31,10 @@ const chatViewState = vi.hoisted(() => ({
 
 const chatSendHarness = vi.hoisted(() => ({
   getQueryAbortable: vi.fn(),
+  getFileDownUrlApi: vi.fn(),
+  saveAs: vi.fn(),
 }));
+vi.mock("file-saver", () => ({ saveAs: chatSendHarness.saveAs }));
 
 const mockBotCapabilities = {
   byTool: ref<BotCapabilityByTool>({}),
@@ -75,6 +79,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
       Promise.resolve({ code: 200, data: [] })
     ),
     getQueryAbortable: chatSendHarness.getQueryAbortable,
+    getFileDownUrlApi: chatSendHarness.getFileDownUrlApi,
   };
 });
 
@@ -155,6 +160,12 @@ function createDemoRouter() {
         component: ChatView,
         meta: { demoKey: "analyst" },
       },
+      {
+        path: "/cases/deep-genome-agent",
+        name: "deepGenomeAgentCase",
+        component: ChatView,
+        meta: { demoKey: "deep-genome" },
+      },
     ],
   });
 }
@@ -169,8 +180,21 @@ async function mountChatView(path: string) {
   store.rolesLoading = false;
   store.expertEnabled = true;
   const wrapper = context.mount(ChatView, {
-    shallow: true,
-    global: { stubs: chatViewStubs },
+    attachTo: document.body,
+    shallow: path !== "/cases/deep-genome-agent",
+    global: {
+      stubs: {
+        ...chatViewStubs,
+        ...(path === "/cases/deep-genome-agent"
+          ? { ChatMessageContent: false }
+          : {}),
+        ScientificCifViewer: true,
+        ElTour: true,
+        ElTourStep: true,
+        ElDialog: true,
+        ElBacktop: true,
+      },
+    },
   });
   await flushPromises();
   await nextTick();
@@ -181,6 +205,8 @@ beforeEach(() => {
   setActivePinia(createPinia());
   chatViewState.states = null;
   chatSendHarness.getQueryAbortable.mockReset();
+  chatSendHarness.getFileDownUrlApi.mockReset();
+  chatSendHarness.saveAs.mockReset();
 });
 
 afterEach(() => {
@@ -188,6 +214,93 @@ afterEach(() => {
 });
 
 describe("ChatView demo case tapes", () => {
+  // Real 256-source rendering and print cloning exceeded 5s under full coverage.
+  // Keep the complete interaction assertions within a bounded per-test budget.
+  it("opens the real DeepGenome protocol and all source excerpts through the actual Chat artifact", async () => {
+    const { wrapper } = await mountChatView("/cases/deep-genome-agent");
+    try {
+      await vi.dynamicImportSettled();
+      await flushPromises();
+      const state = chatViewState.states?.getChatState("demo:deep-genome");
+      if (!state?.renderedChat)
+        throw new Error("Case chat was not initialized");
+      expect(state.renderedChat.messages[1].referenceMaterials).toHaveLength(
+        256
+      );
+      await wrapper.get('[data-test="artifact-open"]').trigger("click");
+      await flushPromises();
+      const artifact = wrapper.get("[data-testid=deep-genome-artifact]");
+      expect(wrapper.getComponent(DeepGenomeArtifact).props("status")).toBe(
+        "Report ready"
+      );
+      expect(artifact.findAll(".scientific-citation__link")).toHaveLength(94);
+      await artifact.get(".scientific-resource-link").trigger("click");
+      await vi.dynamicImportSettled();
+      await flushPromises();
+      expect(
+        wrapper.get("[data-testid=deep-genome-material-detail]").text()
+      ).toContain("Os01g0177400_result-experiments.md");
+      expect(Object.values(state.materialDetailsByArtifact)[0].status).toBe(
+        "ready"
+      );
+      await wrapper.get("[data-testid=material-back]").trigger("click");
+      const report = wrapper.getComponent(DeepGenomeArtifact);
+      expect(
+        report
+          .props("menuItems")
+          ?.find((item) => item.id === "download")
+          ?.children?.map((item) => item.id)
+      ).toEqual(["download:PDF", "download:Markdown"]);
+      expect(state.renderedChat.messages[1].id).toBeUndefined();
+      report.vm.$emit("action", "download:Word");
+      await flushPromises();
+      expect(chatSendHarness.saveAs).not.toHaveBeenCalled();
+      expect(chatSendHarness.getFileDownUrlApi).not.toHaveBeenCalled();
+      report.vm.$emit("action", "download:Markdown");
+      await flushPromises();
+      expect(chatSendHarness.saveAs).toHaveBeenCalledTimes(1);
+      const markdown = await (
+        chatSendHarness.saveAs.mock.calls[0][0] as Blob
+      ).text();
+      expect(markdown).toContain("# Deep Genome Analysis of Os01g0177400");
+      expect(markdown).toContain("256. ");
+      let printedRows = 0;
+      let printedHeadings = 0;
+      let printedMaterialButtons = 0;
+      const print = vi.spyOn(window, "print").mockImplementation(() => {
+        const output = document.querySelector("#print-container");
+        printedRows =
+          output?.querySelectorAll(".citation-reference-row").length ?? 0;
+        printedHeadings =
+          output?.querySelectorAll(".research-evidence-panel__title").length ??
+          0;
+        printedMaterialButtons =
+          output?.querySelectorAll("[data-testid=material-excerpt]").length ??
+          0;
+      });
+      report.vm.$emit("action", "download:PDF");
+      await flushPromises();
+      expect(print).toHaveBeenCalledTimes(1);
+      expect(printedRows).toBe(256);
+      expect(printedHeadings).toBe(1);
+      expect(printedMaterialButtons).toBe(0);
+      expect(chatSendHarness.getFileDownUrlApi).not.toHaveBeenCalled();
+      await artifact.get('[data-tab-id="evidence"]').trigger("click");
+      expect(artifact.findAll("[data-testid=material-excerpt]")).toHaveLength(
+        256
+      );
+      await artifact
+        .findAll("[data-testid=material-excerpt]")[255]
+        .trigger("click");
+      await flushPromises();
+      expect(
+        wrapper.get("[data-testid=deep-genome-material-detail]").text()
+      ).toContain("Reference 256");
+      expect(chatSendHarness.getQueryAbortable).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+    }
+  }, 15_000);
   it("keeps ChatView demo wiring for the CTA, composer gate, and send guards", () => {
     expect(CHAT_SOURCE).toContain("ChatDemoAskCta");
     expect(CHAT_SOURCE).toContain('v-if="!demoKey"');

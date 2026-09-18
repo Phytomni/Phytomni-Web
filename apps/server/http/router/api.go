@@ -87,6 +87,7 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/admin/execution-runtime/metrics", apiHandler.ExecutionRuntimeMetricsV2)  // bounded worker lag/counters (admin-only)
 		apiV1Router.GET("/genes", apiHandler.GeneList)                                             // gene test data list
 		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)                                      // gene detail (resource id = file_name)
+		apiV1Router.GET("/genes/:id/resources/:resource_id", apiHandler.GeneResource)              // current report-registered resource
 
 		apiV1Router.GET("/downloads/analyst-agent/obs-file", apiHandler.DownloadAnalystAgentObsFile)     // AnalystAgent OBS file download link
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links
@@ -126,12 +127,12 @@ func Api(r *gin.RouterGroup) {
 		relayDownloadRouter.GET("/relay-file", apiHandler.RelayFileDownload) // token-authenticated OBS relay streaming download
 	}
 
-	// /api/v1/gene-images: public gene-example image surface (obsfs-backed).
+	// /api/v1/gene-images: public raster examples (mount or curated PNG relay).
 	// Browser-direct <img src> cannot carry an Authorization header, so this
 	// group carries no AuthMiddleware. The handler's traversal gate is the
 	// authorization boundary (gene data is public).
 	apiGeneImageRouter := r.Group("api/v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
 	{
-		apiGeneImageRouter.GET("/gene-images/:gene/:file", apiHandler.GeneImage) // public gene-example image (obsfs-backed)
+		apiGeneImageRouter.GET("/gene-images/:gene/:file", apiHandler.GeneImage) // public gene-example image
 	}
 }

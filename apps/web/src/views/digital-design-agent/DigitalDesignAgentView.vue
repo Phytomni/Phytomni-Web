@@ -357,6 +357,7 @@ import { useResumableUploads } from "@/views/chat/composables/useResumableUpload
 import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
 import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
 import type {
   AgentResultDelivery,
   ConversationArtifactLink,
@@ -567,25 +568,14 @@ const hasRun = computed(
     displayedState.value.degraded
 );
 
-const reportStatus = computed<"loading" | "degraded" | "complete" | "failed">(
-  () => {
-    if (displayedState.value.phase === "failed") return "failed";
-    if (displayedState.value.degraded) return "degraded";
-    if (displayedState.value.phase === "succeeded") return "complete";
-    return "loading";
-  }
+const reportPresentation = computed(() =>
+  reportPresentationFor(displayedState.value, undefined, "DigitalDesignAgent")
 );
+const reportStatus = computed(() => reportPresentation.value.state);
 const reportStatusLabel = computed(() => {
-  switch (reportStatus.value) {
-    case "complete":
-      return t("agents.digitalDesign.complete");
-    case "degraded":
-      return t("agents.digitalDesign.degraded");
-    case "failed":
-      return t("common.failed");
-    default:
-      return t("agents.digitalDesign.progress");
-  }
+  return reportPresentation.value.active
+    ? t("agents.digitalDesign.progress")
+    : t(reportPresentation.value.labelKey);
 });
 const progressLabel = computed(() =>
   isRunActive.value

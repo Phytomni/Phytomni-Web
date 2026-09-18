@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/zlib"
+	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -250,7 +252,7 @@ func pdfTfSizes(t *testing.T, body []byte) []string {
 	var sizes []string
 	seen := map[string]bool{}
 	re := regexp.MustCompile(`([0-9]+\.[0-9]+) Tf`)
-	for _, stream := range pdfDecodedStreams(body) {
+	for _, stream := range pdfDecodedStreams(t, body) {
 		for _, m := range re.FindAllStringSubmatch(string(stream), -1) {
 			if !seen[m[1]] {
 				seen[m[1]] = true
@@ -261,23 +263,81 @@ func pdfTfSizes(t *testing.T, body []byte) []string {
 	return sizes
 }
 
-func pdfDecodedStreams(body []byte) [][]byte {
-	re := regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`)
+func pdfDecodedStreams(t *testing.T, body []byte) [][]byte {
+	t.Helper()
+	// gofpdf writes direct stream lengths, including for image dictionaries
+	// with nested DecodeParms. Binary checksum bytes are not line delimiters.
+	header := regexp.MustCompile(`(?s)<<((?:[^<>]|<<[^<>]*>>)*)>>\r?\nstream\r?\n`)
+	length := regexp.MustCompile(`/Length\s+([0-9]+)\b`)
 	var out [][]byte
-	for _, m := range re.FindAllSubmatch(body, -1) {
-		raw := m[1]
+	for len(body) > 0 {
+		m := header.FindSubmatchIndex(body)
+		if m == nil {
+			break
+		}
+		dictionary := body[m[2]:m[3]]
+		value := length.FindSubmatch(dictionary)
+		if value == nil {
+			t.Fatal("PDF test stream is missing its direct /Length")
+		}
+		n, err := strconv.Atoi(string(value[1]))
+		if err != nil || n > len(body)-m[1] {
+			t.Fatal("PDF test stream /Length exceeds available data")
+		}
+		raw := body[m[1] : m[1]+n]
+		body = body[m[1]+n:]
+		if !bytes.HasPrefix(body, []byte("\nendstream")) && !bytes.HasPrefix(body, []byte("\r\nendstream")) {
+			t.Fatal("PDF test stream /Length does not end at endstream")
+		}
+		if !bytes.Contains(dictionary, []byte("/FlateDecode")) {
+			continue
+		}
 		r, err := zlib.NewReader(bytes.NewReader(raw))
 		if err != nil {
-			continue
+			t.Fatalf("open compressed PDF test stream: %v", err)
 		}
 		decoded, err := io.ReadAll(r)
 		r.Close()
 		if err != nil {
-			continue
+			t.Fatalf("decode compressed PDF test stream: %v", err)
 		}
 		out = append(out, decoded)
 	}
 	return out
+}
+
+func TestPDFDecodedStreamsPreservesCompressedLineEndingBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name, payload string
+		last          byte
+	}{
+		{"carriage-return", "CRw", '\r'},
+		{"line-feed", "LFw", '\n'},
+	} {
+		for _, eol := range []string{"\n", "\r\n"} {
+			t.Run(fmt.Sprintf("%s/%q", tc.name, eol), func(t *testing.T) {
+				var compressed bytes.Buffer
+				writer := zlib.NewWriter(&compressed)
+				if _, err := writer.Write([]byte(tc.payload)); err != nil {
+					t.Fatal(err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+				raw := compressed.Bytes()
+				if raw[len(raw)-1] != tc.last {
+					t.Fatalf("fixture checksum must end with %q", tc.last)
+				}
+				body := []byte(fmt.Sprintf("1 0 obj%s<< /Length %d /Filter /FlateDecode >>%sstream%s", eol, len(raw), eol, eol))
+				body = append(body, raw...)
+				body = append(body, []byte(eol+"endstream"+eol+"endobj")...)
+				streams := pdfDecodedStreams(t, body)
+				if len(streams) != 1 || !bytes.Equal(streams[0], []byte(tc.payload)) {
+					t.Fatalf("compressed content lost at stream boundary: %q", streams)
+				}
+			})
+		}
+	}
 }
 
 func containsString(xs []string, want string) bool {

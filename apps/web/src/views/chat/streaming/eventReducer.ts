@@ -12,6 +12,7 @@ import {
   executionEventFromAGUI,
   type ExecutionRunState,
 } from "./executionEvents";
+import { decodeCitationDocuments } from "../utils/format";
 
 // ReducerState folds the AG-UI event stream into ordered content blocks plus
 // the fields the message needs to finalize (run id, follow-ups, done/error).
@@ -113,7 +114,8 @@ export function reduceAGUIEvent(
       } else if (name === "phyto.references" && isRecord(value)) {
         // P1 cited streaming: finalize copies these into message.doc_list so
         // the ns-aware cited render path engages (citation ns invariant).
-        next.references = decodeCitationDocuments(value.doc_list);
+        const references = decodeCitationDocuments(value.doc_list);
+        if (references?.length) next.references = references;
       } else if (name === "phyto.context_staged") {
         const contextNotice = decodeContextStagedValue(value);
         if (!contextNotice) break;
@@ -228,13 +230,6 @@ function stringField(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function decodeCitationDocuments(value: unknown): CitationDocument[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) =>
-    isRecord(item) ? [item as CitationDocument] : []
-  );
 }
 
 // appendText appends a delta to the LAST block of the given type if it is the

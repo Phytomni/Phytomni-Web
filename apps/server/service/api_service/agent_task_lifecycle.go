@@ -212,6 +212,12 @@ func lifecycleScientificStatus(row *model.QuestionAgentLog, projection BotRunPro
 	return row.Status
 }
 
+func deliveryFailureKeepsScientificSuccess(errorCode string) bool {
+	return errorCode == "no_user_deliverables" ||
+		errorCode == "artifact_manifest_invalid" ||
+		errorCode == "archive_inventory_limit_exceeded"
+}
+
 func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjection) (string, bool) {
 	if !projection.ResultArchiveV1 || projection.Delivery == nil || !projection.Delivery.Required ||
 		phase == "FAILED" || phase == "TIMED_OUT" || phase == "CANCELLED" {
@@ -219,8 +225,14 @@ func lifecycleDeliveryPhase(phase string, terminal bool, projection BotRunProjec
 	}
 	switch projection.Delivery.Status {
 	case "pending":
+		if phase == "SUCCEEDED" || phase == "FINALIZING" {
+			return "FINALIZING", false
+		}
 		return "RUNNING", false
 	case "failed":
+		if deliveryFailureKeepsScientificSuccess(projection.Delivery.ErrorCode) && phase == "SUCCEEDED" {
+			return "SUCCEEDED", true
+		}
 		return "FAILED", true
 	default:
 		return phase, terminal
@@ -320,7 +332,7 @@ func lifecycleArtifactSummary(row *model.QuestionAgentLog, projection BotRunProj
 	return AgentTaskArtifactSummaryDTO{
 		ImageCount:           imageCount,
 		OutputDirectoryCount: directoryCount,
-		HasReport:            strings.TrimSpace(projection.VisibleReport()) != "" || strings.TrimSpace(row.Answer) != "",
+		HasReport:            projection.VisibleReport() != "" || validStoredReportAnswer(projection.Agent, row.Answer),
 	}
 }
 

@@ -6,6 +6,22 @@
  * 既往不恋！当下不杂！！未来不迎！！！
  */
 export default {
+  scientificCif: {
+    title: "蛋白质结构",
+    surface: "分子表面",
+    on: "开启",
+    off: "关闭",
+    reset: "重置视角",
+    enlarge: "放大",
+    close: "关闭结构视图",
+    keyboardHelp:
+      "聚焦结构后，方向键旋转，Shift 加方向键平移，加号或减号缩放。",
+    label: "交互式蛋白质结构",
+    loadingSource: "正在读取结构",
+    buildingSurface: "正在构建分子表面",
+    error: "结构暂不可用",
+    unavailable: "资源暂不可用",
+  },
   // 通用部分
   common: {
     confirm: "确认",
@@ -348,6 +364,7 @@ export default {
     useTool: "使用工具",
     stepResult: "步骤结果",
     resultImageAlt: "结果图 {index}",
+    tableRowCount: "{count} 条结果",
     sendFailed: "发送消息失败，请稍后重试。",
     timeoutFailed: "请求处理超时，请缩小查询范围或稍后重试。",
     contextDegraded: "回答已保存。系统将在下一条消息时重建对话上下文。",
@@ -357,8 +374,21 @@ export default {
     sendAriaLabel: "发送",
     abortAriaLabel: "中止回答",
     botReport: {
+      unavailable: "科学报告暂不可用",
+      executionFailed: "执行失败，已有的部分报告已保留。",
+      warnings: {
+        report_artifact_count_capped: "部分科学产物未纳入报告。",
+        report_context_truncated: "报告中的部分科学上下文已缩减。",
+        report_artifact_size_exceeded: "某项科学产物超出报告大小限制。",
+        report_artifact_read_failed: "某项科学产物无法读取，未纳入报告。",
+        report_artifact_empty: "某项科学产物没有可用的报告文本。",
+        report_no_scientific_text: "没有可用于综合的已验证科学文本。",
+        report_synthesis_failed:
+          "最终报告综合暂不可用，已有科学内容和结果文件已保留。",
+        deep_genome_report_degraded: "部分分析暂不可用，已有科学内容已保留。",
+      },
       waiting: "正在准备报告",
-      partial: "报告尚未完成",
+      partial: "部分报告可用",
       degraded: "部分分析暂不可用",
       failed: "报告生成失败",
       inputRequired: "需要补充信息",
@@ -367,6 +397,7 @@ export default {
     },
     generationStopped: "已停止生成",
     relatedDocuments: "参考资料",
+    referenceUnavailable: "参考文献信息暂不可用。",
     welcomeTitle: "今天想探索什么？",
     history: {
       loading: "正在加载对话历史",
@@ -861,6 +892,7 @@ export default {
     transferProgressText: "{phase}：{loaded} / {total}（{percent}%）",
     transferProgressIndeterminate: "{phase}：已传输 {loaded}",
     downloadCancelled: "已取消下载",
+    pdfFontsUnavailable: "PDF 导出暂时不可用，您仍可下载 Word 或 Markdown。",
     downloadError: "下载过程中出错，请联系管理员！",
     resultArchive: {
       preparing: "正在准备结果归档",
@@ -1087,6 +1119,15 @@ export default {
       imageViewerTitle: "图片查看",
       references: "参考文献",
       noReferences: "暂无参考文献。",
+      material: {
+        back: "返回报告",
+        download: "下载原文件",
+        excerpt: "查看来源摘录",
+        excerptTitle: "来源摘录 · 参考文献 {index}",
+        loading: "正在打开材料…",
+        unavailable: "当前报告暂无法查看这份材料。",
+        failed: "材料打开失败，请重试。",
+      },
     },
     geneNetwork: {
       title: "基因网络智能体",

@@ -135,22 +135,10 @@ func (a *AGUIAccumulator) observeReferences(raw json.RawMessage) {
 	if json.Unmarshal(raw, &envelope) != nil {
 		return
 	}
-	kept := make([]json.RawMessage, 0, len(envelope.DocList))
-	for _, item := range envelope.DocList {
-		trimmed := bytes.TrimSpace(item)
-		if len(trimmed) == 0 || trimmed[0] != '{' {
-			continue
-		}
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(item, &obj) != nil || obj == nil {
-			continue
-		}
-		kept = append(kept, append(json.RawMessage(nil), item...))
-	}
-	if len(kept) == 0 {
+	if len(envelope.DocList) == 0 {
 		return
 	}
-	encoded, err := json.Marshal(kept)
+	encoded, err := json.Marshal(envelope.DocList)
 	if err != nil {
 		return
 	}

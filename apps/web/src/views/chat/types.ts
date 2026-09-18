@@ -24,6 +24,10 @@ import type {
   ExecutionTargetResolution,
   ExecutionWorkspaceTab,
 } from "./streaming/executionEvents";
+import type {
+  DeepGenomeMaterialDetailState,
+  DeepGenomeReferenceMaterial,
+} from "@/components/research/deep-genome-report";
 
 export type { ResumableUploadItem, UploadStatus } from "./upload/types";
 
@@ -90,6 +94,8 @@ export interface ChatMessage {
     prop: string;
     label: string;
   }>;
+  /** Optional Bot-provided table caption; row-count fallback is rendered in UI. */
+  tableCaption?: string;
   instantMessage?: boolean;
   /** Persisted row created_at; wait-card elapsed uses this after reload. */
   created_at?: string;
@@ -120,6 +126,8 @@ export interface ChatMessage {
    * FormData, reactions, Artifact eligibility, or A2UI run identity.
    */
   streamPresentationKey?: string;
+  /** Runtime-only static Case identity; never a persisted row or Bot run. */
+  casePresentationKey?: string;
   /** Runtime-only reason that stream-origin content is terminal UI copy. */
   streamTerminalFailure?: StreamTerminalFailure;
   /** Runtime-only A2UI context sourced exclusively from stream response headers. */
@@ -131,6 +139,7 @@ export interface ChatMessage {
   artifacts?: readonly ConversationArtifactLink[];
   /** Preauthorized report figures; demo tapes set this, live Chat signs artifacts. */
   resources?: readonly AuthorizedScientificResource[];
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
   delivery?: AgentResultDelivery;
   /** Bounded, localized semantic-context status from the gateway. */
   contextNotice?: ChatContextNotice;
@@ -192,6 +201,7 @@ export function normalizeChatContextNotice(
 export type ContentBlock = StreamContentBlock;
 
 export interface ChatResponse extends ConversationContextNotice {
+  projection?: BotRunProjection;
   query: string;
   answer: string;
   id?: string;
@@ -331,6 +341,8 @@ export interface ChatUIState {
     string,
     "unavailable" | "forbidden" | undefined
   >;
+  /** Transient material detail data, never persisted as message/history content. */
+  materialDetailsByArtifact: Record<string, DeepGenomeMaterialDetailState>;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

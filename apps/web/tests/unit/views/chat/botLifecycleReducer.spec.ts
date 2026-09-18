@@ -50,6 +50,66 @@ function artifact(outputDir: string, paths: string[] = []): BotArtifact {
 }
 
 describe("bot lifecycle reducer", () => {
+  it("reconciles report degradation and fresh empty warnings without tracking contamination", () => {
+    const degraded = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        reportRevision: 3,
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      })
+    );
+    expect(degraded.report?.degraded).toBe(true);
+    expect(degraded.reportWarningCodes).toEqual(["report_synthesis_failed"]);
+    const stale = reduceBotProjection(
+      degraded,
+      projection({
+        reportRevision: 2,
+        report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+        reportWarningCodes: [],
+      })
+    );
+    expect(stale.report).toEqual(degraded.report);
+    expect(stale.reportWarningCodes).toEqual(degraded.reportWarningCodes);
+    const fresh = reduceBotProjection(
+      degraded,
+      projection({
+        reportRevision: 4,
+        status: "SUCCEEDED",
+        finalReport: "# Scientific result",
+        trackingDegraded: true,
+        report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+        reportWarningCodes: [],
+      })
+    );
+    expect(fresh.reportWarningCodes).toEqual([]);
+    expect(fresh.report?.degraded).toBe(false);
+    expect(fresh.degraded).toBe(false);
+    expect(fresh.trackingDegraded).toBe(true);
+  });
+
+  it("rejects invalid final placeholders and retains valid science across blank or stale snapshots", () => {
+    const current = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        reportRevision: 4,
+        intermediateReport: "# Intermediate science [1]",
+        finalReport: "Server task created: synthetic",
+      })
+    );
+    expect(current.visibleReport).toBe("# Intermediate science [1]");
+    expect(current.finalReport).toBe("");
+    expect(
+      reduceBotProjection(
+        current,
+        projection({ reportRevision: 3, finalReport: "# Stale science" })
+      ).visibleReport
+    ).toBe(current.visibleReport);
+    expect(
+      reduceBotProjection(current, projection({ reportRevision: 5 }))
+        .visibleReport
+    ).toBe(current.visibleReport);
+  });
   it("preserves a newer work stage against a stale projection", () => {
     const state = reduceBotProjection(
       initBotLifecycleState(),
@@ -305,14 +365,15 @@ describe("bot lifecycle reducer", () => {
     expect(next.failures).toEqual(["artifact export warning"]);
   });
 
-  it("marks a null-id projection as degraded when tracking is unavailable", () => {
+  it("keeps null-id tracking degradation separate from scientific report degradation", () => {
     const next = reduceBotProjection(
       initBotLifecycleState(),
       projection({ runId: null, trackingDegraded: true })
     );
 
     expect(next.runId).toBeNull();
-    expect(next.degraded).toBe(true);
+    expect(next.degraded).toBe(false);
+    expect(next.trackingDegraded).toBe(true);
     expect(next.status).toBe("RUNNING");
   });
 

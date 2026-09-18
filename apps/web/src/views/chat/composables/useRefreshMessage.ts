@@ -31,6 +31,7 @@ import {
   toAssetAttachmentRefs,
 } from "../utils/asset-attachments";
 import { projectHistoryForTransport } from "../utils/chat-history-normalization";
+import { historyAssistantMetadata } from "./useSelectChat";
 
 export function useRefreshMessage(opts: {
   currentChat: Ref<ChatView | null>;
@@ -287,6 +288,7 @@ export function useRefreshMessage(opts: {
                   prop: header.replace(/\s+/g, "_").toLowerCase(),
                   label: header,
                 })),
+                tableCaption: tableInput.title,
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
@@ -306,7 +308,14 @@ export function useRefreshMessage(opts: {
                   response.data.reaction_type
                 );
               }
-            } else if (response.data.tool_name === "AnalystAgent") {
+            } else if (
+              [
+                "AnalystAgent",
+                "InSilicoResearchAgent",
+                "DigitalDesignAgent",
+                "GeneNetworkAgent",
+              ].includes(response.data.tool_name)
+            ) {
               newAssistantMessage = {
                 role: "assistant",
                 content: response.data.answer,
@@ -350,6 +359,17 @@ export function useRefreshMessage(opts: {
 
         // update the captured message array only
         if (newAssistantMessage) {
+          Object.assign(
+            newAssistantMessage,
+            historyAssistantMetadata(response.data)
+          );
+          if (response.data.result_archive_v1) {
+            delete newAssistantMessage.upload_path;
+            delete newAssistantMessage.download_path;
+            delete newAssistantMessage.server_file_path;
+            if (!newAssistantMessage.tableHeaders)
+              delete newAssistantMessage.original;
+          }
           targetMessages[messageIndex] = newAssistantMessage;
           // The captured target ID is already durable; every successful
           // replacement settles the logical refresh turn, even if a legacy

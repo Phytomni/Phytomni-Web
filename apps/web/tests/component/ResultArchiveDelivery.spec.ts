@@ -52,6 +52,17 @@ const manifestInvalidFailure = {
   retryable: false,
 };
 
+const unavailableFailure = {
+  schema_version: 1 as const,
+  required: true as const,
+  status: "failed" as const,
+  revision: 1,
+  name: null,
+  size_bytes: null,
+  error_code: "archive_inventory_limit_exceeded" as const,
+  retryable: false,
+};
+
 function mount(props: Record<string, unknown> = {}, slots = {}) {
   return createTestAppContext().mount(ResultArchiveDelivery, {
     props: { activeV1: true, ...props },
@@ -125,6 +136,9 @@ describe("ResultArchiveDelivery", () => {
     const wrapper = mount({ delivery: retryableFailure });
     const button = wrapper.get('[data-test="result-archive-retry"]');
 
+    expect(
+      wrapper.get('[data-test="result-archive-delivery"]').text()
+    ).toContain("Result archive generation failed");
     expect(button.attributes("aria-label")).toContain("Retry");
     await button.trigger("click");
     expect(wrapper.emitted("retry")).toHaveLength(1);
@@ -147,6 +161,15 @@ describe("ResultArchiveDelivery", () => {
     expect(wrapper.find('[data-test="result-archive-download"]').exists()).toBe(
       false
     );
+  });
+
+  it("offers reconciliation for a truncated legacy inventory failure", async () => {
+    const wrapper = mount({ delivery: unavailableFailure });
+    const button = wrapper.get('[data-test="result-archive-retry"]');
+
+    expect(button.attributes("aria-label")).toContain("Retry");
+    await button.trigger("click");
+    expect(wrapper.emitted("retry")).toHaveLength(1);
   });
 
   it("shows incomplete packaging copy for an invalid producer manifest", () => {

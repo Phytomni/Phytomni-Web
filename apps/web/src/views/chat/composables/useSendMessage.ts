@@ -222,6 +222,7 @@ function commitSuccessfulTurn(
 }
 
 function parseBlockingProjection(data: QueryData) {
+  if (data.projection) return data.projection;
   const payload =
     data.answer === undefined && data.final_answer !== undefined
       ? { ...data, answer: data.final_answer }
@@ -936,6 +937,7 @@ export function useSendMessage(opts: {
                   prop: header.replace(/\s+/g, "_").toLowerCase(),
                   label: header,
                 })),
+                tableCaption: tableInput.title,
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,

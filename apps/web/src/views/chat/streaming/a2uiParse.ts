@@ -1,4 +1,5 @@
 import { A2UI_LIMITS } from "./a2uiContract";
+import { decodeCitationDocuments } from "../utils/format";
 import type {
   A2uiActionResponse,
   A2uiFormattedResult,
@@ -481,8 +482,8 @@ function decodeFormatted(
   }
 
   if (hasOwn(value, "references")) {
-    const references = value.references;
-    if (!Array.isArray(references) || !references.every(isOrdinaryObject)) {
+    const references = decodeCitationDocuments(value.references);
+    if (!references) {
       return fail("props_invalid");
     }
     formatted.references = references;

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"phytomni-server/common"
+	"phytomni-server/common/citation"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -34,6 +35,8 @@ const (
 // message) and from an opaque server failure (500, generic message).
 func queryErrorStatus(err error) (int, string) {
 	switch {
+	case errors.Is(err, citation.ErrInvalidReferences):
+		return http.StatusBadGateway, "upstream service failed"
 	case errors.Is(err, api_service.ErrGatewayDisabled):
 		return http.StatusServiceUnavailable, "service temporarily unavailable"
 	case errors.Is(err, api_service.ErrQueryLimitExceeded):

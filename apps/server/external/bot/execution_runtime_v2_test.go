@@ -1,12 +1,14 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -306,15 +308,56 @@ func TestExecutionRuntimeV2AcceptsBoundedReconstructibleMessageChunk(t *testing.
 			"output_revision": float64(1), "message_id": "msg-assistant-1", "source_message_id": "msg-assistant-1",
 			"base_offset": float64(0), "offset": float64(8192), "total_length": float64(8192),
 			"chunk_index": float64(0), "chunk_count": float64(1), "content_sha256": digest, "text": text,
-			"references": []any{map[string]any{"title": "Drought epigenetics", "di": "10.1000/safe-doi"}},
+			"references": []any{
+				map[string]any{
+					"title": "Drought epigenetics", "di": "10.1000/safe-doi",
+					"formatted_citation": "Rich *citation*.",
+					"citation": map[string]any{
+						"runs":  []any{map[string]any{"text": "forged"}},
+						"links": []any{map[string]any{"label": "Article", "href": "https://evil.example/private"}},
+					},
+				},
+				nil,
+			},
 		},
 	}
 	if err := validateExecutionEventV2(event, event.ExecutionID); err != nil {
 		t.Fatalf("valid reconstructible message chunk rejected: %v", err)
 	}
-	event.PublicPayload["references"] = []any{map[string]any{"title": "unsafe", "dl": "https://evil.example/reference"}}
-	if err := validateExecutionEventV2(event, event.ExecutionID); err == nil {
-		t.Fatal("unsafe citation reference accepted")
+	references, ok := event.PublicPayload["references"].([]any)
+	if !ok || len(references) != 2 {
+		t.Fatalf("canonical references=%#v", event.PublicPayload["references"])
+	}
+	first, ok := references[0].(map[string]any)
+	if !ok || first["formatted_citation"] != "Rich *citation*." {
+		t.Fatalf("canonical first reference=%#v", references[0])
+	}
+	encodedCitation, _ := json.Marshal(first["citation"])
+	if bytes.Contains(encodedCitation, []byte("forged")) || bytes.Contains(encodedCitation, []byte("evil.example")) ||
+		!bytes.Contains(encodedCitation, []byte("Rich")) || !bytes.Contains(encodedCitation, []byte("https://doi.org/10.1000/safe-doi")) {
+		t.Fatalf("citation was not safely rebuilt: %s", encodedCitation)
+	}
+	second, ok := references[1].(map[string]any)
+	if !ok {
+		t.Fatalf("neutral slot shifted: %#v", references)
+	}
+	encodedNeutral, _ := json.Marshal(second["citation"])
+	if !bytes.Contains(encodedNeutral, []byte("Reference details unavailable.")) {
+		t.Fatalf("neutral slot lost: %s", encodedNeutral)
+	}
+
+	for _, forbidden := range []map[string]any{
+		{"title": "unsafe", "dl": "https://evil.example/reference"},
+		{"title": "private", "file_id": "secret"},
+		{"title": "unknown", "private": "secret"},
+		{"title": "https://evil.example/smuggled"},
+	} {
+		candidate := event
+		candidate.PublicPayload = maps.Clone(event.PublicPayload)
+		candidate.PublicPayload["references"] = []any{forbidden}
+		if err := validateExecutionEventV2(candidate, candidate.ExecutionID); err == nil {
+			t.Fatalf("unsafe citation reference accepted: %#v", forbidden)
+		}
 	}
 	event.PublicPayload["references"] = []any{map[string]any{"title": "Drought epigenetics", "di": "10.1000/safe-doi"}}
 	event.PublicPayload["text"] = text + "x"

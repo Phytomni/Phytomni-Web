@@ -6,7 +6,8 @@ export function citedMessages(
   question: string,
   content: string,
   references: ChatMessage["doc_list"],
-  resources?: ChatMessage["resources"]
+  resources?: ChatMessage["resources"],
+  referenceMaterials?: ChatMessage["referenceMaterials"]
 ): ChatMessage[] {
   return [
     { role: "user", content: question },
@@ -16,6 +17,7 @@ export function citedMessages(
       tool_name: tool,
       doc_list: references,
       ...(resources && resources.length > 0 ? { resources } : {}),
+      ...(referenceMaterials?.length ? { referenceMaterials } : {}),
       showFollowUpQuestions: false,
     },
   ];

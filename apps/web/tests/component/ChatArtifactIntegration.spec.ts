@@ -150,7 +150,14 @@ const citedMessage: ChatMessage = {
   tool_name: "KnowledgeAgent",
   status: "SUCCEEDED",
   content: "# Full cited report\n\nEvidence-backed finding [1].",
-  doc_list: [{ title: "Complete source document" }],
+  doc_list: [
+    {
+      citation: {
+        runs: [{ text: "Complete source document" }],
+        links: [],
+      },
+    },
+  ],
 };
 
 const knowledgeZeroReferenceRaw =
@@ -1427,23 +1434,75 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.html()).not.toContain(knowledgeZeroReferenceRaw);
     expect(wrapper.text()).not.toContain("doc_list");
 
-    await wrapper.get('[data-tab-id="evidence"]').trigger("click");
-    expect(wrapper.get(".research-evidence-panel__empty").text()).toContain(
-      enUS.common.noData
-    );
+    expect(wrapper.find('[data-tab-id="evidence"]').exists()).toBe(false);
   });
+
+  it.each([
+    ["KnowledgeAgent", citedMessage, true],
+    [
+      "BriefGeneAgent",
+      {
+        ...citedMessage,
+        id: "brief-1",
+        tool_name: "BriefGeneAgent",
+      } satisfies ChatMessage,
+      true,
+    ],
+    [
+      "ReviewAgent",
+      {
+        ...citedMessage,
+        id: "review-1",
+        tool_name: "ReviewAgent",
+      } satisfies ChatMessage,
+      true,
+    ],
+    ["DeepGenomeAgent", deepGenomeMessage, false],
+  ] as const)(
+    "preserves an unclassified completed %s report without claiming final readiness",
+    async (_tool, message, usesCitedAnswer) => {
+      const { wrapper } = await mountProductionChat(1440, {
+        messagesA: [{ ...message }],
+      });
+      await wrapper.get("[data-test=artifact-open]").trigger("click");
+      await nextTick();
+
+      expect(wrapper.get(".research-artifact-header__status").text()).toBe(
+        enUS.chat.botReport.partial
+      );
+      expect(wrapper.text()).not.toContain(enUS.chat.botReport.waiting);
+      expect(wrapper.findComponent(BotReportState).exists()).toBe(false);
+      expect(wrapper.findComponent(CitedAnswer).exists()).toBe(usesCitedAnswer);
+    }
+  );
 
   it("renders cited Knowledge references outside the report lifecycle", async () => {
     const citedWithReference: ChatMessage = {
       ...knowledgeZeroReferenceMessage,
       id: "knowledge-reference-1",
       content: "One supporting source [1].",
-      doc_list: [{ title: "Usable knowledge source" }],
+      doc_list: [
+        {
+          citation: {
+            runs: [{ text: "Usable knowledge source" }],
+            links: [],
+          },
+        },
+      ],
       botProjection: parseBotProjection({
         agent: "KnowledgeAgent",
         status: "SUCCEEDED",
-        answer:
-          '{"content":"One supporting source [1].","doc_list":[{"title":"Usable knowledge source"}]}',
+        answer: JSON.stringify({
+          content: "One supporting source [1].",
+          doc_list: [
+            {
+              citation: {
+                runs: [{ text: "Usable knowledge source" }],
+                links: [],
+              },
+            },
+          ],
+        }),
       }),
     };
 
@@ -1515,6 +1574,18 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
     expect(CHAT_SOURCE).toContain("<template #workspace>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
+    expect(CHAT_SOURCE).not.toContain('message.status = "FINALIZING"');
+    expect(CHAT_SOURCE).toContain("message.delivery = { ...delivery }");
+    expect(CHAT_SOURCE).not.toContain('message.status = "RUNNING"');
+    expect(CHAT_SOURCE).toContain(
+      ':rendering-file-id="currentArtifactMessage.id"'
+    );
+    expect(CHAT_SOURCE).toContain(
+      "currentArtifactPresentation?.kind === 'deep-genome'"
+    );
+    expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(
+      ':rendering-file-id="renderingFileId"'
+    );
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");

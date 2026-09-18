@@ -370,13 +370,65 @@ claim backend completion, persistence, or measured transfer progress.
 
 ## Artifact and citation behavior
 
+### Deep Genome report and material ownership
+
+Case and database reports use `DeepGenomeArtifact` and the same canonical
+citation presentation. The database detail API supplies the body, ordered
+canonical `references`, explicit `resources`, `reference_materials`, and an
+original-byte SHA256 `report_revision`; the frontend does not parse a second
+`DOC TITLES` bibliography. Empty or invalid reference slots retain their numbers.
+
+The report owns its table-of-contents layout: below 900 CSS pixels of actual
+report width, the existing disclosure becomes compact, including desktop split
+panels. Window width is not a substitute for the available report width. A hidden
+parent's zero-width observation must not reset the user's disclosure state.
+
+Source excerpts are separate from bibliography formatting. Their one-based
+`referenceIndex` binds to the original source slot, not a title match. The Case
+projection is generated at build time from the frozen source JSON and contains
+only `referenceIndex`, `excerpt`, and `resourceIds`; never import the raw search
+metadata into a runtime bundle. Check both generated outputs with:
+
+```sh
+cd apps/server
+go run ./tools/citation-fixtures \
+  -source ../web/src/views/agent-cases/citations/sources.json \
+  -output ../web/src/views/agent-cases/citations/generated.json \
+  -material-source ../web/src/assets/agentOut/round1-references.json \
+  -material-output ../web/src/views/agent-cases/citations/deep-genome-materials.generated.json \
+  -check
+```
+
+Registered Markdown opens inside the current report panel. Back restores the
+report tab, scroll position and focus; the retained parent is hidden and inert.
+The detail shares `ScientificMarkdown`, but excerpts have no parent citation
+namespace. Downloads preserve original Markdown bytes, not rendered HTML.
+Loading, retry and cancellation are scoped to the dialogue, report identity and
+selected resource. Unknown local document links cannot navigate to a guessed
+route. Existing registered live-chat downloads without a preview reader retain
+their download action.
+
+The database registers only verified same-gene curated PNG links today. Its
+protected resource endpoint revalidates the report-bound ID on every read;
+public curated PNG delivery and report exports share the same bounded reader.
+Database protocol/CIF/source-original associations require an actual verified
+storage contract. Do not borrow another gene's Case materials or advertise empty
+material arrays as recovered source content. Opening the frozen experiment
+protocol is not scientific validation of its applicability.
+
 ### One scientific Markdown engine
 
 `ScientificMarkdown` is the only renderer for agent report bodies, including
 cited answers, Chat blocks, DeepGenome documents, research reports, and the
 streaming typewriter. It passes `allow-html=false` and `sanitize=true` to
-XMarkdown, accepts only the citation-only `<sup>` grammar, and owns local table,
+XMarkdown, accepts exact lowercase attribute-free `<sup>`, `<sub>`, `<i>` and
+`<em>` pairs within one source line and inline container, and owns local table,
 code, math, and link overflow; report bodies must not add a `v-html` sink.
+Scripts are ordinary typography, never inferred citations; explicit `[N]`
+outside script/protected spans retains citation behavior. Typed formatting may
+compose with Markdown emphasis or safe authored link labels; nested scripts,
+invalid pairs and other raw HTML remain inert. Code, math, destinations and
+image alt text are protected, and escaped tags are never reinterpreted.
 
 Structured images, CIF files, Markdown attachments, and citation rows are
 separate authorized resources. A caller passes owner-authorized resource
@@ -398,13 +450,64 @@ per dialogue. Hydrated and background reports are marked handled without taking
 focus; a new foreground identity may auto-open once, while manual View always
 opens an eligible report and downloads still require a durable row id.
 
+Frozen Deep Genome Cases use a separate runtime-only `casePresentationKey`;
+they never masquerade as server message rows. Their PDF/Markdown exports are
+client-side and include the same canonical bibliography once.
+
+### Shared molecular structure viewer
+
+Authorized CIF resources use one `ScientificCifViewer` through the shared
+scientific Markdown renderer in Chat, Cases and Database reports. Its light
+scientific canvas is independent of the application theme: a pale blue cartoon,
+translucent mint SES surface and restrained outline use the fixed
+`--phy-scientific-cif-*` tokens. These are decorative brand colors, not confidence,
+charge, binding-site or other scientific annotations. Source coordinates are
+unchanged; native 3Dmol lighting is not patched.
+
+Surface visibility, reset and enlarge controls stay outside the canvas and use
+ordinary theme tokens. Resizing preserves the user's orientation, pan and zoom,
+with relative aspect compensation; reset fits the complete structure in the
+current container. Pointer/touch controls remain native. A focused viewport also
+supports arrow-key rotation, Shift+arrow panning and plus/minus zoom, with localized
+instructions. Those shortcuts do not capture events from the surrounding report.
+
+Enlargement moves the same viewport into a report-local Element Plus dialog,
+without another model, surface task or WebGL context. The canvas remains within
+its report's `.scientific-cif-block`; closing restores the opener and report scroll.
+Inside a fullscreen artifact, Escape closes the structure dialog before the
+parent artifact. Chrome follows dark/system appearance, while scientific canvas
+colors remain fixed-light.
+
+The parent artifact leaves nested-modal Tab handling to that modal and respects
+already handled keys. The structure dialog supplements only its Close/viewport
+Tab boundaries; ordinary Tab events still bubble to Element Plus so its input
+modality tracking receives keyboard events after a pointer interaction.
+
+Loading source data and building the SES surface are distinct honest states,
+without invented percentages. `data-scientific-cif-ready` becomes `true` only
+after the current native surface completes and renders. Source replacement aborts
+the read and detaches obsolete presentation immediately; native surface work is
+not abortable, so its captured viewer is cleared once after it settles. The
+installed 3Dmol release has no public API to remove its constructor's global event
+listeners or internal resize observer; geometry cleanup must not be described as
+complete library disposal.
+
+Client-side Case printing replaces each complete structure block with its decoded
+current canvas PNG, including the user's orientation and surface-off state. It
+does not clone toolbars or retained dialogs, and an unfinished/failed structure
+prevents printing until an explicit later retry. The print-only page background
+is white without changing table shading or scientific canvas pixels. This contract does not imply
+that a server-generated PDF or DOCX is re-rendered by the browser.
+
 ### Citation and HTML safety
 
 Citation links emit typed activation events to the owning reference list and
-must use a matching namespace. The only retained HTML sink is the separately
-reviewed, escaped reference-row renderer; its text uses `escapeHtml` and fixed
-URLs use `sanitizeHref`. Vue-bound resource links use `safeHrefValue`; do not
-resurrect report HTML, add raw report-body `v-html`, or bypass these validators.
+must use a matching namespace. Reference rows render canonical citation runs
+through Vue text interpolation and controlled emphasis nodes, never `v-html`.
+Fixed-label citation links use `safeHrefValue` plus HTTP(S) and userinfo
+validation; rejected presentations retain their numbered slot with localized
+unavailable copy. Vue-bound resource links use `safeHrefValue`; do not resurrect
+report HTML, reconstruct bibliography from metadata, or bypass these validators.
 
 ## Auth, PII, and legal invariants
 

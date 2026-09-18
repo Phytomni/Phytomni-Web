@@ -1,19 +1,40 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { flushPromises } from "@vue/test-utils";
 import { mountWithApp } from "../helpers/test-app-context";
+import { readFileSync } from "node:fs";
 
-const createViewer = vi.fn(() => ({
-  addModel: vi.fn(),
-  setStyle: vi.fn(),
-  zoomTo: vi.fn(),
-  resize: vi.fn(),
-  render: vi.fn(),
-  animate: vi.fn(),
-  stopAnimate: vi.fn(),
-  clear: vi.fn(),
-}));
+const tokens = readFileSync("src/styles/tokens.css", "utf8");
 
-vi.mock("@/utils/3dmol", () => ({
+const createViewer = vi.fn((target: HTMLElement) => {
+  target.append(document.createElement("canvas"));
+  return {
+    addModel: vi.fn(),
+    selectedAtoms: vi.fn(() => [{ x: 0, y: 0, z: 0 }]),
+    addSurface: vi.fn(() => Object.assign(Promise.resolve(7), { surfid: 7 })),
+    setProjection: vi.fn(),
+    setViewStyle: vi.fn(),
+    rotate: vi.fn(),
+    getView: vi.fn(() => [0, 0, 0, -20, 0, 0, 0, 1]),
+    modelToScreen: vi.fn((points: Array<{ x: number; y: number; z: number }>) =>
+      points.map(({ x, y }) => ({
+        x: target.offsetWidth / 2 + x * 10,
+        y: target.offsetHeight / 2 + y * 10,
+      }))
+    ),
+    setStyle: vi.fn(),
+    zoomTo: vi.fn(),
+    zoom: vi.fn(),
+    resize: vi.fn(),
+    render: vi.fn(),
+    animate: vi.fn(),
+    stopAnimate: vi.fn(),
+    clear: vi.fn(),
+  };
+});
+
+vi.mock("@/utils/3dmol", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/3dmol")>()),
   load3DMol: vi.fn(async () => ({ createViewer })),
 }));
 
@@ -49,6 +70,12 @@ const resources = [
 ];
 
 const resizeObservers: TestResizeObserver[] = [];
+let tokenStyles: HTMLStyleElement;
+beforeEach(() => {
+  tokenStyles = document.createElement("style");
+  tokenStyles.textContent = tokens;
+  document.head.append(tokenStyles);
+});
 
 class TestResizeObserver {
   private readonly callback: ResizeObserverCallback;
@@ -67,6 +94,7 @@ class TestResizeObserver {
 }
 
 afterEach(() => {
+  tokenStyles.remove();
   vi.unstubAllGlobals();
   createViewer.mockClear();
   resizeObservers.length = 0;
@@ -141,9 +169,17 @@ describe("ScientificMarkdown resources", () => {
     expect(viewer.setStyle).toHaveBeenCalledWith(
       {},
       {
-        cartoon: { color: "spectrum" },
-        stick: { colorscheme: "Jmol" },
+        cartoon: {
+          color: "#87b4ed",
+          style: "oval",
+          thickness: 0.24,
+          arrows: true,
+        },
       }
+    );
+    await flushPromises();
+    expect(wrapper.find('[data-scientific-cif-ready="true"]').exists()).toBe(
+      true
     );
     wrapper.unmount();
     expect(viewer.stopAnimate).toHaveBeenCalled();
@@ -171,6 +207,10 @@ describe("ScientificMarkdown resources", () => {
     const viewer = createViewer.mock.results.at(-1)?.value;
     viewer.resize.mockClear();
     viewer.render.mockClear();
+    Object.defineProperties(wrapper.get(".scientific-cif-viewer").element, {
+      offsetWidth: { value: 800 },
+      offsetHeight: { value: 600 },
+    });
 
     resizeObservers.at(-1)?.trigger();
 

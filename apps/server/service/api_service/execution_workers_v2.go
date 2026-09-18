@@ -543,8 +543,12 @@ func reconstructProjectedMessage(events []rxBot.ExecutionEventV2, executionID, e
 }
 
 func decodeProjectedCitationReferences(value any) ([]model.ConversationCitationReferenceV2, error) {
-	encoded, err := json.Marshal(value)
-	if err != nil || len(encoded) > 6144 {
+	normalized, err := rxBot.NormalizeExecutionCitationReferencesV2(value)
+	if err != nil {
+		return nil, errors.New("invalid projected citation references")
+	}
+	encoded, err := json.Marshal(normalized)
+	if err != nil || len(encoded) > 64*1024 {
 		return nil, errors.New("invalid projected citation references")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
@@ -554,6 +558,22 @@ func decodeProjectedCitationReferences(value any) ([]model.ConversationCitationR
 		return nil, errors.New("invalid projected citation references")
 	}
 	return references, nil
+}
+
+func normalizeProjectedEventCitationReferences(event *rxBot.ExecutionEventV2) error {
+	if event == nil || (event.Type != "message.snapshot" && event.Type != "message.completed") {
+		return nil
+	}
+	references, present := event.PublicPayload["references"]
+	if !present {
+		return nil
+	}
+	normalized, err := rxBot.NormalizeExecutionCitationReferencesV2(references)
+	if err != nil {
+		return err
+	}
+	event.PublicPayload["references"] = normalized
+	return nil
 }
 
 func projectedTimelineFactType(event rxBot.ExecutionEventV2) string {
@@ -698,7 +718,11 @@ func (ps *Service) projectAdmission(ctx context.Context, admission model.Questio
 	contextPending := snapshot.ContextStage != nil &&
 		snapshot.ContextStage.ProposedBusinessContextVersion > admission.ContextRevision
 	err = model.DB(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, event := range page.Items {
+		for index := range page.Items {
+			if err := normalizeProjectedEventCitationReferences(&page.Items[index]); err != nil {
+				return err
+			}
+			event := page.Items[index]
 			encoded, err := json.Marshal(event)
 			if err != nil {
 				return err
