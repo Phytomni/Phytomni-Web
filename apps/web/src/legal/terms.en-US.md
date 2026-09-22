@@ -6,96 +6,90 @@
 **Contact:** bri-zhbgs@caas.cn  
 **Address:** 12 Zhongguancun South Street, Haidian District, Beijing 100081, People’s Republic of China
 
-Draft pending institute review.
+This document is a draft pending institute review.
 
-For users in mainland China, Chinese prevails if this English text conflicts. For all other users, this English version prevails.
+For users in mainland China, Chinese prevails if the Chinese and English texts conflict. For all other users, the English version prevails.
 
-## 1. Introduction and acceptance
+## 1. Scope, operator, and product boundaries
 
-These Terms of Service (“Terms”) govern your access to and use of Phytomni, operated by the Biotechnology Research Institute, Chinese Academy of Agricultural Sciences (CAAS BRI). By creating an account, logging in, or otherwise using Phytomni, you agree to these Terms and the Privacy Policy.
+These Terms of Service (“Terms”) apply to your access to or use of the Phytomni website, accounts, conversations, agents, file upload and storage, asynchronous analysis, and result or report download features operated by the Biotechnology Research Institute, Chinese Academy of Agricultural Sciences (CAAS BRI). By creating an account, logging in, or using the Services, you agree to these Terms and the Privacy Policy.
 
-You must be old enough to form a binding contract under applicable law, or use Phytomni only with a parent or legal guardian’s consent and supervision. If you use Phytomni on behalf of an organization, you represent that you have authority to bind that organization.
+Phytomni is intended for research, teaching, and related professional uses in agriculture and plant genomics. Features, models, agents, and interfaces may change, be limited, or be discontinued for product, operational, or security reasons. These Terms do not automatically apply to a future public API, enterprise contract, or third-party embedded deployment; if such products are introduced, separate terms or a data-processing arrangement will apply.
 
-## 2. Service description
+## 2. Accounts, organization accounts, and credentials
 
-Phytomni is an agricultural / plant-genomics knowledge platform providing AI chat, specialized agents, cloud storage, and asynchronous analysis features. Features, models, and interfaces may change, be limited, or be discontinued as we improve the service.
+You must provide accurate registration information and keep it up to date, and you must be old enough to enter into a binding contract under applicable law. Anyone below that age may use Phytomni only with appropriate authorization and supervision from a parent or legal guardian. If you use Phytomni on behalf of an organization, you represent that you are authorized to bind that organization. Organization-managed accounts may also be subject to that organization’s access, retention, and security rules.
 
-Phytomni is intended for research, teaching, and related professional use in plant science and agriculture. Availability may vary by account type, institute arrangement, or operational capacity.
+You are responsible for protecting passwords, tokens, and other credentials and for activity under your account. If you suspect unauthorized access or misuse, contact bri-zhbgs@caas.cn as soon as possible. We may suspend or restrict an account because of a security risk, a violation of these Terms, or a legal requirement.
 
-## 3. Accounts and security
+## 3. Services, agents, models, asynchronous tasks, and artifacts
 
-You must provide accurate registration information and keep it up to date. You are responsible for safeguarding your credentials and for activity under your account. Notify us promptly at bri-zhbgs@caas.cn if you suspect unauthorized access or misuse.
+Phytomni may provide AI conversations, specialized agents, model inference, file and object storage, asynchronous tasks, task status information, and reports, tables, or other downloadable files (“Artifacts”). An agent may call enabled tools or external connections within the scope of your request; actual capabilities depend on the features made available by the Services at that time. Task Metadata includes task identifiers, status, timestamps, errors, and records needed to perform the task.
 
-We may suspend or restrict accounts that appear compromised, that violate these Terms, or that we must restrict to comply with law or protect the service and other users.
+We process relevant content to provide the Services, protect the system and users, handle support requests, and diagnose failures. An asynchronous task may be performed jointly by Phytomni and configured Bot or model infrastructure; this does not mean that any particular external service, region, or processing method always applies.
 
-## 4. Acceptable use and prohibitions
+## 4. User inputs, uploaded data, outputs, and ownership
 
-You may use Phytomni for lawful personal, research, teaching, and institute-authorized purposes. You must not:
+“User Input” means prompts, conversation content, instructions, feedback, and other text you submit. “Uploaded File” means a file you upload and its contents. “Research Data” means data such as genomic, phenotypic, experimental, patient or other human, breeding-material, and unpublished-result data. “Output” means text, code, citations, analyses, and recommendations generated by a model or agent. “Artifact” means a report, table, or file generated by a task and made available for download. “Third-Party Service” means an external service enabled for storage, computing, email, monitoring, or model inference.
 
-- Abuse, disrupt, or overload the service, or attempt unauthorized access to systems, accounts, or data
-- Scrape, harvest, or systematically extract content or data beyond ordinary interactive use, or bypass rate limits, access controls, or security measures
-- Upload or transmit malware, or use Phytomni to harm others, infringe rights, or violate applicable law
-- Upload content you do not have rights to use, or content that you are not authorized to share
-- Use Phytomni in ways that violate export-control, sanctions, or similar trade restrictions that apply to you
+You retain rights in User Inputs, Uploaded Files, Research Data, and Outputs and Artifacts to the extent you lawfully hold those rights. To deliver the Services you request, the operator may, to the extent necessary, host, copy, transmit, process, display, and generate Artifacts from relevant content (service-delivery processing). To protect the system and users, prevent abuse, provide support, diagnose failures, and handle legal or audit matters, the operator may also conduct necessary security, abuse-prevention, support, legal, and audit review (security, support, and compliance processing).
 
-We may investigate suspected misuse and take action including suspension or termination.
+Model or product improvement is a processing purpose separate from the purposes above. The scope and method of improvement currently remain subject to institute and legal approval and internal review; unless separately described and approved, these Terms do not imply that any improvement processing, training switch, or specific opt-out mechanism exists. Only separately described and approved improvement processing may occur. Even if an improvement choice is provided in the future, it will not stop processing necessary to deliver the Services or for security, abuse prevention, support, legal, or audit purposes. Except for the purposes above or as required by law, we do not acquire ownership of your content.
 
-## 5. User content
+## 5. Research, biological, and third-party data responsibilities
 
-You retain ownership of content you submit, upload, or store in Phytomni (“User Content”), including prompts, files, and gene- or experiment-related inputs. You grant CAAS BRI a worldwide, non-exclusive license to host, process, transmit, display, and otherwise use User Content as needed to operate, secure, and support Phytomni.
+Before uploading or submitting Research Data, you must conduct a sensitivity and risk assessment appropriate to your circumstances and obtain the required legal basis, ethics approval, organizational authorization, and third-party permissions. You are responsible for patient or other human data, restricted breeding materials, unpublished results, and data you are not authorized to share. Phytomni does not automatically classify Research Data as sensitive information and does not promise to automatically detect, anonymize, block, or exclude particular Research Data.
 
-You are responsible for classifying the sensitivity of research or gene-related uploads and for having all rights and approvals needed to upload them. We do not automatically label research data as sensitive. You warrant that your User Content and your use of Phytomni do not violate law or third-party rights.
+You must not upload or use content that you are not authorized to process, disclose, or license. You must comply with the privacy, research-ethics, intellectual-property, export-control, sanctions, and other laws and regulations that apply to you, and you are responsible for the data you provide to Phytomni and the consequences of doing so.
 
-## 6. Improvement and opt-out
+## 6. AI output, citations, and scientific-use limitations
 
-By default, we may use inputs and related data to improve models and services. You may opt out by emailing bri-zhbgs@caas.cn. After opt-out, new data from your account will not be used for improvement. Model parameters already trained are not rolled back.
+Outputs, citations, analyses, recommendations, and Artifacts may be inaccurate, incomplete, outdated, or fabricated, and do not constitute medical, clinical, breeding, regulatory, legal, or other professional advice. Agent tool calls or task execution occur only to the extent that the relevant feature is actually enabled and runs in response to your request; completion, correctness, or suitability for your purpose is not guaranteed.
 
-Opt-out does not prevent processing needed to provide the service, security, abuse prevention, support, or legal compliance. See the Privacy Policy for more detail.
+Before using them for publication, peer review, laboratory or wet-lab work, breeding decisions, clinical or regulatory submissions, or any other use that may have significant consequences, you must have appropriately qualified personnel independently verify the facts, citations, methods, data, and conclusions. You must not rely solely on Phytomni’s Outputs to make significant decisions.
 
-## 7. AI output and research disclaimer
+## 7. Acceptable use and prohibited conduct
 
-Outputs may be inaccurate, incomplete, or fabricated. They are not professional, medical, breeding, or regulatory advice and are not a substitute for laboratory validation, wet-lab experiment, or peer review. Citations may be incomplete or outdated. You must independently verify results before relying on them for research, publication, breeding decisions, clinical or regulatory filings, or any other consequential use.
+You may use Phytomni only lawfully, responsibly, and with appropriate authorization. You must not:
 
-## 8. Third-party services
+- abuse, disrupt, or overload the Services, or access systems, accounts, or data without authorization;
+- scrape, harvest, or systematically extract content beyond ordinary interactive use, or bypass rate limits, access controls, or security measures;
+- upload malware, or use the Services to harm others, infringe rights, or violate applicable law;
+- upload content that you are not authorized to use, process, or share; or
+- use the Services in a way that violates export controls, sanctions, or similar trade restrictions that apply to you.
 
-Processing may involve Huawei Cloud OBS, Huawei EIHealth, model or infrastructure providers, email delivery (SMTP), and error monitoring tools such as Sentry. Their availability, security practices, and terms apply at the integration boundary. We are not responsible for third-party outages or changes outside our reasonable control, except as required by law.
+We may investigate suspected abuse and take measures including restricting, suspending, or terminating access.
 
-## 9. Intellectual property
+## 8. Third-party services, storage, computing, and external connections
 
-Phytomni’s software, user interface, documentation, branding, and our models and related intellectual property remain owned by CAAS BRI or its licensors. These Terms do not transfer ownership of our IP to you. User Content remains yours, subject to the license in Section 5 and any rights you grant under the Privacy Policy for improvement (unless you opt out).
+When the relevant feature is enabled or used, Uploaded Files, Artifacts, or tasks may be processed through configured object storage, Bot/model infrastructure, asynchronous computing, email delivery, or error-monitoring services. A particular processor receives data only to the extent needed for its corresponding function; not every type of data is sent to every type of service. The current Web task reconciler does not directly perform IAM polling against EIHealth; if a related Bot or computing path is enabled in the future, the arrangements applicable at that time will govern.
 
-Feedback you voluntarily provide may be used to improve Phytomni without obligation to you.
+Third-Party Services are subject to their own availability, security practices, and applicable terms. Except as required by law, we are not responsible for third-party interruptions or changes beyond our reasonable control.
 
-## 10. Fees and changes
+## 9. Intellectual property and feedback
 
-The service may be offered without charge or under institute arrangements. We may introduce fees later with notice. Paid terms will be published when applicable. Continued use after fee terms take effect constitutes acceptance of those terms for the paid features you use.
+Phytomni’s software, user interface, documentation, branding, models, and related intellectual-property rights are owned by the operator or its licensors. These Terms do not transfer those rights to you. Feedback you voluntarily provide may be used to maintain or improve Phytomni without an obligation to pay you or continue providing a particular feature.
 
-## 11. Suspension, termination, and data
+## 10. Availability, changes, rate limits, suspension, and termination
 
-You may stop using Phytomni at any time and may request account closure or deletion as described in the Privacy Policy. We may suspend or terminate access for breach of these Terms, legal compliance, security risk, or prolonged inactivity.
+The Services are provided on an “as is” basis and may be temporarily unavailable because of maintenance, capacity, security, model, or other operational reasons. We may apply reasonable rate limits, access controls, and feature changes, and may suspend or terminate an account or part of the Services when necessary. You may stop using the Services; after termination, content and records are handled under the Privacy Policy and applicable backup, audit, security, dispute, and legal obligations.
 
-After termination, we handle remaining data according to the Privacy Policy, including retention needed for backups, audits, and legal obligations.
+## 11. Fees and institute-provided access
+
+The Services may be provided without charge or under an institute, organization, or other authorization arrangement. If a specific feature is later offered for a fee, the applicable price and paid terms will be published before that feature is enabled for payment; unless otherwise agreed, your continued use of the feature means that you accept the applicable paid terms. Access provided by an institute or organization may also be subject to its internal policies and contracts.
 
 ## 12. Disclaimers and limitation of liability
 
-To the fullest extent permitted by law, Phytomni and related materials are provided “as is” and “as available,” without warranties of merchantability, fitness for a particular purpose, accuracy, or non-infringement. We do not warrant uninterrupted or error-free operation.
-
-Liability cap: [TO BE CONFIRMED BY INSTITUTE]. Nothing in these Terms excludes liability that cannot be limited under applicable law.
+To the maximum extent permitted by law, Phytomni, its Outputs, Artifacts, and related materials are provided “as is” and “as available,” without express or implied warranties of merchantability, fitness for a particular purpose, accuracy, continuous availability, or non-infringement. Nothing excludes or limits liability that applicable law prohibits from being excluded or limited. Unless applicable law requires otherwise, liability for indirect, incidental, special, punitive, or consequential losses is excluded; any liability scope is subject to applicable law and valid contracts.
 
 ## 13. Indemnity
 
-To the extent permitted by law, you will indemnify and hold harmless CAAS BRI and its personnel from claims, losses, and expenses (including reasonable legal fees) arising from your unlawful use of Phytomni, your unauthorized uploads, or your breach of these Terms, except to the extent caused by our willful misconduct.
+To the extent permitted by applicable law, you must provide reasonable assistance to and bear corresponding responsibility for the operator and its personnel in connection with third-party claims, losses, and reasonable expenses arising from your unlawful use of Phytomni, unauthorized uploads, or breach of these Terms. This section does not apply to liability for willful misconduct or gross negligence by the operator that may not lawfully be excluded.
 
-## 14. Governing law and disputes
+## 14. Governing law, dispute resolution, and regional application
 
-For users in mainland China: these Terms are governed by the laws of the People’s Republic of China; disputes shall be submitted to the competent courts in Beijing unless the institute later designates arbitration.
+The governing law, dispute-resolution method, and any regional rules applicable to these Terms are determined by mandatory law applicable to you, any valid contract between you and the operator, and the applicable arrangements published by the operator for the Services. Nothing in these Terms limits rights that you cannot waive under applicable law. For cross-border use or processing, these Terms do not imply a fixed processing region, cross-border mechanism, or single court with exclusive jurisdiction; those matters must be governed by approved operational and legal arrangements.
 
-For other users: this English text prevails on conflict; governing law is PRC law pending institute confirmation of any split. Dispute forum for non-mainland users remains subject to institute confirmation.
+## 15. Policy changes and contact information
 
-## 15. Changes
-
-We may update these Terms from time to time. Material changes will be reflected in a new version and effective date on this page. Continued use after the effective date constitutes acceptance of the updated Terms. When registration consent logging is enabled, the version you agreed to at registration is the audit anchor for that consent event.
-
-## 16. Contact
-
-Questions about these Terms: bri-zhbgs@caas.cn · CAAS BRI · 12 Zhongguancun South Street, Haidian District, Beijing 100081, People’s Republic of China.
+We may update these Terms to reflect changes to the Services, law, or security. Material changes will be published on this page with new version or effective-date information; continued use after a change takes effect means that you accept the updated Terms, except where applicable law requires otherwise. For questions about these Terms or use of Phytomni, contact bri-zhbgs@caas.cn: Biotechnology Research Institute, Chinese Academy of Agricultural Sciences, 12 Zhongguancun South Street, Haidian District, Beijing 100081, People’s Republic of China.
