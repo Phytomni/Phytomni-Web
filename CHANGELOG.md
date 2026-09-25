@@ -13,6 +13,14 @@ Newest first.
 
 ## [Unreleased]
 
+_No changes recorded yet._
+
+## [0.1.4] — 2026-09-25
+
+Final Web release for the 0.1.3 compatibility baseline. The release keeps
+all new Bot-facing capabilities dark-launched and does not claim Bot,
+operations, staging, or production acceptance.
+
 ### 🐛 Design terminal runs close without report_revision
 
 - A RUNNING Design ledger whose stored revision is 0 still takes a
@@ -245,12 +253,6 @@ Newest first.
 - Close the final Vite 8 contract gaps by removing the transitional Sass option,
   reconciling the exact coverage inventory, hardening warning-oracle mode lookup,
   and stabilizing upgraded Vue test fixtures without changing thresholds.
-
-## [0.1.4] — 2026-07-24 (release candidate)
-
-Quality and compatibility follow-up on the `0.1.3` Web/Bot contract. The
-release keeps all new Bot-facing capabilities dark-launched and does not claim
-Bot, operations, staging, or production acceptance.
 
 ### 🛡️ Quality gates and CI governance
 
