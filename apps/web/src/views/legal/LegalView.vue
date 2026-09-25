@@ -7,7 +7,6 @@
     <div class="legal-toolbar">
       <LangSwitch />
     </div>
-    <p v-if="draftBanner" class="legal-draft-banner">{{ draftBanner }}</p>
     <header class="legal-header">
       <h1>{{ title }}</h1>
       <p class="legal-meta">
@@ -62,7 +61,6 @@ watchEffect(() => {
 const title = computed(() =>
   kind.value === "privacy" ? t("legal.privacyTitle") : t("legal.termsTitle")
 );
-const draftBanner = computed(() => t("legal.draftBanner"));
 </script>
 
 <style lang="scss" scoped>
@@ -87,18 +85,6 @@ const draftBanner = computed(() => t("legal.draftBanner"));
   justify-content: flex-end;
   max-width: 760px;
   margin: 0 auto 16px;
-}
-
-.legal-draft-banner {
-  max-width: 760px;
-  margin: 0 auto 20px;
-  padding: 12px 16px;
-  border-radius: 4px;
-  background: var(--el-fill-color-light, #f4f4f5);
-  border: 1px solid var(--el-border-color-lighter, #ebeef5);
-  color: var(--el-text-color-regular, #606266);
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .legal-header {
