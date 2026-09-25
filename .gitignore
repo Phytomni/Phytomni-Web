@@ -55,6 +55,7 @@ pkg/
 go/pkg/mod/
 # compiled server binary (`go build -o phytomni-server .`)
 apps/server/phytomni-server
+apps/server/server-app
 
 # ---- Python (repo-wide tooling: scripts/ + pyproject.toml) ----
 # Virtual environments
@@ -107,3 +108,11 @@ skills-lock.json
 docs/superpowers/
 .codegraph
 .understand-anything
+
+# Scoped local build/test/runtime outputs (never reviewable source)
+.codex-test-cache/
+.codex-runtime/
+.gocache/
+coverage/
+test-results/
+**/node_modules/.vite/

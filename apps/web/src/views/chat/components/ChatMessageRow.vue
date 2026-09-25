@@ -9,7 +9,7 @@
   >
     <div v-if="showAvatar" class="message-avatar">
       <slot name="avatar">
-        <el-avatar :size="36" :src="defaultBotAvatar" />
+        <el-avatar :size="36" :src="BOT_LOGO_SRC" />
       </slot>
     </div>
     <div class="message-content">
@@ -24,7 +24,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import defaultBotAvatar from "@/assets/images/chat/logo.png";
+
+const BOT_LOGO_SRC = "/logo.png";
 
 export type ChatMessageRowRole = "user" | "assistant";
 

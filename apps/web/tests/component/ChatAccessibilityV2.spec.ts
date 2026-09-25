@@ -3,7 +3,7 @@
  * progress live-region restraint, and focus-visible ownership.
  * Test-only; mounts production Chat surface components without network.
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { flushPromises } from "@vue/test-utils";
@@ -14,13 +14,11 @@ import {
   FIXTURE_ACTIVITY_BLOCKS,
   FIXTURE_ACTIVITY_STATE_KEY,
   FIXTURE_A2UI_REQUIRED_BLOCK,
-  FIXTURE_PROGRESS_STARTED_AT,
 } from "../fixtures/chat";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
-import SendProgress from "@/views/chat/components/SendProgress.vue";
 import AgentSurfaceBlock from "@/views/chat/components/blocks/AgentSurfaceBlock.vue";
 import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
@@ -732,44 +730,6 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
     expect(wrapper.text()).toContain(enUS.chat.a2ui.expired);
     expect(wrapper.find(".a2ui-status").attributes("role")).toBe("status");
     expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe("polite");
-  });
-});
-
-describe("ChatAccessibilityV2 — progressbar and live-region restraint", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it("exposes min/max/now/valuetext and keeps percent out of the live region", async () => {
-    const wrapper = mount(SendProgress, {
-      props: {
-        startedAt: FIXTURE_PROGRESS_STARTED_AT,
-        agentName: "ChatAgent",
-        completing: false,
-        stageLabel: "Retrieving",
-      },
-      global: {},
-    });
-    vi.advanceTimersByTime(7500);
-    await nextTick();
-
-    const root = wrapper.find('[data-test="send-progress"]');
-    expect(root.attributes("role")).toBe("progressbar");
-    expect(root.attributes("aria-valuemin")).toBe("0");
-    expect(root.attributes("aria-valuemax")).toBe("100");
-    const nowVal = Number(root.attributes("aria-valuenow"));
-    expect(nowVal).toBeGreaterThanOrEqual(0);
-    expect(nowVal).toBeLessThanOrEqual(98);
-    expect(root.attributes("aria-valuetext")).toBe(`Processing, ${nowVal}%`);
-
-    const label = wrapper.find('[data-test="progress-label"]');
-    expect(label.attributes("aria-live")).toBe("polite");
-    expect(label.text()).toBe("Retrieving");
-
-    const percent = wrapper.find('[data-test="progress-percent"]');
-    expect(percent.attributes("aria-hidden")).toBe("true");
-    expect(percent.attributes("aria-live")).toBeUndefined();
-    // Percent ticks must not share the stage live region.
-    expect(label.text()).not.toContain("%");
   });
 });
 

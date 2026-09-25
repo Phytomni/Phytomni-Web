@@ -36,7 +36,6 @@ TRUSTED_UPLOAD_CREATE_PATHS = frozenset(
 
 WEB_RELAY_PATHS = (
     Path("apps/web/src/views/chat/composables/useSendMessage.ts"),
-    Path("apps/web/src/views/chat/composables/useStreamMessage.ts"),
     Path("apps/web/src/views/chat/composables/useRefreshMessage.ts"),
     Path("apps/web/src/views/chat/composables/useBotRemoteAgentRun.ts"),
     BROWSER_UPLOAD_CONTROL_PATH,

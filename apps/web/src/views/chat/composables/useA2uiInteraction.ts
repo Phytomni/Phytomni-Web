@@ -30,6 +30,11 @@ export interface A2uiSurfaceActionEvent {
 
 export interface A2uiInteractionOptions {
   buildActionId?: () => string;
+  submitExecutionAction?: (
+    message: ChatMessage,
+    event: A2uiSurfaceActionEvent,
+    actionId: string
+  ) => Promise<boolean>;
 }
 
 function normalizeUnexpectedError(error: unknown): A2uiTransportError {
@@ -231,6 +236,15 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     message: ChatMessage,
     event: A2uiSurfaceActionEvent
   ): Promise<void> => {
+    if (message.executionId) {
+      if (!options.submitExecutionAction) {
+        message.blocks = markA2uiNotSent(message.blocks ?? [], event.surfaceId);
+        return;
+      }
+      const actionId = buildActionId();
+      await options.submitExecutionAction(message, event, actionId);
+      return;
+    }
     const runtime = message.a2uiRuntime;
     const runId = runtime?.runId;
     const transport = runtime?.transport;
@@ -253,12 +267,14 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
       return;
     }
 
+    const actionId = buildActionId();
+
     const begun = beginA2uiAction(
       message.blocks ?? [],
       event.surfaceId,
       runId,
       event.intent,
-      buildActionId()
+      actionId
     );
     message.blocks = begun.blocks;
     if (!begun.ok) return;
@@ -270,6 +286,13 @@ export function useA2uiInteraction(options: A2uiInteractionOptions = {}): {
     message: ChatMessage,
     surfaceId: string
   ): Promise<void> => {
+    // V2 actions are owned by the execution command endpoint and its journal.
+    // A failed or stale V2 action must never fall through to the legacy
+    // message/run transport, which would create a second command path.
+    if (message.executionId) {
+      message.blocks = markA2uiNotSent(message.blocks ?? [], surfaceId);
+      return;
+    }
     const runtime = message.a2uiRuntime;
     const transport = runtime?.transport;
     if (runtime && !runtimeOwnsMessage(message, runtime)) {

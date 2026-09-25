@@ -1,5 +1,4 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
-import { nextTick } from "vue";
+import { describe, expect, it, vi } from "vitest";
 import type { BotArtifact } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import BotReportState from "@/components/research/BotReportState.vue";
@@ -123,14 +122,10 @@ describe("BotReportState", () => {
       false
     );
   });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
-  it("shows the finished report immediately without terminal CoT flushing", async () => {
-    vi.useFakeTimers();
+  it("shows the finished report immediately when lifecycle becomes terminal", async () => {
     const wrapper = mountReport(lifecycle({ status: "RUNNING" }));
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.attributes("data-report-status")).toBe("loading");
     expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
       false
     );
@@ -142,18 +137,12 @@ describe("BotReportState", () => {
         finalReport: "# Final report",
       }),
     });
-    await nextTick();
     expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
       true
     );
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
-
-    vi.advanceTimersByTime(180);
-    await nextTick();
     expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
       "# Final report"
     );
-    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
   });
 
   it.each([

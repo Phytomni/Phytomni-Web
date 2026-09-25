@@ -8,6 +8,7 @@ import {
   citationPlainText,
   citationMarkdown,
   decodeCitationPresentation,
+  decodeJournalCitationReferences,
   referenceListPlainText,
   referenceListMarkdown,
 } from "@/utils/citation-presentation";
@@ -76,6 +77,7 @@ describe("canonical citation presentation", () => {
         runs: [{ text, vertical: "superscript" as const, italic: true }],
         links: [],
       };
+      expect(decodeCitationPresentation(presentation)).toEqual(presentation);
       const markdown = citationMarkdown(presentation);
       expect(markdown).not.toMatch(/[\r\n]/);
       if (text.includes("\r")) expect(markdown).toContain("&#13;");
@@ -283,6 +285,41 @@ describe("canonical citation presentation", () => {
     ])
       expect(decodeCitationPresentation(value)).toBeNull();
   });
+  it("strictly decodes canonical journal rows and rejects non-journal fields", () => {
+    expect(
+      decodeJournalCitationReferences([
+        {
+          title: "Canonical title",
+          formatted_citation: "Canonical title.",
+          doi_missing: false,
+          citation: p,
+        },
+      ])
+    ).toEqual({
+      ok: true,
+      value: [
+        {
+          title: "Canonical title",
+          formatted_citation: "Canonical title.",
+          doi_missing: false,
+          citation: p,
+        },
+      ],
+    });
+    for (const reference of [
+      { title: "T", dl: "https://provider.invalid/file", citation: p },
+      { title: "T", file_id: "private-file", citation: p },
+      { title: "T", provider_payload: "private", citation: p },
+      {
+        title: "T",
+        citation: { ...p, provider_payload: "private" },
+      },
+    ]) {
+      expect(decodeJournalCitationReferences([reference])).toEqual({
+        ok: false,
+      });
+    }
+  });
   it.each([
     "javascript:alert(1)",
     "data:text/html,x",
@@ -314,6 +351,30 @@ describe("canonical citation presentation", () => {
       { citation: p },
     ]);
     expect(decodeCitationDocuments(null)).toBeUndefined();
+  });
+  it("never reconstructs presentation from metadata or formatted text", () => {
+    expect(
+      decodeCitationDocuments([
+        {
+          title: "Legacy title",
+          di: "10.1000/legacy",
+          formatted_citation: "*untrusted formatting*",
+          private_provider_field: "must not survive",
+        },
+        {
+          formatted_citation: "Safe-looking text",
+          citation: { runs: "bad", links: [] },
+        },
+      ])
+    ).toEqual([
+      {
+        title: "Legacy title",
+        di: "10.1000/legacy",
+        formatted_citation: "*untrusted formatting*",
+        citation: null,
+      },
+      { formatted_citation: "Safe-looking text", citation: null },
+    ]);
   });
   it("retains scientific styles through history decoding and keeps invalid slots numbered", () => {
     const citation = {

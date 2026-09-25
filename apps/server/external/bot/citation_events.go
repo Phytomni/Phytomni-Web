@@ -3,9 +3,81 @@ package bot
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"phytomni-server/common/citation"
 )
+
+// NormalizeExecutionEventFrameV2 validates one browser-facing execution SSE
+// event and replaces citation references with Web-derived canonical rows. All
+// non-execution frames (including comments and heartbeats) pass byte-for-byte.
+func NormalizeExecutionEventFrameV2(frame []byte, expectedExecutionID string) ([]byte, error) {
+	var eventName string
+	var dataLines []string
+	for _, raw := range bytes.Split(frame, []byte("\n")) {
+		line := strings.TrimRight(string(raw), "\r")
+		switch {
+		case strings.HasPrefix(line, "event:"):
+			eventName = strings.TrimSpace(line[len("event:"):])
+		case strings.HasPrefix(line, "data:"):
+			dataLines = append(dataLines, strings.TrimPrefix(line[len("data:"):], " "))
+		}
+	}
+	if eventName != "execution_event" {
+		return frame, nil
+	}
+	if !executionV2Identifier.MatchString(expectedExecutionID) {
+		return nil, errors.New("invalid execution event frame v2 identity")
+	}
+	data := []byte(strings.Join(dataLines, "\n"))
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, errors.New("invalid execution event frame v2")
+	}
+	var event ExecutionEventV2
+	if err := decodeFiniteV2(data, &event); err != nil {
+		return nil, err
+	}
+	if err := validateExecutionEventV2(event, expectedExecutionID); err != nil {
+		return nil, err
+	}
+	normalized, err := json.Marshal(event)
+	if err != nil {
+		return nil, err
+	}
+	return replaceSSEData(frame, normalized), nil
+}
+
+func replaceSSEData(frame, data []byte) []byte {
+	lines := bytes.SplitAfter(frame, []byte("\n"))
+	lastData := -1
+	for index, line := range lines {
+		if bytes.HasPrefix(line, []byte("data:")) {
+			lastData = index
+		}
+	}
+	var out bytes.Buffer
+	for index, line := range lines {
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			out.Write(line)
+			continue
+		}
+		if index != lastData {
+			continue
+		}
+		out.WriteString("data: ")
+		out.Write(data)
+		switch {
+		case bytes.HasSuffix(line, []byte("\r\n")):
+			out.WriteString("\r\n")
+		case bytes.HasSuffix(line, []byte("\n")):
+			out.WriteByte('\n')
+		case bytes.HasSuffix(line, []byte("\r")):
+			out.WriteByte('\r')
+		}
+	}
+	return out.Bytes()
+}
 
 // NormalizeReferenceFrame rewrites only the known phyto.references payload.
 // Non-data lines and the last data line's ending retain their original bytes.
@@ -26,34 +98,7 @@ func NormalizeReferenceFrame(frame []byte) ([]byte, error) {
 	if err != nil {
 		return nil, citation.ErrInvalidReferences
 	}
-	lines := bytes.SplitAfter(frame, []byte("\n"))
-	lastData := -1
-	for i, line := range lines {
-		if bytes.HasPrefix(line, []byte("data:")) {
-			lastData = i
-		}
-	}
-	var out bytes.Buffer
-	for i, line := range lines {
-		if !bytes.HasPrefix(line, []byte("data:")) {
-			out.Write(line)
-			continue
-		}
-		if i != lastData {
-			continue
-		}
-		out.WriteString("data: ")
-		out.Write(data)
-		switch {
-		case bytes.HasSuffix(line, []byte("\r\n")):
-			out.WriteString("\r\n")
-		case bytes.HasSuffix(line, []byte("\n")):
-			out.WriteByte('\n')
-		case bytes.HasSuffix(line, []byte("\r")):
-			out.WriteByte('\r')
-		}
-	}
-	return out.Bytes(), nil
+	return replaceSSEData(frame, data), nil
 }
 
 // NormalizeActionReferences preserves the terminal action envelope and widgets,

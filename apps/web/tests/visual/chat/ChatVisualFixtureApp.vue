@@ -172,7 +172,7 @@
                     >
                       <template #mark>
                         <img
-                          src="@/assets/images/chat/logo.png"
+                          :src="'/logo.png'"
                           class="empty-chat-mark"
                           alt=""
                         />
@@ -313,12 +313,9 @@
                           >
                             <ChatAnalystLog
                               :row-id="logOverlay?.rowId"
-                              :task-id="logOverlay?.taskId"
                               :log-data="logOverlay?.logData"
                               :loading="!!logOverlay?.loading"
-                              :updating="!!logOverlay?.updating"
                               :error-kind="logOverlay?.errorKind"
-                              @update="onFixtureAction('log-update')"
                               @retry="onFixtureAction('log-retry')"
                             />
                           </ChatActivity>
@@ -351,25 +348,34 @@
                     <ChatMessageRow
                       v-if="showProgressOverlay || showTransferOverlay"
                       role="assistant"
-                      loading
+                      :loading="showTransferOverlay || !progressRun?.terminal"
                     >
                       <div
                         class="message-text loading-message phy-bubble-assistant"
                         data-testid="chat-fixture-progress-host"
                       >
-                        <span class="sr-only">{{
-                          $t("chat.ladingInner")
-                        }}</span>
+                        <template
+                          v-if="showTransferOverlay || !progressRun?.terminal"
+                        >
+                          {{ $t("chat.ladingInner") }}
+                        </template>
                         <TransferProgress
                           v-if="transferSnapshot"
                           :snapshot="transferSnapshot"
                           @cancel="onFixtureAction('transfer-cancel')"
                         />
-                        <SendProgress
-                          v-else-if="progressProps"
-                          :started-at="progressProps.startedAt"
-                          :agent-name="progressProps.agentName"
-                          :completing="progressProps.completing"
+                        <ExecutionActivityPanel
+                          v-else-if="progressRun"
+                          :run="progressRun"
+                          :expanded="true"
+                          @open-target="onFixtureExecutionTarget"
+                        />
+                        <ExecutionRail
+                          v-if="progressRun"
+                          class="fixture-execution-rail"
+                          :run="progressRun"
+                          @cancel="onFixtureAction('execution-cancel')"
+                          @open-target="onFixtureAction('execution-target')"
                         />
                       </div>
                     </ChatMessageRow>
@@ -470,7 +476,8 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import ChatAnalystLog from "@/views/chat/components/ChatAnalystLog.vue";
 import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
-import SendProgress from "@/views/chat/components/SendProgress.vue";
+import ExecutionActivityPanel from "@/views/chat/components/ExecutionActivityPanel.vue";
+import ExecutionRail from "@/views/chat/components/ExecutionRail.vue";
 import TransferProgress from "@/components/TransferProgress.vue";
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
@@ -494,10 +501,16 @@ import {
   FIXTURE_ACTIVITY_STATE_KEY,
   getPhase3COverlay,
   type Phase3CLogProps,
-  type Phase3CProgressProps,
   type Phase3COverlaySpec,
 } from "../../fixtures/chat";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
+import {
+  createExecutionRunState,
+  type ExecutionEvent,
+  type ExecutionOperationRecord,
+  type ExecutionRunState,
+  type ExecutionTarget,
+} from "@/views/chat/streaming/executionEvents";
 import {
   SYNTHETIC_IDENTITY,
   buildSyntheticFileList,
@@ -611,7 +624,6 @@ const logOverlay = computed((): Phase3CLogProps | null => {
   if (lifecycleLog) {
     return {
       rowId: lifecycleLog.rowId,
-      taskId: lifecycleLog.taskId,
       logData: lifecycleLog.data,
     };
   }
@@ -713,13 +725,390 @@ const transferSnapshot = computed((): TransferSnapshot | null => {
   return overlay.transfer;
 });
 
-const progressProps = computed((): Phase3CProgressProps | null => {
-  if (waitCotSendingProgress.value) return waitCotSendingProgress.value;
+const FIXTURE_OPERATION_LABELS: Readonly<
+  Record<string, { labelKey: string; fallbackLabel: string }>
+> = {
+  "artifact.package": {
+    labelKey: "execution.operation.artifact.package",
+    fallbackLabel: "Package results",
+  },
+  "data.query": {
+    labelKey: "execution.operation.data.query",
+    fallbackLabel: "Query data",
+  },
+  "knowledge.search": {
+    labelKey: "execution.operation.knowledge.search",
+    fallbackLabel: "Search knowledge",
+  },
+  "remote.analysis": {
+    labelKey: "execution.operation.remote.analysis",
+    fallbackLabel: "Run analysis",
+  },
+  "remote.reconcile": {
+    labelKey: "execution.operation.remote.reconcile",
+    fallbackLabel: "Collect analysis",
+  },
+  "remote.submit": {
+    labelKey: "execution.operation.remote.submit",
+    fallbackLabel: "Submit analysis",
+  },
+  "review.citation_check": {
+    labelKey: "execution.operation.review.citationCheck",
+    fallbackLabel: "Check citations",
+  },
+  "review.draft_dimension": {
+    labelKey: "execution.operation.review.draftDimension",
+    fallbackLabel: "Draft section",
+  },
+  "review.final_synthesis": {
+    labelKey: "execution.operation.review.finalSynthesis",
+    fallbackLabel: "Synthesize report",
+  },
+  "review.retrieve_dimension": {
+    labelKey: "execution.operation.review.retrieveDimension",
+    fallbackLabel: "Retrieve evidence",
+  },
+};
+
+function fixtureSecondsAgo(seconds: number): string {
+  return new Date(Date.now() - seconds * 1_000).toISOString();
+}
+
+function buildFixtureOperation(
+  operationKey: string,
+  index: number,
+  status: ExecutionOperationRecord["status"],
+  overrides: Partial<ExecutionOperationRecord> = {}
+): ExecutionOperationRecord {
+  const labels = FIXTURE_OPERATION_LABELS[operationKey] ?? {
+    labelKey: "execution.operation.generic",
+    fallbackLabel: "Internal operation",
+  };
+  const startedAt = fixtureSecondsAgo(64 - index * 4);
+  const terminal = !["queued", "running", "retrying"].includes(status);
+  const lastObservationAt = terminal
+    ? fixtureSecondsAgo(62 - index * 4)
+    : fixtureSecondsAgo(12);
+  const attemptStatus: ExecutionOperationRecord["attempts"][number]["status"] =
+    status === "retrying" || status === "queued"
+      ? "running"
+      : status === "partial"
+        ? "succeeded"
+        : status;
+  return {
+    schemaVersion: 1,
+    operationId: `fixture-operation-${index}`,
+    workUnitId: `fixture-work-unit-${index}`,
+    operationKey,
+    labelKey: labels.labelKey,
+    fallbackLabel: labels.fallbackLabel,
+    status,
+    startedAt,
+    lastObservationAt,
+    completedAt: terminal ? lastObservationAt : null,
+    durationMs: terminal ? 2_000 : 12_000,
+    currentAttempt: 1,
+    attempts:
+      status === "queued"
+        ? []
+        : [
+            {
+              attempt: 1,
+              status: attemptStatus,
+              startedAt,
+              completedAt: terminal ? lastObservationAt : null,
+              durationMs: terminal ? 2_000 : 12_000,
+              failure: null,
+              retry: null,
+            },
+          ],
+    progress: null,
+    detail: {},
+    summary: null,
+    target: null,
+    ...overrides,
+  };
+}
+
+function buildFixtureEvent(
+  executionId: string,
+  seq: number,
+  kind: string,
+  secondsAgo: number,
+  overrides: Partial<ExecutionEvent> = {}
+): ExecutionEvent {
+  return {
+    schemaVersion: 2,
+    eventId: `${executionId}-event-${seq}`,
+    executionId,
+    runId: executionId,
+    seq,
+    occurredAt: fixtureSecondsAgo(secondsAgo),
+    kind,
+    known: true,
+    ignorable: false,
+    status: "succeeded",
+    summary: { key: kind, text: kind },
+    payload: {},
+    ...overrides,
+  };
+}
+
+const progressRun = computed((): ExecutionRunState | null => {
   const overlay = phase3cOverlay.value;
   if (!overlay || overlay.kind !== "progress" || !overlay.progress) {
     return null;
   }
-  return overlay.progress;
+  const executionId = `turn-fixture-${props.fixture?.key ?? "progress"}`;
+  const run = createExecutionRunState(executionId, 2);
+  const occurredAt = new Date(
+    overlay.progress.startedAt ?? Date.now()
+  ).toISOString();
+  const completed = overlay.progress.completing;
+  run.status = completed ? "succeeded" : "running";
+  run.delivery = "connected";
+  run.startedAt = occurredAt;
+  run.lastActivityAt = occurredAt;
+  run.latestSeq = 1;
+  run.events = [
+    {
+      schemaVersion: 2,
+      eventId: `${executionId}-event-1`,
+      executionId,
+      runId: executionId,
+      seq: 1,
+      occurredAt,
+      kind: completed ? "phase.completed" : "phase.started",
+      known: true,
+      ignorable: false,
+      status: completed ? "succeeded" : "running",
+      summary: {
+        key: completed ? "phase.completed" : "phase.started",
+        text: completed ? "Response completed" : "Retrieving evidence",
+      },
+      payload: { phase: "research" },
+    },
+  ];
+  if (completed) {
+    run.terminal = { status: "succeeded", eventId: `${executionId}-event-1` };
+  }
+
+  const fixtureKey = props.fixture?.key;
+  if (fixtureKey?.startsWith("execution-")) {
+    run.startedAt = fixtureSecondsAgo(60);
+    run.lastActivityAt = fixtureSecondsAgo(12);
+    run.lastContactAt = fixtureSecondsAgo(3);
+    run.events = [];
+  }
+  if (fixtureKey === "execution-long-running") {
+    run.operations = [
+      buildFixtureOperation("review.retrieve_dimension", 1, "succeeded", {
+        progress: { completed: 8, total: 8, unit: "dimensions" },
+        detail: { ordinal: 8, total: 8 },
+      }),
+      buildFixtureOperation("review.draft_dimension", 2, "succeeded", {
+        progress: { completed: 8, total: 8, unit: "dimensions" },
+        detail: { ordinal: 8, total: 8 },
+      }),
+      buildFixtureOperation("review.citation_check", 3, "running", {
+        progress: { completed: 37, total: 64, unit: "batches" },
+        detail: { ordinal: 37, total: 64 },
+        summary: {
+          kind: "decision",
+          text: "Checking cited evidence before final synthesis.",
+        },
+      }),
+      buildFixtureOperation("knowledge.search", 4, "succeeded", {
+        progress: { completed: 4, total: 4, unit: "repositories" },
+        detail: { repository_count: 4, result_count: 126 },
+      }),
+      buildFixtureOperation("data.query", 5, "succeeded", {
+        progress: { completed: 2400, total: 2400, unit: "rows" },
+        detail: { result_count: 2400 },
+      }),
+      buildFixtureOperation("remote.submit", 6, "succeeded", {
+        detail: { provider_state: "accepted" },
+      }),
+      buildFixtureOperation("remote.analysis", 7, "running", {
+        detail: { provider_state: "running" },
+      }),
+      buildFixtureOperation("remote.reconcile", 8, "queued"),
+      buildFixtureOperation("review.final_synthesis", 9, "queued"),
+      buildFixtureOperation("artifact.package", 10, "queued"),
+    ];
+    run.executionStage = {
+      stage: "scientific_execution",
+      childStatus: "running",
+      rootStatus: "running",
+      answerAvailable: false,
+      todos: [
+        { id: "planning", status: "completed" },
+        { id: "analysis", status: "in_progress" },
+        { id: "consolidation", status: "pending" },
+        { id: "response", status: "pending" },
+      ],
+      pendingStatusKey: "execution.pending.running",
+      clocks: {
+        lastExecutionFactAt: fixtureSecondsAgo(12),
+        lastProviderContactAt: fixtureSecondsAgo(8),
+        lastStreamContactAt: fixtureSecondsAgo(3),
+      },
+    };
+  } else if (fixtureKey === "execution-retrying") {
+    run.status = "retry_scheduled";
+    run.operations = [
+      buildFixtureOperation("knowledge.search", 1, "retrying", {
+        currentAttempt: 2,
+        attempts: [
+          {
+            attempt: 1,
+            status: "failed",
+            startedAt: fixtureSecondsAgo(28),
+            completedAt: fixtureSecondsAgo(25.5),
+            durationMs: 2_500,
+            failure: { code: "PROVIDER_BUSY", retryable: true },
+            retry: { delayMs: 1_500 },
+          },
+          {
+            attempt: 2,
+            status: "running",
+            startedAt: fixtureSecondsAgo(24),
+            completedAt: null,
+            durationMs: 9_000,
+            failure: null,
+            retry: null,
+          },
+        ],
+        detail: { repository_count: 3, result_count: 18 },
+      }),
+    ];
+    run.executionStage = {
+      stage: "scientific_execution",
+      childStatus: "running",
+      rootStatus: "running",
+      answerAvailable: false,
+      todos: [
+        { id: "planning", status: "completed" },
+        { id: "analysis", status: "in_progress" },
+        { id: "consolidation", status: "pending" },
+        { id: "response", status: "pending" },
+      ],
+      pendingStatusKey: "execution.pending.running",
+      clocks: {
+        lastExecutionFactAt: fixtureSecondsAgo(24),
+        lastProviderContactAt: fixtureSecondsAgo(20),
+        lastStreamContactAt: fixtureSecondsAgo(16),
+      },
+    };
+  } else if (fixtureKey === "execution-cancelled") {
+    run.status = "cancelled";
+    run.operations = [buildFixtureOperation("data.query", 1, "cancelled")];
+    run.terminal = { status: "cancelled", eventId: `${executionId}-event-1` };
+    run.executionStage = {
+      stage: "scientific_execution",
+      childStatus: "cancelled",
+      rootStatus: "cancelled",
+      answerAvailable: false,
+      todos: [
+        { id: "planning", status: "completed" },
+        { id: "analysis", status: "skipped" },
+        { id: "consolidation", status: "skipped" },
+        { id: "response", status: "skipped" },
+      ],
+      pendingStatusKey: null,
+      clocks: {
+        lastExecutionFactAt: fixtureSecondsAgo(22),
+        lastProviderContactAt: fixtureSecondsAgo(23),
+        lastStreamContactAt: fixtureSecondsAgo(21),
+      },
+    };
+  } else if (fixtureKey === "execution-succeeded") {
+    const succeededKeys = [
+      "remote.submit",
+      "remote.analysis",
+      "remote.reconcile",
+      "review.final_synthesis",
+      "artifact.package",
+    ];
+    run.operations = succeededKeys.map((key, index) =>
+      buildFixtureOperation(key, index + 1, "succeeded", {
+        detail:
+          key === "artifact.package"
+            ? { artifact_count: 2 }
+            : key.startsWith("remote.")
+              ? { provider_state: "succeeded" }
+              : {},
+      })
+    );
+    run.events = [
+      buildFixtureEvent(executionId, 1, "execution.started", 66, {
+        status: "running",
+      }),
+      buildFixtureEvent(executionId, 2, "todo.snapshot", 62, {
+        payload: {
+          items: [
+            { id: "search", label_key: "todo.search", status: "pending" },
+          ],
+        },
+        target: { kind: "todo", id: "fixture-todo-initial" },
+      }),
+      buildFixtureEvent(executionId, 3, "message.snapshot", 58),
+      buildFixtureEvent(executionId, 4, "reasoning.summary", 46, {
+        summary: {
+          key: "reasoning.summary",
+          text: "Evidence was checked before final synthesis.",
+        },
+        payload: { text: "Evidence was checked before final synthesis." },
+      }),
+      buildFixtureEvent(executionId, 5, "todo.snapshot", 8, {
+        payload: {
+          items: [
+            { id: "search", label_key: "todo.search", status: "completed" },
+            { id: "report", label_key: "todo.report", status: "completed" },
+          ],
+        },
+        target: { kind: "todo", id: "fixture-todo-latest" },
+      }),
+      buildFixtureEvent(executionId, 6, "message.completed", 5),
+    ];
+    run.latestSeq = 6;
+    run.outputText = "The network analysis and archive are ready.";
+    run.results = [
+      {
+        eventId: `${executionId}-result-1`,
+        name: "network-results.zip",
+        mediaType: "application/zip",
+        sizeBytes: 16_384,
+        target: { kind: "artifact", id: "fixture-network-results" },
+      },
+      {
+        eventId: `${executionId}-result-2`,
+        name: "execution-log.json",
+        mediaType: "application/json",
+        sizeBytes: 4_096,
+        target: { kind: "artifact", id: "fixture-execution-log" },
+      },
+    ];
+    run.executionStage = {
+      stage: "response_settlement",
+      childStatus: "succeeded",
+      rootStatus: "succeeded",
+      answerAvailable: true,
+      todos: [
+        { id: "planning", status: "completed" },
+        { id: "analysis", status: "completed" },
+        { id: "consolidation", status: "completed" },
+        { id: "response", status: "completed" },
+      ],
+      pendingStatusKey: null,
+      clocks: {
+        lastExecutionFactAt: fixtureSecondsAgo(6),
+        lastProviderContactAt: fixtureSecondsAgo(9),
+        lastStreamContactAt: fixtureSecondsAgo(5),
+      },
+    };
+  }
+  return run;
 });
 
 const geneNetworkImages = computed(
@@ -795,6 +1184,10 @@ const onFixtureAction = (name: string) => {
     activeSidebarItem.value = "knowledge-base";
   }
   if (name === "favorites") activeSidebarItem.value = "favorites";
+};
+
+const onFixtureExecutionTarget = (target: ExecutionTarget) => {
+  lastFixtureAction.value = `execution-target:${target.kind}:${target.id}`;
 };
 
 async function applyPickerFixtureState() {

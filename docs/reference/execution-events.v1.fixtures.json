@@ -1,0 +1,304 @@
+{
+  "contract": {
+    "schema_version": 1,
+    "execution_identity": {
+      "source_field": "client_turn_id",
+      "public_field": "execution_id",
+      "transport_header": "X-Phyto-Execution-Id",
+      "opaque_pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "stable_retry": "same_fingerprint",
+      "replacement": "new_identity",
+      "second_client_uuid_allowed": false
+    },
+    "event_kinds": [
+      "run.started",
+      "run.accepted",
+      "run.waiting_input",
+      "run.resumed",
+      "run.succeeded",
+      "run.failed",
+      "run.cancelled",
+      "phase.started",
+      "phase.progress",
+      "phase.completed",
+      "phase.failed",
+      "tool.started",
+      "tool.completed",
+      "tool.failed",
+      "todo.snapshot",
+      "reasoning.summary",
+      "decision.note",
+      "input.required",
+      "input.resolved",
+      "artifact.published",
+      "tracking.degraded"
+    ],
+    "statuses": [
+      "queued",
+      "running",
+      "waiting",
+      "succeeded",
+      "failed",
+      "cancelled"
+    ],
+    "todo_statuses": ["pending", "in_progress", "completed"],
+    "target_kinds": [
+      "event",
+      "artifact",
+      "report",
+      "todo",
+      "preview",
+      "download"
+    ],
+    "limits": {
+      "max_event_bytes": 16384,
+      "max_summary_chars": 512,
+      "max_todo_items": 100,
+      "default_page_size": 50,
+      "max_page_size": 200,
+      "max_events_per_run": 10000,
+      "max_live_backlog": 1000,
+      "progress_coalesce_ms": 500
+    }
+  },
+  "base_event": {
+    "schema_version": 1,
+    "event_id": "evt-fixture",
+    "run_id": "run-fixture",
+    "seq": 1,
+    "idempotency_key": "fixture:event",
+    "occurred_at": "2026-08-18T00:00:00Z",
+    "kind": "run.started",
+    "status": "running",
+    "summary": {
+      "key": "activity.run.started",
+      "text": "Run started"
+    },
+    "payload": {},
+    "ignorable": false
+  },
+  "valid_events": [
+    {
+      "name": "run started",
+      "event": { "kind": "run.started", "payload": {} }
+    },
+    {
+      "name": "run accepted",
+      "event": { "kind": "run.accepted", "status": "queued", "payload": {} }
+    },
+    {
+      "name": "run waiting for input",
+      "event": {
+        "kind": "run.waiting_input",
+        "status": "waiting",
+        "payload": {}
+      }
+    },
+    {
+      "name": "run resumed",
+      "event": { "kind": "run.resumed", "payload": {} }
+    },
+    {
+      "name": "run succeeded",
+      "event": { "kind": "run.succeeded", "status": "succeeded", "payload": {} }
+    },
+    {
+      "name": "run failed",
+      "event": {
+        "kind": "run.failed",
+        "status": "failed",
+        "payload": { "code": "execution_failed", "retryable": false }
+      }
+    },
+    {
+      "name": "run cancelled",
+      "event": { "kind": "run.cancelled", "status": "cancelled", "payload": {} }
+    },
+    {
+      "name": "phase started",
+      "event": {
+        "kind": "phase.started",
+        "payload": { "phase": "retrieval", "label_key": "phase.retrieval" }
+      }
+    },
+    {
+      "name": "phase progress",
+      "event": {
+        "kind": "phase.progress",
+        "payload": { "phase": "retrieval", "completed": 2, "total": 5 }
+      }
+    },
+    {
+      "name": "phase completed",
+      "event": {
+        "kind": "phase.completed",
+        "status": "succeeded",
+        "payload": { "phase": "retrieval", "label_key": "phase.retrieval" }
+      }
+    },
+    {
+      "name": "phase failed",
+      "event": {
+        "kind": "phase.failed",
+        "status": "failed",
+        "payload": { "phase": "retrieval", "code": "phase_failed" }
+      }
+    },
+    {
+      "name": "tool started",
+      "event": {
+        "kind": "tool.started",
+        "payload": { "tool_key": "tool.search", "call_id": "call-fixture" }
+      }
+    },
+    {
+      "name": "tool completed",
+      "event": {
+        "kind": "tool.completed",
+        "status": "succeeded",
+        "payload": {
+          "tool_key": "tool.search",
+          "call_id": "call-fixture",
+          "duration_ms": 42
+        }
+      }
+    },
+    {
+      "name": "tool failed",
+      "event": {
+        "kind": "tool.failed",
+        "status": "failed",
+        "payload": {
+          "tool_key": "tool.search",
+          "call_id": "call-fixture",
+          "duration_ms": 42,
+          "code": "tool_failed"
+        }
+      }
+    },
+    {
+      "name": "todo snapshot",
+      "event": {
+        "kind": "todo.snapshot",
+        "payload": {
+          "items": [
+            {
+              "id": "prepare",
+              "label_key": "todo.prepare",
+              "status": "in_progress"
+            },
+            {
+              "id": "finish",
+              "label_key": "todo.finish",
+              "status": "pending"
+            }
+          ]
+        },
+        "target": { "kind": "todo", "id": "todo-fixture" }
+      }
+    },
+    {
+      "name": "reasoning summary",
+      "event": {
+        "kind": "reasoning.summary",
+        "payload": { "text": "Compared the available evidence." }
+      }
+    },
+    {
+      "name": "decision note",
+      "event": {
+        "kind": "decision.note",
+        "payload": { "text": "Selected the bounded analysis path." }
+      }
+    },
+    {
+      "name": "input required",
+      "event": {
+        "kind": "input.required",
+        "status": "waiting",
+        "payload": { "surface_id": "surface-fixture", "widget": "confirm" }
+      }
+    },
+    {
+      "name": "input resolved",
+      "event": {
+        "kind": "input.resolved",
+        "payload": { "surface_id": "surface-fixture", "outcome": "accepted" }
+      }
+    },
+    {
+      "name": "artifact published",
+      "event": {
+        "kind": "artifact.published",
+        "status": "succeeded",
+        "payload": {
+          "name": "result.csv",
+          "media_type": "text/csv",
+          "size_bytes": 128
+        },
+        "target": { "kind": "artifact", "id": "artifact-fixture" }
+      }
+    },
+    {
+      "name": "tracking degraded",
+      "event": {
+        "kind": "tracking.degraded",
+        "status": "failed",
+        "payload": { "code": "event_store_unavailable", "retryable": true }
+      }
+    }
+  ],
+  "projection": {
+    "schema_version": 1,
+    "run_id": "run-fixture",
+    "latest_seq": 21,
+    "status": "succeeded",
+    "phase": "retrieval",
+    "todos": [
+      { "id": "prepare", "label_key": "todo.prepare", "status": "completed" }
+    ],
+    "results": [
+      {
+        "event_id": "evt-artifact",
+        "name": "result.csv",
+        "media_type": "text/csv",
+        "size_bytes": 128,
+        "target": { "kind": "artifact", "id": "artifact-fixture" }
+      }
+    ],
+    "input_required": null,
+    "terminal": { "status": "succeeded", "event_id": "evt-terminal" }
+  },
+  "ignorable_extension": {
+    "kind": "extension.trace_hint",
+    "payload": { "hint": "safe" },
+    "ignorable": true
+  },
+  "invalid_events": [
+    {
+      "name": "unknown required kind",
+      "event": { "kind": "extension.required", "ignorable": false },
+      "reason": "unknown_required_kind"
+    },
+    {
+      "name": "unknown target kind",
+      "event": { "target": { "kind": "direct_url", "id": "target-fixture" } },
+      "reason": "unknown_target_kind"
+    },
+    {
+      "name": "raw reasoning",
+      "event": { "payload": { "raw_reasoning": "private scratchpad" } },
+      "reason": "forbidden_public_payload"
+    },
+    {
+      "name": "absolute path",
+      "event": { "payload": { "path": "/srv/private/result.csv" } },
+      "reason": "forbidden_public_payload"
+    },
+    {
+      "name": "arbitrary URL",
+      "event": { "payload": { "url": "https://storage.invalid/object" } },
+      "reason": "forbidden_public_payload"
+    }
+  ]
+}

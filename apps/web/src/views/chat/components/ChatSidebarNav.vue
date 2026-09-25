@@ -11,18 +11,9 @@
             :aria-label="$t('chat.expandNavigation')"
             @click="emit('toggle-collapse')"
           >
-            <img
-              src="../../../assets/images/chat/logo.png"
-              class="logo"
-              alt=""
-            />
+            <img :src="BOT_LOGO_SRC" class="logo" alt="" />
           </button>
-          <img
-            v-else
-            src="../../../assets/images/chat/logo.png"
-            class="logo"
-            alt=""
-          />
+          <img v-else :src="BOT_LOGO_SRC" class="logo" alt="" />
           <span
             v-if="!collapsed"
             class="app-title-label"
@@ -313,6 +304,8 @@ import {
 import LangSwitch from "@/components/LangSwitch.vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { SIDEBAR_MOBILE_BREAKPOINT } from "@/views/chat/composables/useSidebarResponsive";
+
+const BOT_LOGO_SRC = "/logo.png";
 
 const props = withDefaults(
   defineProps<{

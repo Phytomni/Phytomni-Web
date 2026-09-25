@@ -1,0 +1,486 @@
+{
+  "schema_version": 1,
+  "contract": {
+    "grouping_key": "work_unit_id",
+    "operation_statuses": [
+      "queued",
+      "running",
+      "retrying",
+      "succeeded",
+      "partial",
+      "failed",
+      "cancelled",
+      "timed_out"
+    ],
+    "attempt_statuses": [
+      "running",
+      "retry_scheduled",
+      "succeeded",
+      "failed",
+      "cancelled",
+      "timed_out"
+    ],
+    "progress": {
+      "requires_exact_total": true,
+      "percent_without_total_allowed": false
+    },
+    "unknown_presenter": {
+      "operation_key": "operation.unknown",
+      "label_key": "execution.operation.generic",
+      "detail_policy": "empty"
+    },
+    "execution_log": {
+      "artifact_role": "execution_log",
+      "target_kind": "artifact"
+    },
+    "limits": {
+      "max_operations_per_run": 256,
+      "max_attempt_history_per_operation": 8,
+      "max_detail_fields_per_operation": 16,
+      "liveness_coalesce_ms": 30000,
+      "max_execution_log_bytes": 1048576
+    }
+  },
+  "records": {
+    "grouped_operation": {
+      "schema_version": 1,
+      "operation_id": "operation-review-retrieve-2",
+      "work_unit_id": "work-review-retrieve-2",
+      "operation_key": "review.retrieve_dimension",
+      "label_key": "execution.operation.review.retrieveDimension",
+      "fallback_label": "Retrieve evidence",
+      "status": "running",
+      "started_at": "2026-08-22T03:00:00Z",
+      "last_observation_at": "2026-08-22T03:00:12.500Z",
+      "completed_at": null,
+      "duration_ms": 12500,
+      "current_attempt": 2,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "failed",
+          "started_at": "2026-08-22T03:00:00Z",
+          "completed_at": "2026-08-22T03:00:04.200Z",
+          "duration_ms": 4200,
+          "failure": {
+            "code": "provider_retryable",
+            "retryable": true
+          },
+          "retry": {
+            "delay_ms": 1000
+          }
+        },
+        {
+          "attempt": 2,
+          "status": "running",
+          "started_at": "2026-08-22T03:00:05.200Z",
+          "completed_at": null,
+          "duration_ms": 7300,
+          "failure": null,
+          "retry": null
+        }
+      ],
+      "progress": {
+        "completed": 2,
+        "total": 4,
+        "unit": "dimensions"
+      },
+      "detail": {
+        "ordinal": 2,
+        "total": 4
+      },
+      "summary": null,
+      "target": null
+    },
+    "unknown_presenter": {
+      "schema_version": 1,
+      "operation_id": "operation-unknown",
+      "work_unit_id": "work-unknown",
+      "operation_key": "operation.unknown",
+      "label_key": "execution.operation.generic",
+      "fallback_label": "Internal operation",
+      "status": "running",
+      "started_at": "2026-08-22T03:01:00Z",
+      "last_observation_at": "2026-08-22T03:01:00Z",
+      "completed_at": null,
+      "duration_ms": 0,
+      "current_attempt": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "running",
+          "started_at": "2026-08-22T03:01:00Z",
+          "completed_at": null,
+          "duration_ms": 0,
+          "failure": null,
+          "retry": null
+        }
+      ],
+      "progress": null,
+      "detail": {},
+      "summary": null,
+      "target": null
+    }
+  },
+  "execution_log": {
+    "artifact_role": "execution_log",
+    "name": "execution-log.txt",
+    "media_type": "text/plain",
+    "size_bytes": 640,
+    "target": {
+      "kind": "artifact",
+      "id": "execution-log-fixture"
+    }
+  },
+  "stage_contract": {
+    "stages": [
+      "orchestration",
+      "scientific_execution",
+      "consolidation",
+      "response_settlement"
+    ],
+    "root_statuses": [
+      "running",
+      "succeeded",
+      "partial",
+      "failed",
+      "cancelled",
+      "timed_out"
+    ],
+    "todo_ids": ["planning", "analysis", "consolidation", "response"],
+    "pending_status_keys": {
+      "orchestration": "execution.pending.submitted",
+      "scientific_execution": "execution.pending.running",
+      "consolidation": "execution.pending.consolidating",
+      "response_settlement": "execution.pending.settling"
+    },
+    "clocks": [
+      "last_execution_fact_at",
+      "last_provider_contact_at",
+      "last_stream_contact_at"
+    ]
+  },
+  "stage_transition_cases": [
+    {
+      "name": "child_submission_succeeded",
+      "signal": "provider_submitted",
+      "state": {
+        "stage": "orchestration",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": false,
+        "todos": [
+          { "id": "planning", "status": "in_progress" },
+          { "id": "analysis", "status": "pending" },
+          { "id": "consolidation", "status": "pending" },
+          { "id": "response", "status": "pending" }
+        ],
+        "pending_status_key": "execution.pending.submitted",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:00Z",
+          "last_provider_contact_at": "2026-08-22T04:00:00Z",
+          "last_stream_contact_at": "2026-08-22T03:59:59Z"
+        }
+      }
+    },
+    {
+      "name": "provider_running",
+      "signal": "provider_state_changed",
+      "state": {
+        "stage": "scientific_execution",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": false,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "in_progress" },
+          { "id": "consolidation", "status": "pending" },
+          { "id": "response", "status": "pending" }
+        ],
+        "pending_status_key": "execution.pending.running",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:05Z",
+          "last_provider_contact_at": "2026-08-22T04:00:05Z",
+          "last_stream_contact_at": "2026-08-22T04:00:04Z"
+        }
+      }
+    },
+    {
+      "name": "unchanged_provider_poll",
+      "signal": "provider_contact_unchanged",
+      "previous": {
+        "stage": "scientific_execution",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:05Z",
+          "last_provider_contact_at": "2026-08-22T04:00:05Z",
+          "last_stream_contact_at": "2026-08-22T04:00:04Z"
+        }
+      },
+      "state": {
+        "stage": "scientific_execution",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": false,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "in_progress" },
+          { "id": "consolidation", "status": "pending" },
+          { "id": "response", "status": "pending" }
+        ],
+        "pending_status_key": "execution.pending.running",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:05Z",
+          "last_provider_contact_at": "2026-08-22T04:00:15Z",
+          "last_stream_contact_at": "2026-08-22T04:00:04Z"
+        }
+      }
+    },
+    {
+      "name": "stream_heartbeat",
+      "signal": "stream_contact",
+      "previous": {
+        "stage": "scientific_execution",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:05Z",
+          "last_provider_contact_at": "2026-08-22T04:00:15Z",
+          "last_stream_contact_at": "2026-08-22T04:00:04Z"
+        }
+      },
+      "state": {
+        "stage": "scientific_execution",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": false,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "in_progress" },
+          { "id": "consolidation", "status": "pending" },
+          { "id": "response", "status": "pending" }
+        ],
+        "pending_status_key": "execution.pending.running",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:00:05Z",
+          "last_provider_contact_at": "2026-08-22T04:00:15Z",
+          "last_stream_contact_at": "2026-08-22T04:00:20Z"
+        }
+      }
+    },
+    {
+      "name": "provider_terminal_consolidating",
+      "signal": "consolidation_started",
+      "state": {
+        "stage": "consolidation",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": false,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "completed" },
+          { "id": "consolidation", "status": "in_progress" },
+          { "id": "response", "status": "pending" }
+        ],
+        "pending_status_key": "execution.pending.consolidating",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:01:00Z",
+          "last_provider_contact_at": "2026-08-22T04:00:55Z",
+          "last_stream_contact_at": "2026-08-22T04:00:20Z"
+        }
+      }
+    },
+    {
+      "name": "answer_settling",
+      "signal": "answer_available",
+      "state": {
+        "stage": "response_settlement",
+        "child_status": "succeeded",
+        "root_status": "running",
+        "answer_available": true,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "completed" },
+          { "id": "consolidation", "status": "completed" },
+          { "id": "response", "status": "in_progress" }
+        ],
+        "pending_status_key": "execution.pending.settling",
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:01:10Z",
+          "last_provider_contact_at": "2026-08-22T04:00:55Z",
+          "last_stream_contact_at": "2026-08-22T04:01:09Z"
+        }
+      }
+    },
+    {
+      "name": "root_succeeded",
+      "signal": "root_succeeded",
+      "state": {
+        "stage": "response_settlement",
+        "child_status": "succeeded",
+        "root_status": "succeeded",
+        "answer_available": true,
+        "todos": [
+          { "id": "planning", "status": "completed" },
+          { "id": "analysis", "status": "completed" },
+          { "id": "consolidation", "status": "completed" },
+          { "id": "response", "status": "completed" }
+        ],
+        "pending_status_key": null,
+        "clocks": {
+          "last_execution_fact_at": "2026-08-22T04:01:12Z",
+          "last_provider_contact_at": "2026-08-22T04:00:55Z",
+          "last_stream_contact_at": "2026-08-22T04:01:12Z"
+        }
+      }
+    }
+  ],
+  "invalid_stage_cases": [
+    {
+      "reason": "stage_regression",
+      "previous_stage": "consolidation",
+      "stage": "scientific_execution"
+    },
+    {
+      "reason": "child_terminal_closes_root",
+      "child_status": "succeeded",
+      "remote_status": "running",
+      "root_status": "succeeded"
+    },
+    {
+      "reason": "todo_stage_mismatch",
+      "stage": "scientific_execution",
+      "todo_id": "planning",
+      "todo_status": "in_progress"
+    },
+    {
+      "reason": "pending_answer_mismatch",
+      "stage": "scientific_execution",
+      "answer_available": false,
+      "pending_status_key": null
+    },
+    {
+      "reason": "stream_contact_mutates_execution_clocks",
+      "signal": "stream_contact",
+      "mutated_clocks": ["last_execution_fact_at", "last_provider_contact_at"]
+    },
+    {
+      "reason": "unchanged_provider_mutates_execution_clock",
+      "signal": "provider_contact_unchanged",
+      "mutated_clocks": ["last_execution_fact_at"]
+    },
+    {
+      "reason": "root_terminal_before_settlement",
+      "stage": "consolidation",
+      "root_status": "succeeded"
+    }
+  ],
+  "redacted_record": {
+    "schema_version": 1,
+    "operation_id": "operation-redacted",
+    "work_unit_id": "work-redacted",
+    "operation_key": "review.retrieve_dimension",
+    "label_key": "execution.operation.review.retrieveDimension",
+    "fallback_label": "Retrieve evidence",
+    "status": "succeeded",
+    "started_at": "2026-08-22T03:02:00Z",
+    "last_observation_at": "2026-08-22T03:02:08Z",
+    "completed_at": "2026-08-22T03:02:08Z",
+    "duration_ms": 8000,
+    "current_attempt": 1,
+    "attempts": [
+      {
+        "attempt": 1,
+        "status": "succeeded",
+        "started_at": "2026-08-22T03:02:00Z",
+        "completed_at": "2026-08-22T03:02:08Z",
+        "duration_ms": 8000,
+        "failure": null,
+        "retry": null
+      }
+    ],
+    "progress": {
+      "completed": 1,
+      "total": 1,
+      "unit": "dimensions"
+    },
+    "detail": {
+      "ordinal": 1,
+      "total": 1
+    },
+    "summary": {
+      "kind": "operation",
+      "text": "Evidence retrieval completed"
+    },
+    "target": null
+  },
+  "invalid_payloads": [
+    {
+      "name": "raw prompt",
+      "payload": {
+        "prompt": "private model prompt"
+      },
+      "reason": "forbidden_prompt"
+    },
+    {
+      "name": "source passage",
+      "payload": {
+        "source_passage": "private scientific evidence"
+      },
+      "reason": "forbidden_source_passage"
+    },
+    {
+      "name": "raw SQL",
+      "payload": {
+        "sql": "select * from private_table"
+      },
+      "reason": "forbidden_sql"
+    },
+    {
+      "name": "tool arguments and result",
+      "payload": {
+        "tool_arguments": {
+          "query": "private"
+        },
+        "tool_result": {
+          "rows": []
+        }
+      },
+      "reason": "forbidden_tool_payload"
+    },
+    {
+      "name": "storage path",
+      "payload": {
+        "path": "/srv/private/execution.log"
+      },
+      "reason": "forbidden_path"
+    },
+    {
+      "name": "arbitrary URL",
+      "payload": {
+        "url": "https://storage.invalid/private"
+      },
+      "reason": "forbidden_url"
+    },
+    {
+      "name": "credential",
+      "payload": {
+        "token": "Bearer private-token"
+      },
+      "reason": "forbidden_credential"
+    },
+    {
+      "name": "provider response body",
+      "payload": {
+        "provider_body": {
+          "task_id": "provider-private"
+        }
+      },
+      "reason": "forbidden_provider_payload"
+    },
+    {
+      "name": "exception text",
+      "payload": {
+        "exception_text": "private traceback"
+      },
+      "reason": "forbidden_exception"
+    }
+  ]
+}

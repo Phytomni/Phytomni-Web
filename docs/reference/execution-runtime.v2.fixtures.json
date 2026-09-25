@@ -1,0 +1,684 @@
+{
+  "schema_version": 2,
+  "message_admission": {
+    "http_status": 202,
+    "data": {
+      "conversation_id": "conversation-fixture",
+      "message_id": 123,
+      "execution_id": "turn-fixture",
+      "status": "admitted",
+      "event_cursor": 0,
+      "idempotent_replay": false
+    }
+  },
+  "execution_snapshot": {
+    "schema_version": 2,
+    "execution_id": "turn-fixture",
+    "status": "running",
+    "latest_seq": 4,
+    "output_revision": 1,
+    "output_offset": 17,
+    "tracking_health": "healthy",
+    "active_span_ids": ["span-retrieval"],
+    "todos": [
+      {
+        "id": "retrieve",
+        "label_key": "todo.retrieve",
+        "status": "in_progress"
+      }
+    ],
+    "results": [],
+    "terminal": null
+  },
+  "durable_event": {
+    "schema_version": 2,
+    "event_id": "evt-fixture-4",
+    "execution_id": "turn-fixture",
+    "seq": 4,
+    "type": "span.started",
+    "status": "running",
+    "occurred_at": "2026-08-19T00:00:00Z",
+    "source": "graph",
+    "span_id": "span-retrieval",
+    "parent_span_id": "span-root",
+    "work_unit_id": "work-retrieval",
+    "attempt": 1,
+    "summary": {
+      "key": "activity.retrieval.started",
+      "text": "Retrieval started"
+    },
+    "public_payload": {
+      "phase": "retrieval"
+    },
+    "target": null,
+    "idempotency_key": "turn-fixture:work-retrieval:1:started"
+  },
+  "content_delta": {
+    "schema_version": 2,
+    "execution_id": "turn-fixture",
+    "output_revision": 1,
+    "offset": 17,
+    "delta": "bounded public text"
+  },
+  "heartbeat": {
+    "sse_comment": "heartbeat",
+    "advances_event_sequence": false
+  },
+  "action": {
+    "action_id": "action-fixture",
+    "expected_revision": 3,
+    "surface_id": "surface-fixture",
+    "payload": {
+      "outcome": "accepted"
+    }
+  },
+  "cancellation": {
+    "request_id": "cancel-fixture",
+    "expected_revision": 4,
+    "reason": "user_requested"
+  },
+  "typed_target": {
+    "kind": "artifact",
+    "id": "artifact-fixture"
+  },
+  "errors": {
+    "not_found": {
+      "code": 404,
+      "message": "resource not found"
+    },
+    "fingerprint_conflict": {
+      "code": 409,
+      "message": "execution identity conflict"
+    },
+    "stale_action": {
+      "code": 409,
+      "message": "execution revision conflict"
+    },
+    "unsupported_contract": {
+      "code": 409,
+      "message": "execution contract unsupported"
+    }
+  },
+  "capabilities": {
+    "execution_runtime_major": 1,
+    "execution_journal_major": 2,
+    "stable_execution_identity": true,
+    "async_message_admission": true,
+    "content_resume": true,
+    "actions": true,
+    "cancellation": true,
+    "drivers": [
+      "local_graph",
+      "remote_task",
+      "remote_fanout",
+      "resumable_graph",
+      "hybrid"
+    ],
+    "target_kinds": [
+      "event",
+      "artifact",
+      "report",
+      "todo",
+      "preview",
+      "download"
+    ],
+    "operation_records": {
+      "major_version": 1,
+      "grouping_key": "work_unit_id",
+      "attempt_history": true,
+      "unknown_presenter": {
+        "operation_key": "operation.unknown",
+        "label_key": "execution.operation.generic",
+        "fallback_label": "Internal operation",
+        "semantic_kind": "operation",
+        "allowed_detail_fields": {},
+        "counter_units": [],
+        "target_kinds": []
+      },
+      "execution_log_artifact_role": "execution_log",
+      "liveness_clocks": [
+        "last_execution_fact_at",
+        "last_provider_contact_at",
+        "last_stream_contact_at"
+      ],
+      "limits": {
+        "max_operations_per_run": 256,
+        "max_attempt_history_per_operation": 8,
+        "max_detail_fields_per_operation": 16,
+        "liveness_coalesce_ms": 30000,
+        "max_execution_log_bytes": 1048576
+      },
+      "agent_coverage": {
+        "chat": ["model.generate", "tool.chat"],
+        "knowledge": ["knowledge.search", "model.generate", "tool.knowledge"],
+        "data": ["data.query", "tool.data"],
+        "analyst": [
+          "analyst.prepare_analysis",
+          "analyst.run_workflow",
+          "analyst.collect_outputs",
+          "artifact.package",
+          "remote.analysis",
+          "remote.reconcile",
+          "tool.analyst"
+        ],
+        "review": [
+          "model.generate",
+          "review.citation_check",
+          "review.draft_dimension",
+          "review.final_synthesis",
+          "review.retrieve_dimension",
+          "tool.review"
+        ],
+        "brief_gene": ["model.generate", "tool.brief_gene"],
+        "deep_genome": [
+          "deep_genome.prepare_plan",
+          "deep_genome.gather_context",
+          "deep_genome.run_analysis_branches",
+          "deep_genome.experiment_protocol",
+          "deep_genome.synthesize_results",
+          "artifact.package",
+          "deep_genome.workflow",
+          "model.generate",
+          "remote.analysis",
+          "remote.reconcile",
+          "tool.deep_genome"
+        ],
+        "research": [
+          "research.decompose_objectives",
+          "research.dispatch_work",
+          "research.collect_evidence",
+          "research.synthesize_results",
+          "research.package_outputs",
+          "artifact.package",
+          "model.generate",
+          "remote.analysis",
+          "remote.reconcile",
+          "tool.research"
+        ],
+        "design": [
+          "design.validate_target",
+          "design.run_branches",
+          "design.consolidate_candidates",
+          "design.package_outputs",
+          "artifact.package",
+          "remote.analysis",
+          "remote.reconcile",
+          "tool.design"
+        ],
+        "network": [
+          "artifact.package",
+          "gene_network.infer_network",
+          "gene_network.prepare_inputs",
+          "gene_network.rank_regulators",
+          "gene_network.synthesize_results",
+          "gene_network.validate_target",
+          "remote.analysis",
+          "remote.reconcile",
+          "tool.network"
+        ]
+      },
+      "presenters": [
+        {
+          "operation_key": "analyst.prepare_analysis",
+          "label_key": "execution.trace.analyst.prepareAnalysis",
+          "fallback_label": "Prepare analysis",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "analyst.run_workflow",
+          "label_key": "execution.trace.analyst.runWorkflow",
+          "fallback_label": "Run analysis workflow",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "step_count": "integer"
+          },
+          "counter_units": ["steps"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "analyst.collect_outputs",
+          "label_key": "execution.trace.analyst.collectOutputs",
+          "fallback_label": "Collect analysis outputs",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "artifact.package",
+          "label_key": "execution.operation.artifact.package",
+          "fallback_label": "Package results",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "artifact_count": "integer"
+          },
+          "counter_units": ["artifacts"],
+          "target_kinds": ["artifact", "download"]
+        },
+        {
+          "operation_key": "data.query",
+          "label_key": "execution.operation.data.query",
+          "fallback_label": "Query data",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["rows", "results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.workflow",
+          "label_key": "execution.operation.deepGenome.workflow",
+          "fallback_label": "Run genome workflow",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.prepare_plan",
+          "label_key": "execution.trace.deepGenome.preparePlan",
+          "fallback_label": "Prepare genome analysis plan",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.gather_context",
+          "label_key": "execution.trace.deepGenome.gatherContext",
+          "fallback_label": "Gather genome context",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.run_analysis_branches",
+          "label_key": "execution.trace.deepGenome.runAnalysisBranches",
+          "fallback_label": "Run genome analysis branches",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "branch_count": "integer"
+          },
+          "counter_units": ["branches"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.experiment_protocol",
+          "label_key": "execution.trace.deepGenome.experimentProtocol",
+          "fallback_label": "Build experiment protocol",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "deep_genome.synthesize_results",
+          "label_key": "execution.trace.deepGenome.synthesizeResults",
+          "fallback_label": "Synthesize genome results",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "design.validate_target",
+          "label_key": "execution.trace.design.validateTarget",
+          "fallback_label": "Validate design target",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "target_validated": "boolean"
+          },
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "design.run_branches",
+          "label_key": "execution.trace.design.runBranches",
+          "fallback_label": "Run design branches",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "branch_count": "integer"
+          },
+          "counter_units": ["branches"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "design.consolidate_candidates",
+          "label_key": "execution.trace.design.consolidateCandidates",
+          "fallback_label": "Consolidate design candidates",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "candidate_count": "integer"
+          },
+          "counter_units": ["candidates"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "design.package_outputs",
+          "label_key": "execution.trace.design.packageOutputs",
+          "fallback_label": "Package design outputs",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "artifact_count": "integer"
+          },
+          "counter_units": ["artifacts"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "gene_network.infer_network",
+          "label_key": "execution.trace.geneNetwork.inferNetwork",
+          "fallback_label": "Infer regulatory network",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "gene_count": "integer",
+            "interaction_count": "integer"
+          },
+          "counter_units": ["genes", "interactions"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "gene_network.prepare_inputs",
+          "label_key": "execution.trace.geneNetwork.prepareInputs",
+          "fallback_label": "Prepare analysis inputs",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "input_count": "integer"
+          },
+          "counter_units": ["inputs"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "gene_network.rank_regulators",
+          "label_key": "execution.trace.geneNetwork.rankRegulators",
+          "fallback_label": "Rank candidate regulators",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "regulator_count": "integer"
+          },
+          "counter_units": ["regulators"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "gene_network.synthesize_results",
+          "label_key": "execution.trace.geneNetwork.synthesizeResults",
+          "fallback_label": "Synthesize network results",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": ["artifact", "report", "download"]
+        },
+        {
+          "operation_key": "gene_network.validate_target",
+          "label_key": "execution.trace.geneNetwork.validateTarget",
+          "fallback_label": "Validate trait target",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "target_validated": "boolean"
+          },
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "knowledge.search",
+          "label_key": "execution.operation.knowledge.search",
+          "fallback_label": "Search knowledge",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "repository_count": "integer",
+            "result_count": "integer"
+          },
+          "counter_units": ["repositories", "results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "model.generate",
+          "label_key": "execution.operation.model.generate",
+          "fallback_label": "Generate response",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "remote.analysis",
+          "label_key": "execution.operation.remote.analysis",
+          "fallback_label": "Run analysis",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "provider_state": "provider_state"
+          },
+          "counter_units": [],
+          "target_kinds": ["trace"]
+        },
+        {
+          "operation_key": "remote.reconcile",
+          "label_key": "execution.operation.remote.reconcile",
+          "fallback_label": "Collect analysis",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "provider_state": "provider_state",
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": ["artifact", "download"]
+        },
+        {
+          "operation_key": "remote.submit",
+          "label_key": "execution.operation.remote.submit",
+          "fallback_label": "Submit analysis",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "provider_state": "provider_state"
+          },
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "research.decompose_objectives",
+          "label_key": "execution.trace.research.decomposeObjectives",
+          "fallback_label": "Define research objectives",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "objective_count": "integer"
+          },
+          "counter_units": ["objectives"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "research.dispatch_work",
+          "label_key": "execution.trace.research.dispatchWork",
+          "fallback_label": "Run research tasks",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "task_count": "integer"
+          },
+          "counter_units": ["tasks"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "research.collect_evidence",
+          "label_key": "execution.trace.research.collectEvidence",
+          "fallback_label": "Collect research evidence",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "research.synthesize_results",
+          "label_key": "execution.trace.research.synthesizeResults",
+          "fallback_label": "Synthesize research results",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "result_count": "integer"
+          },
+          "counter_units": ["results"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "research.package_outputs",
+          "label_key": "execution.trace.research.packageOutputs",
+          "fallback_label": "Package research outputs",
+          "semantic_kind": "phase",
+          "allowed_detail_fields": {
+            "artifact_count": "integer"
+          },
+          "counter_units": ["artifacts"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "review.citation_check",
+          "label_key": "execution.operation.review.citationCheck",
+          "fallback_label": "Check citations",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "ordinal": "integer",
+            "total": "integer"
+          },
+          "counter_units": ["batches"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "review.draft_dimension",
+          "label_key": "execution.operation.review.draftDimension",
+          "fallback_label": "Draft section",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "ordinal": "integer",
+            "total": "integer"
+          },
+          "counter_units": ["dimensions"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "review.final_synthesis",
+          "label_key": "execution.operation.review.finalSynthesis",
+          "fallback_label": "Synthesize report",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "total": "integer"
+          },
+          "counter_units": ["dimensions"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "review.retrieve_dimension",
+          "label_key": "execution.operation.review.retrieveDimension",
+          "fallback_label": "Retrieve evidence",
+          "semantic_kind": "operation",
+          "allowed_detail_fields": {
+            "ordinal": "integer",
+            "total": "integer"
+          },
+          "counter_units": ["dimensions"],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.analyst",
+          "label_key": "execution.operation.tool.analyst",
+          "fallback_label": "Submit analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.brief_gene",
+          "label_key": "execution.operation.tool.brief_gene",
+          "fallback_label": "Run gene summary",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.chat",
+          "label_key": "execution.operation.tool.chat",
+          "fallback_label": "Generate response",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.data",
+          "label_key": "execution.operation.tool.data",
+          "fallback_label": "Run data analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.deep_genome",
+          "label_key": "execution.operation.tool.deep_genome",
+          "fallback_label": "Run genome analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.design",
+          "label_key": "execution.operation.tool.design",
+          "fallback_label": "Submit design analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.knowledge",
+          "label_key": "execution.operation.tool.knowledge",
+          "fallback_label": "Run knowledge analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.network",
+          "label_key": "execution.operation.tool.network",
+          "fallback_label": "Submit network analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.research",
+          "label_key": "execution.operation.tool.research",
+          "fallback_label": "Submit research analysis",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        },
+        {
+          "operation_key": "tool.review",
+          "label_key": "execution.operation.tool.review",
+          "fallback_label": "Run literature review",
+          "semantic_kind": "tool",
+          "allowed_detail_fields": {},
+          "counter_units": [],
+          "target_kinds": []
+        }
+      ]
+    }
+  }
+}

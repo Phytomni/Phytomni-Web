@@ -31,11 +31,12 @@ Three secrets can be injected from the environment instead of `app.yml`, for
 `app.yml` value wins** — leaving the environment untouched (or setting an empty
 string) keeps file-based config. Only a **non-empty** env value overrides the file.
 
-| Env var                   | Overrides                       | Mechanism                      |
-| ------------------------- | ------------------------------- | ------------------------------ |
-| `PHYTOMNI_JWT_SECRET`     | `jwt.secret_key`                | explicit non-empty `os.Getenv` |
-| `PHYTOMNI_DB_DSN`         | the `db.<key>.dsn`              | explicit `os.Getenv`           |
-| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv`           |
+| Env var                      | Overrides                             | Mechanism                                                               |
+| ---------------------------- | ------------------------------------- | ----------------------------------------------------------------------- |
+| `PHYTOMNI_JWT_SECRET`        | `jwt.secret_key`                      | explicit non-empty `os.Getenv`                                          |
+| `PHYTOMNI_DB_DSN`            | the `db.<key>.dsn`                    | explicit `os.Getenv`                                                    |
+| `PHYTOMNI_REDIS_PASSWORD`    | `redis.clients.<name>.password`       | explicit `os.Getenv`                                                    |
+| `PHYTOMNI_API_SERVICE_TOKEN` | Web↔Bot V2 execution service identity | explicit non-empty `os.Getenv`; set to the same secret in both services |
 
 ## `app.yml` blocks
 
@@ -355,3 +356,20 @@ As of `0.1.3` **neither block has a live consumer**:
 
 Both are **safe to leave** (nothing reads them) or delete for a clean config. No
 behavioral impact either way.
+
+### Unified execution runtime V2 environment flags
+
+The canonical message path always uses transactional V2 admission and the Web
+dispatcher/projector. Web therefore requires `PHYTOMNI_API_SERVICE_TOKEN` at
+startup and refuses to open its HTTP listener when the value is absent. Bot
+must receive the exact same value under `PHYTOMNI_API_SERVICE_TOKEN`. For
+compatibility Web also reads `PHYTOMNI_BOT_SERVICE_TOKEN`, but deployments
+SHOULD use the canonical name on both processes so a restart cannot silently
+split their identities. The value remains process-environment secret material:
+never put it in `app.yml`, frontend variables, logs, or source control.
+
+`VITE_EXECUTION_V2_ENABLED` and `VITE_EXECUTION_WORKBENCH_ENABLED` affect only
+frontend presentation. They do not restore a second message or execution path.
+The enriched Activity defaults, measured event volume, Bot-before-Web release
+order, and independent rollback sequence are documented in
+[`../reference/execution-runtime-v2.md`](../reference/execution-runtime-v2.md#execution-activity-detail-production-defaults).

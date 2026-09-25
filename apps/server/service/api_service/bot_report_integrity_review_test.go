@@ -12,6 +12,95 @@ import (
 	"phytomni-server/model"
 )
 
+func loadBotRunProjectionForTest(t *testing.T, username string, id int64) BotRunProjection {
+	t.Helper()
+	projection, err := LoadBotRunProjection(context.Background(), username, id)
+	if err != nil {
+		t.Fatalf("load projection row %d: %v", id, err)
+	}
+	return projection
+}
+
+// applyBotRunRecordForTest exercises the current projection store and legacy
+// history projector without restoring the removed production reconciler. It is
+// intentionally test-only: production polling now runs through the unified
+// execution runtime.
+func applyBotRunRecordForTest(ctx context.Context, row *model.QuestionAgentLog, record *rxBot.RunRecord) error {
+	if row == nil || record == nil {
+		return fmt.Errorf("test projection requires a row and run record")
+	}
+	if strings.TrimSpace(row.UserName) == "" {
+		return fmt.Errorf("test projection row has no owner")
+	}
+
+	incoming, err := DecodeRunProjection(record)
+	if err != nil {
+		return err
+	}
+	if incoming.RunID != strings.TrimSpace(row.BotRunId) {
+		return fmt.Errorf("test projection run id %q does not match row", incoming.RunID)
+	}
+	formatted, _, hasFormatted := rxBot.ParseRunFormatted(record.Result)
+	// Validate references before touching the durable projection, matching the
+	// security boundary shared by the live history projector.
+	if err := validateCitationReferencesForAgent(incoming.Agent, formatted); err != nil {
+		return err
+	}
+	if err := saveBotRunProjectionForTest(ctx, row.UserName, row.Id, incoming); err != nil {
+		return err
+	}
+	stored, err := LoadBotRunProjection(ctx, row.UserName, row.Id)
+	if err != nil {
+		return err
+	}
+
+	var durable model.QuestionAgentLog
+	read := model.DB(ctx).Where("id = ? AND user_name = ? AND bot_run_id = ?", row.Id, row.UserName, row.BotRunId).First(&durable)
+	if read.Error != nil {
+		return read.Error
+	}
+
+	shapeFormatted := formatted
+	answerProjected := false
+	metadataCurrent := projectionMetadataMergeable(stored, incoming)
+	if stored.Agent == "data" {
+		answerProjected = metadataCurrent && hasFormattedTable(formatted)
+	} else if strings.TrimSpace(stored.VisibleReport()) != "" {
+		answerProjected = metadataCurrent && hasFormatted &&
+			strings.TrimSpace(incoming.VisibleReport()) == strings.TrimSpace(stored.VisibleReport())
+	}
+	if !answerProjected {
+		shapeFormatted = nil
+	}
+	if _, err := applyBotProjectionToHistoryRowWithFormatted(&durable, stored, shapeFormatted); err != nil {
+		return err
+	}
+
+	updates := map[string]interface{}{
+		"answer":    durable.Answer,
+		"status":    durable.Status,
+		"tool_name": durable.ToolName,
+	}
+	if answerProjected && formatted != nil {
+		followUps := strings.TrimSpace(string(formatted.FollowUpQuestions))
+		if followUps != "" && followUps != "null" {
+			durable.FollowUpQuestions = string(formatted.FollowUpQuestions)
+			updates["follow_up_questions"] = durable.FollowUpQuestions
+		}
+	}
+	write := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND user_name = ? AND bot_run_id = ? AND bot_report_revision = ?", row.Id, row.UserName, row.BotRunId, stored.ReportRevision).
+		Updates(updates)
+	if write.Error != nil {
+		return write.Error
+	}
+	if write.RowsAffected != 1 {
+		return ErrBotProjectionConflict
+	}
+	*row = durable
+	return nil
+}
+
 func TestIndependentReviewPublicDiagnostics(t *testing.T) {
 	gdb := setupTestDB(t)
 	useOfflineLegacyHistoryMode(t)
@@ -20,7 +109,7 @@ func TestIndependentReviewPublicDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := rxBot.RunRecord{RunID: row.BotRunId, Agent: "deep_genome", Status: "failed", Result: json.RawMessage(`{"formatted":{"answer":"# Synthetic science"},"report_revision":2,"degraded_reason":"provider diagnostic at /srv/private/synthetic-owner","failures":[{"status":"failed","message":"download failed obs://synthetic-private/path?token=synthetic"}]}`)}
-	if err := NewService().applyBotRunProjection(context.Background(), &row, &record, rxBot.ResponseMeta{}); err != nil {
+	if err := applyBotRunRecordForTest(context.Background(), &row, &record); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := NewService().AnswerCheck(context.Background(), row.UserName, row.DialogueId)
@@ -43,7 +132,7 @@ func TestIndependentReviewDataReconciliation(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := rxBot.RunRecord{RunID: row.BotRunId, Agent: "data", Status: "succeeded", Result: json.RawMessage(`{"formatted":{"answer":"Synthetic table result","tabular":{"headers":["gene"],"rows":[["SYNTHETIC_A"]]}},"report_revision":2}`)}
-	if err := NewService().applyBotRunProjection(context.Background(), &row, &record, rxBot.ResponseMeta{}); err != nil {
+	if err := applyBotRunRecordForTest(context.Background(), &row, &record); err != nil {
 		t.Fatal(err)
 	}
 	_, answer := readStatusAnswer(t, gdb, row.Id)
@@ -58,7 +147,7 @@ func TestIndependentReviewDataExport(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveBotRunProjection(context.Background(), row.UserName, row.Id, BotRunProjection{RunID: row.BotRunId, Agent: "data", Status: "SUCCEEDED", ReportRevision: 2, FinalReport: "Synthetic table result"}); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), row.UserName, row.Id, BotRunProjection{RunID: row.BotRunId, Agent: "data", Status: "SUCCEEDED", ReportRevision: 2, FinalReport: "Synthetic table result"}); err != nil {
 		t.Fatal(err)
 	}
 	content, _, err := NewService().DownloadObsRenderingFile(context.Background(), row.UserName, int(row.Id), "Markdown")
@@ -96,20 +185,29 @@ func TestIndependentReviewRecognizedChildren(t *testing.T) {
 }
 
 func TestIndependentReviewDirectDeepGenomeSubmission(t *testing.T) {
-	setupExpertTestDB(t)
-	agentRunServer(t, "deep_genome", `{"id":"run-review-submission","object":"agent.run","agent":"deep_genome","status":"failed","task_ids":["synthetic-umbrella"],"result":{"formatted":{"answer":"# Partial synthetic science","metadata":{"deep_genome":{"stage":"intermediate","completeness":"partial","revision":17,"degraded":true}}},"execution":{"report":{"state":"intermediate","degraded":true,"source_artifact_count":12},"warnings":[{"code":"deep_genome_report_degraded"}]}}}`)
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "synthetic query", Tool: "DeepGenomeAgent", Mode: "expert"})
+	runID := "run-review-submission"
+	p, err := DecodeAgentRunSubmission(rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "deep_genome",
+		Status: "failed",
+		TaskIDs: []string{
+			"synthetic-umbrella",
+		},
+		Result: rxBot.AgentRunResult{
+			Formatted: &rxBot.Formatted{
+				Answer:   "# Partial synthetic science",
+				Metadata: json.RawMessage(`{"deep_genome":{"stage":"intermediate","completeness":"partial","revision":17,"degraded":true}}`),
+			},
+			Execution: json.RawMessage(`{"report":{"state":"intermediate","degraded":true,"source_artifact_count":12},"warnings":[{"code":"deep_genome_report_degraded"}]}`),
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil {
-		t.Fatal(err)
+	if p.Report == nil || p.ReportRevision != 17 {
+		t.Fatalf("direct submission lost bounded facts: status=%s projection_run=%q revision=%d report=%+v codes=%v", p.Status, p.RunID, p.ReportRevision, p.Report, p.ReportWarningCodes)
 	}
-	if p.Report == nil || p.ReportRevision != 17 || out.Projection == nil {
-		t.Fatalf("direct submission lost bounded facts: status=%s projection_run=%q revision=%d report=%+v codes=%v public=%v", out.Status, p.RunID, p.ReportRevision, p.Report, p.ReportWarningCodes, out.Projection)
-	}
-	if out.Status != "FAILED" || p.Status != "FAILED" || p.VisibleReport() != "# Partial synthetic science" || !reflect.DeepEqual(p.ReportWarningCodes, []string{"deep_genome_report_degraded"}) {
+	if p.Status != "FAILED" || p.VisibleReport() != "# Partial synthetic science" || !reflect.DeepEqual(p.ReportWarningCodes, []string{"deep_genome_report_degraded"}) {
 		t.Fatalf("direct submission lost scientific or execution truth: %+v", p)
 	}
 }
@@ -132,7 +230,7 @@ func TestReportIntegrityReviewDataTableSurvivesSnapshots(t *testing.T) {
 			status = "failed"
 		}
 		record := rxBot.RunRecord{RunID: row.BotRunId, Agent: "data", Status: status, Result: json.RawMessage(result)}
-		if err := NewService().applyBotRunProjection(context.Background(), &row, &record, rxBot.ResponseMeta{}); err != nil {
+		if err := applyBotRunRecordForTest(context.Background(), &row, &record); err != nil {
 			t.Fatal(err)
 		}
 		_, answer := readStatusAnswer(t, gdb, row.Id)
@@ -206,9 +304,13 @@ func TestReportIntegrityReviewConcreteKindsRoundTrip(t *testing.T) {
 }
 
 func TestReportIntegrityReviewDirectDeepGenomeRejectsMalformedReport(t *testing.T) {
-	setupExpertTestDB(t)
-	agentRunServer(t, "deep_genome", `{"id":"run-malformed-report","object":"agent.run","agent":"deep_genome","status":"failed","result":{"execution":{"report":{"state":"final","degraded":false,"source_artifact_count":-1}}}}`)
-	if _, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "synthetic query", Tool: "DeepGenomeAgent", Mode: "expert"}); err == nil {
+	runID := "run-malformed-report"
+	if _, err := DecodeAgentRunSubmission(rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "deep_genome",
+		Status: "failed",
+		Result: rxBot.AgentRunResult{Execution: json.RawMessage(`{"report":{"state":"final","degraded":false,"source_artifact_count":-1}}`)},
+	}); err == nil {
 		t.Fatal("direct submission bypassed report validation")
 	}
 }
@@ -222,7 +324,7 @@ func TestReportIntegrityReviewUnversionedDeliveryPreservesScience(t *testing.T) 
 	current := BotRunProjection{RunID: row.BotRunId, Agent: "analyst", Status: "RUNNING", ReportRevision: 9, IntermediateReport: "# Current science", ResultArchiveV1: true, Delivery: testPendingDelivery(1, testProjectionDigestA)}
 	incoming := BotRunProjection{RunID: row.BotRunId, Agent: "analyst", Status: "SUCCEEDED", ReportRevision: -1, FinalReport: "# Stale science", ResultArchiveV1: true, Delivery: testReadyDelivery(1, testProjectionDigestA), OutputDirectoryCount: 1, Artifacts: ProjectionArtifacts{Directories: []string{"obs://bucket/owner/run"}, OutputDirs: []string{"obs://bucket/owner/run"}}}
 	for _, snapshot := range []BotRunProjection{current, incoming} {
-		if err := SaveBotRunProjection(context.Background(), row.UserName, row.Id, snapshot); err != nil {
+		if err := saveBotRunProjectionForTest(context.Background(), row.UserName, row.Id, snapshot); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -237,7 +339,7 @@ func TestReportIntegrityReviewUnversionedDeliveryPreservesScience(t *testing.T) 
 	incoming.ReportRevision = 10
 	incoming.Artifacts.OutputDirs = []string{"obs://bucket/other/run"}
 	incoming.Artifacts.Directories = append([]string(nil), incoming.Artifacts.OutputDirs...)
-	if err := SaveBotRunProjection(context.Background(), row.UserName, row.Id, incoming); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), row.UserName, row.Id, incoming); err != nil {
 		t.Fatal(err)
 	}
 	after := loadBotRunProjectionForTest(t, row.UserName, row.Id)

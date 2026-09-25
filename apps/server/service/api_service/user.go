@@ -114,7 +114,20 @@ func (ps *Service) GetUserProfile(ctx context.Context, email string) (*common.Us
 	}
 
 	var dialogueCount int64
-	if err := model.DB(ctx).Model(&model.QuestionAgentLog{}).Where("user_name = ? AND f_id = ? AND delete_at IS NULL", email, 0).Count(&dialogueCount).Error; err != nil {
+	database := model.DB(ctx)
+	if database.Migrator().HasTable(&model.ConversationTurnV2{}) {
+		if err := database.Raw(`SELECT COUNT(*) FROM (
+			SELECT dialogue_id FROM question_agent_logs
+			WHERE user_name = ? AND f_id = 0 AND delete_at IS NULL
+			UNION
+			SELECT dialogue_id FROM conversation_turns_v2
+			WHERE user_name = ? AND parent_id = 0 AND delete_at IS NULL
+		) AS owned_conversations`, email, email).Scan(&dialogueCount).Error; err != nil {
+			return nil, err
+		}
+	} else if err := database.Model(&model.QuestionAgentLog{}).
+		Where("user_name = ? AND f_id = ? AND delete_at IS NULL", email, 0).
+		Count(&dialogueCount).Error; err != nil {
 		return nil, err
 	}
 

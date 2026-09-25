@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,21 +42,19 @@ func setupReconcilerDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-// TestReconciler_RoutesRunningRowToBot pins the post-EIHealth routing: the cron
-// reconciles a RUNNING analyst-class row against its Bot run, not a dead Huawei
-// poll. Before the routing switch this row went to the EIHealth IAM poll and
-// stayed RUNNING; now Run() hands every RUNNING row to SyncBotRuns, so a finished
-// Bot run flips it to SUCCEEDED and writes the formatted answer.
-func TestReconciler_RoutesRunningRowToBot(t *testing.T) {
+// Lifecycle reads and cron cleanup must not become a second execution
+// reconciler. The Bot supervisor and Web projector own progress/settlement.
+func TestReconciler_DoesNotPollOrSettleRunningRows(t *testing.T) {
 	gdb := setupReconcilerDB(t)
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
 		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, created_at) VALUES
 		(60, 'dlg-r', 'alice', 'q', 'Task created: t1', 'AnalystAgent', 'run-r', 'RUNNING', '2026-01-01 00:00:00')`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"run_id":"run-r","agent":"network","status":"succeeded","result":{"formatted":{"answer":"done"}}}`))
+		calls.Add(1)
+		http.Error(w, "unexpected poll", http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
@@ -70,12 +67,15 @@ func TestReconciler_RoutesRunningRowToBot(t *testing.T) {
 	if err := row.Scan(&status, &answer); err != nil {
 		t.Fatalf("read row: %v", err)
 	}
-	if status != "SUCCEEDED" || answer != "done" {
-		t.Errorf("cron did not reconcile analyst via Bot: status=%q answer=%q, want SUCCEEDED/done", status, answer)
+	if status != "RUNNING" || answer != "Task created: t1" {
+		t.Errorf("cron mutated projector-owned row: status=%q answer=%q", status, answer)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("cron made %d Bot lifecycle calls, want zero", calls.Load())
 	}
 }
 
-func TestReconciler_CleansTombstonesAndStaleSubmissionsWithoutSyncingSubmitting(t *testing.T) {
+func TestReconciler_CleansTombstonesWithoutReconcilingExecutionRows(t *testing.T) {
 	gdb := setupReconcilerDB(t)
 	now := time.Now()
 	const tombstoneDialogue = "77777777-7777-4777-8777-777777777777"
@@ -117,9 +117,7 @@ func TestReconciler_CleansTombstonesAndStaleSubmissionsWithoutSyncingSubmitting(
 			return
 		}
 		runCalls.Add(1)
-		_, _ = w.Write([]byte(
-			`{"run_id":"run-70","agent":"analyst","status":"succeeded","result":{"formatted":{"answer":"done"}}}`,
-		))
+		http.Error(w, "unexpected lifecycle poll", http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
 	previous := rxBot.BotConfig
@@ -143,11 +141,11 @@ func TestReconciler_CleansTombstonesAndStaleSubmissionsWithoutSyncingSubmitting(
 		statusByID[id] = status
 		logStatusByID[id] = logStatus
 	}
-	if statusByID[70] != "SUCCEEDED" {
-		t.Fatalf("RUNNING row status=%q, want existing reconciliation to succeed", statusByID[70])
+	if statusByID[70] != "RUNNING" {
+		t.Fatalf("RUNNING row status=%q, want projector ownership preserved", statusByID[70])
 	}
-	if statusByID[71] != "FAILED" || logStatusByID[71] != "stale_submission_timeout" {
-		t.Fatalf("stale submission status=%q reason=%q", statusByID[71], logStatusByID[71])
+	if statusByID[71] != "SUBMITTING" || logStatusByID[71] != "" {
+		t.Fatalf("stale submission was mutated outside the projector: status=%q reason=%q", statusByID[71], logStatusByID[71])
 	}
 	if statusByID[72] != "SUBMITTING" {
 		t.Fatalf("fresh submission status=%q, want SUBMITTING", statusByID[72])
@@ -155,8 +153,8 @@ func TestReconciler_CleansTombstonesAndStaleSubmissionsWithoutSyncingSubmitting(
 	if logStatusByID[73] != "CONTEXT_DELETE_ACKED" {
 		t.Fatalf("tombstone status=%q, want ACKED", logStatusByID[73])
 	}
-	if runCalls.Load() != 1 {
-		t.Fatalf("Bot run polls=%d, want only RUNNING row", runCalls.Load())
+	if runCalls.Load() != 0 {
+		t.Fatalf("Bot run polls=%d, want zero", runCalls.Load())
 	}
 	if tombstoneCalls.Load() != 1 {
 		t.Fatalf("Bot tombstone calls=%d, want 1", tombstoneCalls.Load())
@@ -215,7 +213,7 @@ func TestReconciler_TombstoneFailureDoesNotStopBatch(t *testing.T) {
 	}
 }
 
-func TestReconciler_DiscoversPrivateActiveReplacementWithoutPollingSubmitting(t *testing.T) {
+func TestReconciler_DoesNotDiscoverOrPollPrivateReplacementState(t *testing.T) {
 	gdb := setupReconcilerDB(t)
 	privateProjection := `{"run_id":"run-public-accepted","agent":"analyst","status":"SUCCEEDED","report_revision":0,"final_report":"accepted public report","conversation_context":{"client_turn_id":"cron-base-key","request_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","replacement":{"client_turn_id":"cron-replacement-key","request_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","query":"cron replacement query","tool_name":"InSilicoResearchAgent","mode":"expert","interop_mode":"off","active_status":"RUNNING","active_bot_run_id":"run-cron-private-replacement","active_report_revision":-1}}}`
 	if err := gdb.Exec(`INSERT INTO question_agent_logs
@@ -231,12 +229,9 @@ func TestReconciler_DiscoversPrivateActiveReplacementWithoutPollingSubmitting(t 
 		t.Fatalf("seed private replacement and submitting row: %v", err)
 	}
 	var calls atomic.Int64
-	var requestPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		requestPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"run_id":"run-cron-private-replacement","agent":"research","status":"failed","result":{"report_revision":1,"final_report":"private failure"}}`))
+		http.Error(w, "unexpected private poll", http.StatusInternalServerError)
 	}))
 	t.Cleanup(server.Close)
 	previous := rxBot.BotConfig
@@ -245,8 +240,8 @@ func TestReconciler_DiscoversPrivateActiveReplacementWithoutPollingSubmitting(t 
 
 	(&TaskReconciler{}).Run()
 
-	if calls.Load() != 1 || !strings.HasSuffix(requestPath, "/v1/runs/run-cron-private-replacement") {
-		t.Fatalf("cron private polls=%d path=%q, want one active replacement poll", calls.Load(), requestPath)
+	if calls.Load() != 0 {
+		t.Fatalf("cron private polls=%d, want zero", calls.Load())
 	}
 	var query, answer, tool, runID, status, raw string
 	if err := gdb.Raw(`SELECT COALESCE(query,''), COALESCE(answer,''), COALESCE(tool_name,''),
@@ -256,8 +251,8 @@ func TestReconciler_DiscoversPrivateActiveReplacementWithoutPollingSubmitting(t 
 	}
 	if query != "accepted public query" || answer != "accepted public answer" ||
 		tool != "AnalystAgent" || runID != "run-public-accepted" || status != "SUCCEEDED" ||
-		!strings.Contains(raw, `"terminal_result"`) || !strings.Contains(raw, `"status":"FAILED"`) {
-		t.Fatalf("cron failed replacement changed base or lost terminal result: query=%q answer=%q tool=%q run=%q status=%q raw=%s", query, answer, tool, runID, status, raw)
+		raw != privateProjection {
+		t.Fatalf("cleanup cron changed projector-owned state: query=%q answer=%q tool=%q run=%q status=%q raw=%s", query, answer, tool, runID, status, raw)
 	}
 	var submittingStatus string
 	if err := gdb.Raw(`SELECT status FROM question_agent_logs WHERE id=91`).Scan(&submittingStatus).Error; err != nil {

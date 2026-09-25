@@ -206,7 +206,7 @@ export const MESSAGE_INTERLEAVED_STREAMING: ChatMessage = {
 
 /**
  * Characterizes the streaming citation gap for a follow-up fix:
- * useStreamMessage copies phyto.references → doc_list, but non-empty blocks keep
+ * The canonical execution reducer copies phyto.references → doc_list, but non-empty blocks keep
  * the StreamMessage branch (no ns, no reference rows). Not a visual registry key.
  */
 export const MESSAGE_STREAM_REFS_CAPTURED: ChatMessage = {

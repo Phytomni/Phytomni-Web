@@ -33,16 +33,70 @@ export function optionalStringValue(
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-/** Preserve source-array positions, including rejected presentation slots. */
+const CITATION_SCALAR_FIELDS = [
+  "title",
+  "au",
+  "ti",
+  "so",
+  "vl",
+  "bp",
+  "ep",
+  "ar",
+  "py",
+  "di",
+  "dl",
+  "pm",
+] as const;
+
+function citationScalar(value: unknown): string | number | null | undefined {
+  if (value === null) return null;
+  if (
+    typeof value === "string" &&
+    [...value].length <= 512 &&
+    !value.includes("\u0000")
+  ) {
+    return value;
+  }
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    (!Number.isInteger(value) || Number.isSafeInteger(value))
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function decodeCitationDocument(value: unknown): CitationDocument {
+  if (!isRecord(value)) return { citation: null };
+  const row: CitationDocument = { citation: null };
+  for (const key of CITATION_SCALAR_FIELDS) {
+    const field = citationScalar(value[key]);
+    if (field !== undefined) row[key] = field;
+  }
+  if (
+    typeof value.formatted_citation === "string" &&
+    [...value.formatted_citation].length <= 4096 &&
+    !value.formatted_citation.includes("\u0000")
+  ) {
+    row.formatted_citation = value.formatted_citation;
+  }
+  if (typeof value.doi_missing === "boolean") {
+    row.doi_missing = value.doi_missing;
+  }
+
+  // Presentation is server-derived. Metadata and formatted text are never
+  // reinterpreted as bibliography markup on the client.
+  row.citation = decodeCitationPresentation(value.citation);
+  return row;
+}
+
+/** Preserve source-array positions and expose only citation allowlist fields. */
 export function decodeCitationDocuments(
   value: unknown
 ): CitationDocument[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  return Array.from(value, (item) =>
-    isRecord(item)
-      ? { ...item, citation: decodeCitationPresentation(item.citation) }
-      : { citation: null }
-  );
+  return Array.from(value, decodeCitationDocument);
 }
 
 // Convert data into Element Plus Table format
@@ -50,6 +104,82 @@ export interface TableDataInput {
   title?: string;
   headers: readonly string[];
   rows: readonly unknown[][];
+}
+
+export interface TableMessagePresentation {
+  content: Array<Record<string, unknown>>;
+  tableHeaders: Array<{ prop: string; label: string }>;
+  original: string;
+}
+
+const MAX_VISIBLE_TABLE_JSON_CHARS = 16 * 1024 * 1024;
+const MAX_VISIBLE_TABLE_HEADERS = 256;
+const MAX_VISIBLE_TABLE_ROWS = 100_000;
+const MAX_VISIBLE_TABLE_HEADER_CHARS = 512;
+const MAX_VISIBLE_TABLE_CELL_CHARS = 8192;
+
+function isVisibleTableCell(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "boolean" ||
+    (typeof value === "number" &&
+      Number.isFinite(value) &&
+      (!Number.isInteger(value) || Number.isSafeInteger(value))) ||
+    (typeof value === "string" &&
+      [...value].length <= MAX_VISIBLE_TABLE_CELL_CHARS)
+  );
+}
+
+/** Decode the complete DataAgent display document from V2 message content. */
+export function decodeTableMessagePresentation(
+  value: unknown
+): TableMessagePresentation | undefined {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_VISIBLE_TABLE_JSON_CHARS
+  ) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed)) return undefined;
+  const headers = parsed.headers;
+  const rows = parsed.rows;
+  if (
+    !Array.isArray(headers) ||
+    headers.length === 0 ||
+    headers.length > MAX_VISIBLE_TABLE_HEADERS ||
+    !headers.every(
+      (header): header is string =>
+        typeof header === "string" &&
+        header.length > 0 &&
+        [...header].length <= MAX_VISIBLE_TABLE_HEADER_CHARS
+    ) ||
+    !Array.isArray(rows) ||
+    rows.length > MAX_VISIBLE_TABLE_ROWS ||
+    !rows.every(
+      (row): row is unknown[] =>
+        Array.isArray(row) &&
+        row.length === headers.length &&
+        row.every(isVisibleTableCell)
+    )
+  ) {
+    return undefined;
+  }
+  const table = { headers, rows } satisfies TableDataInput;
+  return {
+    content: convertToTableData(table),
+    tableHeaders: headers.map((header) => ({
+      prop: header.replace(/\s+/g, "_").toLowerCase(),
+      label: header,
+    })),
+    original: value,
+  };
 }
 
 /** Decode the table shape before it reaches Element Plus table rendering. */

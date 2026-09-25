@@ -20,10 +20,7 @@ function createDefaultChatUIState(): ChatUIState {
     refreshingMessages: {},
     agentRunLifecycles: {},
     reactions: {},
-    updatingLog: {},
     logErrorKinds: {},
-    sendStartedAt: null,
-    activeAgentName: "",
     completing: false,
     mode: "expert",
     isStreaming: false,
@@ -42,6 +39,17 @@ function createDefaultChatUIState(): ChatUIState {
     artifactTab: "content",
     handledArtifactIdentities: [],
     archiveRetryingByMessageId: {},
+    executionRuns: {},
+    selectedExecutionRunId: null,
+    executionWorkspaceTabs: [],
+    activeExecutionWorkspaceTab: null,
+    executionWorkspaceOpen: false,
+    executionRailOpen: true,
+    transcriptScrollTop: 0,
+    workspaceScrollTop: 0,
+    executionTargetDetails: {},
+    executionTargetLoading: {},
+    executionTargetErrors: {},
     materialDetailsByArtifact: {},
   };
 }
@@ -288,22 +296,6 @@ export function useChatStates() {
     },
   });
 
-  // log-updating state management - now based on the current conversation
-  const updatingLog = computed({
-    get: () => {
-      if (!currentChatId.value) return {};
-      const chatState = getChatState(currentChatId.value);
-      return chatState ? chatState.updatingLog : {};
-    },
-    set: (value: Record<string, boolean>) => {
-      if (!currentChatId.value) return;
-      const chatState = getChatState(currentChatId.value);
-      if (chatState) {
-        chatState.updatingLog = value;
-      }
-    },
-  });
-
   const rekeyChatState = (
     fromDialogueId: string,
     toDialogueId: string
@@ -350,6 +342,5 @@ export function useChatStates() {
     loadingLog,
     refreshingMessages,
     historyQuestion,
-    updatingLog,
   };
 }

@@ -68,5 +68,8 @@ python3 scripts/check_a2ui_activation_contract.py
 step "G16 offline Bot HEAD/Web compatibility contract"
 python3 scripts/check_bot_web_compatibility.py
 
+step "G16.1 pinned public-agent catalog drift contract"
+python3 scripts/check_public_agent_catalog.py
+
 step "G17 offline Bot/Web activation evidence matrix"
 python3 scripts/check_bot_web_activation.py

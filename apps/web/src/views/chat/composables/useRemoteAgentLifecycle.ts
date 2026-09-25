@@ -1,6 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { getAnswerCheck } from "@/api/chat";
-import type { AgentTaskLifecycle } from "@/api/types";
+import type { AgentRunPhase, AgentTaskLifecycle } from "@/api/types";
 import type { RemoteAgentTool } from "@/constants/agents";
 import type { BotRunProjection } from "@/views/chat/botProjection";
 import type {
@@ -9,6 +9,9 @@ import type {
 } from "./useBotRemoteAgentRun";
 import { useAgentRunLifecycle } from "./useAgentRunLifecycle";
 import { findRemoteAgentHistorySnapshot } from "./remoteAgentHistory";
+import { useChatStates } from "./useChatStates";
+import { useExecutionEvents } from "./useExecutionEvents";
+import type { ExecutionRunState } from "../streaming/executionEvents";
 
 const SAFE_ROW_ID = /^[1-9]\d{0,18}$/u;
 const ACTIVE_PHASES = new Set(["submitting", "running", "input_required"]);
@@ -62,18 +65,116 @@ function positiveRowId(value: unknown): string | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? value : null;
 }
 
+function executionPhase(state: ExecutionRunState): AgentRunPhase {
+  const status = state.terminal?.status ?? state.status;
+  switch (status) {
+    case "succeeded":
+    case "partial":
+      return "SUCCEEDED";
+    case "failed":
+      return "FAILED";
+    case "cancelled":
+      return "CANCELLED";
+    case "timed_out":
+      return "TIMED_OUT";
+    default:
+      break;
+  }
+  switch ((state.phase ?? "").toUpperCase()) {
+    case "RESOLVING_INPUTS":
+      return "RESOLVING_INPUTS";
+    case "PLANNING":
+      return "PLANNING";
+    case "FINALIZING":
+      return "FINALIZING";
+    case "RUNNING":
+      return "RUNNING";
+    default:
+      return state.latestSeq > 0 ? "RUNNING" : "PREPARING";
+  }
+}
+
+function executionSnapshot(
+  rowId: string,
+  state: ExecutionRunState
+): AgentTaskLifecycle {
+  const phase = executionPhase(state);
+  const resultMedia = state.results.map((result) =>
+    result.mediaType.toLowerCase()
+  );
+  return {
+    id: Number(rowId),
+    phase,
+    terminal: state.terminal !== null,
+    child_task_count: Object.keys(state.spans).length,
+    child_work_accepted: state.latestSeq > 0,
+    report_revision: state.outputRevision,
+    artifact_summary: {
+      image_count: resultMedia.filter((media) => media.startsWith("image/"))
+        .length,
+      output_directory_count: 0,
+      has_report:
+        state.outputText.length > 0 ||
+        resultMedia.some(
+          (media) =>
+            media === "text/markdown" ||
+            media === "text/html" ||
+            media === "application/pdf"
+        ),
+    },
+    reconciliation:
+      state.delivery === "connected" && state.trackingHealth !== "degraded"
+        ? "FRESH"
+        : "DEGRADED",
+    tracking_degraded:
+      state.trackingHealth === "degraded" || state.delivery === "stale",
+    error_code: null,
+  };
+}
+
+function remotePhase(phase: AgentRunPhase): BotRemoteAgentRunState["phase"] {
+  switch (phase) {
+    case "SUCCEEDED":
+      return "succeeded";
+    case "FAILED":
+      return "failed";
+    case "TIMED_OUT":
+      return "timed_out";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      return "running";
+  }
+}
+
 export function useRemoteAgentLifecycle(options: {
   tool: RemoteAgentTool;
   run: RemoteAgentLifecycleRun;
   dialogueId: string;
 }): RemoteAgentLifecycleController {
+  const executionStates = useChatStates();
+  const executionEvents = useExecutionEvents({
+    getChatState: executionStates.getChatState,
+  });
   const trackedRowId = ref<string | null>(null);
   let trackedRunId: string | null = null;
   let trackedDialogueId: string | null = null;
+  let trackedExecutionId: string | null = null;
+  let trackedExecutionDialogueId: string | null = null;
   let generation = 0;
   let historyEpoch = 0;
   let disposed = false;
   let terminalHistoryWork: TerminalHistoryWork | null = null;
+
+  const executionRun = computed<ExecutionRunState | null>(() => {
+    const executionId = options.run.state.value.executionId;
+    if (!executionId) return null;
+    const dialogueId = options.run.state.value.dialogueId ?? options.dialogueId;
+    return (
+      executionStates.getChatState(dialogueId).executionRuns[executionId] ??
+      null
+    );
+  });
 
   const ownsHistoryWork = (
     identity: HistoryReconciliationIdentity
@@ -231,6 +332,17 @@ export function useRemoteAgentLifecycle(options: {
     if (rowId) lifecycle.unwatchRow(rowId);
   };
 
+  const stopExecutionTracking = (): void => {
+    if (trackedExecutionId && trackedExecutionDialogueId) {
+      executionEvents.disposeRun(
+        trackedExecutionDialogueId,
+        trackedExecutionId
+      );
+    }
+    trackedExecutionId = null;
+    trackedExecutionDialogueId = null;
+  };
+
   const stopWatch = watch(
     () =>
       [
@@ -240,6 +352,7 @@ export function useRemoteAgentLifecycle(options: {
         options.run.state.value.delivery?.revision,
         options.run.state.value.projection?.runId,
         options.run.state.value.dialogueId ?? options.dialogueId,
+        options.run.state.value.executionId,
       ] as const,
     ([
       messageId,
@@ -248,8 +361,32 @@ export function useRemoteAgentLifecycle(options: {
       deliveryRevision,
       runId,
       dialogueId,
+      executionId,
     ]) => {
       const rowId = positiveRowId(messageId);
+      if (executionId) {
+        if (
+          trackedExecutionId !== executionId ||
+          trackedExecutionDialogueId !== dialogueId
+        ) {
+          stopExecutionTracking();
+          trackedExecutionId = executionId;
+          trackedExecutionDialogueId = dialogueId;
+          void executionEvents.attachExecution(dialogueId, executionId);
+        }
+        if (
+          trackedRowId.value !== rowId ||
+          trackedRunId !== (runId ?? null) ||
+          trackedDialogueId !== dialogueId
+        ) {
+          stopTracking();
+          trackedRowId.value = rowId;
+          trackedRunId = runId ?? null;
+          trackedDialogueId = dialogueId;
+        }
+        return;
+      }
+      stopExecutionTracking();
       if (!rowId) {
         stopTracking();
         return;
@@ -280,18 +417,55 @@ export function useRemoteAgentLifecycle(options: {
     { immediate: true, flush: "sync" }
   );
 
+  const stopExecutionStateWatch = watch(
+    executionRun,
+    (state) => {
+      if (!state) return;
+      const phase = executionPhase(state);
+      const current = options.run.state.value;
+      const nextPhase = remotePhase(phase);
+      const nextStatus =
+        phase === "SUCCEEDED" ||
+        phase === "FAILED" ||
+        phase === "TIMED_OUT" ||
+        phase === "CANCELLED"
+          ? phase
+          : "RUNNING";
+      if (current.phase !== nextPhase || current.status !== nextStatus) {
+        options.run.state.value = {
+          ...current,
+          phase: nextPhase,
+          status: nextStatus,
+        };
+      }
+      const rowId = trackedRowId.value;
+      if (rowId && state.terminal) reconcileTerminalHistory(rowId);
+    },
+    { deep: true, immediate: true }
+  );
+
   const snapshot = computed(() => {
     const rowId = trackedRowId.value;
+    if (rowId && executionRun.value) {
+      return executionSnapshot(rowId, executionRun.value);
+    }
     return rowId ? (lifecycle.snapshots.value[rowId] ?? null) : null;
   });
+
+  const reset = (): void => {
+    stopExecutionTracking();
+    stopTracking();
+  };
 
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
     stopWatch();
-    stopTracking();
+    stopExecutionStateWatch();
+    reset();
+    executionEvents.dispose();
     lifecycle.dispose();
   };
 
-  return { snapshot, reset: stopTracking, dispose };
+  return { snapshot, reset, dispose };
 }

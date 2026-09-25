@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 )
@@ -49,7 +48,6 @@ func (ps *Service) A2uiAction(
 		return nil, err
 	}
 	var authorizedRow *model.QuestionAgentLog
-	privateReplacement := false
 	for index := range rows {
 		_, private, decodeErr := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
 		if decodeErr != nil {
@@ -60,7 +58,6 @@ func (ps *Service) A2uiAction(
 			if replacement.ActiveStatus == "INPUT_REQUIRED" &&
 				replacement.ActiveBotRunID == env.RunID {
 				authorizedRow = &rows[index]
-				privateReplacement = true
 				break
 			}
 			// While a private replacement is active, the old public run is no
@@ -99,47 +96,11 @@ func (ps *Service) A2uiAction(
 			if err != nil {
 				return nil, ErrA2uiUpstreamProtocol
 			}
-			record, meta, err := client.GetRunWithMeta(ctx, env.RunID)
-			if err != nil {
-				return nil, err
-			}
-			// Validate the raw known field before typed projection decoding can
-			// reject unrelated fields or discard a malformed formatted envelope.
-			source, err := json.Marshal(map[string]json.RawMessage{"result": record.Result})
-			if err != nil {
-				return nil, ErrA2uiUpstreamProtocol
-			}
-			if _, err := rxBot.NormalizeActionReferences(source); err != nil {
-				return nil, ErrA2uiUpstreamProtocol
-			}
-			projection, err := DecodeRunProjection(record)
-			if err != nil {
-				return nil, err
-			}
-			if projection.Status != statusSucceeded {
-				return nil, ErrA2uiUpstreamProtocol
-			}
-			if privateReplacement {
-				err = ps.applyPrivateReplacementRunProjection(
-					ctx,
-					authorizedRow.Id,
-					authorizedRow.UserName,
-					env.RunID,
-					record,
-					meta,
-				)
-			} else {
-				err = ps.applyBotRunProjection(ctx, authorizedRow, record, meta)
-			}
-			if err != nil {
-				if errors.Is(err, citation.ErrInvalidReferences) {
-					return nil, ErrA2uiUpstreamProtocol
-				}
-				return nil, err
-			}
 			result.Body = normalized
 		}
 	}
+	// This compatibility uplink forwards the command only. Runtime supervision
+	// and the canonical projector own every resulting lifecycle/business write.
 	return &A2uiActionOutcome{
 		Status:      result.Status,
 		Body:        result.Body,

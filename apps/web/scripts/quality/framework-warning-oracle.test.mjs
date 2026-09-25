@@ -24,11 +24,9 @@ test("limits warning-oracle modes to the approved local commands", () => {
   });
 
   const command = resolveCommand("build", ["--minify", "esbuild"]);
-  assert.equal(
-    command.executable,
-    resolve(scriptDir, "../../node_modules/.bin/vite")
-  );
+  assert.equal(command.executable, process.execPath);
   assert.deepEqual(command.args, [
+    resolve(scriptDir, "../../node_modules/vite/bin/vite.js"),
     "build",
     "--mode",
     "production",

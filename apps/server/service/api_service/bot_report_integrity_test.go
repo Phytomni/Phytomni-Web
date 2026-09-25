@@ -288,13 +288,15 @@ func TestReportIntegrityReconciliationKeepsReferenceBinding(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	botRunRecordSequenceServer(t,
-		`{"run_id":"run-reference-integrity","agent":"deep_genome","status":"running","result":{"formatted":{"answer":"Evidence [1].","references":[{"title":"Original study"}]},"report_revision":7}}`,
-		`{"run_id":"run-reference-integrity","agent":"deep_genome","status":"running","result":{"formatted":{"answer":"Stale evidence [1].","references":[{"title":"Stale study"}]},"report_revision":6}}`,
-		`{"run_id":"run-reference-integrity","agent":"deep_genome","status":"failed","result":{"formatted":{"answer":""},"report_revision":8}}`,
-	)
-	for i := 0; i < 3; i++ {
-		SyncBotRuns([]model.QuestionAgentLog{row})
+	records := []rxBot.RunRecord{
+		{RunID: row.BotRunId, Agent: "deep_genome", Status: "running", Result: json.RawMessage(`{"formatted":{"answer":"Evidence [1].","references":[{"title":"Original study"}]},"report_revision":7}`)},
+		{RunID: row.BotRunId, Agent: "deep_genome", Status: "running", Result: json.RawMessage(`{"formatted":{"answer":"Stale evidence [1].","references":[{"title":"Stale study"}]},"report_revision":6}`)},
+		{RunID: row.BotRunId, Agent: "deep_genome", Status: "failed", Result: json.RawMessage(`{"formatted":{"answer":""},"report_revision":8}`)},
+	}
+	for i := range records {
+		if err := applyBotRunRecordForTest(context.Background(), &row, &records[i]); err != nil {
+			t.Fatal(err)
+		}
 		_, answer := readStatusAnswer(t, gdb, row.Id)
 		var got struct {
 			Content string           `json:"content"`

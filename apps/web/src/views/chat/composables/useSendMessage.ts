@@ -23,15 +23,10 @@ import {
   writePendingChat,
   isLocalStorageChat,
   upsertPendingChatListEntry,
-  clearPendingChat,
-  removePendingChatListEntry,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
 import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
 import { isDemoDialogueId } from "@/views/chat/demos/catalog";
-import { normalizePositiveTaskRowId } from "@/api/task";
-import { shouldStream } from "../streaming/sendBranch";
-import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
 import {
   clientTurnDraftFingerprint,
@@ -45,17 +40,12 @@ import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
-import {
-  progressConfigFor,
-  remainingCotFlushMs,
-  rememberProgressStartedAt,
-} from "../utils/agentProgress";
 import { isRecord, isSuccessfulDataEnvelope } from "@/api/contracts";
 import {
   chatContentToText,
   decodeAgentSteps,
   decodeFollowUpQuestions,
-  messagePlainText,
+  streamMarkdownToText,
 } from "../messageTypes";
 import {
   completedUploadDisplays,
@@ -66,23 +56,17 @@ import {
   MAX_CONVERSATION_HISTORY_MESSAGES,
   projectHistoryForTransport,
 } from "../utils/chat-history-normalization";
-import type {
-  BotCapabilityByTool,
-  BotResearchInputCapability,
-} from "./useBotCapabilities";
+import type { BotResearchInputCapability } from "./useBotCapabilities";
+import { executionV2TransportEnabled } from "../executionFeature";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
-const ACCEPTED_EMPTY_BACKGROUND_TOOLS = new Set([
-  "GeneNetworkAgent",
-  "DigitalDesignAgent",
-  "InSilicoResearchAgent",
-]);
 const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_SURFACEABLE_CLIENT_MESSAGE = 512;
 
 type ChatUserStore = {
   FedLogOut: () => Promise<unknown>;
 };
+type ChatMode = ChatUIState["mode"];
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
@@ -92,6 +76,20 @@ function safeWebRequestID(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return SAFE_WEB_REQUEST_ID_PATTERN.test(normalized) ? normalized : undefined;
+}
+
+function clearCapturedSelectionAfterAcceptance(
+  chatState: ChatUIState,
+  capturedMode: ChatMode,
+  capturedSelectedAgent: string
+): void {
+  if (
+    capturedMode === "expert" &&
+    capturedSelectedAgent !== "" &&
+    chatState.selectedAgent === capturedSelectedAgent
+  ) {
+    chatState.selectedAgent = "";
+  }
 }
 
 function surfaceableClientMessage(value: unknown): string | undefined {
@@ -110,21 +108,6 @@ function surfaceableClientMessage(value: unknown): string | undefined {
 function hasDurableRowId(value: unknown): boolean {
   if (typeof value === "string") return value.trim() !== "";
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-function isDurableSelectingWait(data: QueryData): boolean {
-  const toolName =
-    typeof data.tool_name === "string" ? data.tool_name.trim() : "";
-  if (toolName !== "") return false;
-  const status =
-    typeof data.status === "string" ? data.status.trim().toUpperCase() : "";
-  if (status !== "RUNNING" && status !== "SUBMITTING") return false;
-  try {
-    normalizePositiveTaskRowId(data.id ?? "");
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function clearPendingTurnIdentity(
@@ -182,7 +165,11 @@ function isHistoryMessage(value: unknown): value is ChatMessage {
 }
 
 function historyText(message: ChatMessage): string {
-  return messagePlainText(message);
+  const content = chatContentToText(message.content);
+  if (content.trim()) {
+    return message.role === "user" ? content : content.trim();
+  }
+  return streamMarkdownToText(message.blocks);
 }
 
 function historyAttachments(message: ChatMessage) {
@@ -382,6 +369,16 @@ function attachBlockingA2ui(
     },
   ];
 
+  // New executions submit actions through the canonical execution command
+  // endpoint. Keep the decoded surface for rendering, but do not attach the
+  // historical conversation/run transport to the same message.
+  if (
+    typeof data.execution_id === "string" &&
+    data.execution_id.trim() !== ""
+  ) {
+    return;
+  }
+
   const runId = projection.runId;
   const dialogueId = data.dialogue_id?.trim() ?? "";
   const messageId =
@@ -420,17 +417,13 @@ export function useSendMessage(opts: {
     | Promise<DialogueReconciliationResult | undefined>
     | DialogueReconciliationResult
     | undefined;
-  reconcileDialogueIdentity: (
-    tempId: string,
-    serverId: string
-  ) => DialogueReconciliationResult;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
   scrollToBottom: () => Promise<void>;
   attachmentTargetBlocked?: Readonly<Ref<boolean>>;
   researchInputCapability: Readonly<Ref<BotResearchInputCapability>>;
-  botCapabilitiesByTool: Readonly<Ref<BotCapabilityByTool>>;
+  attachExecution?: (dialogueId: string, executionId: string) => Promise<void>;
 }) {
   const {
     getChatState,
@@ -440,14 +433,12 @@ export function useSendMessage(opts: {
     t,
     userStore,
     getHistoryQuestionData,
-    reconcileDialogueIdentity,
     chatList,
     timestamp,
     selectChat,
     scrollToBottom,
     attachmentTargetBlocked,
     researchInputCapability,
-    botCapabilitiesByTool,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
@@ -504,9 +495,6 @@ export function useSendMessage(opts: {
     chatState.isSending = true;
     chatState.generationStopped = false;
     chatState.activeRequestId = requestKey;
-    chatState.sendStartedAt = Date.now();
-    rememberProgressStartedAt(sendingDialogueId, chatState.sendStartedAt);
-    chatState.activeAgentName = capturedActiveAgentName;
     chatState.completing = false;
     chatState.messageInput = "";
 
@@ -535,7 +523,7 @@ export function useSendMessage(opts: {
 
     // Keep the user-visible/persisted query exactly as authored. Attachment
     // metadata is carried separately as bounded asset references.
-    const userMessage = {
+    const userMessage: ChatMessage = {
       role: "user",
       content: currentMessage,
       attachments:
@@ -548,7 +536,7 @@ export function useSendMessage(opts: {
     const sendingTitle = currentMessage;
     let blockingDialogueId: string | undefined;
     let acceptedTurn = false;
-    let identityReconciliation: DialogueReconciliationResult | undefined;
+    let acceptedExecutionId: string | undefined;
 
     if (parentRowId === null) {
       // Hard no-send: missing/ambiguous existing parent mapping.
@@ -568,9 +556,7 @@ export function useSendMessage(opts: {
       if (chatState.activeRequestId === requestKey) {
         chatState.activeRequestId = "";
         chatState.isSending = false;
-        chatState.sendStartedAt = null;
         chatState.completing = false;
-        chatState.activeAgentName = "";
         chatState.generationStopped = false;
       }
       if (isForeground(sendingDialogueId)) {
@@ -599,14 +585,6 @@ export function useSendMessage(opts: {
     chatState.pendingTurnId = clientTurnId;
     chatState.pendingTurnFingerprint = draftFingerprint;
 
-    const discardRejectedLocalDraft = (): void => {
-      clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
-      if (isLocalStorageChat(sendingDialogueId)) {
-        clearPendingChat(sendingDialogueId);
-        removePendingChatListEntry(chatList.value, sendingDialogueId);
-      }
-    };
-
     const settleAcceptedTurn = (
       assistantMessage: ChatMessage,
       acceptedExpertResponse: boolean
@@ -620,6 +598,13 @@ export function useSendMessage(opts: {
         draftFingerprint,
         durableRowId
       );
+      if (capturedMode !== "expert" || acceptedExpertResponse) {
+        clearCapturedSelectionAfterAcceptance(
+          chatState,
+          capturedMode,
+          capturedSelectedAgent
+        );
+      }
     };
 
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
@@ -666,114 +651,22 @@ export function useSendMessage(opts: {
       }
       queryData.append("attachments", JSON.stringify(attachmentRefs));
 
-      // Stream branch: chat-family + the mode that can route that agent.
-      // Insertion is inside the existing try, so returning here still runs
-      // the enclosing finally exactly once.
-      const streamAgents = Object.values(botCapabilitiesByTool.value).flatMap(
-        (capability) =>
-          capability?.enabled && capability.stream ? [capability.tool] : []
-      );
-      if (
-        shouldStream(capturedActiveAgentName, capturedMode, {
-          agents: streamAgents,
-        })
-      ) {
-        const placeholder: ChatMessage = {
-          role: "assistant",
-          content: "",
-          streaming: true,
-          blocks: [],
-          instantMessage: false,
-          tool_name: capturedActiveAgentName,
-          followUpQuestions: [],
-          showFollowUpQuestions: false,
-          showLog: false,
-          // Runtime-only Activity identity — reuse the captured request key.
-          streamPresentationKey: requestKey,
-        };
-        sendingMessages.push(placeholder);
-        const streamPlaceholder =
-          sendingMessages[sendingMessages.length - 1] ?? placeholder;
-        // Bind stream lookups to the captured state object so a post-rekey
-        // getChatState(oldTempId) cannot resurrect an empty temp record.
-        const getStreamChatState = (id: string) =>
-          id === sendingDialogueId ? chatState : getChatState(id);
-        const { streamMessage } = useStreamMessage({
-          getChatState: getStreamChatState,
-          t,
-        });
-        const streamResult = await streamMessage({
-          dialogueId: sendingDialogueId,
-          formData: queryData,
-          requestId: requestKey,
-          placeholder: streamPlaceholder,
-          clientTurnId,
-          onIdentity: ({ dialogueId }) => {
-            if (chatState.activeRequestId !== requestKey) return;
-            blockingDialogueId = dialogueId;
-            if (identityReconciliation) return;
-            identityReconciliation = reconcileDialogueIdentity(
-              sendingDialogueId,
-              dialogueId
-            );
-            void Promise.resolve()
-              .then(() => getHistoryQuestionData())
-              .catch(() => undefined);
-          },
-        });
-        if (
-          chatState.activeRequestId === requestKey &&
-          streamResult.dialogueId
-        ) {
-          blockingDialogueId = streamResult.dialogueId;
-        }
-        if (
-          chatState.activeRequestId === requestKey &&
-          streamResult.contextNotice?.context_degraded === true
-        ) {
-          ElMessage.warning(t("chat.contextDegraded"));
-        }
-        if (
-          chatState.activeRequestId === requestKey &&
-          !chatState.generationStopped &&
-          streamResult.completed === true
-        ) {
-          acceptedTurn = true;
-          commitSuccessfulTurn(chatState, userMessage, streamPlaceholder);
-          if (streamResult.messageId) {
-            settlePendingTurnIdentity(
-              chatState,
-              clientTurnId,
-              draftFingerprint,
-              streamResult.messageId
-            );
-          }
-        }
-        if (
-          chatState.activeRequestId === requestKey &&
-          streamResult.preDispatch4xx
-        ) {
-          discardRejectedLocalDraft();
-        }
-        return;
+      // Start the canonical execution-addressed stream as soon as the POST is
+      // in flight. The Web SSE endpoint waits through the bounded admission
+      // race, so this same subscription owns pre-admission, admitted, running,
+      // and terminal presentation without a second local progress state machine.
+      const responsePromise = getQueryAbortable(queryData, requestKey);
+      if (opts.attachExecution) {
+        void opts
+          .attachExecution(sendingDialogueId, clientTurnId)
+          .catch(() => undefined);
       }
-
-      const response = await getQueryAbortable(queryData, requestKey);
+      const response = await responsePromise;
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
       if (!chatState.generationStopped) {
         chatState.completing = true;
-        const elapsed =
-          chatState.sendStartedAt == null
-            ? 0
-            : Math.max(0, Date.now() - chatState.sendStartedAt);
-        const flushMs = remainingCotFlushMs(
-          elapsed,
-          progressConfigFor(chatState.activeAgentName)
-        );
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.max(300, flushMs))
-        );
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
       // The runtime interceptor returns code 200 for decoded success envelopes;
@@ -781,6 +674,70 @@ export function useSendMessage(opts: {
       // without `code` and rejects explicit non-success envelopes.
       if (isSuccessfulDataEnvelope<QueryData>(response)) {
         const responseData = response.data;
+        const asyncAccepted =
+          executionV2TransportEnabled() &&
+          responseData.schema_version === 2 &&
+          typeof responseData.execution_id === "string" &&
+          responseData.execution_id.length > 0 &&
+          responseData.execution_id === clientTurnId &&
+          ["ADMITTED", "admitted", "queued", "dispatching"].includes(
+            responseData.status ?? ""
+          );
+        if (asyncAccepted) {
+          if (
+            typeof responseData.user_message_id !== "string" ||
+            responseData.user_message_id.length === 0 ||
+            typeof responseData.assistant_message_id !== "string" ||
+            responseData.assistant_message_id.length === 0
+          ) {
+            throw new Error("invalid v2 message identity");
+          }
+          const executionId = responseData.execution_id as string;
+          const userMessageId = responseData.user_message_id as string;
+          const assistantMessageId =
+            responseData.assistant_message_id as string;
+          if (
+            typeof responseData.dialogue_id === "string" &&
+            responseData.dialogue_id !== ""
+          ) {
+            blockingDialogueId = responseData.dialogue_id;
+          }
+          userMessage.id = userMessageId;
+          userMessage.sourceMessageId = userMessageId;
+          userMessage.executionId = executionId;
+          const currentRun = chatState.executionRuns?.[executionId];
+          const assistantMessage: ChatMessage = {
+            role: "assistant",
+            content: currentRun?.outputText ?? "",
+            status: currentRun?.status ?? responseData.status ?? "ADMITTED",
+            instantMessage: true,
+            tool_name: responseData.tool_name ?? capturedActiveAgentName,
+            id: assistantMessageId,
+            sourceMessageId: assistantMessageId,
+            parentMessageId: userMessageId,
+            messageType: "assistant",
+            visibility: "user",
+            followUpQuestions: [],
+            showFollowUpQuestions: false,
+            showLog: false,
+            executionId,
+            executionRun: currentRun,
+            contentRevision: currentRun?.outputRevision ?? 0,
+            contentOffset: currentRun?.outputOffset ?? 0,
+            contentLength: currentRun?.outputOffset ?? 0,
+          };
+          if (
+            chatState.activeRequestId === requestKey &&
+            !chatState.generationStopped
+          ) {
+            sendingMessages.push(assistantMessage);
+            commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+            acceptedTurn = true;
+            acceptedExecutionId = executionId;
+            settleAcceptedTurn(assistantMessage, true);
+          }
+          return;
+        }
         const parsedBotProjection = parseBlockingProjection(responseData);
         const botProjection = normalizeCompletedReviewBlockingProjection(
           responseData,
@@ -797,12 +754,12 @@ export function useSendMessage(opts: {
           (botProjection === undefined &&
             typeof responseData.status === "string" &&
             responseData.status.trim().toUpperCase() === "SUCCEEDED");
-        const acceptedExpertResponse =
-          isDurableSelectingWait(responseData) ||
-          isAcceptedExpertResponse(expertSucceeded, botProjection);
+        const acceptedExpertResponse = isAcceptedExpertResponse(
+          expertSucceeded,
+          botProjection
+        );
         if (
           capturedMode === "expert" &&
-          !isDurableSelectingWait(responseData) &&
           (!isCanonicalToolName(responseData.tool_name) ||
             (botProjection && botProjection.agent !== responseData.tool_name) ||
             hasMalformedExpertRunIdentity(responseData) ||
@@ -1027,7 +984,8 @@ export function useSendMessage(opts: {
               // handle other unknown tool types with the default format
               const acceptedSpecializedBackground =
                 acceptedExpertResponse &&
-                ACCEPTED_EMPTY_BACKGROUND_TOOLS.has(response.data.tool_name);
+                (response.data.tool_name === "GeneNetworkAgent" ||
+                  response.data.tool_name === "DigitalDesignAgent");
               assistantMessage = {
                 role: "assistant",
                 content:
@@ -1186,7 +1144,7 @@ export function useSendMessage(opts: {
       }
 
       if (isDefinitePreDispatch4xx(error)) {
-        discardRejectedLocalDraft();
+        clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
       }
 
       // check whether it's a token-expired error
@@ -1316,39 +1274,20 @@ export function useSendMessage(opts: {
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
         const wasStopped = chatState.generationStopped;
-        const identityResult = identityReconciliation;
-        const identityAlreadyReconciled =
-          identityResult?.status === "reconciled" &&
-          identityResult.serverId === blockingDialogueId;
-        // Snapshot the accepted turn so a later refresh can reopen this
-        // still-local `new_*` row. Reconciliation may still replace the
-        // record with the server dialogue id below.
-        if (
-          acceptedTurn &&
-          isNewChat &&
-          isLocalStorageChat(sendingDialogueId) &&
-          !identityAlreadyReconciled
-        ) {
-          writePendingChat(
-            sendingDialogueId,
-            sendingMessages as unknown as Array<{
-              role: string;
-              content: string;
-              [key: string]: unknown;
-            }>,
-            {
-              title: sendingTitle,
-              mode: capturedMode,
-            }
-          );
-        }
         const historyOpts =
           blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
-        const reconciliation =
-          identityResult ??
-          (await getHistoryQuestionData(sendingDialogueId, historyOpts));
+        const reconciliation = await getHistoryQuestionData(
+          sendingDialogueId,
+          historyOpts
+        );
         if (reconciliation?.status === "reconciled") {
           chatState.historyHydration = "ready";
+        }
+        if (acceptedExecutionId && opts.attachExecution) {
+          const executionDialogueId = blockingDialogueId ?? sendingDialogueId;
+          void opts
+            .attachExecution(executionDialogueId, acceptedExecutionId)
+            .catch(() => undefined);
         }
 
         if (!isNewChat) {
@@ -1395,9 +1334,7 @@ export function useSendMessage(opts: {
         }
 
         chatState.isSending = false;
-        chatState.sendStartedAt = null;
         chatState.completing = false;
-        chatState.activeAgentName = "";
         if (isForeground(sendingDialogueId)) {
           await scrollToBottom();
         }

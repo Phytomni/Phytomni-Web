@@ -624,8 +624,8 @@ func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) 
 		t, api_service.QuerySurfaceAgentProduct, "stable handler Research query",
 	)
 	handler.AgentProductRun(firstCtx)
-	if firstRecorder.Code != http.StatusOK {
-		t.Fatalf("first status=%d body=%s, want 200", firstRecorder.Code, firstRecorder.Body.String())
+	if firstRecorder.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d body=%s, want 202", firstRecorder.Code, firstRecorder.Body.String())
 	}
 	var first struct {
 		Code int                   `json:"code"`
@@ -634,11 +634,11 @@ func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) 
 	if err := json.Unmarshal(firstRecorder.Body.Bytes(), &first); err != nil {
 		t.Fatalf("decode first response: %v", err)
 	}
-	if first.Data.BotRunID != "run-handler-research-retry" || first.Data.Id == 0 {
+	if first.Data.ExecutionID != "negotiated-research-turn" || first.Data.Id == 0 {
 		t.Fatalf("first identity=%+v", first.Data)
 	}
-	if catalogCalls != 1 || runCalls != 1 {
-		t.Fatalf("first catalog/run calls=%d/%d, want 1/1", catalogCalls, runCalls)
+	if catalogCalls != 1 || runCalls != 0 {
+		t.Fatalf("admission catalog/run calls=%d/%d, want validation only", catalogCalls, runCalls)
 	}
 
 	capabilityOK = false
@@ -646,8 +646,8 @@ func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) 
 		t, api_service.QuerySurfaceAgentProduct, "stable handler Research query",
 	)
 	handler.AgentProductRun(retryCtx)
-	if retryRecorder.Code != http.StatusOK {
-		t.Fatalf("retry status=%d body=%s, want 200", retryRecorder.Code, retryRecorder.Body.String())
+	if retryRecorder.Code != http.StatusAccepted {
+		t.Fatalf("retry status=%d body=%s, want 202", retryRecorder.Code, retryRecorder.Body.String())
 	}
 	var retry struct {
 		Code int                   `json:"code"`
@@ -656,11 +656,11 @@ func TestDedicatedResearchHandlerRetryBypassesLiveCapabilityDrift(t *testing.T) 
 	if err := json.Unmarshal(retryRecorder.Body.Bytes(), &retry); err != nil {
 		t.Fatalf("decode retry response: %v", err)
 	}
-	if retry.Data.Id != first.Data.Id || retry.Data.BotRunID != first.Data.BotRunID {
+	if retry.Data.Id != first.Data.Id || retry.Data.ExecutionID != first.Data.ExecutionID {
 		t.Fatalf("retry identity changed: first=%+v retry=%+v", first.Data, retry.Data)
 	}
-	if catalogCalls != 1 || runCalls != 1 {
-		t.Fatalf("retry catalog/run calls=%d/%d, want 1/1", catalogCalls, runCalls)
+	if catalogCalls != 1 || runCalls != 0 {
+		t.Fatalf("retry catalog/run calls=%d/%d, want duplicate fast path", catalogCalls, runCalls)
 	}
 }
 
@@ -696,7 +696,7 @@ func TestResearchClientTurnHeaderMustMatchParsedBody(t *testing.T) {
 		t, api_service.QuerySurfaceAgentProduct, "accepted header identity",
 	)
 	handler.AgentProductRun(firstCtx)
-	if firstRecorder.Code != http.StatusOK {
+	if firstRecorder.Code != http.StatusAccepted {
 		t.Fatalf("first status=%d body=%s", firstRecorder.Code, firstRecorder.Body.String())
 	}
 	mismatchCtx, mismatchRecorder := newNegotiatedResearchRequestWithClientTurn(
@@ -711,8 +711,8 @@ func TestResearchClientTurnHeaderMustMatchParsedBody(t *testing.T) {
 	if mismatchRecorder.Code != http.StatusBadRequest {
 		t.Fatalf("mismatch status=%d body=%s, want 400", mismatchRecorder.Code, mismatchRecorder.Body.String())
 	}
-	if catalogCalls != 1 || runCalls != 1 {
-		t.Fatalf("mismatch catalog/run calls=%d/%d, want no calls after accepted turn", catalogCalls, runCalls)
+	if catalogCalls != 1 || runCalls != 0 {
+		t.Fatalf("message admission catalog/run calls=%d/%d", catalogCalls, runCalls)
 	}
 }
 
@@ -762,7 +762,7 @@ func TestResearchClientTurnHeaderLookupIsOwnerScoped(t *testing.T) {
 		t, api_service.QuerySurfaceAgentProduct, "owner-scoped accepted turn",
 	)
 	handler.AgentProductRun(firstCtx)
-	if firstRecorder.Code != http.StatusOK {
+	if firstRecorder.Code != http.StatusAccepted {
 		t.Fatalf("first status=%d body=%s", firstRecorder.Code, firstRecorder.Body.String())
 	}
 	capabilityOK = false
@@ -775,10 +775,10 @@ func TestResearchClientTurnHeaderLookupIsOwnerScoped(t *testing.T) {
 	handler.AgentProductRun(foreignCtx)
 
 	if foreignRecorder.Code != http.StatusServiceUnavailable {
-		t.Fatalf("foreign status=%d body=%s, want 503", foreignRecorder.Code, foreignRecorder.Body.String())
+		t.Fatalf("foreign status=%d body=%s, want owner-scoped validation failure", foreignRecorder.Code, foreignRecorder.Body.String())
 	}
-	if tracked.reads != 0 || tracked.bytes != 0 || catalogCalls != 2 || runCalls != 1 {
-		t.Fatalf("foreign key bypassed owner gate: reads=%d bytes=%d catalog/run=%d/%d", tracked.reads, tracked.bytes, catalogCalls, runCalls)
+	if tracked.reads != 0 || tracked.bytes != 0 || catalogCalls != 2 || runCalls != 0 {
+		t.Fatalf("foreign admission ownership mismatch: reads=%d bytes=%d catalog/run=%d/%d", tracked.reads, tracked.bytes, catalogCalls, runCalls)
 	}
 }
 
@@ -1115,58 +1115,5 @@ func TestQueryResearchIntentMismatchFailsClosedBeforeDispatch(t *testing.T) {
 	}
 	if runCalls != 0 {
 		t.Fatalf("mismatched Research intent dispatched %d Bot run(s)", runCalls)
-	}
-}
-
-func newUpdateLogRequest(t *testing.T, fields map[string]string) (*gin.Context, *httptest.ResponseRecorder) {
-	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	for key, value := range fields {
-		if err := mw.WriteField(key, value); err != nil {
-			t.Fatalf("write %s: %v", key, err)
-		}
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/async-tasks/analyst-log", &buf)
-	c.Request.Header.Set("Content-Type", mw.FormDataContentType())
-	c.Set("username", "alice")
-	i18n.Localize()(c)
-	return c, w
-}
-
-func TestApiQueryAnalystUpdateLogRejectsBlankTaskID(t *testing.T) {
-	ph := NewHandler()
-	c, w := newUpdateLogRequest(t, map[string]string{"task_id": "   ", "compute_resource": "cr-1"})
-
-	ph.QueryAnalystUpdateLog(c)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
-	}
-	var parsed struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if parsed.Code != http.StatusBadRequest || parsed.Message != "task_id is required" {
-		t.Fatalf("unexpected body: %+v", parsed)
-	}
-}
-
-func TestQueryErrorStatusMissingBotRunID(t *testing.T) {
-	status, msg := queryErrorStatus(api_service.ErrMissingBotRunID)
-	if status != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", status)
-	}
-	if msg != "task is not syncable through bot run state" {
-		t.Fatalf("message = %q", msg)
 	}
 }

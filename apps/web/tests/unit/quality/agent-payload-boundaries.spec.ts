@@ -2,11 +2,36 @@ import { describe, expect, it } from "vitest";
 import {
   decodeCitationDocuments,
   decodeTableDataInput,
+  decodeTableMessagePresentation,
   optionalStringValue,
   parseAgentAnswer,
 } from "@/views/chat/utils/format";
 
 describe("agent payload boundary decoders", () => {
+  it("accepts only complete finite scalar DataAgent message tables", () => {
+    expect(
+      decodeTableMessagePresentation(
+        '{"headers":["gene","score"],"rows":[["Os01",0.5]]}'
+      )
+    ).toMatchObject({
+      content: [{ gene: "Os01", score: 0.5 }],
+      tableHeaders: [
+        { prop: "gene", label: "gene" },
+        { prop: "score", label: "score" },
+      ],
+    });
+    expect(
+      decodeTableMessagePresentation(
+        '{"headers":["gene"],"rows":[["Os01",{"private":"value"}]]}'
+      )
+    ).toBeUndefined();
+    expect(
+      decodeTableMessagePresentation(
+        '{"headers":["gene","score"],"rows":[["Os01"]]}'
+      )
+    ).toBeUndefined();
+  });
+
   it.each([
     ["null", "null"],
     ["array", "[]"],

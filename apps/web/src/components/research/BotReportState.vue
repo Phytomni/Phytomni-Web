@@ -29,7 +29,7 @@
     </div>
 
     <ScientificMarkdown
-      v-if="reportText && !showWaitProgress"
+      v-if="reportText"
       :source="reportText"
       :citation-namespace="ns"
       :reference-count="referenceCount"
@@ -38,13 +38,6 @@
       data-test="bot-report-content"
       @citation-activate="emit('citation-activate', $event)"
       @resource-activate="emit('resource-activate', $event)"
-    />
-    <SendProgress
-      v-else-if="showWaitProgress"
-      :started-at="resolvedProgressStartedAt"
-      :agent-name="agentName"
-      :completing="false"
-      :stage-label="statusLabel"
     />
     <p
       v-else-if="
@@ -72,9 +65,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
-import SendProgress from "@/views/chat/components/SendProgress.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
-import { progressStartedAtFor } from "@/views/chat/utils/agentProgress";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import {
@@ -112,7 +103,6 @@ const props = withDefaults(
     failureLabel?: string;
     hideActiveReport?: boolean;
     agentName?: string;
-    progressStartedAt?: number | null;
   }>(),
   {
     progress: null,
@@ -123,7 +113,6 @@ const props = withDefaults(
     labels: () => ({}),
     hideActiveReport: false,
     agentName: "",
-    progressStartedAt: null,
   }
 );
 
@@ -194,15 +183,6 @@ const updatedAtLabel = computed(() =>
     : ""
 );
 
-const resolvedProgressStartedAt = computed(() =>
-  progressStartedAtFor(
-    props.state.runId || "bot-report",
-    props.progressStartedAt
-  )
-);
-const showWaitProgress = computed(
-  () => presentation.value.active && !reportText.value
-);
 const progressVisible = computed(() => {
   const progress = props.progress ?? lifecycleMetadata.value.progress ?? null;
   if (!progress) return false;

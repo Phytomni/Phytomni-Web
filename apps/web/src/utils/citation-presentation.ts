@@ -19,6 +19,13 @@ export interface CitationPresentation {
   links: CitationLink[];
 }
 
+export type CitationReferenceDecodeResult =
+  | {
+      ok: true;
+      value: ReadonlyArray<Readonly<Record<string, unknown>>> | undefined;
+    }
+  | { ok: false };
+
 const LINK_LABELS = new Set([
   "Article",
   "PubMed",
@@ -60,15 +67,28 @@ export function decodeCitationPresentation(
 ): CitationPresentation | null {
   if (
     !isRecord(value) ||
+    Object.keys(value).some((key) => key !== "runs" && key !== "links") ||
     !Array.isArray(value.runs) ||
-    !Array.isArray(value.links)
+    value.runs.length > 256 ||
+    !Array.isArray(value.links) ||
+    value.links.length > 16
   )
     return null;
   const runs: CitationRun[] = [];
+  let textLength = 0;
   for (const run of value.runs) {
     if (
       !isRecord(run) ||
+      Object.keys(run).some(
+        (key) =>
+          key !== "text" &&
+          key !== "bold" &&
+          key !== "italic" &&
+          key !== "vertical"
+      ) ||
       typeof run.text !== "string" ||
+      [...run.text].length > 4096 ||
+      run.text.includes("\u0000") ||
       (run.bold !== undefined && typeof run.bold !== "boolean") ||
       (run.italic !== undefined && typeof run.italic !== "boolean") ||
       (run.vertical !== undefined &&
@@ -76,6 +96,8 @@ export function decodeCitationPresentation(
         run.vertical !== "subscript")
     )
       return null;
+    textLength += [...run.text].length;
+    if (textLength > 16_384) return null;
     runs.push({
       text: run.text,
       ...(run.bold !== undefined ? { bold: run.bold } : {}),
@@ -88,15 +110,88 @@ export function decodeCitationPresentation(
   for (const link of value.links) {
     if (
       !isRecord(link) ||
+      Object.keys(link).some((key) => key !== "label" && key !== "href") ||
       typeof link.label !== "string" ||
       !LINK_LABELS.has(link.label) ||
       typeof link.href !== "string" ||
+      [...link.href].length > 2048 ||
       !isCitationHref(link.href)
     )
       return null;
     links.push({ label: link.label, href: link.href });
   }
   return { runs, links };
+}
+
+const JOURNAL_CITATION_FIELDS = new Set([
+  "title",
+  "au",
+  "ti",
+  "so",
+  "vl",
+  "bp",
+  "ep",
+  "ar",
+  "py",
+  "di",
+  "pm",
+  "formatted_citation",
+  "doi_missing",
+  "citation",
+]);
+
+/**
+ * Decode the finite citation row shared by execution events and ordered
+ * history. Unknown/provider-only fields never enter reactive state.
+ *
+ * `citation` is optional only for rows persisted before the canonical
+ * presentation contract was introduced. When present it must be valid; an
+ * invalid canonical value fails the containing event/history response.
+ */
+export function decodeJournalCitationReferences(
+  value: unknown
+): CitationReferenceDecodeResult {
+  if (value === undefined) {
+    return { ok: true, value: undefined };
+  }
+  if (!Array.isArray(value) || value.length > 64) return { ok: false };
+
+  const references: Array<Readonly<Record<string, unknown>>> = [];
+  for (const reference of value) {
+    if (
+      !isRecord(reference) ||
+      Object.keys(reference).some((key) => !JOURNAL_CITATION_FIELDS.has(key))
+    ) {
+      return { ok: false };
+    }
+
+    const decoded: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(reference)) {
+      if (key === "citation") {
+        const citation = decodeCitationPresentation(field);
+        if (!citation) return { ok: false };
+        decoded.citation = citation;
+        continue;
+      }
+      if (key === "doi_missing") {
+        if (typeof field !== "boolean") return { ok: false };
+        decoded.doi_missing = field;
+        continue;
+      }
+      const limit = key === "formatted_citation" ? 4096 : 512;
+      if (
+        typeof field !== "string" ||
+        [...field].length > limit ||
+        field.includes("\u0000") ||
+        (key !== "title" && field.length === 0)
+      ) {
+        return { ok: false };
+      }
+      decoded[key] = field;
+    }
+    references.push(decoded);
+  }
+  return { ok: true, value: references };
 }
 
 /** The canonical sentence excludes numbering and the separate link line. */

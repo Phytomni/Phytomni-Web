@@ -10,6 +10,11 @@ export const COMMANDS = {
   coverage: ["vitest", ["run", "--coverage"]],
 };
 
+const CLI_ENTRYPOINTS = {
+  vite: ["vite", "bin", "vite.js"],
+  vitest: ["vitest", "vitest.mjs"],
+};
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDir, "../..");
 
@@ -18,9 +23,10 @@ export function resolveCommand(mode, forwardedArgs) {
   const command = COMMANDS[mode];
 
   const [name, args] = command;
+  const cliEntrypoint = CLI_ENTRYPOINTS[name];
   return {
-    executable: resolve(webRoot, "node_modules", ".bin", name),
-    args: [...args, ...forwardedArgs],
+    executable: process.execPath,
+    args: [resolve(webRoot, "node_modules", ...cliEntrypoint), ...args, ...forwardedArgs],
     cwd: webRoot,
   };
 }

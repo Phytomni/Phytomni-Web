@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// Client is a thin HTTP wrapper around the Bot phytomni-api /v1 surface. It
-// presents the single ptm_<web> user key on every call; the Bot service token
-// is ops-only and intentionally absent here.
+// Client is a thin HTTP wrapper around the Bot phytomni-api surface. Legacy
+// user-principal calls present the ptm_<web> key; canonical V2 execution calls
+// present the environment-only Web service identity and explicit owner.
 type Client struct {
 	http    *http.Client
 	baseURL string
@@ -184,6 +184,10 @@ func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string,
 }
 
 func (c *Client) doJSONWithMetaOptionsAndIdempotency(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool, idempotencyKey string) (ResponseMeta, error) {
+	return c.doJSONWithMetaOptionsAndTransport(ctx, method, path, body, out, rejectDuplicateKeys, idempotencyKey, "")
+}
+
+func (c *Client) doJSONWithMetaOptionsAndTransport(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool, idempotencyKey, executionID string) (ResponseMeta, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -202,6 +206,9 @@ func (c *Client) doJSONWithMetaOptionsAndIdempotency(ctx context.Context, method
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
 	if idempotencyKey != "" {
 		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	if executionID != "" {
+		req.Header.Set("X-Phyto-Execution-Id", executionID)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -331,7 +338,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req ChatCompletionRequest) 
 func (c *Client) ChatCompletionWithMeta(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, ResponseMeta, error) {
 	req.Stream = false
 	var out ChatCompletionResponse
-	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/chat/completions", req, &out)
+	meta, err := c.doJSONWithMetaOptionsAndTransport(ctx, http.MethodPost, "/v1/chat/completions", req, &out, false, "", req.ExecutionID)
 	if err == nil && req.Conversation != nil {
 		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
 	}
@@ -352,6 +359,9 @@ func (c *Client) ChatCompletionStreamWithMeta(ctx context.Context, req ChatCompl
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.userKey)
+	if req.ExecutionID != "" {
+		httpReq.Header.Set("X-Phyto-Execution-Id", req.ExecutionID)
+	}
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return nil, ResponseMeta{}, wrapTransportError(err)
@@ -407,7 +417,7 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 // InvokeAgentWithMeta submits a run and returns Bot response metadata.
 func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
 	var out AgentRunResponse
-	meta, err := c.doJSONWithMetaOptionsAndIdempotency(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true, req.IdempotencyKey)
+	meta, err := c.doJSONWithMetaOptionsAndTransport(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true, req.IdempotencyKey, req.ExecutionID)
 	if err == nil && req.Conversation != nil {
 		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
 	}
@@ -428,7 +438,7 @@ func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQ
 // metadata alongside the agent.run-shaped response.
 func (c *Client) RouteQueryWithMeta(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, ResponseMeta, error) {
 	var out RouteQueryResponse
-	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/query/route", req, &out, true)
+	meta, err := c.doJSONWithMetaOptionsAndTransport(ctx, http.MethodPost, "/v1/query/route", req, &out, true, "", req.ExecutionID)
 	if err == nil && req.Conversation != nil {
 		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
 	}

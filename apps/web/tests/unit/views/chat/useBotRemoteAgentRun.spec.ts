@@ -615,9 +615,7 @@ describe("useBotRemoteAgentRun", () => {
         "query",
         "Investigate drought tolerance",
       ]);
-      expect(entries.some(([key]) => key === "client_turn_id")).toBe(
-        tool === "InSilicoResearchAgent"
-      );
+      expect(entries.some(([key]) => key === "client_turn_id")).toBe(true);
     }
   );
 
@@ -1156,7 +1154,6 @@ describe("useBotRemoteAgentRun", () => {
 
     expect(state.uploadTransfer).toBeNull();
     expect(state.activeRequestId).toBe("");
-    expect(state.activeAgentName).toBe("");
     expect(state.botLifecycle?.status).toBe("CANCELLED");
     expect(state.botLifecycle?.failures).toContain("analysis task cancelled");
     expect(run.state.value.phase).toBe("cancelled");

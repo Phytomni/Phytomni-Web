@@ -88,20 +88,6 @@ func assertContractAnswer(t *testing.T, answer, name string) {
 	}
 }
 
-func reviewedCitationFrames(t *testing.T) (string, string) {
-	t.Helper()
-	content, refs, _ := reviewedCitationFixture(t)
-	text, err := json.Marshal(map[string]any{"type": "TextMessageContent", "delta": content})
-	if err != nil {
-		t.Fatal(err)
-	}
-	references, err := json.Marshal(map[string]any{"type": "Custom", "name": "phyto.references", "value": map[string]any{"doc_list": refs}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return "event: TextMessageContent\ndata: " + string(text) + "\n", "event: Custom\ndata: " + string(references) + "\n"
-}
-
 func TestCitationProjectionReadSeparatesOwnedBodyWithoutSaving(t *testing.T) {
 	gdb := setupTestDB(t)
 	old := rxBot.BotConfig
@@ -246,7 +232,7 @@ func TestCitationProjectionMatchingReview(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveBotRunProjection(context.Background(), "alice", 1, BotRunProjection{RunID: "run", Agent: "review", Status: "SUCCEEDED", FinalReport: "body [1]", ReportRevision: 1}); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), "alice", 1, BotRunProjection{RunID: "run", Agent: "review", Status: "SUCCEEDED", FinalReport: "body [1]", ReportRevision: 1}); err != nil {
 		t.Fatal(err)
 	}
 	for _, mode := range []HistoryReadMode{HistoryReadModeLegacy, HistoryReadModeProjection} {
@@ -273,7 +259,7 @@ func TestCitationProjectionScientificMatchingReview(t *testing.T) {
 	if err := gdb.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveBotRunProjection(context.Background(), "alice", 1, BotRunProjection{RunID: "run", Agent: "review", Status: "SUCCEEDED", FinalReport: content, ReportRevision: 1}); err != nil {
+	if err := saveBotRunProjectionForTest(context.Background(), "alice", 1, BotRunProjection{RunID: "run", Agent: "review", Status: "SUCCEEDED", FinalReport: content, ReportRevision: 1}); err != nil {
 		t.Fatal(err)
 	}
 	for _, mode := range []HistoryReadMode{HistoryReadModeLegacy, HistoryReadModeDual, HistoryReadModeProjection} {
@@ -511,7 +497,7 @@ func TestCitationProjectionMalformedReadAndPersistence(t *testing.T) {
 		t.Fatalf("list error: %v", err)
 	}
 	rec := &rxBot.RunRecord{RunID: "run", Agent: "review", Status: "succeeded", Result: json.RawMessage(`{"formatted":{"answer":"body","references":{"bad":"private-source"}}}`)}
-	if err := ps.applyBotRunProjection(context.Background(), &row, rec, rxBot.ResponseMeta{}); !errors.Is(err, citation.ErrInvalidReferences) || err.Error() != "invalid reference payload" {
+	if err := applyBotRunRecordForTest(context.Background(), &row, rec); !errors.Is(err, citation.ErrInvalidReferences) || err.Error() != "invalid reference payload" {
 		t.Fatalf("persistence error: %v", err)
 	}
 	status, answer := readStatusAnswer(t, gdb, 1)
@@ -569,25 +555,24 @@ func TestCitationProjectionBotOverlayMalformedRoot(t *testing.T) {
 }
 
 func TestCitationProjectionBlockingError(t *testing.T) {
-	gdb := setupExpertTestDB(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"run","run_id":"run","object":"agent.run","agent":"knowledge","status":"succeeded","result":{"formatted":{"answer":"body","references":{"bad":"private-source"}}}}`))
-	}))
-	t.Cleanup(server.Close)
-	old := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5}
-	t.Cleanup(func() { rxBot.BotConfig = old })
-	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert", Tool: "KnowledgeAgent"})
-	if out != nil || !errors.Is(err, citation.ErrInvalidReferences) || err.Error() != "invalid reference payload" {
-		t.Fatalf("blocking result: %+v %v", out, err)
-	}
-	var count int64
-	if err := gdb.Model(&model.QuestionAgentLog{}).Where("status = ?", "SUCCEEDED").Count(&count).Error; err != nil {
+	runID := "run"
+	formatted := &rxBot.Formatted{Answer: "body", References: json.RawMessage(`{"bad":"private-source"}`)}
+	projection, err := DecodeAgentRunSubmission(rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "knowledge",
+		Status: "succeeded",
+		Result: rxBot.AgentRunResult{Formatted: formatted},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Fatal("corrupt blocking success saved")
+	row := model.QuestionAgentLog{BotRunId: runID, ToolName: "KnowledgeAgent", Status: "RUNNING", Answer: "prior answer"}
+	applied, err := applyBotProjectionToHistoryRowWithFormatted(&row, projection, formatted)
+	if applied || !errors.Is(err, citation.ErrInvalidReferences) || err.Error() != "invalid reference payload" {
+		t.Fatalf("blocking result: applied=%v row=%+v err=%v", applied, row, err)
+	}
+	if row.Status != "RUNNING" || row.Answer != "prior answer" {
+		t.Fatal("corrupt blocking success mutated history")
 	}
 }
 
@@ -623,16 +608,18 @@ func TestCitationProjectionEmptyReport(t *testing.T) {
 						rec := rxBot.RunRecord{RunID: "run", Agent: slug, Status: "succeeded", Result: result}
 						wantInvalid := references.invalid && slug != "chat" && slug != "data"
 						if boundary == "reconcile" {
-							err = NewService().applyBotRunProjection(context.Background(), &row, &rec, rxBot.ResponseMeta{})
-							terminal, terminalErr := replacementTerminalResultFromProjection(
-								&persistedConversationReplacement{ToolName: row.ToolName},
-								BotRunProjection{RunID: "run", Agent: slug, Status: "CANCELLED", FinalReport: body.text}, &rec,
+							err = applyBotRunRecordForTest(context.Background(), &row, &rec)
+							terminal := model.QuestionAgentLog{BotRunId: "run", ToolName: row.ToolName}
+							terminalApplied, terminalErr := applyBotProjectionToHistoryRowWithFormatted(
+								&terminal,
+								BotRunProjection{RunID: "run", Agent: slug, Status: "CANCELLED", FinalReport: body.text},
+								formatted,
 							)
 							if wantInvalid {
-								if terminal != nil || !errors.Is(terminalErr, citation.ErrInvalidReferences) {
+								if terminalApplied || !errors.Is(terminalErr, citation.ErrInvalidReferences) {
 									t.Errorf("malformed terminal references accepted: %v", terminalErr)
 								}
-							} else if terminalErr != nil || terminal.Answer != "" || terminal.Status != "CANCELLED" {
+							} else if !terminalApplied || terminalErr != nil || terminal.Answer != "" || terminal.Status != "CANCELLED" {
 								t.Fatalf("valid empty terminal behavior changed: %+v %v", terminal, terminalErr)
 							}
 						} else {

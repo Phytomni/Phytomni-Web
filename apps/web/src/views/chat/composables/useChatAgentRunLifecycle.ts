@@ -60,6 +60,10 @@ function lifecycleReloadSignature(next: AgentTaskLifecycle): string {
 }
 
 function isWatchableMessage(message: ChatMessage): string | null {
+  // Every newly admitted turn with an execution_id is owned by the canonical
+  // execution SSE. Row lifecycle polling is a bounded historical fallback
+  // only and must never become a second live-progress owner.
+  if (message.executionId) return null;
   if (!isPollableWaitTool(message.tool_name)) return null;
   const deliveryPending = message.delivery?.status === "pending";
   if (

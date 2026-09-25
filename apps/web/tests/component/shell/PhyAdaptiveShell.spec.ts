@@ -168,6 +168,106 @@ describe("PhyAdaptiveShell", () => {
     opener.remove();
   });
 
+  it("focus-manages a fullscreen execution workspace and restores Chat focus", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      attachTo: document.body,
+      props: { workspaceFullscreen: true },
+      slots: {
+        sidebar: '<nav data-test="sidebar">Sidebar</nav>',
+        main: '<main data-test="main">Conversation</main>',
+        workspace: `
+          <button data-test="execution-workspace-back" type="button">Back</button>
+          <button data-test="workspace-last" type="button">Close</button>
+        `,
+      },
+    });
+    await nextTick();
+
+    const workspace = wrapper.get(".phy-adaptive-shell__workspace");
+    expect(workspace.attributes("role")).toBe("dialog");
+    expect(workspace.attributes("aria-modal")).toBe("true");
+    expect(
+      wrapper.get(".phy-adaptive-shell__main").element.hasAttribute("inert")
+    ).toBe(true);
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-test="execution-workspace-back"]').element
+    );
+
+    await wrapper.get('[data-test="workspace-last"]').trigger("keydown", {
+      key: "Tab",
+    });
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-test="execution-workspace-back"]').element
+    );
+
+    await wrapper.setProps({ workspaceFullscreen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    wrapper.unmount();
+    opener.remove();
+  });
+
+  it("keeps Chat, the closable workspace, and the Todo/Results rail in separate columns", () => {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      props: {
+        artifactOpen: false,
+        workspaceOpen: true,
+        railOpen: true,
+      },
+      slots: {
+        sidebar: '<nav data-test="sidebar">Sidebar</nav>',
+        main: '<main data-test="main">Conversation</main>',
+        workspace: '<section data-test="workspace">Report tab</section>',
+        rail: '<aside data-test="rail">Todo and Results</aside>',
+      },
+    });
+
+    expect(wrapper.classes()).toContain("phy-adaptive-shell--execution");
+    expect(wrapper.classes()).toContain("has-execution-rail");
+    expect(wrapper.classes()).not.toContain(
+      "phy-adaptive-shell--artifact-split"
+    );
+    expect(wrapper.classes()).not.toContain("phy-adaptive-shell--rail-only");
+    expect(wrapper.get(".phy-adaptive-shell__workspace").text()).toContain(
+      "Report tab"
+    );
+    expect(wrapper.get(".phy-adaptive-shell__rail").text()).toContain(
+      "Todo and Results"
+    );
+  });
+
+  it("places the shared content header above main, workspace, and rail", () => {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      props: { workspaceOpen: true, railOpen: true },
+      slots: {
+        sidebar: '<nav data-test="sidebar">Sidebar</nav>',
+        header: '<header data-test="header">Conversation title</header>',
+        main: '<main data-test="main">Conversation</main>',
+        workspace: '<section data-test="workspace">Report tab</section>',
+        rail: '<aside data-test="rail">Todo and Results</aside>',
+      },
+    });
+
+    expect(wrapper.classes()).toContain("has-shell-header");
+    expect(wrapper.get(".phy-adaptive-shell__header").text()).toBe(
+      "Conversation title"
+    );
+    expect(SHELL_SOURCE).toMatch(
+      /\.has-shell-header\s*\{[\s\S]*?grid-template-rows:\s*auto\s+minmax\(0,\s*1fr\)/
+    );
+    expect(SHELL_SOURCE).toMatch(
+      /\.phy-adaptive-shell__header\s*\{[\s\S]*?grid-column:\s*2\s*\/\s*-1;[\s\S]*?grid-row:\s*1;/
+    );
+    expect(SHELL_SOURCE).toMatch(
+      /\.has-shell-header\s+\.phy-adaptive-shell__rail[\s\S]*?grid-row:\s*2;/
+    );
+  });
+
   it("lets fullscreen override the higher-specificity collapsed grid", () => {
     expect(SHELL_SOURCE).toMatch(
       /\.phy-adaptive-shell\.phy-adaptive-shell--artifact-fullscreen\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/

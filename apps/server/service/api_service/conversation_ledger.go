@@ -53,10 +53,11 @@ type ConversationRebuildSnapshot struct {
 }
 
 type conversationLedgerRow struct {
-	ID      int64
-	Status  string
-	Query   string
-	Context *persistedConversationContext
+	ID                     int64
+	Status                 string
+	Query                  string
+	Context                *persistedConversationContext
+	BusinessContextVersion int64
 
 	fingerprint ledgerFingerprintRow
 }
@@ -189,7 +190,7 @@ func buildConversationLedgerWithDB(
 func (ledger ConversationLedger) HistoryBefore(currentRowID int64) []rxBot.LedgerEntryV1 {
 	history := make([]rxBot.LedgerEntryV1, 0)
 	for _, row := range ledger.rows {
-		if row.ID >= currentRowID || row.Status != statusSucceeded {
+		if row.ID >= currentRowID || !conversationStatusSucceeded(row.Status) {
 			continue
 		}
 		if content := boundConversationLedgerText(row.Query); content != "" {
@@ -224,7 +225,7 @@ func (ledger ConversationLedger) RebuildBefore(
 	seenArtifacts := make(map[string]struct{})
 	var cursor int64
 	for _, row := range ledger.rows {
-		if row.ID >= currentRowID || row.Status != statusSucceeded {
+		if row.ID >= currentRowID || !conversationStatusSucceeded(row.Status) {
 			continue
 		}
 		fingerprintRows = append(fingerprintRows, row.fingerprint)

@@ -209,6 +209,39 @@ describe("ChatActivity", () => {
     }
   });
 
+  it("lets a terminal lifecycle override a stale streaming hint", () => {
+    const lifecycle: AgentTaskLifecycle = {
+      id: 10,
+      phase: "SUCCEEDED",
+      terminal: true,
+      child_task_count: 0,
+      child_work_accepted: false,
+      report_revision: 1,
+      artifact_summary: {
+        image_count: 0,
+        output_directory_count: 0,
+        has_report: true,
+      },
+      reconciliation: "FRESH",
+      tracking_degraded: false,
+      error_code: null,
+    };
+    const wrapper = mountActivity({
+      stateKey,
+      expanded: true,
+      streaming: true,
+      lifecycle,
+    });
+
+    expect(wrapper.get(".chat-activity__status").text()).toBe("Succeeded");
+    expect(wrapper.get(".chat-activity__status").classes()).toContain(
+      "is-done"
+    );
+    expect(wrapper.get(".chat-activity__status").classes()).not.toContain(
+      "is-running"
+    );
+  });
+
   it("uses semantic tokens for a compact timeline instead of nested cards", () => {
     const styles = ACTIVITY_SOURCE.slice(ACTIVITY_SOURCE.indexOf("<style"));
     expect(styles).toContain("max-width: min(100%, 42rem)");

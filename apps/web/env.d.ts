@@ -2,6 +2,10 @@
 
 interface ImportMetaEnv {
   readonly VITE_ATTACHMENTS_BASE_URL?: string;
+  /** Independent rollback switch for the durable execution workbench. */
+  readonly VITE_EXECUTION_WORKBENCH_ENABLED?: string;
+  /** Independent rollback switch for execution-addressed V2 transport. */
+  readonly VITE_EXECUTION_V2_ENABLED?: string;
 }
 
 declare module "*.vue" {

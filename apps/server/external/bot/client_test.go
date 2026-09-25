@@ -259,6 +259,68 @@ func TestInvokeAgentSendsIdempotencyKeyAsHeaderOnly(t *testing.T) {
 	}
 }
 
+func TestExecutionIdentityIsSentAsHeaderOnlyAcrossDispatchSurfaces(t *testing.T) {
+	const executionID = "exec-018f6ad2-4fd8-7d2d-a8d2-72f87f2d0913"
+	tests := []struct {
+		name string
+		path string
+		call func(*Client) error
+	}{
+		{
+			name: "agent run",
+			path: "/v1/agents/data/runs",
+			call: func(client *Client) error {
+				_, err := client.InvokeAgent(context.Background(), "data", AgentRunRequest{
+					Arguments: map[string]interface{}{}, ExecutionID: executionID,
+				})
+				return err
+			},
+		},
+		{
+			name: "chat completion",
+			path: "/v1/chat/completions",
+			call: func(client *Client) error {
+				_, err := client.ChatCompletion(context.Background(), ChatCompletionRequest{ExecutionID: executionID})
+				return err
+			},
+		},
+		{
+			name: "expert route",
+			path: "/v1/query/route",
+			call: func(client *Client) error {
+				_, err := client.RouteQuery(context.Background(), RouteQueryRequest{ExecutionID: executionID})
+				return err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var rawBody map[string]json.RawMessage
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tt.path {
+					t.Errorf("path=%q, want %q", r.URL.Path, tt.path)
+				}
+				if got := r.Header.Get("X-Phyto-Execution-Id"); got != executionID {
+					t.Errorf("X-Phyto-Execution-Id=%q, want %q", got, executionID)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
+					t.Errorf("decode request: %v", err)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"run-1","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{},"choices":[]}`))
+			}))
+			defer srv.Close()
+
+			if err := tt.call(newTestClient(srv.URL)); err != nil {
+				t.Fatalf("dispatch: %v", err)
+			}
+			if _, leaked := rawBody["execution_id"]; leaked {
+				t.Fatalf("execution id leaked into JSON body: %#v", rawBody)
+			}
+		})
+	}
+}
+
 func TestInvokeAgentRejectsMismatchedContextTurn(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

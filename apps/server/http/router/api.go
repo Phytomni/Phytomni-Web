@@ -45,9 +45,23 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/users/me/tool-permissions", apiHandler.PermissionUserTool) // user tool-permission listing
 		apiV1Router.POST("/user-feedback", apiHandler.UserFeedback)                  // submit user feedback
 
-		apiV1Router.GET("/conversations", apiHandler.Conversations)                                                                                // conversation list (?favorite=true for favourites)
-		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                                                     // all child messages for a conversation
-		apiV1Router.GET("/conversations/:id/messages/:message_id/stream", middleware.PerUserRateLimit("query"), apiHandler.ResumeQuestionStream)   // owner-only AG-UI resume
+		apiV1Router.GET("/conversations", apiHandler.Conversations)            // conversation list (?favorite=true for favourites)
+		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck) // all child messages for a conversation
+		apiV1Router.GET("/conversations/:id/runs/:run_id/events", apiHandler.ConversationRunEvents)
+		apiV1Router.GET("/conversations/:id/runs/:run_id/event-projection", apiHandler.ConversationRunEventProjection)
+		apiV1Router.GET("/conversations/:id/runs/:run_id/events/stream", apiHandler.ConversationRunEventStream)
+		apiV1Router.GET("/conversations/:id/runs/:run_id/events/:event_id", apiHandler.ConversationRunEvent)
+		apiV1Router.GET("/conversations/:id/runs/:run_id/targets/:kind/:target_id", apiHandler.ConversationRunExecutionTarget)
+		apiV1Router.GET("/executions/:execution_id/events", apiHandler.ExecutionEvents)
+		apiV1Router.GET("/executions/:execution_id", apiHandler.ExecutionSnapshot)
+		apiV1Router.GET("/executions/:execution_id/event-projection", apiHandler.ExecutionEventProjection)
+		apiV1Router.GET("/executions/:execution_id/events/stream", apiHandler.ExecutionEventStream)
+		apiV1Router.GET("/executions/:execution_id/events/:event_id", apiHandler.ExecutionEvent)
+		apiV1Router.GET("/executions/:execution_id/operations/:operation_id", apiHandler.ExecutionOperation)
+		apiV1Router.GET("/executions/:execution_id/targets/:kind/:target_id", apiHandler.ExecutionTarget)
+		apiV1Router.GET("/executions/:execution_id/targets/:kind/:target_id/content", apiHandler.ExecutionTargetContent)
+		apiV1Router.POST("/executions/:execution_id/actions", apiHandler.ExecutionAction)
+		apiV1Router.POST("/executions/:execution_id/cancel", apiHandler.ExecutionCancel)
 		apiV1Router.GET("/conversations/:id/messages/:message_id/artifacts/:artifact_id/download-url", apiHandler.ConversationArtifactDownloadURL) // click-time artifact signer
 		apiV1Router.POST("/conversations/:id/messages/:message_id/artifacts/archive/retry", apiHandler.ConversationArtifactRetry)                  // owner-authorized archive retry
 		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query)                                    // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
@@ -61,18 +75,19 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) // like/dislike
 		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      // favourite/unfavourite
 
-		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       // task list (owner-scoped)
-		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   // task status (owner-scoped)
-		apiV1Router.GET("/async-tasks/:id/lifecycle", apiHandler.AgentTaskLifecycle)    // bounded lifecycle (owner-scoped)
-		apiV1Router.POST("/async-tasks/:id/cancel", apiHandler.AgentTaskCancel)         // owner-authorized cancel
-		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog)  // analyst log
-		apiV1Router.PATCH("/async-tasks/analyst-log", apiHandler.QueryAnalystUpdateLog) // async result write-back (Bot via legacy alias /query/analyst/update_log)
+		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                      // task list (owner-scoped)
+		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                  // task status (owner-scoped)
+		apiV1Router.GET("/async-tasks/:id/lifecycle", apiHandler.AgentTaskLifecycle)   // bounded lifecycle (owner-scoped)
+		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog) // analyst log
 
-		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)               // operation log query (admin-only)
-		apiV1Router.GET("/admin/cron-entries", apiHandler.GetCronEntries)             // cron schedule inspection (admin-only)
-		apiV1Router.GET("/genes", apiHandler.GeneList)                                // gene test data list
-		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)                         // gene detail (resource id = file_name)
-		apiV1Router.GET("/genes/:id/resources/:resource_id", apiHandler.GeneResource) // current report-registered resource
+		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)                            // operation log query (admin-only)
+		apiV1Router.GET("/admin/cron-entries", apiHandler.GetCronEntries)                          // cron schedule inspection (admin-only)
+		apiV1Router.GET("/admin/executions/:execution_id", apiHandler.InspectExecutionV2)          // execution recovery inspection (admin-only)
+		apiV1Router.POST("/admin/executions/:execution_id/actions", apiHandler.OperateExecutionV2) // revision-checked recovery action (admin-only)
+		apiV1Router.GET("/admin/execution-runtime/metrics", apiHandler.ExecutionRuntimeMetricsV2)  // bounded worker lag/counters (admin-only)
+		apiV1Router.GET("/genes", apiHandler.GeneList)                                             // gene test data list
+		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)                                      // gene detail (resource id = file_name)
+		apiV1Router.GET("/genes/:id/resources/:resource_id", apiHandler.GeneResource)              // current report-registered resource
 
 		apiV1Router.GET("/downloads/analyst-agent/obs-file", apiHandler.DownloadAnalystAgentObsFile)     // AnalystAgent OBS file download link
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links
@@ -102,14 +117,6 @@ func Api(r *gin.RouterGroup) {
 	{
 		authLifecycleRouter.POST("/logout", apiHandler.Logout)        // revoke current token (single device)
 		authLifecycleRouter.POST("/logout-all", apiHandler.LogoutAll) // logout all devices (per-user epoch bump)
-	}
-
-	// Bot write-back alias: Bot still POSTs /query/analyst/update_log; frontend has switched to
-	// PATCH /api/v1/async-tasks/analyst-log. Remove this alias after Bot cross-repo backport.
-	// Middleware chain matches /api/v1; gateway only serves real traffic when bot.proxy_enabled=true.
-	queryRouter := r.Group("").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.AuthMiddleware(), middleware.LoginStatusMiddleware(), middleware.CORS(), middleware.OperationLog())
-	{
-		queryRouter.POST("/query/analyst/update_log", apiHandler.QueryAnalystUpdateLog) // Bot write-back alias (pending Bot backport)
 	}
 
 	// Browser-direct download surface: window.open / <img src> cannot carry an Authorization

@@ -1,14 +1,12 @@
-import { nextTick, watch } from "vue";
+import { watch } from "vue";
 import type { Ref } from "vue";
 import type { AnalystAgentLog } from "@/api/types";
 import type { ChatMessage, ChatUIState, ChatView } from "../types";
-import { ElMessage } from "element-plus";
-import i18n from "@/locales";
-import { getAnalystAgentLog, updateAnalystAgentLog } from "@/api/chat";
+import { getAnalystAgentLog } from "@/api/chat";
 
 const POSITIVE_DECIMAL_ID = /^[1-9]\d*$/;
 
-export type LogErrorKind = "fetch" | "update";
+export type LogErrorKind = "fetch";
 
 /** UI/cache key and GET path id — positive-decimal only; never coerce. */
 export function deriveAnalystLogRowId(
@@ -17,15 +15,6 @@ export function deriveAnalystLogRowId(
   if (message.id == null) return undefined;
   const s = String(message.id);
   return POSITIVE_DECIMAL_ID.test(s) ? s : undefined;
-}
-
-/** PATCH-only id — non-null and trim-nonempty; never falls back to row id. */
-export function deriveAnalystLogTaskId(
-  message: ChatMessage
-): string | undefined {
-  if (message.task_id == null) return undefined;
-  const trimmed = String(message.task_id).trim();
-  return trimmed !== "" ? trimmed : undefined;
 }
 
 export function analystLogActivityKey(rowId: string): string {
@@ -46,9 +35,8 @@ export function useLogView(opts: {
   currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
-  scrollToBottom: () => Promise<void>;
 }) {
-  const { currentChat, currentChatId, getChatState, scrollToBottom } = opts;
+  const { currentChat, currentChatId, getChatState } = opts;
 
   const fetchLogIfNeeded = async (
     rowId: string,
@@ -138,75 +126,14 @@ export function useLogView(opts: {
     await setLogExpanded(message, next);
   };
 
-  const updateLog = async (message: ChatMessage) => {
-    if (!currentChatId.value) return;
-
-    const rowId = deriveAnalystLogRowId(message);
-    const taskId = deriveAnalystLogTaskId(message);
-    if (!rowId || !taskId) return;
-
-    const chatState = getChatState(currentChatId.value);
-    if (!chatState) return;
-    const cached = chatState.logData[rowId];
-    if (
-      cached?.source !== "LEGACY_TASK" ||
-      cached.can_request_legacy_refresh !== true
-    ) {
-      return;
-    }
-
-    chatState.updatingLog[rowId] = true;
-
-    try {
-      let computeResource = "analyst-agents-small";
-      if (message.compute_resource) {
-        computeResource = message.compute_resource;
-      }
-
-      const formData = new FormData();
-      formData.append("task_id", taskId);
-      formData.append("compute_resource", computeResource);
-
-      const response = await updateAnalystAgentLog(formData);
-
-      if (response.code === 200) {
-        ElMessage.success(i18n.global.t("chat.logUpdatedSuccess"));
-        delete chatState.logErrorKinds[rowId];
-
-        const key = analystLogActivityKey(rowId);
-        if (chatState.activityExpandedByMessage[key] === true) {
-          await fetchLogIfNeeded(rowId, chatState, true);
-        }
-      } else {
-        chatState.logErrorKinds[rowId] = "update";
-        ElMessage.error(i18n.global.t("chat.logUpdateFailed"));
-      }
-    } catch (error) {
-      console.error("Failed to update log:", error);
-      chatState.logErrorKinds[rowId] = "update";
-      ElMessage.error(i18n.global.t("chat.logUpdateFailedRetry"));
-    } finally {
-      chatState.updatingLog[rowId] = false;
-
-      nextTick(() => {
-        scrollToBottom().catch(() => undefined);
-      }).catch(() => undefined);
-    }
-  };
-
   const retryLog = async (message: ChatMessage) => {
     if (!currentChatId.value) return;
     const rowId = deriveAnalystLogRowId(message);
     if (!rowId) return;
 
     const chatState = getChatState(currentChatId.value);
-    const kind = chatState.logErrorKinds[rowId];
     delete chatState.logErrorKinds[rowId];
 
-    if (kind === "update") {
-      await updateLog(message);
-      return;
-    }
     await fetchLogIfNeeded(rowId, chatState, true);
   };
 
@@ -228,7 +155,6 @@ export function useLogView(opts: {
   return {
     setLogExpanded,
     toggleLogView,
-    updateLog,
     retryLog,
     refreshModernLog,
     ensureLegacyLogActivityInit,

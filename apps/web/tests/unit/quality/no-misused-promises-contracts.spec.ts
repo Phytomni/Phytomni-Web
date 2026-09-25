@@ -40,7 +40,6 @@ describe("no-misused-promises callback contracts", () => {
   it("declares the injected chat scroll contract as Promise<void> and handles every call", () => {
     for (const relativePath of [
       "views/chat/composables/useComposer.ts",
-      "views/chat/composables/useLogView.ts",
       "views/chat/composables/useFileUpload.ts",
       "views/chat/composables/useReactions.ts",
     ]) {

@@ -1,6 +1,7 @@
 package api_handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestCitationProjectionQueryHandler502(t *testing.T) {
+func TestCitationProjectionQueryHandlerAdmitsBeforeBotProjection(t *testing.T) {
 	gdb := setupRemoteProductHandlerDB(t)
 	if err := gdb.Exec("INSERT INTO users (email, code) VALUES ('alice', 'admin')").Error; err != nil {
 		t.Fatal(err)
@@ -35,8 +36,17 @@ func TestCitationProjectionQueryHandler502(t *testing.T) {
 	ctx, recorder := newChatQueryHandlerRequest(t, map[string]string{"query": "q", "mode": "expert", "tool": "KnowledgeAgent"})
 	ctx.Set("username", "alice")
 	NewHandler().Query(ctx)
-	if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), "upstream service failed") || strings.Contains(recorder.Body.String(), "private-source") {
+	if recorder.Code != http.StatusAccepted || strings.Contains(recorder.Body.String(), "private-source") {
 		t.Fatalf("HTTP %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Data api_service.QueryData `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode admission response: %v", err)
+	}
+	if response.Data.Status != "ADMITTED" || response.Data.ExecutionID == "" {
+		t.Fatalf("admission response=%+v, want durable admitted execution", response.Data)
 	}
 	var count int64
 	if err := gdb.Table("question_agent_logs").Where("status = ?", "SUCCEEDED").Count(&count).Error; err != nil {

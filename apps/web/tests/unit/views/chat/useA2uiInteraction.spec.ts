@@ -121,6 +121,44 @@ const deferred = <T>() => {
 };
 
 describe("useA2uiInteraction", () => {
+  it("routes a V2 execution action only through the execution command path", async () => {
+    const legacyTransport = vi.fn();
+    const submitExecutionAction = vi.fn().mockResolvedValue(false);
+    const message = messageWith(legacyTransport, {
+      executionId: "turn-v2-only",
+    });
+    const { submitAction } = useA2uiInteraction({
+      buildActionId: () => "action-v2",
+      submitExecutionAction,
+    });
+
+    await submitAction(message, event);
+
+    expect(submitExecutionAction).toHaveBeenCalledWith(
+      message,
+      event,
+      "action-v2"
+    );
+    expect(legacyTransport).not.toHaveBeenCalled();
+  });
+
+  it("never retries a V2 execution action through the legacy transport", async () => {
+    const legacyTransport = vi.fn();
+    const message = messageWith(legacyTransport, {
+      executionId: "turn-v2-only",
+    });
+    const { retryAction } = useA2uiInteraction();
+
+    await retryAction(message, confirmSurface.surface_id);
+
+    expect(legacyTransport).not.toHaveBeenCalled();
+    expect(message.blocks?.[1].a2ui?.state).toEqual({
+      status: "ready",
+      round: 1,
+      lastError: "not_sent",
+    });
+  });
+
   it("reads run and transport from the owning message and enters submitting before await", async () => {
     let resolveTransport!: (response: A2uiActionResponse) => void;
     const transport = vi.fn(

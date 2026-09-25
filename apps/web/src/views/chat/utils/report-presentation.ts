@@ -1,8 +1,11 @@
 import {
   isBotReportWarningCode,
+  parseBotProjection,
   type BotReport,
+  type BotRunProjection,
   type BotReportStage,
 } from "../botProjection";
+import type { ExecutionRunState } from "../streaming/executionEvents";
 import {
   initBotLifecycleState,
   reduceBotProjection,
@@ -32,6 +35,47 @@ export interface ReportPresentationDecision {
   source: ReportSource | null;
   active: boolean;
   warningKeys: string[];
+}
+
+/**
+ * Project a completed V2 durable answer through the existing Bot report
+ * trust boundary. Execution V2 does not expose a report descriptor, so this
+ * deliberately leaves sourceArtifactCount absent instead of inventing it.
+ */
+export function executionReportProjection(
+  run: ExecutionRunState,
+  toolName: string,
+  reportText: string
+): BotRunProjection | undefined {
+  if (
+    run.status !== "succeeded" ||
+    run.terminal?.status !== "succeeded" ||
+    !run.outputCompleted
+  ) {
+    return undefined;
+  }
+  const warningCodes = run.reportWarningCodes;
+  const degraded = (warningCodes?.length ?? 0) > 0;
+  try {
+    const projection = parseBotProjection({
+      ...(run.botRunId ? { bot_run_id: run.botRunId } : {}),
+      agent: toolName,
+      status: "SUCCEEDED",
+      answer: reportText,
+      report_stage: "final",
+      report_completeness: degraded ? "partial" : "complete",
+      ...(warningCodes === undefined
+        ? {}
+        : { report_warning_codes: warningCodes }),
+      degraded,
+      tracking_degraded: run.trackingHealth === "degraded",
+    });
+    return projection.reportPresentation && projection.finalReport
+      ? projection
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Execution outcome, report validity, and file delivery are independent facts. */

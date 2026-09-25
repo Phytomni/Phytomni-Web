@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getTaskLifecycle: vi.fn(),
   getAnswerCheck: vi.fn(),
   abortRequest: vi.fn(),
+  openExecutionStream: vi.fn(),
 }));
 
 vi.mock("@/api/task", async (importOriginal) => {
@@ -22,6 +23,14 @@ vi.mock("@/api/chat", () => ({
 
 vi.mock("@/utils/request", () => ({
   abortRequest: mocks.abortRequest,
+}));
+
+vi.mock("@/api/execution-events", () => ({
+  getExecutionEvents: vi.fn(),
+  getExecutionProjection: vi.fn(),
+  getExecutionEventsById: vi.fn(),
+  getExecutionProjectionById: vi.fn(),
+  openExecutionEventStreamById: mocks.openExecutionStream,
 }));
 
 function projection(
@@ -135,8 +144,57 @@ describe("useRemoteAgentLifecycle", () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     vi.clearAllMocks();
     mocks.abortRequest.mockReturnValue(true);
+    mocks.openExecutionStream.mockReset();
     mocks.getTaskLifecycle.mockResolvedValue({ data: lifecycle() });
     mocks.getAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+  });
+
+  it("uses execution-id SSE and never lifecycle polling for a new product run", async () => {
+    const executionId = "turn-network-v2";
+    const snapshot = {
+      schema_version: 2,
+      execution_id: executionId,
+      agent_slug: "network",
+      status: "succeeded",
+      latest_seq: 0,
+      output_revision: 0,
+      output_offset: 0,
+      operation_revision: 0,
+      tracking_health: "healthy",
+      active_span_ids: [],
+      todo_declared: false,
+      todos: [],
+      results: [],
+      targets: [],
+      failed_work_unit_ids: [],
+      warnings: [],
+      input_required: null,
+      context_stage: null,
+      terminal: { status: "succeeded", event_id: "evt-terminal" },
+      stale: false,
+      source: "journal",
+    };
+    mocks.openExecutionStream.mockResolvedValueOnce(
+      new Response(
+        `event: execution_snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } }
+      )
+    );
+    const state = ref(runState({ executionId }));
+    const controller = useRemoteAgentLifecycle({
+      tool: "GeneNetworkAgent",
+      run: { state, hydrate: vi.fn() },
+      dialogueId: "dialogue-42",
+    });
+
+    await flushAsync();
+    expect(mocks.openExecutionStream).toHaveBeenCalledWith(
+      expect.objectContaining({ executionId, afterSeq: 0 })
+    );
+    expect(mocks.getTaskLifecycle).not.toHaveBeenCalled();
+    expect(state.value.phase).toBe("succeeded");
+    expect(controller.snapshot.value?.phase).toBe("SUCCEEDED");
+    controller.dispose();
   });
 
   afterEach(() => {

@@ -119,6 +119,29 @@ func TestBuildAgentArgumentsDeepGenomePreservesResolverFlag(t *testing.T) {
 	}
 }
 
+func TestBuildAgentArgumentsTreatsNormalizedOffAsNoInterop(t *testing.T) {
+	for _, slug := range []string{"data", "brief_gene"} {
+		t.Run(slug, func(t *testing.T) {
+			if _, err := BuildAgentArguments(slug, AgentArgumentInput{
+				UserQuery: "run", InteropMode: "off",
+			}); err != nil {
+				t.Fatalf("normalized off mode rejected for %s: %v", slug, err)
+			}
+
+			if _, err := BuildAgentArguments(slug, AgentArgumentInput{
+				UserQuery: "run", InteropMode: "auto",
+			}); err == nil {
+				t.Fatalf("unsupported interop mode accepted for %s", slug)
+			}
+			if _, err := BuildAgentArguments(slug, AgentArgumentInput{
+				UserQuery: "run", InteropMode: "off", InteropTargets: []string{"peer"},
+			}); err == nil {
+				t.Fatalf("unsupported interop targets accepted for %s", slug)
+			}
+		})
+	}
+}
+
 func TestBuildAgentArgumentsRejectsUntrustedInput(t *testing.T) {
 	tests := []struct {
 		name  string

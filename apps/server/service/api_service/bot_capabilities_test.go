@@ -24,10 +24,71 @@ func capabilityDescriptors() []rxBot.AgentDescriptor {
 				Streaming:   true,
 				Artifacts:   resultArchiveAgent(definition.Slug),
 				Attachments: rxBot.AgentDescriptorAttachments{DocumentContext: &struct{}{}},
+				ExecutionEvents: rxBot.AgentDescriptorExecutionEvents{
+					MajorVersion:     1,
+					ResumableHistory: true,
+					CustomEvent:      "phyto.run_event",
+					TargetKinds: []string{
+						"event", "artifact", "report", "todo", "preview", "download", "trace",
+					},
+				},
 			},
 		})
 	}
 	return descriptors
+}
+
+func TestBotCapabilitiesProjectsExecutionEventContract(t *testing.T) {
+	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, capabilityDescriptors()), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: true})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := capabilityBySlug(manifest.Agents, "chat").ExecutionEvents
+	if !capability.Enabled || capability.MajorVersion != 1 || !capability.ResumableHistory || capability.CustomEvent != "phyto.run_event" {
+		t.Fatalf("unexpected execution-event projection: %#v", capability)
+	}
+	wantTargets := []string{"event", "artifact", "report", "todo", "preview", "download", "trace"}
+	if strings.Join(capability.TargetKinds, ",") != strings.Join(wantTargets, ",") {
+		t.Fatalf("target kinds = %#v, want %#v", capability.TargetKinds, wantTargets)
+	}
+}
+
+func TestBotCapabilitiesProjectsOnlySupportedAgentWorkTrace(t *testing.T) {
+	descriptors := capabilityDescriptors()
+	for index := range descriptors {
+		if descriptors[index].Slug != "network" {
+			continue
+		}
+		descriptors[index].Capabilities.WorkTrace = rxBot.AgentDescriptorWorkTrace{
+			MajorVersion: 1,
+			State:        "supported",
+			Features: rxBot.AgentDescriptorWorkTraceFeatures{
+				Lifecycle: "supported", SemanticPhases: "supported",
+				SemanticTools: "supported", PublicReasoning: "supported", TraceTarget: "supported",
+			},
+			Target:         &rxBot.AgentDescriptorWorkTraceTarget{Kind: "trace", MajorVersion: 1},
+			DetailEndpoint: "/v2/executions/{execution_id}/targets/trace/{target_id}",
+		}
+	}
+	srv := capabilityServer(t, http.StatusOK, capabilityManifestResponse(t, descriptors), 0)
+	t.Cleanup(srv.Close)
+	useCapabilityBotConfig(t, srv.URL, rxBot.Config{ProxyEnabled: true})
+
+	manifest, err := NewService().BotCapabilities(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	network := capabilityBySlug(manifest.Agents, "network").WorkTrace
+	if !network.Enabled || network.State != "supported" || network.TargetKind != "trace" || network.TargetMajorVersion != 1 {
+		t.Fatalf("network work trace was not enabled: %#v", network)
+	}
+	if capabilityBySlug(manifest.Agents, "chat").WorkTrace.Enabled {
+		t.Fatal("missing work-trace declaration must remain disabled")
+	}
 }
 
 func TestBotCapabilitiesHeadResearchInputFixture(t *testing.T) {
@@ -449,7 +510,8 @@ func TestBotCapabilitiesDoNotExposeUpstreamPrivateFields(t *testing.T) {
 	allowed := map[string]bool{
 		"tool": true, "slug": true, "execution": true, "stream": true,
 		"a2ui": true, "resolver": true, "attachments": true,
-		"attachment_purposes": true, "artifacts": true, "enabled": true,
+		"attachment_purposes": true, "artifacts": true,
+		"execution_events": true, "work_trace": true, "enabled": true,
 	}
 	if len(public.Upload) == 0 {
 		t.Fatal("upload capability missing")

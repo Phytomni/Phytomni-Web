@@ -2,8 +2,10 @@ package log
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"phytomni-server/utils"
 
@@ -28,7 +30,9 @@ type Config struct {
 }
 
 var (
-	logger *zap.Logger
+	logger        *zap.Logger
+	loggerMu      sync.Mutex
+	loggerClosers []io.Closer
 
 	config Config
 
@@ -46,6 +50,8 @@ func init() {
 }
 
 func InitFromViper() error {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
 
 	if err := viper.UnmarshalKey("log", &config); err != nil {
 		return err
@@ -79,6 +85,7 @@ func InitFromViper() error {
 	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
 
 	cores := make([]zapcore.Core, 0)
+	closers := make([]io.Closer, 0)
 	for _, outPath := range config.Outputs {
 		switch outPath {
 
@@ -103,13 +110,23 @@ func InitFromViper() error {
 
 			fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
 			cores = append(cores, zapcore.NewCore(fileEncoder, zapcore.AddSync(lumberjackWriter), levelEnabler))
+			closers = append(closers, lumberjackWriter)
 		}
 	}
 
 	options := make([]zap.Option, 0)
 	options = append(options, zap.AddCaller())
 
+	previousLogger := logger
+	previousClosers := loggerClosers
 	logger = zap.New(zapcore.NewTee(cores...), options...)
+	loggerClosers = closers
+	if previousLogger != nil {
+		_ = previousLogger.Sync()
+	}
+	for _, closer := range previousClosers {
+		_ = closer.Close()
+	}
 	return nil
 }
 
@@ -126,6 +143,8 @@ func ReplaceLoggerForTest(next *zap.Logger) func() {
 }
 
 func Flush() {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
 	_ = logger.Sync()
 }
 

@@ -46,6 +46,14 @@ const CHAT_FIXTURE_SOURCE = readFileSync(
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
 
+describe("ChatResponsiveContracts — long transcript rendering", () => {
+  it("virtualizes settled off-screen rows while leaving live rows observable", () => {
+    expect(CHAT_SOURCE).toContain("content-visibility: auto");
+    expect(CHAT_SOURCE).toContain("contain-intrinsic-block-size: auto 280px");
+    expect(CHAT_SOURCE).toMatch(/\.message:not\(\.streaming\)/);
+  });
+});
+
 function makeHarness(opts?: {
   collapsed?: () => boolean;
   drawerOpen?: () => boolean;
@@ -292,9 +300,9 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     expect(CHAT_SOURCE).toContain(
       ':effective-collapsed="effectiveSidebarCollapsed"'
     );
-    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain(':workspace-open="executionWorkspaceOpen"');
     expect(CHAT_SOURCE).toContain(
-      ':artifact-fullscreen="artifactOpen && isMobileViewport"'
+      ':workspace-fullscreen="executionWorkspaceOpen && isMobileViewport"'
     );
     expect(CHAT_SOURCE).toContain(':drawer-open="leftSidebarDrawerOpen"');
     expect(SIDEBAR_SOURCE).toContain(':collapsed="renderedSidebarCollapsed"');

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -88,10 +87,35 @@ func TestReportIntegrityArchiveRealAuthorization(t *testing.T) {
 				if projection.VisibleReport() != "" || projection.Delivery == nil || projection.Delivery.Status != "ready" {
 					t.Fatal("expected empty science with ready archive")
 				}
-				if err := gdb.Exec(`INSERT INTO question_agent_logs (id, dialogue_id, user_name, status, answer, bot_run_id, bot_projection_json, bot_report_revision) VALUES (?, ?, 'synthetic-owner', 'SUCCEEDED', '', ?, '', -1)`, row.ID, row.DialogueID, row.RunID).Error; err != nil {
+				// This router-package test cannot import api_service's unexported
+				// projection writer. Seed its narrow persistence schema directly,
+				// including the two server-only delivery fields required to resolve
+				// the opaque archive capability.
+				persisted, err := json.Marshal(map[string]interface{}{
+					"run_id":                 projection.RunID,
+					"agent":                  projection.Agent,
+					"status":                 projection.Status,
+					"report_revision":        projection.ReportRevision,
+					"artifacts":              map[string]interface{}{"directories": projection.Artifacts.Directories, "output_dirs": projection.Artifacts.OutputDirs, "paths": projection.Artifacts.Paths},
+					"output_directory_count": projection.OutputDirectoryCount,
+					"result_archive_v1":      projection.ResultArchiveV1,
+					"delivery": map[string]interface{}{
+						"schema_version":   projection.Delivery.SchemaVersion,
+						"required":         projection.Delivery.Required,
+						"status":           projection.Delivery.Status,
+						"revision":         projection.Delivery.Revision,
+						"inventory_digest": projection.Delivery.InventoryDigest,
+						"name":             projection.Delivery.ArchiveName,
+						"size_bytes":       projection.Delivery.ArchiveSize,
+						"archive_ref":      projection.Delivery.ArchiveRef,
+						"error_code":       projection.Delivery.ErrorCode,
+						"retryable":        projection.Delivery.Retryable,
+					},
+				})
+				if err != nil {
 					t.Fatal(err)
 				}
-				if err := api_service.SaveBotRunProjection(context.Background(), "synthetic-owner", row.ID, projection); err != nil {
+				if err := gdb.Exec(`INSERT INTO question_agent_logs (id, dialogue_id, user_name, status, answer, bot_run_id, bot_projection_json, bot_report_revision) VALUES (?, ?, 'synthetic-owner', 'SUCCEEDED', '', ?, ?, ?)`, row.ID, row.DialogueID, row.RunID, string(persisted), projection.ReportRevision).Error; err != nil {
 					t.Fatal(err)
 				}
 				route := fmt.Sprintf("/api/v1/conversations/%s/messages/%d/artifacts/%s/download-url", row.DialogueID, row.ID, row.Artifacts[0].ID)

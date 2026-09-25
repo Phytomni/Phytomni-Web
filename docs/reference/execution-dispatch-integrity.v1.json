@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "classifications": ["retry", "reconcile", "reject"],
+  "boundary_states": ["not_entered", "entered", "durably_claimed"],
+  "rules": [
+    {
+      "code": "poison_command",
+      "classification": "reject",
+      "boundary_state": "not_entered"
+    },
+    {
+      "code": "invalid_command",
+      "classification": "reject",
+      "boundary_state": "not_entered"
+    },
+    {
+      "code": "unsupported_agent",
+      "classification": "reject",
+      "boundary_state": "not_entered"
+    },
+    {
+      "code": "mcp_invalid_params",
+      "classification": "reject",
+      "boundary_state": "entered",
+      "nested_mcp_code": -32602
+    },
+    {
+      "code": "agent_business_validation_failed",
+      "classification": "reject",
+      "boundary_state": "entered"
+    },
+    {
+      "code": "conversation_context_turn_in_progress",
+      "classification": "reconcile",
+      "boundary_state": "durably_claimed"
+    },
+    {
+      "code": "execution_already_reserved",
+      "classification": "reconcile",
+      "boundary_state": "durably_claimed"
+    },
+    {
+      "code": "transport_connection_failed",
+      "classification": "retry",
+      "boundary_state": "entered"
+    },
+    {
+      "code": "transport_timeout",
+      "classification": "retry",
+      "boundary_state": "entered"
+    },
+    {
+      "code": "provider_rate_limited",
+      "classification": "retry",
+      "boundary_state": "entered"
+    },
+    {
+      "code": "provider_unavailable",
+      "classification": "retry",
+      "boundary_state": "entered"
+    },
+    {
+      "code": "dispatch_unknown_before_boundary",
+      "classification": "retry",
+      "boundary_state": "not_entered"
+    },
+    {
+      "code": "dispatch_unknown_after_boundary",
+      "classification": "reconcile",
+      "boundary_state": "entered"
+    }
+  ],
+  "exhaustion": {
+    "retry": "reconcile",
+    "reconcile": "reconcile",
+    "reject": "reject"
+  },
+  "persistence": {
+    "safe_fields": [
+      "classification",
+      "boundary_state",
+      "first_error_code",
+      "last_error_code",
+      "attempt",
+      "next_attempt_at",
+      "next_reconcile_at"
+    ],
+    "forbidden_fields": [
+      "exception_text",
+      "traceback",
+      "request_payload",
+      "response_payload",
+      "tool_arguments",
+      "tool_result"
+    ]
+  },
+  "compatibility": {
+    "bot_queue_states": {
+      "retry": "retry",
+      "reconcile": "reconcile",
+      "reject": "rejected"
+    },
+    "web_outbox_states": {
+      "retry": "retry",
+      "reconcile": "reconcile",
+      "reject": "rejected"
+    },
+    "legacy_dead_letter": "operator_only"
+  }
+}

@@ -53,7 +53,8 @@ func TestQueryInputForSurfaceClientTurnCompatibility(t *testing.T) {
 		{name: "v1 Research product missing", enabled: true, surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
 		{name: "v1 Research product malformed", enabled: true, value: "bad turn", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent", wantErr: true},
 		{name: "v1 Research product valid", enabled: true, value: "turn-research-retry", surface: api_service.QuerySurfaceAgentProduct, routeTool: "InSilicoResearchAgent"},
-		{name: "v1 design product remains compatible", enabled: true, surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent"},
+		{name: "v1 design product requires identity", enabled: true, surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent", wantErr: true},
+		{name: "v1 design product accepts identity", enabled: true, value: "turn-design-direct", surface: api_service.QuerySurfaceAgentProduct, routeTool: "DigitalDesignAgent"},
 	}
 
 	for _, tc := range tests {

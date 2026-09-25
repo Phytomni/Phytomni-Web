@@ -11,7 +11,7 @@ import {
   type Ref,
 } from "vue";
 import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   createTestAppContext,
   mountWithApp,
@@ -523,7 +523,7 @@ describe("Profile workspace", () => {
 
     const srcDirectory = resolve(__dirname, "../../src");
     const writers = findLoginStatusWriters(srcDirectory)
-      .map((file) => file.replace(`${srcDirectory}/`, ""))
+      .map((file) => relative(srcDirectory, file).replaceAll("\\", "/"))
       .sort();
     expect(writers).toEqual(["stores/user.ts", "views/login/LoginView.vue"]);
   });

@@ -30,6 +30,10 @@ export const PHASE_3C_FIXTURE_KEYS = [
   "progress-fast",
   "progress-slow",
   "progress-completing",
+  "execution-long-running",
+  "execution-retrying",
+  "execution-cancelled",
+  "execution-succeeded",
   "transfer-real",
   "a2ui-required",
   "send-stop",
@@ -162,11 +166,9 @@ export const FIXTURE_PROGRESS_STARTED_AT = 1_700_000_000_000;
 
 export type Phase3CLogProps = {
   rowId?: string;
-  taskId?: string;
   logData?: Phase3CAnalystLog;
   loading?: boolean;
-  updating?: boolean;
-  errorKind?: "fetch" | "update";
+  errorKind?: "fetch";
 };
 
 export type Phase3CProgressProps = {
@@ -216,7 +218,6 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       activityExpanded: true,
       log: {
         rowId: "42",
-        taskId: "fixture-task-42",
         loading: true,
       },
       assistantMessage: MESSAGE_ANALYST_LOG,
@@ -226,7 +227,6 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       activityExpanded: true,
       log: {
         rowId: "42",
-        taskId: "fixture-task-42",
         logData: {
           state: "AVAILABLE",
           source: "BOT_RUN",
@@ -245,7 +245,6 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       activityExpanded: true,
       log: {
         rowId: "42",
-        taskId: "fixture-task-42",
         errorKind: "fetch",
       },
       assistantMessage: MESSAGE_ANALYST_LOG,
@@ -255,7 +254,6 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       activityExpanded: true,
       log: {
         rowId: "43",
-        taskId: undefined,
         logData: {
           state: "AVAILABLE",
           source: "BOT_RUN",
@@ -294,6 +292,42 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
         completing: true,
       },
       isSending: true,
+    },
+    "execution-long-running": {
+      kind: "progress",
+      progress: {
+        startedAt: FIXTURE_PROGRESS_STARTED_AT,
+        agentName: "ReviewAgent",
+        completing: false,
+      },
+      isSending: true,
+    },
+    "execution-retrying": {
+      kind: "progress",
+      progress: {
+        startedAt: FIXTURE_PROGRESS_STARTED_AT,
+        agentName: "KnowledgeAgent",
+        completing: false,
+      },
+      isSending: true,
+    },
+    "execution-cancelled": {
+      kind: "progress",
+      progress: {
+        startedAt: FIXTURE_PROGRESS_STARTED_AT,
+        agentName: "DataAgent",
+        completing: false,
+      },
+      isSending: false,
+    },
+    "execution-succeeded": {
+      kind: "progress",
+      progress: {
+        startedAt: FIXTURE_PROGRESS_STARTED_AT,
+        agentName: "GeneNetworkAgent",
+        completing: true,
+      },
+      isSending: false,
     },
     "transfer-real": {
       kind: "transfer",

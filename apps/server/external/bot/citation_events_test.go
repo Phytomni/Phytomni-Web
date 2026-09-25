@@ -2,12 +2,68 @@ package bot
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"phytomni-server/common/citation"
 )
+
+func TestNormalizeExecutionEventFrameV2CanonicalizesReferences(t *testing.T) {
+	text := "durable answer"
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(text)))
+	event := ExecutionEventV2{
+		SchemaVersion: 2, EventID: "event-citation", ExecutionID: "turn-citation", Seq: 1,
+		Type: "message.completed", Status: "succeeded", OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Source: "message", SpanID: "root", Attempt: 1,
+		Summary: ExecutionSafeSummaryV2{Key: "message.completed", Text: "Answer completed"},
+		PublicPayload: map[string]any{
+			"output_revision": float64(1), "message_id": "msg-citation", "source_message_id": "msg-citation",
+			"base_offset": float64(0), "offset": float64(len([]rune(text))), "total_length": float64(len([]rune(text))),
+			"chunk_index": float64(0), "chunk_count": float64(1), "content_sha256": digest, "text": text,
+			"references": []any{map[string]any{"title": "A study", "di": "10.1000/safe", "citation": map[string]any{"runs": []any{map[string]any{"text": "forged"}}, "links": []any{map[string]any{"label": "Article", "href": "https://evil.example"}}}}},
+		},
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte("id: 1\nevent: execution_event\ndata: " + string(raw) + "\n\n")
+	normalized, err := NormalizeExecutionEventFrameV2(frame, "turn-citation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(normalized, []byte("id: 1\n")) || bytes.Contains(normalized, []byte("forged")) || bytes.Contains(normalized, []byte("evil.example")) || !bytes.Contains(normalized, []byte("https://doi.org/10.1000/safe")) {
+		t.Fatalf("unsafe or incomplete canonical frame: %s", normalized)
+	}
+
+	for _, executionID := range []string{"", "turn-other"} {
+		event.ExecutionID = executionID
+		raw, _ = json.Marshal(event)
+		if got, err := NormalizeExecutionEventFrameV2([]byte("event: execution_event\ndata: "+string(raw)+"\n\n"), "turn-citation"); err == nil || len(got) != 0 {
+			t.Fatalf("execution identity %q did not fail closed: %s %v", executionID, got, err)
+		}
+	}
+	event.ExecutionID = "turn-citation"
+	event.PublicPayload["references"] = []any{map[string]any{"title": "A study", "file_id": "private"}}
+	raw, _ = json.Marshal(event)
+	if got, err := NormalizeExecutionEventFrameV2([]byte("event: execution_event\ndata: "+string(raw)+"\n\n"), "turn-citation"); err == nil || len(got) != 0 {
+		t.Fatalf("private reference frame did not fail closed: %s %v", got, err)
+	}
+
+	heartbeat := []byte(": heartbeat\n\n")
+	got, err := NormalizeExecutionEventFrameV2(heartbeat, "turn-citation")
+	if err != nil || !bytes.Equal(got, heartbeat) {
+		t.Fatalf("heartbeat changed: %q %v", got, err)
+	}
+	if strings.Count(string(normalized), "data:") != 1 {
+		t.Fatalf("execution frame data lines changed: %q", normalized)
+	}
+}
 
 func TestCitationFrameKeepsTransportIdentity(t *testing.T) {
 	_, refs, canonical := reviewedBotCitationFixture(t)

@@ -51,6 +51,20 @@ capabilities_unavailable = "bot capabilities unavailable"
 capabilities_not_found = "interop capabilities not found"
 capabilities_unavailable = "interop capabilities unavailable"
 
+[execution]
+unauthorized = "unauthorized"
+resource_not_found = "resource not found"
+history_unavailable = "execution history unavailable"
+control_rejected = "execution control rejected"
+control_unavailable = "execution control unavailable"
+invalid_cursor = "invalid cursor"
+invalid_limit = "invalid limit"
+invalid_trace_cursor = "invalid trace cursor"
+invalid_content_revision = "invalid content revision"
+invalid_content_offset = "invalid content offset"
+invalid_action = "invalid execution action"
+invalid_cancellation = "invalid execution cancellation"
+
 [upload]
 invalid_request = "invalid upload request"
 attachment_type_unsupported = "file name does not identify a supported attachment type"

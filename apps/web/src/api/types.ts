@@ -18,7 +18,10 @@ import {
 import type { CitationDocument } from "@/views/chat/messageTypes";
 import type { DeepGenomeReferenceMaterial } from "@/components/research/deep-genome-report";
 import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
-import { decodeCitationPresentation } from "@/utils/citation-presentation";
+import {
+  decodeCitationPresentation,
+  decodeJournalCitationReferences,
+} from "@/utils/citation-presentation";
 import { indexScientificResources } from "@/utils/scientific-markdown/resources";
 
 export type ApiDetail = GatewayErrorDetail | string | null;
@@ -203,6 +206,11 @@ export interface QueryData extends ConversationContextNotice {
   result_archive_v1?: boolean;
   delivery?: AgentResultDelivery;
   route_reason_code?: string;
+  schema_version?: number;
+  execution_id?: string;
+  user_message_id?: string;
+  assistant_message_id?: string;
+  event_cursor?: number;
 }
 
 export interface ConversationSummary {
@@ -221,6 +229,59 @@ export type ChatHistoryRecord = QueryData & {
   created_at?: string;
   f_dialogue_id?: string;
 };
+
+export interface ConversationTimelineItemV2 {
+  message_id: string;
+  conversation_id: string;
+  message_index: number;
+  execution_id: string;
+  legacy_message_id?: number;
+  source_message_id: string;
+  parent_message_id?: string;
+  type: string;
+  role: string;
+  visibility: "user" | "collapsed";
+  source_event_id?: string;
+  tool_call_id?: string;
+  content_revision: number;
+  content_offset: number;
+  content_length: number;
+  content_sha256?: string;
+  content: string;
+  references?: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  status: string;
+  occurred_at: string;
+}
+
+function decodeConversationCitationReferences(
+  value: unknown
+): ReadonlyArray<Readonly<Record<string, unknown>>> | undefined {
+  const decoded = decodeJournalCitationReferences(value);
+  if (!decoded.ok) invalid("conversation history v2");
+  return decoded.value;
+}
+
+export interface ConversationExecutionHistoryV2 {
+  execution_id: string;
+  user_message_id?: string;
+  assistant_message_id?: string;
+  status: string;
+  event_cursor: number;
+  projection_revision: number;
+  content_revision: number;
+  content_offset: number;
+  tracking_health: string;
+  stale: boolean;
+  projection: Readonly<Record<string, unknown>> | null;
+  events: ReadonlyArray<Readonly<Record<string, unknown>>>;
+}
+
+export interface ConversationHistoryV2 {
+  schema_version: 2;
+  conversation_id: string;
+  messages: ConversationTimelineItemV2[];
+  executions: ConversationExecutionHistoryV2[];
+}
 
 export interface FeedbackRequest {
   feedback_type: string;
@@ -1229,6 +1290,9 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     "task_id",
     "query",
     "route_reason_code",
+    "execution_id",
+    "user_message_id",
+    "assistant_message_id",
   ];
   const decodedFields = result as unknown as Record<string, unknown>;
   stringFields.forEach((key) => {
@@ -1325,6 +1389,18 @@ export function decodeQueryData(value: unknown): DecodedQueryData {
     "chat response"
   );
   if (reportRevision !== undefined) result.report_revision = reportRevision;
+  const schemaVersion = optionalNumberField(
+    value,
+    "schema_version",
+    "chat response"
+  );
+  if (schemaVersion !== undefined) result.schema_version = schemaVersion;
+  const eventCursor = optionalNumberField(
+    value,
+    "event_cursor",
+    "chat response"
+  );
+  if (eventCursor !== undefined) result.event_cursor = eventCursor;
   if (hasOwn(value, "projection")) {
     if (!isRecord(value.projection)) invalid("chat projection");
     const projectionInput: Record<string, unknown> = {
@@ -1403,6 +1479,225 @@ export function decodeChatHistory(value: unknown): ChatHistoryRecord[] {
   } catch {
     invalid("chat history response");
   }
+}
+
+function decodeConversationTimelineItemV2(
+  value: unknown
+): ConversationTimelineItemV2 {
+  if (!isRecord(value)) invalid("conversation history v2");
+  const messageId = requiredString(
+    value,
+    "message_id",
+    "conversation history v2"
+  );
+  const conversationId = requiredString(
+    value,
+    "conversation_id",
+    "conversation history v2"
+  );
+  const executionId = requiredString(
+    value,
+    "execution_id",
+    "conversation history v2"
+  );
+  const sourceMessageId = requiredString(
+    value,
+    "source_message_id",
+    "conversation history v2"
+  );
+  const messageIndex = requiredNumber(
+    value,
+    "message_index",
+    "conversation history v2"
+  );
+  const contentRevision = requiredNumber(
+    value,
+    "content_revision",
+    "conversation history v2"
+  );
+  const contentOffset = requiredNumber(
+    value,
+    "content_offset",
+    "conversation history v2"
+  );
+  const contentLength = requiredNumber(
+    value,
+    "content_length",
+    "conversation history v2"
+  );
+  const role = requiredString(value, "role", "conversation history v2");
+  const type = requiredString(value, "type", "conversation history v2");
+  const visibility = requiredString(
+    value,
+    "visibility",
+    "conversation history v2"
+  );
+  if (
+    !Number.isSafeInteger(messageIndex) ||
+    messageIndex < 0 ||
+    !Number.isSafeInteger(contentRevision) ||
+    contentRevision < 0 ||
+    !Number.isSafeInteger(contentOffset) ||
+    contentOffset < 0 ||
+    !Number.isSafeInteger(contentLength) ||
+    contentLength < contentOffset ||
+    (visibility !== "user" && visibility !== "collapsed")
+  ) {
+    invalid("conversation history v2");
+  }
+  const content = optionalStringField(
+    value,
+    "content",
+    "conversation history v2"
+  );
+  if (content === undefined) invalid("conversation history v2");
+  const item: ConversationTimelineItemV2 = {
+    message_id: messageId,
+    conversation_id: conversationId,
+    message_index: messageIndex,
+    execution_id: executionId,
+    source_message_id: sourceMessageId,
+    type,
+    role,
+    visibility,
+    content_revision: contentRevision,
+    content_offset: contentOffset,
+    content_length: contentLength,
+    content,
+    status: requiredString(value, "status", "conversation history v2"),
+    occurred_at: requiredString(
+      value,
+      "occurred_at",
+      "conversation history v2"
+    ),
+  };
+  const optionalStrings = [
+    "parent_message_id",
+    "source_event_id",
+    "tool_call_id",
+    "content_sha256",
+  ] as const;
+  for (const key of optionalStrings) {
+    const field = optionalStringField(value, key, "conversation history v2");
+    if (field !== undefined) item[key] = field;
+  }
+  if (
+    item.content_sha256 !== undefined &&
+    !/^[a-f0-9]{64}$/u.test(item.content_sha256)
+  ) {
+    invalid("conversation history v2");
+  }
+  const legacyMessageId = optionalNumberField(
+    value,
+    "legacy_message_id",
+    "conversation history v2"
+  );
+  if (legacyMessageId !== undefined) item.legacy_message_id = legacyMessageId;
+  const references = decodeConversationCitationReferences(value.references);
+  if (references !== undefined) item.references = references;
+  return item;
+}
+
+function decodeConversationExecutionHistoryV2(
+  value: unknown
+): ConversationExecutionHistoryV2 {
+  if (!isRecord(value)) invalid("conversation history v2");
+  const result: ConversationExecutionHistoryV2 = {
+    execution_id: requiredString(
+      value,
+      "execution_id",
+      "conversation history v2"
+    ),
+    status: requiredString(value, "status", "conversation history v2"),
+    event_cursor: requiredNumber(
+      value,
+      "event_cursor",
+      "conversation history v2"
+    ),
+    projection_revision: requiredNumber(
+      value,
+      "projection_revision",
+      "conversation history v2"
+    ),
+    content_revision: requiredNumber(
+      value,
+      "content_revision",
+      "conversation history v2"
+    ),
+    content_offset: requiredNumber(
+      value,
+      "content_offset",
+      "conversation history v2"
+    ),
+    tracking_health: requiredString(
+      value,
+      "tracking_health",
+      "conversation history v2"
+    ),
+    stale: requiredBoolean(value, "stale", "conversation history v2"),
+    projection: null,
+    events: [],
+  };
+  for (const key of ["user_message_id", "assistant_message_id"] as const) {
+    const field = optionalStringField(value, key, "conversation history v2");
+    if (field !== undefined) result[key] = field;
+  }
+  if (value.projection !== null) {
+    if (!isRecord(value.projection)) invalid("conversation history v2");
+    result.projection = { ...value.projection };
+  }
+  if (
+    !Array.isArray(value.events) ||
+    value.events.some((event) => !isRecord(event))
+  ) {
+    invalid("conversation history v2");
+  }
+  result.events = value.events.map((event) => ({ ...event }));
+  for (const field of [
+    result.event_cursor,
+    result.projection_revision,
+    result.content_revision,
+    result.content_offset,
+  ]) {
+    if (!Number.isSafeInteger(field) || field < 0)
+      invalid("conversation history v2");
+  }
+  return result;
+}
+
+export function decodeConversationHistoryV2(
+  value: unknown
+): ConversationHistoryV2 {
+  if (!isRecord(value) || value.schema_version !== 2) {
+    invalid("conversation history v2");
+  }
+  const conversationId = requiredString(
+    value,
+    "conversation_id",
+    "conversation history v2"
+  );
+  if (!Array.isArray(value.messages) || !Array.isArray(value.executions)) {
+    invalid("conversation history v2");
+  }
+  const messages = value.messages.map(decodeConversationTimelineItemV2);
+  if (
+    messages.some((message, index) => {
+      const previous = messages[index - 1];
+      return (
+        message.conversation_id !== conversationId ||
+        (index > 0 &&
+          (!previous || message.message_index <= previous.message_index))
+      );
+    })
+  ) {
+    invalid("conversation history v2");
+  }
+  return {
+    schema_version: 2,
+    conversation_id: conversationId,
+    messages,
+    executions: value.executions.map(decodeConversationExecutionHistoryV2),
+  };
 }
 
 function decodeConversationSummary(value: unknown): ConversationSummary {

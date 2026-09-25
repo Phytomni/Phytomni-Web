@@ -8,6 +8,7 @@ describe("buildDisplayReferences — typed boundary", () => {
     for (const value of [[], null, undefined])
       expect(buildDisplayReferences(value, "test")).toEqual([]);
   });
+
   it("preserves canonical runs without reconstructing source metadata", () => {
     expect(
       buildDisplayReferences(
@@ -23,6 +24,7 @@ describe("buildDisplayReferences — typed boundary", () => {
       )
     ).toEqual([{ id: "test-ref-1", index: 1, citation }]);
   });
+
   it("keeps rejected members in original numbered slots without stringifying them", () => {
     const rows = buildDisplayReferences(
       [
@@ -50,6 +52,7 @@ describe("buildDisplayReferences — typed boundary", () => {
       "test-ref-5",
     ]);
   });
+
   it("does not restore malformed canonical data from formatted_citation", () => {
     expect(
       buildDisplayReferences(
@@ -63,12 +66,14 @@ describe("buildDisplayReferences — typed boundary", () => {
       )[0].citation
     ).toBeNull();
   });
+
   it("preserves valid namespace characters and separates pages", () => {
     expect(buildDisplayReferences([{ citation }], "artifact_under")[0].id).toBe(
       "artifact_under-ref-1"
     );
     expect(buildDisplayReferences([{ citation }], "m3")[0].id).toBe("m3-ref-1");
   });
+
   it.each(["", 'a b"<x'])("rejects an invalid namespace %s", (ns) => {
     expect(() => buildDisplayReferences([{ citation }], ns)).toThrowError(
       "citation namespace is invalid"

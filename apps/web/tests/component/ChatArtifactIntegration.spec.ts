@@ -14,8 +14,8 @@ const testState = vi.hoisted(() => ({
   > | null,
   copiedText: vi.fn(),
   downloadFile: vi.fn(),
-  getFileDownUrl: vi.fn(),
   getAnswerCheck: vi.fn(),
+  getConversationHistoryV2: vi.fn(),
   getAnalystAgentLog: vi.fn(),
 }));
 
@@ -44,7 +44,7 @@ vi.mock("@/views/chat/composables/useCopyDownload", () => ({
   useCopyDownload: () => ({
     fallbackCopyText: (text: string) => testState.copiedText(text),
     downloadFile: testState.downloadFile,
-    getFileDownUrl: testState.getFileDownUrl,
+    getFileDownUrl: vi.fn(),
   }),
 }));
 
@@ -54,6 +54,7 @@ vi.mock("@/api/chat", async (importOriginal) => {
     ...actual,
     getHistoryQuestionList: vi.fn(() => new Promise(() => undefined)),
     getAnswerCheck: testState.getAnswerCheck,
+    getConversationHistoryV2: testState.getConversationHistoryV2,
     getAnalystAgentLog: testState.getAnalystAgentLog,
     getUserTool: vi.fn(async () => ({
       code: 200,
@@ -103,8 +104,6 @@ import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import ChatIndex from "@/views/chat/ChatView.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
-import { CANONICAL_AGENT_DISPLAY_ORDER } from "@/constants/agents";
-import type { CanonicalAgentTool } from "@/constants/agents";
 import enUS from "@/locales/langs/en-US";
 import { SIDEBAR_COLLAPSED_PREFERENCE_KEY } from "@/views/chat/composables/useSidebarResponsive";
 import type { ChatMessage } from "@/views/chat/types";
@@ -262,69 +261,6 @@ const deepGenomeMessage: ChatMessage = {
   doc_list: [{ title: "DeepGenome source" }],
 };
 
-const overflowFileArtifact = {
-  id: "overflow-file",
-  name: "result.txt",
-  kind: "file" as const,
-};
-
-function overflowMessageFor(tool: CanonicalAgentTool): ChatMessage {
-  if (tool === "DeepGenomeAgent") {
-    return { ...deepGenomeMessage, id: `overflow-${tool}` };
-  }
-  if (tool === "ChatAgent" || tool === "DataAgent") {
-    return {
-      role: "assistant",
-      id: `overflow-${tool}`,
-      tool_name: tool,
-      status: "SUCCEEDED",
-      content: `${tool} answer body`,
-      artifacts: [overflowFileArtifact],
-    };
-  }
-  if (
-    tool === "AnalystAgent" ||
-    tool === "InSilicoResearchAgent" ||
-    tool === "DigitalDesignAgent" ||
-    tool === "GeneNetworkAgent"
-  ) {
-    return {
-      ...researchMessage,
-      id: `overflow-${tool}`,
-      tool_name: tool,
-      content: `# Full ${tool} report\n\nComplete results.`,
-    };
-  }
-  return {
-    ...citedMessage,
-    id: `overflow-${tool}`,
-    tool_name: tool,
-    content: `# Full ${tool} report\n\nEvidence-backed finding [1].`,
-  };
-}
-
-function copiedNeedleFor(tool: CanonicalAgentTool): string {
-  if (tool === "DeepGenomeAgent") return "Full DeepGenome report";
-  if (tool === "ChatAgent" || tool === "DataAgent") {
-    return `${tool} answer body`;
-  }
-  return `Full ${tool} report`;
-}
-
-async function chooseArtifactOverflow(
-  wrapper: VueWrapper,
-  command: string
-): Promise<void> {
-  await wrapper.get("[data-test=artifact-action]").trigger("click");
-  await nextTick();
-  const item = document.querySelector(
-    `[data-test="artifact-action-${command}"]`
-  );
-  expect(item).toBeTruthy();
-  (item as HTMLElement).click();
-  await nextTick();
-}
-
 const deepGenomePreview = {
   title: "Finished",
   kind: "Deep Genome Agent",
@@ -454,7 +390,7 @@ async function mountProductionChat(
         ChatAnalystLog: true,
         StreamMessage: true,
         TransferProgress: true,
-        SendProgress: true,
+        ExecutionActivityPanel: true,
         ElTour: true,
         ElTourStep: true,
         ElBacktop: true,
@@ -513,6 +449,10 @@ beforeEach(() => {
   testState.copiedText.mockReset();
   testState.downloadFile.mockReset();
   testState.getAnswerCheck.mockReset();
+  testState.getConversationHistoryV2.mockReset();
+  testState.getConversationHistoryV2.mockRejectedValue(
+    new Error("ordered history unavailable")
+  );
   testState.getAnalystAgentLog.mockReset();
   testState.getAnalystAgentLog.mockResolvedValue({
     code: 200,
@@ -635,7 +575,7 @@ describe("Chat artifact message ownership", () => {
 
   it("keeps the existing copy action wired to complete message source", () => {
     expect(CHAT_SOURCE).toContain('@copy="handleMessageCopy(message, index)"');
-    expect(CHAT_SOURCE).toContain("messagePlainText(message)");
+    expect(CHAT_SOURCE).toContain("chatContentToText(message.content)");
     expect(CHAT_SOURCE).toContain('"\\nReferences:\\n"');
     expect(CHAT_SOURCE).not.toMatch(
       /handleMessageCopy[\s\S]{0,500}artifactPreview/
@@ -934,17 +874,6 @@ describe("Chat artifact shell integration", () => {
       },
       expectOpen: false,
     },
-    {
-      name: "running cached complete file",
-      message: {
-        ...deepGenomeMessage,
-        id: "running-cached-deep",
-        status: "RUNNING",
-        content:
-          "# Smoc Analysis\n\nThe analysis of chromatin accessibility for the Os01g0822900 promoter.",
-      },
-      expectOpen: false,
-    },
   ])(
     "handles a $name report according to usable content",
     async ({ name, message, expectOpen = false }) => {
@@ -968,19 +897,11 @@ describe("Chat artifact shell integration", () => {
         );
         expect(wrapper.text()).not.toContain("No references available.");
       }
-      if (name === "running cached complete file") {
-        expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
-        expect(wrapper.find('[data-test="artifact-open"]').exists()).toBe(
-          false
-        );
-        expect(wrapper.text()).not.toContain("Smoc Analysis");
-        expect(wrapper.text()).not.toContain("Os01g0822900");
-      }
     }
   );
 
   it.each([
-    ["RUNNING", ""],
+    ["RUNNING", enUS.chat.lifecycle.running],
     ["FAILED", enUS.chat.lifecycle.failed],
     ["CANCELLED", enUS.chat.lifecycle.cancelled],
     ["SUCCEEDED", enUS.chat.lifecycle.resultUnavailable],
@@ -1010,11 +931,7 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       const row = wrapper.get(`[data-message-id="${id}"]`);
-      if (status === "RUNNING") {
-        expect(row.find('[data-test="agent-wait"]').exists()).toBe(true);
-      } else {
-        expect(row.text()).toContain(expectedCopy);
-      }
+      expect(row.text()).toContain(expectedCopy);
       expect(row.find(".research-artifact-preview").exists()).toBe(false);
       expect(row.find('[data-test="artifact-open"]').exists()).toBe(false);
       expect(state.getChatState("A").artifactOpen).toBe(false);
@@ -1034,14 +951,14 @@ describe("Chat artifact shell integration", () => {
         status: "RUNNING",
         content: "Server task created: synthetic-child",
       } satisfies ChatMessage,
-      lifecycleCopy: "",
+      lifecycleCopy: enUS.chat.lifecycle.running,
       inlineReport: null,
       previewCount: 0,
       neutralPreviewCount: 0,
       showActions: null,
     },
     {
-      name: "running cached file Markdown",
+      name: "running revision Markdown",
       message: {
         role: "assistant",
         id: "402",
@@ -1049,10 +966,10 @@ describe("Chat artifact shell integration", () => {
         status: "RUNNING",
         content: "# Synthetic revision report",
       } satisfies ChatMessage,
-      lifecycleCopy: "",
+      lifecycleCopy: enUS.chat.lifecycle.running,
       inlineReport: null,
-      previewCount: 0,
-      neutralPreviewCount: 0,
+      previewCount: 1,
+      neutralPreviewCount: 1,
       showActions: null,
     },
     {
@@ -1105,11 +1022,7 @@ describe("Chat artifact shell integration", () => {
       await nextTick();
 
       const row = wrapper.get(`[data-message-id="${message.id}"]`);
-      if (lifecycleCopy) {
-        expect(row.text()).toContain(lifecycleCopy);
-      } else {
-        expect(row.find('[data-test="agent-wait"]').exists()).toBe(true);
-      }
+      expect(row.text()).toContain(lifecycleCopy);
       expect(row.findAll(".research-artifact-preview")).toHaveLength(
         previewCount
       );
@@ -1202,7 +1115,7 @@ describe("Chat artifact shell integration", () => {
     transcript.scrollTop = 999;
     await settleResponsiveLayout();
     expect(wrapper.get(".phy-adaptive-shell").classes()).toContain(
-      "phy-adaptive-shell--artifact-split"
+      "phy-adaptive-shell--execution"
     );
     expect(wrapper.get(".phy-adaptive-shell").classes()).toContain(
       "is-sidebar-collapsed"
@@ -1211,7 +1124,7 @@ describe("Chat artifact shell integration", () => {
       "false"
     );
     const artifactBody = wrapper.get(
-      '.phy-adaptive-shell__artifact [data-test="markdown-body"]'
+      '.phy-adaptive-shell__workspace [data-test="markdown-body"]'
     );
     expect(artifactBody.attributes("data-surface")).toBe("artifact");
     expect(artifactBody.classes()).toEqual(
@@ -1269,10 +1182,10 @@ describe("Chat artifact shell integration", () => {
     await wrapper.get("[data-test=artifact-open]").trigger("click");
 
     expect(wrapper.get(".phy-adaptive-shell").classes()).toContain(
-      "phy-adaptive-shell--artifact-fullscreen"
+      "phy-adaptive-shell--execution-fullscreen"
     );
     expect(CHAT_SOURCE).toContain(
-      ':artifact-fullscreen="artifactOpen && isMobileViewport"'
+      ':workspace-fullscreen="executionWorkspaceOpen && isMobileViewport"'
     );
     expect(wrapper.get("[data-testid=chat-transcript]").element).toBe(
       transcript
@@ -1522,8 +1435,6 @@ describe("Chat artifact shell integration", () => {
     expect(wrapper.text()).not.toContain("doc_list");
 
     expect(wrapper.find('[data-tab-id="evidence"]').exists()).toBe(false);
-    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
-    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
   });
 
   it.each([
@@ -1632,65 +1543,6 @@ describe("Chat artifact shell integration", () => {
     expect(malformed.wrapper.find("a.citation-ref").exists()).toBe(false);
   });
 
-  it.each([...CANONICAL_AGENT_DISPLAY_ORDER])(
-    "copies the %s artifact from the overflow menu",
-    async (tool) => {
-      const message = overflowMessageFor(tool);
-      const { wrapper, state } = await mountProductionChat(1440, {
-        messagesA: [message],
-      });
-
-      if (tool === "ChatAgent" || tool === "DataAgent") {
-        const chat = state.getChatState("A");
-        chat.activeArtifactIdentity = `message:${message.id}`;
-        chat.artifactOpen = true;
-        await nextTick();
-      } else {
-        await wrapper.get("[data-test=artifact-open]").trigger("click");
-      }
-
-      testState.copiedText.mockClear();
-      await chooseArtifactOverflow(wrapper, "copy");
-      expect(testState.copiedText).toHaveBeenCalled();
-      expect(String(testState.copiedText.mock.calls[0]?.[0])).toContain(
-        copiedNeedleFor(tool)
-      );
-    }
-  );
-
-  it("exports a cited report from the overflow Download menu", async () => {
-    const { wrapper } = await mountProductionChat(1440, {
-      messagesA: [
-        {
-          ...citedMessage,
-          id: "cited-download-1",
-          tool_name: "ReviewAgent",
-        },
-      ],
-    });
-    await wrapper.get("[data-test=artifact-open]").trigger("click");
-    testState.getFileDownUrl.mockClear();
-
-    await chooseArtifactOverflow(wrapper, "download:PDF");
-    expect(testState.getFileDownUrl).toHaveBeenCalledWith(
-      "cited-download-1",
-      "PDF"
-    );
-    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
-    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
-  });
-
-  it("closes the artifact panel from the overflow menu", async () => {
-    const { wrapper, state } = await mountProductionChat(1440, {
-      messagesA: [citedMessage],
-    });
-    await wrapper.get("[data-test=artifact-open]").trigger("click");
-    expect(state.getChatState("A").artifactOpen).toBe(true);
-
-    await chooseArtifactOverflow(wrapper, "close");
-    expect(state.getChatState("A").artifactOpen).toBe(false);
-  });
-
   it("keeps an ordinary Chat answer on the normal answer path", async () => {
     const ordinaryChat: ChatMessage = {
       role: "assistant",
@@ -1718,9 +1570,9 @@ describe("Chat artifact shell integration", () => {
 
   it("wires production Chat to the artifact state, renderers, and adaptive slot", () => {
     expect(CHAT_SOURCE).toContain("useArtifactPanel({");
-    expect(CHAT_SOURCE).toContain(':artifact-open="artifactOpen"');
+    expect(CHAT_SOURCE).toContain(':workspace-open="executionWorkspaceOpen"');
     expect(CHAT_SOURCE).toContain("effectiveSidebarCollapsed");
-    expect(CHAT_SOURCE).toContain("<template #artifact>");
+    expect(CHAT_SOURCE).toContain("<template #workspace>");
     expect(CHAT_SOURCE).toContain("<DeepGenomeArtifact");
     expect(CHAT_SOURCE).not.toContain('message.status = "FINALIZING"');
     expect(CHAT_SOURCE).toContain("message.delivery = { ...delivery }");
@@ -1737,10 +1589,6 @@ describe("Chat artifact shell integration", () => {
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-actions="false"');
     expect(DEEP_GENOME_ARTIFACT_SOURCE).toContain(':show-references="false"');
     expect(CHAT_SOURCE).toContain("<ResearchArtifactShell");
-    expect(CHAT_SOURCE).toContain(':tabs="artifactTabs"');
-    expect(CHAT_SOURCE).toContain("copyDownloadCloseArtifactMenuItems");
-    expect(CHAT_SOURCE).toContain(':menu-items="artifactMenuItems"');
-    expect(CHAT_SOURCE).toContain('@action="onArtifactMenu"');
     expect(CHAT_SOURCE).toContain('surface="artifact"');
     expect(CHAT_SOURCE).toContain("<CitedAnswer");
     expect(CHAT_SOURCE).toContain('reference-presentation="external"');
@@ -1754,27 +1602,5 @@ describe("Chat artifact shell integration", () => {
     expect(CHAT_SOURCE).not.toContain('title: t("common.finished")');
     expect(CONTENT_SOURCE).toContain("<ResearchArtifactPreview");
     expect(CONTENT_SOURCE).toContain("@open=\"emit('open-artifact')\"");
-  });
-
-  it("does not relabel archive packing as compute RUNNING on any remote-agent surface", () => {
-    const productSources = [
-      resolve(
-        __dirname,
-        "../../src/views/digital-design-agent/DigitalDesignAgentView.vue"
-      ),
-      resolve(
-        __dirname,
-        "../../src/views/gene-network-agent/GeneNetworkAgentView.vue"
-      ),
-      resolve(
-        __dirname,
-        "../../src/views/analysis-agent/RemoteAnalysisAgentWorkspace.vue"
-      ),
-    ].map((path) => readFileSync(path, "utf8"));
-
-    for (const source of productSources) {
-      expect(source).toContain("function applyPendingArchiveDelivery");
-      expect(source).not.toContain('status: "RUNNING", delivery');
-    }
   });
 });

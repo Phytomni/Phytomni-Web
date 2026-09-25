@@ -12,12 +12,6 @@ vi.mock("@/api/chat", () => ({
   getAnswerCheck: vi.fn(),
 }));
 
-vi.mock("@/views/chat/composables/useStreamMessage", () => ({
-  useStreamMessage: () => ({
-    streamMessage: vi.fn(async () => ({})),
-  }),
-}));
-
 vi.mock("element-plus", () => ({
   ElMessage: { warning: vi.fn() },
   ElMessageBox: { alert: vi.fn() },
