@@ -249,7 +249,7 @@ func TestAgentTaskLifecycleKeepsRequiredPendingDeliveryAsCachedProjection(t *tes
 	if err != nil {
 		t.Fatalf("AgentTaskLifecycle: %v", err)
 	}
-	if got.Phase != "RUNNING" || got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
+	if got.Phase != "FINALIZING" || got.Terminal || got.Reconciliation != "CACHED" || fake.calls != 0 {
 		t.Fatalf("lifecycle=%+v calls=%d, want cached nonterminal pending delivery", got, fake.calls)
 	}
 	if got.Delivery == nil || got.Delivery.Status != "pending" || got.Delivery.Revision != 1 {

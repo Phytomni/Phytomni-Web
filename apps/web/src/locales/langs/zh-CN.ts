@@ -260,7 +260,6 @@ export default {
     icpFiling: "京ICP备07026971号-9",
     versionLabel: "版本",
     effectiveLabel: "生效日期",
-    draftBanner: "本稿待中国农业科学院生物技术研究所审定，不构成最终法律文本。",
     loadError: "文档加载失败，请稍后重试。",
   },
 

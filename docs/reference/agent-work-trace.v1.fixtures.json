@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "private_observation_contract": {
+    "fields": {
+      "schema_version": { "type": "integer", "const": 1 },
+      "adapter_version": { "type": "string", "max_length": 32 },
+      "source_revision": { "type": ["integer", "null"], "minimum": 0 },
+      "next_cursor": {
+        "type": ["string", "null"],
+        "max_length": 128,
+        "visibility": "private"
+      },
+      "snapshot_complete": { "type": "boolean" },
+      "health": { "enum": ["healthy", "degraded", "unavailable"] },
+      "records": { "type": "array", "max_items": 256 }
+    },
+    "record_classes": [
+      "semantic_phase",
+      "semantic_tool",
+      "bounded_progress",
+      "public_summary",
+      "artifact_available"
+    ],
+    "record_fields": {
+      "source_identity": {
+        "type": "string",
+        "max_length": 128,
+        "visibility": "private"
+      },
+      "record_class": { "type": "enum" },
+      "semantic_code": {
+        "type": "string",
+        "max_length": 96,
+        "must_be_presenter_allowlisted": true
+      },
+      "status": {
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled",
+          "timed_out"
+        ]
+      },
+      "occurred_at": { "type": ["iso8601", "null"] },
+      "attempt": { "type": "integer", "minimum": 1, "maximum": 20 },
+      "completed": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "maximum": 1000000
+      },
+      "total": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "maximum": 1000000
+      },
+      "summary_kind": { "enum": ["reasoning_summary", "decision", null] },
+      "public_text": {
+        "type": ["string", "null"],
+        "max_length": 512,
+        "requires_explicit_public_marker": true
+      },
+      "artifact_role": {
+        "type": ["string", "null"],
+        "max_length": 64,
+        "must_be_presenter_allowlisted": true
+      }
+    },
+    "forbidden_fields": [
+      "prompt",
+      "chain_of_thought",
+      "model_tokens",
+      "raw_log",
+      "content",
+      "arguments",
+      "result",
+      "query",
+      "sql",
+      "path",
+      "url",
+      "credential",
+      "provider_body",
+      "exception_text"
+    ]
+  },
+  "public_presenter_contract": {
+    "item_kinds": [
+      "phase",
+      "tool",
+      "progress",
+      "reasoning_summary",
+      "decision",
+      "artifact"
+    ],
+    "statuses": [
+      "pending",
+      "running",
+      "succeeded",
+      "failed",
+      "cancelled",
+      "timed_out"
+    ],
+    "required_fields": [
+      "schema_version",
+      "item_id",
+      "kind",
+      "operation_key",
+      "label_key",
+      "status",
+      "attempt"
+    ],
+    "optional_fields": [
+      "occurred_at",
+      "duration_ms",
+      "completed",
+      "total",
+      "unit_key",
+      "summary",
+      "target"
+    ],
+    "summary_max_length": 512,
+    "counter_maximum": 1000000,
+    "arbitrary_additional_fields": false
+  },
+  "trace_target_contract": {
+    "kind": "trace",
+    "id_pattern": "^trc_[A-Za-z0-9_-]{16,80}$",
+    "id_is_opaque": true,
+    "owner_scope_required": true,
+    "provider_identity_allowed": false,
+    "work_unit_identity_allowed": false,
+    "missing_and_foreign_result": "not_found"
+  },
+  "golden_cases": [
+    {
+      "name": "submission_acknowledged",
+      "private_input": {
+        "parent_operation": "remote.analysis",
+        "child_operation": "remote.submit",
+        "provider_status": "acknowledged"
+      },
+      "public_output": {
+        "parent_status": "running",
+        "child_status": "succeeded",
+        "parent_label_key": "execution.operation.remote.analysis",
+        "child_label_key": "execution.operation.remote.submit"
+      }
+    },
+    {
+      "name": "recognized_gene_network_phase",
+      "private_input": {
+        "schema_version": 1,
+        "adapter_version": "analysis-full-v1",
+        "source_revision": 12,
+        "next_cursor": "private-cursor-12",
+        "snapshot_complete": true,
+        "health": "healthy",
+        "records": [
+          {
+            "source_identity": "private-record-12",
+            "record_class": "semantic_phase",
+            "semantic_code": "gene_network.prepare_inputs",
+            "status": "succeeded",
+            "occurred_at": "2026-08-23T01:00:00Z",
+            "attempt": 1,
+            "completed": null,
+            "total": null,
+            "summary_kind": null,
+            "public_text": null,
+            "artifact_role": null
+          }
+        ]
+      },
+      "public_output": [
+        {
+          "schema_version": 1,
+          "item_id": "trace-item-12",
+          "kind": "phase",
+          "operation_key": "gene_network.prepare_inputs",
+          "label_key": "execution.trace.geneNetwork.prepareInputs",
+          "status": "succeeded",
+          "attempt": 1,
+          "occurred_at": "2026-08-23T01:00:00Z"
+        }
+      ]
+    },
+    {
+      "name": "explicit_public_decision",
+      "private_input": {
+        "record_class": "public_summary",
+        "semantic_code": "gene_network.workflow_selected",
+        "status": "succeeded",
+        "summary_kind": "decision",
+        "public_text": "Selected the declared network-analysis workflow.",
+        "explicit_public": true
+      },
+      "public_output": {
+        "kind": "decision",
+        "label_key": "execution.trace.decision",
+        "summary": "Selected the declared network-analysis workflow."
+      }
+    },
+    {
+      "name": "unknown_provider_record",
+      "private_input": {
+        "record_class": "semantic_tool",
+        "semantic_code": "provider.internal.command",
+        "status": "succeeded"
+      },
+      "public_output": []
+    },
+    {
+      "name": "raw_log_rejected",
+      "private_input": {
+        "record_class": "semantic_phase",
+        "semantic_code": "gene_network.prepare_inputs",
+        "status": "running",
+        "content": "private console output"
+      },
+      "validation_error": "forbidden_field"
+    },
+    {
+      "name": "owner_scoped_trace_target",
+      "public_output": {
+        "kind": "trace",
+        "id": "trc_A1b2C3d4E5f6G7h8"
+      }
+    }
+  ]
+}

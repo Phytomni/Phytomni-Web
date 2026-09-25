@@ -1,10 +1,6 @@
 package api_service
 
-import (
-	"time"
-
-	rxBot "phytomni-server/external/bot"
-)
+import rxBot "phytomni-server/external/bot"
 
 var synchronousAgentTimeoutSlugs = map[string]struct{}{
 	"chat":       {},
@@ -48,17 +44,4 @@ func resolveExecutionTimeoutSeconds(
 		return cfg.TimeoutSeconds
 	}
 	return maxSeconds
-}
-
-func newExecutionBotClient(
-	cfg *rxBot.Config,
-	mode string,
-	forcedTool string,
-	directSlug string,
-	allowedTools []string,
-) *rxBot.Client {
-	seconds := resolveExecutionTimeoutSeconds(
-		cfg, mode, forcedTool, directSlug, allowedTools,
-	)
-	return rxBot.NewClientWithTimeout(time.Duration(seconds) * time.Second)
 }

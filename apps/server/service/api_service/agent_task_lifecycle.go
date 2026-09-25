@@ -114,7 +114,7 @@ func lifecycleFromExecutionV2(
 	}
 	phase, terminal := lifecyclePhase(status, "")
 	if admission.TerminalStatus != nil {
-		phase, terminal = lifecyclePhase(*admission.TerminalStatus, "")
+		phase, _ = lifecyclePhase(*admission.TerminalStatus, "")
 		terminal = true
 	}
 	resultCount := 0
@@ -160,19 +160,6 @@ func loadAgentTaskLifecycleRow(ctx context.Context, rowID int64, username string
 		return nil, result.Error
 	}
 	return &row, nil
-}
-
-func validLifecycleRunRecord(record *rxBot.RunRecord, expectedRunID string) bool {
-	return record != nil && strings.TrimSpace(record.RunID) == strings.TrimSpace(expectedRunID)
-}
-
-func rowIsTerminal(status string) bool {
-	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case "SUCCEEDED", "FAILED", "TIMED_OUT", "TIMEOUT", "CANCELLED", "CANCELED":
-		return true
-	default:
-		return false
-	}
 }
 
 func lifecycleFromStored(row *model.QuestionAgentLog, reconciliation string, errorCode *string) AgentTaskLifecycleDTO {
@@ -382,9 +369,5 @@ func cloneLifecycleErrorCode(value *string) *string {
 		return nil
 	}
 	code := *value
-	return &code
-}
-
-func lifecycleErrorCode(code string) *string {
 	return &code
 }

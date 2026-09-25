@@ -951,10 +951,7 @@ import type {
   ScientificResourceActivation,
 } from "@/utils/scientific-markdown/types";
 import type { BotRunProjection } from "./botProjection";
-import {
-  cloneBotInterop,
-  type BotLifecycleState,
-} from "./streaming/botLifecycleReducer";
+import { type BotLifecycleState } from "./streaming/botLifecycleReducer";
 import {
   createExecutionRunState,
   mergeExecutionTracePage,

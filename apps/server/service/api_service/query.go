@@ -8,9 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1430,30 +1427,6 @@ func failV1Submission(
 	return nil
 }
 
-// isV1DefiniteFailure distinguishes a completed Bot rejection or malformed
-// response from a transport outcome whose request may already have reached
-// Bot. Only the former is safe to terminally settle before a retry.
-func isV1DefiniteFailure(err error) bool {
-	if err == nil || errors.Is(err, rxBot.ErrBotTimeout) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
-		errors.Is(err, io.ErrUnexpectedEOF) {
-		return false
-	}
-	var apiErr *rxBot.APIError
-	if errors.As(err, &apiErr) {
-		if apiErr.Retryable || apiErr.Status == 408 || apiErr.Status == 425 || apiErr.Status == 429 {
-			return false
-		}
-		return apiErr.Status >= 400 && apiErr.Status < 500
-	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return false
-	}
-	var netErr net.Error
-	return !errors.As(err, &netErr)
-}
-
 // IsDedicatedAgentProductTool reports whether tool has its own route-owned
 // product-run surface.
 func IsDedicatedAgentProductTool(tool string) bool {
@@ -1732,26 +1705,6 @@ func (ps *Service) prepareInterop(ctx context.Context, username, slug, mode stri
 			Kind:     firstAvailable.Kind,
 		},
 	}, nil
-}
-
-// resolveExpertAgent validates the Bot router's selected slug against both
-// Web-owned canonical maps before any tool name, answer shape, or projection
-// lifecycle is derived from the response. Expert is a cross-service boundary:
-// a missing/unknown/malformed slug must never fall back to ChatAgent.
-func resolveExpertAgent(resp *rxBot.RouteQueryResponse) (string, string, error) {
-	if resp == nil {
-		return "", "", fmt.Errorf("%w: missing expert response", ErrExpertRouteContract)
-	}
-	rawSlug := resp.Agent
-	slug := strings.TrimSpace(rawSlug)
-	if slug == "" || rawSlug != slug || strings.ContainsAny(rawSlug, "\r\n\t") {
-		return "", "", fmt.Errorf("%w: malformed expert agent", ErrExpertRouteContract)
-	}
-	canonicalTool, ok := rxBot.CanonicalAgentTool[slug]
-	if !ok || slugToToolName[slug] != canonicalTool {
-		return "", "", fmt.Errorf("%w: unsupported expert agent", ErrExpertRouteContract)
-	}
-	return slug, canonicalTool, nil
 }
 
 // validateExpertResolvedTool re-checks the Bot router's selected native slug

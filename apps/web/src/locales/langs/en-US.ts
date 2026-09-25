@@ -257,8 +257,6 @@ export default {
     icpFiling: "京ICP备07026971号-9",
     versionLabel: "Version",
     effectiveLabel: "Effective date",
-    draftBanner:
-      "Draft pending review by Biotechnology Research Institute, CAAS. Not a final legal instrument.",
     loadError: "Unable to load this document. Please try again later.",
   },
 

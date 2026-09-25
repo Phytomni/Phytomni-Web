@@ -102,7 +102,7 @@ const chatViewStubs = {
   PhyAdaptiveShell: {
     name: "PhyAdaptiveShell",
     template:
-      '<div><slot name="sidebar" /><slot name="main" /><slot name="artifact" /></div>',
+      '<div><slot name="sidebar" /><slot name="main" /><slot name="workspace" /><slot name="artifact" /></div>',
   },
   Sidebar: {
     name: "Sidebar",

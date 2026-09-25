@@ -216,37 +216,6 @@ func parseNonnegativeInt64(raw string) (int64, bool) {
 	return value, true
 }
 
-func parsePositiveInt64(raw string) (int64, bool) {
-	value, ok := parseNonnegativeInt64(raw)
-	if !ok || value < 1 {
-		return 0, false
-	}
-	return value, true
-}
-
-// parseResumeAfterSeq reads Last-Event-ID, or ?after= when the header is
-// absent. Missing both yields 0. A present but unparseable value is invalid.
-func parseResumeAfterSeq(ctx *gin.Context) (int64, bool) {
-	if ctx == nil || ctx.Request == nil {
-		return 0, true
-	}
-	if values := ctx.Request.Header.Values("Last-Event-ID"); len(values) > 0 {
-		afterSeq, err := strconv.ParseInt(strings.TrimSpace(values[0]), 10, 64)
-		if err != nil {
-			return 0, false
-		}
-		return afterSeq, true
-	}
-	if raw, ok := ctx.GetQuery("after"); ok {
-		afterSeq, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-		if err != nil {
-			return 0, false
-		}
-		return afterSeq, true
-	}
-	return 0, true
-}
-
 // parseAssetAttachments accepts exactly one bounded JSON array of opaque asset
 // references. Strict object decoding keeps filenames, paths, MIME hints, and
 // future authority fields out of the Chat/Agent request contract.

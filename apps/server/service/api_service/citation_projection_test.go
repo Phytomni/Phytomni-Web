@@ -88,20 +88,6 @@ func assertContractAnswer(t *testing.T, answer, name string) {
 	}
 }
 
-func reviewedCitationFrames(t *testing.T) (string, string) {
-	t.Helper()
-	content, refs, _ := reviewedCitationFixture(t)
-	text, err := json.Marshal(map[string]any{"type": "TextMessageContent", "delta": content})
-	if err != nil {
-		t.Fatal(err)
-	}
-	references, err := json.Marshal(map[string]any{"type": "Custom", "name": "phyto.references", "value": map[string]any{"doc_list": refs}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return "event: TextMessageContent\ndata: " + string(text) + "\n", "event: Custom\ndata: " + string(references) + "\n"
-}
-
 func TestCitationProjectionReadSeparatesOwnedBodyWithoutSaving(t *testing.T) {
 	gdb := setupTestDB(t)
 	old := rxBot.BotConfig

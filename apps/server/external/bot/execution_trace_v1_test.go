@@ -86,8 +86,8 @@ func TestResolveExecutionTraceV1RejectsUnknownFieldsAndVersion(t *testing.T) {
 
 func TestExecutionTraceV1SharedGoldenSafetyReplayAndBounds(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(
-		"..", "..", "..", "..", "..", "Phytomni-Bot", "docs", "contracts",
-		"agent-work-trace", "v1", "fixtures.json",
+		"..", "..", "..", "..", "docs", "reference",
+		"agent-work-trace.v1.fixtures.json",
 	))
 	if err != nil {
 		t.Fatal(err)

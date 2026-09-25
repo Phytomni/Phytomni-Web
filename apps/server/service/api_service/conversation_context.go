@@ -542,13 +542,6 @@ func (value *persistedConversationContext) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// v1AssistantSummary is the V1 context boundary. Answer/report/table prose is
-// display output only; until Bot provides a typed metadata-only summary, V1
-// persists no assistant summary while retaining stage and artifact metadata.
-func v1AssistantSummary(_ *rxBot.ContextStageMetadata) string {
-	return ""
-}
-
 func settleBlockingConversationContext(
 	ctx context.Context,
 	username string,
@@ -787,30 +780,6 @@ func lockConversationRootModeWithDB(
 	return nil
 }
 
-func lockConversationRootMode(
-	ctx context.Context,
-	username string,
-	dialogueID string,
-) error {
-	return model.DB(ctx).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return lockConversationRootModeWithDB(ctx, tx, username, dialogueID)
-	})
-}
-
-func encodePersistedActiveA2UI(surface *A2uiSurfaceDTO) (json.RawMessage, error) {
-	if surface == nil {
-		return nil, nil
-	}
-	encoded, err := json.Marshal(surface)
-	if err != nil || len(encoded) > maxPersistedActiveA2UIBytes {
-		return nil, ErrInvalidA2uiSurface
-	}
-	if _, err := DecodeA2uiSurface(encoded); err != nil {
-		return nil, ErrInvalidA2uiSurface
-	}
-	return encoded, nil
-}
-
 func decodeConversationActiveA2UI(private persistedConversationContext) *A2uiSurfaceDTO {
 	if len(private.ActiveA2UI) == 0 {
 		return nil
@@ -820,27 +789,6 @@ func decodeConversationActiveA2UI(private persistedConversationContext) *A2uiSur
 		return nil
 	}
 	return surface
-}
-
-func persistConversationActiveA2UI(
-	ctx context.Context,
-	username string,
-	rowID int64,
-	out *QueryData,
-) error {
-	if out == nil || rowID <= 0 || out.Status != "INPUT_REQUIRED" || out.A2UI == nil {
-		return nil
-	}
-	encoded, err := encodePersistedActiveA2UI(out.A2UI)
-	if err != nil {
-		return err
-	}
-	private, err := LoadBotConversationContext(ctx, username, rowID)
-	if err != nil {
-		return err
-	}
-	private.ActiveA2UI = encoded
-	return SaveBotConversationContext(ctx, username, rowID, private)
 }
 
 func invalidateConversationContextsAfter(

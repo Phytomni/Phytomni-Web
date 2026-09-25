@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/service/api_service"
 	"phytomni-server/utils/errs"
@@ -41,33 +42,33 @@ func executionCursor(ctx *gin.Context) (int64, error) {
 	}
 	cursor, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || cursor < 0 {
-		return 0, errors.New("invalid cursor")
+		return 0, errors.New(i18n.T(ctx, "execution.invalid_cursor"))
 	}
 	return cursor, nil
 }
 
 func executionEventError(ctx *gin.Context, err error) {
 	if errors.Is(err, api_service.ErrExecutionRunOwnership) {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "resource not found"})
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "execution.resource_not_found")})
 		return
 	}
-	ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "execution history unavailable"})
+	ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": i18n.T(ctx, "execution.history_unavailable")})
 }
 
 func (ph *Handler) ConversationRunEvents(ctx *gin.Context) {
 	username, dialogueID, runID, ok := executionEventIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	afterSeq, err := strconv.ParseInt(ctx.DefaultQuery("after_seq", "0"), 10, 64)
 	if err != nil || afterSeq < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid cursor"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_cursor")})
 		return
 	}
 	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	if err != nil || limit < 1 || limit > 200 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid limit"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_limit")})
 		return
 	}
 	page, err := ph.service.ConversationRunEvents(ctx, username, dialogueID, runID, afterSeq, limit)
@@ -81,7 +82,7 @@ func (ph *Handler) ConversationRunEvents(ctx *gin.Context) {
 func (ph *Handler) ConversationRunEventProjection(ctx *gin.Context) {
 	username, dialogueID, runID, ok := executionEventIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	projection, err := ph.service.ConversationRunEventProjection(ctx, username, dialogueID, runID)
@@ -95,7 +96,7 @@ func (ph *Handler) ConversationRunEventProjection(ctx *gin.Context) {
 func (ph *Handler) ConversationRunEvent(ctx *gin.Context) {
 	username, dialogueID, runID, ok := executionEventIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	event, err := ph.service.ConversationRunEvent(ctx, username, dialogueID, runID, ctx.Param("event_id"))
@@ -109,7 +110,7 @@ func (ph *Handler) ConversationRunEvent(ctx *gin.Context) {
 func (ph *Handler) ConversationRunExecutionTarget(ctx *gin.Context) {
 	username, dialogueID, runID, ok := executionEventIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	target, err := ph.service.ConversationRunExecutionTarget(
@@ -125,7 +126,7 @@ func (ph *Handler) ConversationRunExecutionTarget(ctx *gin.Context) {
 func (ph *Handler) ConversationRunEventStream(ctx *gin.Context) {
 	username, dialogueID, runID, ok := executionEventIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	cursorValue := ctx.Query("after_seq")
@@ -137,7 +138,7 @@ func (ph *Handler) ConversationRunEventStream(ctx *gin.Context) {
 	}
 	afterSeq, err := strconv.ParseInt(cursorValue, 10, 64)
 	if err != nil || afterSeq < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid cursor"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_cursor")})
 		return
 	}
 	body, _, err := ph.service.ConversationRunEventStream(ctx, username, dialogueID, runID, afterSeq)
@@ -156,17 +157,17 @@ func (ph *Handler) ConversationRunEventStream(ctx *gin.Context) {
 func (ph *Handler) ExecutionEvents(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	afterSeq, err := executionCursor(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid cursor"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_cursor")})
 		return
 	}
 	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	if err != nil || limit < 1 || limit > 200 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid limit"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_limit")})
 		return
 	}
 	page, err := ph.service.ExecutionEventsPageV2(ctx, username, executionID, afterSeq, limit)
@@ -180,7 +181,7 @@ func (ph *Handler) ExecutionEvents(ctx *gin.Context) {
 func (ph *Handler) ExecutionEventProjection(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	projection, err := ph.service.ExecutionSnapshotV2(ctx, username, executionID)
@@ -194,7 +195,7 @@ func (ph *Handler) ExecutionEventProjection(ctx *gin.Context) {
 func (ph *Handler) ExecutionEvent(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	event, err := ph.service.ExecutionEventDetailV2(ctx, username, executionID, ctx.Param("event_id"))
@@ -208,7 +209,7 @@ func (ph *Handler) ExecutionEvent(ctx *gin.Context) {
 func (ph *Handler) ExecutionOperation(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	operation, err := ph.service.ExecutionOperationDetailV2(
@@ -224,14 +225,14 @@ func (ph *Handler) ExecutionOperation(ctx *gin.Context) {
 func (ph *Handler) ExecutionTarget(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	if ctx.Param("kind") == "trace" {
 		afterSeq, cursorErr := executionCursor(ctx)
 		limit, limitErr := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 		if cursorErr != nil || limitErr != nil || limit < 1 || limit > 100 {
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid trace cursor"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_trace_cursor")})
 			return
 		}
 		trace, traceErr := ph.service.ExecutionTraceResolutionV1(
@@ -257,7 +258,7 @@ func (ph *Handler) ExecutionTarget(ctx *gin.Context) {
 func (ph *Handler) ExecutionTargetContent(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	body, metadata, err := ph.service.OpenExecutionTargetContentV2(
@@ -279,22 +280,22 @@ func (ph *Handler) ExecutionTargetContent(ctx *gin.Context) {
 func (ph *Handler) ExecutionEventStream(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	afterSeq, err := executionCursor(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid cursor"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_cursor")})
 		return
 	}
 	afterRevision, err := strconv.ParseInt(ctx.DefaultQuery("after_revision", "0"), 10, 64)
 	if err != nil || afterRevision < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid content revision"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_content_revision")})
 		return
 	}
 	afterOffset, err := strconv.ParseInt(ctx.DefaultQuery("after_offset", "0"), 10, 64)
 	if err != nil || afterOffset < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid content offset"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_content_offset")})
 		return
 	}
 	snapshot, err := ph.service.ExecutionStreamSnapshotV2(ctx, username, executionID)
@@ -455,7 +456,7 @@ func copyExecutionStream(
 func (ph *Handler) ExecutionSnapshot(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	snapshot, err := ph.service.ExecutionSnapshotV2(ctx, username, executionID)
@@ -468,28 +469,28 @@ func (ph *Handler) ExecutionSnapshot(ctx *gin.Context) {
 
 func executionControlError(ctx *gin.Context, err error) {
 	if errors.Is(err, api_service.ErrExecutionRunOwnership) {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "resource not found"})
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "execution.resource_not_found")})
 		return
 	}
 	var apiErr *rxBot.APIError
 	if errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500 {
-		ctx.JSON(apiErr.Status, gin.H{"code": apiErr.Status, "message": "execution control rejected"})
+		ctx.JSON(apiErr.Status, gin.H{"code": apiErr.Status, "message": i18n.T(ctx, "execution.control_rejected")})
 		return
 	}
-	ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": "execution control unavailable"})
+	ctx.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": i18n.T(ctx, "execution.control_unavailable")})
 }
 
 func (ph *Handler) ExecutionAction(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	var request rxBot.ExecutionActionRequestV2
 	decoder := json.NewDecoder(ctx.Request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil || request.ActionID == "" || request.ExpectedRevision < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid execution action"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_action")})
 		return
 	}
 	response, err := ph.service.ExecutionActionV2(ctx, username, executionID, request)
@@ -503,14 +504,14 @@ func (ph *Handler) ExecutionAction(ctx *gin.Context) {
 func (ph *Handler) ExecutionCancel(ctx *gin.Context) {
 	username, executionID, ok := publicExecutionIdentity(ctx)
 	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "execution.unauthorized")})
 		return
 	}
 	var request rxBot.ExecutionCancelRequestV2
 	decoder := json.NewDecoder(ctx.Request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil || request.RequestID == "" || request.ExpectedRevision < 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid execution cancellation"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "execution.invalid_cancellation")})
 		return
 	}
 	response, err := ph.service.ExecutionCancelV2(ctx, username, executionID, request)

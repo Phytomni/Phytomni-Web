@@ -52,9 +52,12 @@ describe("LegalPage", () => {
       global: { stubs: { LangSwitch: true } },
     });
     await flushPromises();
-    expect(wrapper.text()).toMatch(/0\.1\.0/);
+    expect(wrapper.text()).toMatch(/0\.1\.4/);
     expect(wrapper.find(".legal-body").html().length).toBeGreaterThan(20);
-    expect(wrapper.text()).toMatch(/draft|review/i);
+    expect(wrapper.find(".legal-draft-banner").exists()).toBe(false);
+    expect(wrapper.text()).not.toMatch(
+      /Draft pending review by Biotechnology Research Institute|本稿待中国农业科学院生物技术研究所审定/
+    );
     expect(wrapper.find('[data-scroll-root="legal"]').exists()).toBe(true);
     expect(wrapper.findAll('[data-scroll-root="legal"]')).toHaveLength(1);
     expect(wrapper.findAll(".footer-container")).toHaveLength(1);

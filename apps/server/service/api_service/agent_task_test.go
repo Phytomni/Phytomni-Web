@@ -32,17 +32,6 @@ func readStatusAnswer(t *testing.T, gdb *gorm.DB, id int64) (status, answer stri
 	return status, answer
 }
 
-// readGalleryCols reads back a row's download_path + image_paths (COALESCE so a
-// NULL column scans as "") — used by the reconcile gallery-write tests.
-func readGalleryCols(t *testing.T, gdb *gorm.DB, id int64) (downloadPath, imagePaths string) {
-	t.Helper()
-	row := gdb.Raw(`SELECT COALESCE(download_path,''), COALESCE(image_paths,'') FROM question_agent_logs WHERE id = ?`, id).Row()
-	if err := row.Scan(&downloadPath, &imagePaths); err != nil {
-		t.Fatalf("read gallery cols %d: %v", id, err)
-	}
-	return downloadPath, imagePaths
-}
-
 // setupTestDB opens an in-memory SQLite DB, creates the minimal question_agent_logs
 // column set, registers it in the global db registry, and returns *gorm.DB for
 // seeding test data.
