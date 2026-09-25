@@ -20,9 +20,15 @@ defineProps<{
 <style scoped>
 .phy-page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--phy-space-12);
+  min-width: 0;
+}
+.phy-page-header__title {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 .phy-page-header__title :deep(h1) {
   margin: 0;
@@ -32,7 +38,10 @@ defineProps<{
 }
 .phy-page-header__actions {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: var(--phy-space-12);
+  min-width: 0;
 }
 </style>

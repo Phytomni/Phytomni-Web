@@ -1,0 +1,8 @@
+name: fixture
+on: [push]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+        # actionlint-ignore: fixture-only workflow syntax

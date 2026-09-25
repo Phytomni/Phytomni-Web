@@ -1,9 +1,10 @@
 // Application entry point.
-import { createApp } from "vue";
+import { createApp, type Plugin } from "vue";
 import { createPinia } from "pinia";
 import { createActionObserverPlugin } from "@/stores/actionObserver";
 import ElementPlus from "element-plus";
 import i18n, { setLanguage } from "./locales"; // import i18n config
+import type { SupportedLocales } from "./locales/lazy";
 import { useAppStore, useThemeStore } from "@/stores";
 
 import App from "./App.vue";
@@ -33,8 +34,10 @@ const appStore = useAppStore();
 const themeStore = useThemeStore();
 
 // Ensure the locale bundle is loaded before using i18n
-const currentLang =
-  appStore.language || localStorage.getItem("language") || "en-US";
+const currentLang: SupportedLocales =
+  appStore.language === "zh-CN" || localStorage.getItem("language") === "zh-CN"
+    ? "zh-CN"
+    : "en-US";
 
 // init i18n
 app.use(i18n);
@@ -42,18 +45,11 @@ app.use(i18n);
 // init theme
 themeStore.initTheme();
 
-// Debug logging
-console.log("Theme initialized:", {
-  theme: themeStore.theme,
-  currentTheme: themeStore.currentTheme,
-  systemTheme: (themeStore as any).systemTheme,
-});
-
 // mount global methods
 app.config.globalProperties.download = download;
 
 app.use(router);
-app.use(plugins);
+app.use(plugins as Plugin);
 app.use(directive);
 
 // use Element Plus with a global component size
@@ -62,7 +58,14 @@ app.use(ElementPlus, {
 });
 
 // Load the active locale pack before first paint, then mount.
-setLanguage(currentLang).then(() => app.mount("#app"));
+setLanguage(currentLang).then(
+  () => app.mount("#app"),
+  (error: unknown) => {
+    // A failed locale load must not leave the application unmounted.
+    console.error("Failed to initialize the application locale:", error);
+    app.mount("#app");
+  }
+);
 
 // Clean up the theme listener on page unload
 window.addEventListener("beforeunload", () => {

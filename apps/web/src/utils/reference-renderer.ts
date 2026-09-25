@@ -1,90 +1,23 @@
-import { escapeHtml, sanitizeHref } from "@/utils/sanitize-markup";
-import { formatDetailedCitation } from "@/utils/citation";
+import { decodeCitationDocuments } from "@/views/chat/utils/format";
+import type { CitationPresentation } from "@/utils/citation-presentation";
+import { requireCitationNamespace } from "@/utils/scientific-markdown/citations";
 
-// Build the formatted HTML for the reference list (extracted verbatim from
-// DeepGenomeResultViewer's displayReferences computed).
-//
-// XSS sanitization invariant (v-html sink): references come from a reshape of
-// Bot's `formatted.references`, whose fields are influenced by agent output / RAG
-// corpus and are ultimately injected via v-html. Every agent text field (title /
-// citation au-so / dl text / pm text / plain string / JSON) is escapeHtml-ed; the
-// DOI / PubMed href always goes through sanitizeHref for a scheme allow-list check.
+export interface DisplayReference {
+  id: string;
+  index: number;
+  citation: CitationPresentation | null;
+}
+
+/** Build typed rows without interpreting bibliography text as markup. */
 export const buildDisplayReferences = (
-  references: any[],
-  ns = ""
-): Array<{ html: string; id: string }> => {
-  if (!references || references.length === 0) {
-    return [];
-  }
-
-  // ns namespaces the anchor ids so [N] links jump to reference N of the SAME
-  // message (multiple cited/DeepGenome answers render into one chat document, so
-  // a bare `ref-N` would collide). ns is developer-supplied (m<index> / kb / bg),
-  // never agent text; sanitize defensively so it can never inject markup into an id.
-  const safeNs = ns.replace(/[^A-Za-z0-9-]/g, "");
-  const refId = (n: number) => (safeNs ? `${safeNs}-ref-${n}` : `ref-${n}`);
-
-  return references.map((doc, index) => {
-    const refIndex = index + 1;
-
-    if (doc.au || doc.ti) {
-      // Rich branch FIRST: an enriched doc carries BOTH title and au/ti, and must render the full
-      // bibliography rather than collapsing to the title-only row (enriched wins over title-only).
-      const citation = formatDetailedCitation(doc);
-
-      // build the DOI and PMID link parts
-      let linkPart = "";
-      const hasLink = doc.dl || doc.pm;
-
-      if (hasLink) {
-        const doiLink = doc.dl
-          ? `doi: <a href="${sanitizeHref(
-              String(doc.dl)
-            )}" target="_blank" class="doi-link">${escapeHtml(
-              String(doc.dl)
-            )}</a>`
-          : "";
-        const pmidLink = doc.pm
-          ? `pmid:<a href="${sanitizeHref(
-              "https://pubmed.ncbi.nlm.nih.gov/" + String(doc.pm)
-            )}" target="_blank" class="pmid-link">${escapeHtml(
-              String(doc.pm)
-            )}</a>`
-          : "";
-
-        const separator = doc.dl && doc.pm ? "; " : "";
-
-        linkPart = `. <span class="doc-link-inline">${doiLink}</span><span>${separator}</span><span class="doc-link-inline">${pmidLink}</span>`;
-      }
-
-      return {
-        // citation is plain text (au/so/volume-page-year), escaped first; linkPart is
-        // a sanitized anchor produced by this component (sanitizeHref + escapeHtml),
-        // kept as-is and not re-escaped.
-        html: `<div class="doc-citation">${refIndex}. ${escapeHtml(
-          citation
-        )}${linkPart}</div>`,
-        id: refId(refIndex),
-      };
-    } else if (doc.title) {
-      return {
-        html: `<div>${refIndex}. ${escapeHtml(String(doc.title))}</div>`,
-        id: refId(refIndex),
-      };
-    } else {
-      // handle plain-string references
-      if (typeof doc === "string") {
-        return {
-          html: `<div>${refIndex}. ${escapeHtml(doc)}</div>`,
-          id: refId(refIndex),
-        };
-      }
-
-      // default case
-      return {
-        html: `<div>${refIndex}. ${escapeHtml(JSON.stringify(doc))}</div>`,
-        id: refId(refIndex),
-      };
-    }
-  });
+  references: readonly unknown[] | null | undefined,
+  ns: string
+): DisplayReference[] => {
+  if (references == null || references.length === 0) return [];
+  const safeNs = requireCitationNamespace(ns);
+  return (decodeCitationDocuments(references) ?? []).map((doc, position) => ({
+    id: `${safeNs}-ref-${position + 1}`,
+    index: position + 1,
+    citation: doc.citation,
+  }));
 };

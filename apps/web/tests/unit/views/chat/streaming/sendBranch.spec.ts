@@ -1,45 +1,52 @@
 import { describe, it, expect } from "vitest";
-import { shouldStream } from "@/views/chat/streaming/sendBranch";
+import {
+  shouldStream,
+  type StreamCapability,
+} from "@/views/chat/streaming/sendBranch";
 
 describe("shouldStream", () => {
-  it("streams only agents present in the enabled capability", () => {
+  it("streams only agents present in the advertised capability", () => {
     expect(
-      shouldStream("KnowledgeAgent", "instant", {
-        enabled: true,
+      shouldStream("KnowledgeAgent", "expert", {
         agents: ["KnowledgeAgent"],
-      }),
+      })
     ).toBe(true);
     expect(
-      shouldStream("BriefGeneAgent", "instant", {
-        enabled: false,
-        agents: ["BriefGeneAgent"],
-      }),
-    ).toBe(false);
-    expect(
-      shouldStream("AnalystAgent", "instant", {
-        enabled: true,
+      shouldStream("AnalystAgent", "expert", {
         agents: ["AnalystAgent"],
-      }),
+      })
     ).toBe(false);
   });
 
-  it("keeps the legacy environment boolean limited to ChatAgent", () => {
-    expect(shouldStream("ChatAgent", "instant", true)).toBe(true);
-    expect(shouldStream("KnowledgeAgent", "instant", true)).toBe(false);
-    expect(shouldStream("BriefGeneAgent", "instant", true)).toBe(false);
+  it("does not synthesize Chat streaming from a legacy boolean", () => {
+    expect(
+      shouldStream("ChatAgent", "instant", true as unknown as StreamCapability)
+    ).toBe(false);
   });
 
-  it("streams for ChatAgent in instant mode when the flag is on", () => {
-    expect(shouldStream("ChatAgent", "instant", true)).toBe(true);
+  it("streams Chat from a negotiated capability", () => {
+    expect(
+      shouldStream("ChatAgent", "instant", {
+        agents: ["ChatAgent"],
+      })
+    ).toBe(true);
   });
-  it("does not stream when the flag is off", () => {
-    expect(shouldStream("ChatAgent", "instant", false)).toBe(false);
-  });
-  it("never streams expert mode (routes via Bot /v1/query/route)", () => {
-    expect(shouldStream("ChatAgent", "expert", true)).toBe(false);
-  });
-  it("does not stream non-chat agents even when the flag is on", () => {
-    expect(shouldStream("KnowledgeAgent", "instant", true)).toBe(false);
-    expect(shouldStream("DataAgent", "instant", true)).toBe(false);
+  it("rejects agents in a mode that cannot route them", () => {
+    expect(
+      shouldStream("KnowledgeAgent", "instant", {
+        agents: ["KnowledgeAgent"],
+      })
+    ).toBe(false);
+    // Expert-selected ChatAgent is a stream-family agent.
+    expect(
+      shouldStream("ChatAgent", "expert", {
+        agents: ["ChatAgent"],
+      })
+    ).toBe(true);
+    expect(
+      shouldStream("DataAgent", "instant", {
+        agents: ["DataAgent"],
+      })
+    ).toBe(false);
   });
 });

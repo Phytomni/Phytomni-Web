@@ -2,23 +2,55 @@ import { nextTick } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import { saveAs } from "file-saver";
 import { ElMessage } from "element-plus";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import i18n from "@/locales";
-import { convertFilePath } from "@/utils/markdown-inline";
+import { downloadRenderingFile } from "@/utils/download-rendering-file";
+import type { DisplayReference } from "@/utils/reference-renderer";
+import { referenceListMarkdown } from "@/utils/citation-presentation";
+
+export type DeepGenomeMainContentValue =
+  HTMLElement | { $el?: Element | null } | null;
 
 export interface DeepGenomeDownloadsOpts {
   props: {
     markdown: string;
     filename?: string;
+    renderingFileId?: string;
   };
-  mainContentRef: Ref<any>;
-  displayReferences: ComputedRef<Array<{ html?: string; id?: string }>>;
+  mainContentRef: Ref<DeepGenomeMainContentValue>;
+  displayReferences: ComputedRef<DisplayReference[]>;
+  printReferencesRoot?: () => HTMLElement | null;
 }
+
+function resolveRenderingFileId(value: unknown): string {
+  if (value == null || value === "") return "";
+  try {
+    return normalizePositiveTaskRowId(value as string | number);
+  } catch {
+    return "";
+  }
+}
+
+const resolveMainElement = (
+  value: DeepGenomeMainContentValue
+): HTMLElement | null => {
+  const candidate = value instanceof HTMLElement ? value : value?.$el;
+  return candidate instanceof HTMLElement ? candidate : null;
+};
 
 export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
   const { props, mainContentRef, displayReferences } = opts;
 
   // Download methods
   const downloadPDF = async () => {
+    const renderingFileId = resolveRenderingFileId(props.renderingFileId);
+    if (renderingFileId) {
+      await downloadRenderingFile(renderingFileId, "PDF", (key) =>
+        i18n.global.t(key)
+      );
+      return;
+    }
+
     // create the print container
     const printContainer = document.createElement("div");
     printContainer.id = "print-container";
@@ -49,13 +81,88 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     contentBlocksCopy.style.height = "auto";
 
     // grab everything inside el-main (excluding el-main itself)
-    const originalElMain = mainContentRef.value?.$el ?? mainContentRef.value;
+    const originalElMain = resolveMainElement(mainContentRef.value);
+    if (!originalElMain) return;
     const contentInsideElMain = document.createElement("div");
 
     // clone all child nodes inside el-main
     for (let i = 0; i < originalElMain.children.length; i++) {
       const childClone = originalElMain.children[i].cloneNode(true);
       contentInsideElMain.appendChild(childClone);
+    }
+
+    // Normalize each complete widget to its current decoded canvas image. The
+    // print stylesheet must never expose toolbar or retained dialog markup.
+    try {
+      const blocks = originalElMain.querySelectorAll<HTMLElement>(
+        ".scientific-cif-block"
+      );
+      const copies = contentInsideElMain.querySelectorAll(
+        ".scientific-cif-block"
+      );
+      const snapshots = Array.from(blocks, (block, index) => {
+        const viewers = block.querySelectorAll<HTMLElement>(
+          ".scientific-cif-viewer"
+        );
+        const structure = viewers[0];
+        const canvases = structure?.querySelectorAll("canvas");
+        const canvas = canvases?.[0];
+        const copy = copies[index];
+        if (
+          viewers.length !== 1 ||
+          !structure ||
+          canvases?.length !== 1 ||
+          structure.dataset.scientificCifReady !== "true" ||
+          !canvas ||
+          !copy ||
+          canvas.width === 0 ||
+          canvas.height === 0
+        )
+          throw new Error("Structure is not ready to print");
+        const image = document.createElement("img");
+        image.className = "scientific-cif-print-snapshot";
+        image.src = canvas.toDataURL("image/png");
+        if (!image.src.startsWith("data:image/png;base64,")) {
+          throw new Error("Structure snapshot is unavailable");
+        }
+        image.alt = structure.getAttribute("aria-label") ?? "";
+        image.width = canvas.width;
+        image.height = canvas.height;
+        image.style.maxWidth = "100%";
+        image.style.height = "auto";
+        copy.replaceWith(image);
+        return image;
+      });
+      if (snapshots.length > 0) {
+        await Promise.all(snapshots.map((image) => image.decode()));
+      }
+    } catch {
+      ElMessage.error(i18n.global.t("chat.printFailed"));
+      return;
+    }
+
+    // Embedded reports display their canonical bibliography in a separate tab.
+    // Copy that rendered bibliography, not its material actions, into the print.
+    if (!contentInsideElMain.querySelector(".deep-genome-references")) {
+      const references = opts.printReferencesRoot?.()?.cloneNode(true);
+      if (references instanceof HTMLElement) {
+        references
+          .querySelectorAll("button, input, select, textarea, [aria-live]")
+          .forEach((node) => node.remove());
+        references
+          .querySelectorAll<HTMLElement>(
+            "[tabindex], [aria-current], .is-citation-target"
+          )
+          .forEach((node) => {
+            node.removeAttribute("tabindex");
+            node.removeAttribute("aria-current");
+            node.classList.remove(
+              "is-citation-target",
+              "research-evidence-panel__item--active"
+            );
+          });
+        contentInsideElMain.appendChild(references);
+      }
     }
 
     // remove the download button group via its semantic shell hook
@@ -95,6 +202,7 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
     style.innerHTML = `
     @media print {
       /* basic print setup */
+      html, body { background: #fff !important; }
       body * { display: none; }
       #print-container { display: block !important; position: static !important; }
 
@@ -108,9 +216,19 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
       #print-container a,
       #print-container strong,
       #print-container em,
+      #print-container sup,
+      #print-container sub,
       #print-container code,
       #print-container b {
         display: inline !important;
+      }
+
+      #print-container .citation-reference-row {
+        display: grid !important;
+      }
+
+      #print-container .citation-reference-row__links {
+        display: flex !important;
       }
 
       /* fix table display - ensure correct table layout */
@@ -199,73 +317,27 @@ export function useDeepGenomeDownloads(opts: DeepGenomeDownloadsOpts) {
 
     // trigger print
     try {
-      await window.print();
+      window.print();
     } catch (error) {
       ElMessage.error(i18n.global.t("chat.printFailed"));
       console.error("Print error:", error);
+    } finally {
+      printContainer.remove();
+      style.remove();
     }
-
-    // remove the print container
-    document.body.removeChild(printContainer);
   };
 
   const downloadMarkdown = () => {
-    // build the converted Markdown content
+    // Preserve the report source exactly. Resource authorization is a render
+    // concern; exports must never invent public paths from report strings.
     let convertedMarkdown = props.markdown;
-
-    // handle line breaks - convert escaped \n into real newlines
-    convertedMarkdown = convertedMarkdown.replace(/\\n/g, "\n");
-
-    // convert image paths
-    convertedMarkdown = convertedMarkdown.replace(
-      /!\[(.*?)\]\((.*?)\)/g,
-      (match, alt, src) => {
-        const convertedSrc = convertFilePath(src);
-        return `![${alt}](${convertedSrc})`;
-      }
-    );
-
-    // convert link paths
-    convertedMarkdown = convertedMarkdown.replace(
-      /\[([^\]]+?)\]\(([^)]+?)\)/g,
-      (match, text, url) => {
-        // skip links that already start with http/https
-        if (url.startsWith("http://") || url.startsWith("https://")) {
-          return match;
-        }
-        const convertedUrl = convertFilePath(url);
-        return `[${text}](${convertedUrl})`;
-      }
-    );
 
     // add the references section
     if (displayReferences.value && displayReferences.value.length > 0) {
-      convertedMarkdown += "\n\n## References\n";
-
-      displayReferences.value.forEach((ref, index) => {
-        const refIndex = index + 1;
-        let refText = "";
-
-        // extract plain text from HTML, stripping HTML tags
-        if (ref.html) {
-          // create a temporary element to parse the HTML
-          const tempElement = document.createElement("div");
-          tempElement.innerHTML = ref.html;
-
-          // get plain text and drop the reference number (we add it manually)
-          let plainText =
-            tempElement.textContent || tempElement.innerText || "";
-          plainText = plainText.trim();
-
-          // remove the leading number and dot (e.g. "1. ")
-          plainText = plainText.replace(/^\d+\.\s+/, "");
-
-          refText = plainText;
-        }
-
-        // add the formatted reference entry
-        convertedMarkdown += `${refIndex}. ${refText}\n`;
-      });
+      convertedMarkdown +=
+        "\n\n## References\n\n" +
+        referenceListMarkdown(displayReferences.value) +
+        "\n";
     }
 
     // create a Blob and download it

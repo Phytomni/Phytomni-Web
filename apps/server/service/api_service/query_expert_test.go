@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	"phytomni-server/db"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
+	"phytomni-server/utils"
 )
 
 // setupExpertTestDB opens an in-memory SQLite with the columns Query writes,
@@ -46,15 +48,37 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	)`).Error; err != nil {
 		t.Fatalf("create users table: %v", err)
 	}
-	// Expert policy is deliberately authenticated and fail-closed. These
-	// synthetic callers represent the administrator fixture used by the
-	// existing allowed-path tests; production authorization still resolves the
-	// real JWT operator from the Web users table.
+	for _, statement := range []string{
+		`CREATE TABLE tool_names (id INTEGER PRIMARY KEY, tool_name TEXT NOT NULL)`,
+		`CREATE TABLE user_tool_names (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL, tool_id TEXT NOT NULL)`,
+	} {
+		if err := gdb.Exec(statement).Error; err != nil {
+			t.Fatalf("create permission table: %v", err)
+		}
+	}
+	// These synthetic callers represent administrator fixtures used by the
+	// shared blocking and streaming allowed-path tests; production authorization
+	// still resolves the real JWT operator from the Web users table.
 	for _, email := range []string{
 		"alice",
 		"dan",
 		"alice@x.com",
 		"task27-expert@example.com",
+		"alice@example.com",
+		"ready@example.com",
+		"broken@example.com",
+		"cancel@example.com",
+		"action@example.com",
+		"bob@example.com",
+		"eve@example.com",
+		"carol@example.com",
+		"compat@example.com",
+		"task27-stream@example.com",
+		"task27-error@example.com",
+		"gate@example.com",
+		"network@example.com",
+		"dan@example.com",
+		"erin@example.com",
 	} {
 		if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, 'admin')`, email).Error; err != nil {
 			t.Fatalf("seed expert user %s: %v", email, err)
@@ -62,6 +86,23 @@ func setupExpertTestDB(t *testing.T) *gorm.DB {
 	}
 	db.Set("phytomni-server", gdb)
 	return gdb
+}
+
+func seedExpertPermissionUser(t *testing.T, gdb *gorm.DB, email, code string) {
+	t.Helper()
+	if err := gdb.Exec(`INSERT INTO users (email, code) VALUES (?, ?)`, email, code).Error; err != nil {
+		t.Fatalf("seed permission user %s: %v", email, err)
+	}
+}
+
+func seedExpertPermissionTool(t *testing.T, gdb *gorm.DB, code, tool string, id int) {
+	t.Helper()
+	if err := gdb.Exec(`INSERT INTO tool_names (id, tool_name) VALUES (?, ?)`, id, tool).Error; err != nil {
+		t.Fatalf("seed permission tool %s: %v", tool, err)
+	}
+	if err := gdb.Exec(`INSERT INTO user_tool_names (code, tool_id) VALUES (?, ?)`, code, id).Error; err != nil {
+		t.Fatalf("seed permission grant %s/%s: %v", code, tool, err)
+	}
 }
 
 // botRouter returns an httptest Bot that records the hit path and answers the
@@ -82,10 +123,85 @@ func botRouter(t *testing.T, hit *string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+type queryPermissionEffects struct {
+	uploads           int
+	botCalls          int
+	dialogueQueries   int
+	persistenceWrites int
+}
+
+func observeQueryPermissionEffects(t *testing.T, gdb *gorm.DB) *queryPermissionEffects {
+	t.Helper()
+	effects := &queryPermissionEffects{}
+	const (
+		queryCallback  = "task13_observe_dialogue_resolution"
+		createCallback = "task13_observe_persistence_create"
+		updateCallback = "task13_observe_persistence_update"
+	)
+	if err := gdb.Callback().Query().Before("gorm:query").Register(queryCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.dialogueQueries++
+		}
+	}); err != nil {
+		t.Fatalf("register dialogue callback: %v", err)
+	}
+	if err := gdb.Callback().Create().Before("gorm:create").Register(createCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.persistenceWrites++
+		}
+	}); err != nil {
+		t.Fatalf("register create callback: %v", err)
+	}
+	if err := gdb.Callback().Update().Before("gorm:update").Register(updateCallback, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "question_agent_logs" {
+			effects.persistenceWrites++
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+	return effects
+}
+
+func (effects *queryPermissionEffects) assertNone(t *testing.T) {
+	t.Helper()
+	if effects.uploads != 0 || effects.botCalls != 0 || effects.dialogueQueries != 0 || effects.persistenceWrites != 0 {
+		t.Fatalf("permission failure side effects = %+v, want all zero", effects)
+	}
+}
+
+func permissionRouteServer(t *testing.T, effects *queryPermissionEffects, captured *rxBot.RouteQueryRequest) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		effects.botCalls++
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/files":
+			effects.uploads++
+			_, _ = w.Write([]byte(`{"id":"file-task13","path":"obs://task13/file"}`))
+		case "/v1/query/route":
+			if captured != nil {
+				if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
+					t.Errorf("decode route request: %v", err)
+				}
+			}
+			_, _ = w.Write([]byte(`{"id":"run-task13","run_id":"run-task13","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok","references":[]}}}`))
+		case "/v1/chat/completions":
+			_, _ = w.Write([]byte(`{"id":"chat-task13","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"formatted":{"answer":"ok"}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
 }
 
 // TestQuery_ExpertRoutesToRouteEndpoint is the slug-gate regression lock:
@@ -93,6 +209,32 @@ func botRouter(t *testing.T, hit *string) {
 // (the SlugFor("")->"chat" collapse). Reshapes by the resolved slug and
 // persists mode="expert".
 func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
+	t.Run("reviewed contract blocking and persistence", func(t *testing.T) {
+		gdb := setupExpertTestDB(t)
+		content, refs, _ := reviewedCitationFixture(t)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/query/route" {
+				t.Errorf("wrong expert endpoint %s", r.URL.Path)
+				w.WriteHeader(404)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "reviewed-run", "run_id": "reviewed-run", "object": "agent.run", "agent": "knowledge", "status": "succeeded", "task_ids": []string{}, "result": map[string]any{"formatted": map[string]any{"answer": content, "references": refs}}})
+		}))
+		defer server.Close()
+		previous := rxBot.BotConfig
+		rxBot.BotConfig = &rxBot.Config{BaseURL: server.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+		defer func() { rxBot.BotConfig = previous }()
+		out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "Synthetic contract", Mode: "expert"})
+		if err != nil || out == nil {
+			t.Fatalf("query %v", err)
+		}
+		row := waitForQuestionRowTerminal(t, gdb, out.Id)
+		assertReviewedAnswer(t, row.Answer)
+		if row.Mode != "expert" || row.ToolName != "KnowledgeAgent" {
+			t.Fatal("blocking route identity drift")
+		}
+	})
 	gdb := setupExpertTestDB(t)
 	var hit string
 	botRouter(t, &hit)
@@ -101,14 +243,18 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
 	if hit != "/v1/query/route" {
 		t.Fatalf("expert must hit /v1/query/route, hit %q (ChatAgent collapse?)", hit)
 	}
-	if out.ToolName != "KnowledgeAgent" {
-		t.Errorf("expected resolved tool_name KnowledgeAgent, got %q", out.ToolName)
+	if row.ToolName != "KnowledgeAgent" {
+		t.Errorf("expected resolved tool_name KnowledgeAgent, got %q", row.ToolName)
 	}
-	if !strings.Contains(out.Answer, "doc_list") || !strings.Contains(out.Answer, "Doc A") {
-		t.Errorf("expert answer not reshaped by resolved slug: %q", out.Answer)
+	if !strings.Contains(row.Answer, "doc_list") || !strings.Contains(row.Answer, "Doc A") {
+		t.Errorf("expert answer not reshaped by resolved slug: %q", row.Answer)
 	}
 	var mode string
 	gdb.Raw(`SELECT COALESCE(mode,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&mode)
@@ -117,46 +263,426 @@ func TestQuery_ExpertRoutesToRouteEndpoint(t *testing.T) {
 	}
 }
 
-// TestQuery_ExpertDisabledReturns503Sentinel: flag OFF -> ErrExpertDisabled, no Bot call.
-func TestQuery_ExpertDisabledReturns503Sentinel(t *testing.T) {
-	setupExpertTestDB(t)
-	var hit string
-	botRouter(t, &hit)
-	rxBot.BotConfig.ExpertEnabled = false
-
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-	if !errors.Is(err, ErrExpertDisabled) {
-		t.Fatalf("expected ErrExpertDisabled, got %v", err)
+// TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection locks that a forced
+// agent under the v1 multiturn flag uses Bot's context-aware route and carries
+// the server-owned selection through forced_tool.
+func TestQueryExpertV1ForwardsOnlyValidatedPerTurnSelection(t *testing.T) {
+	useConversationV1(t)
+	gdb := setupExpertTestDB(t)
+	var dispatchPath string
+	var captured rxBot.AgentRunRequest
+	var settleCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/agents/data/runs":
+			dispatchPath = r.URL.Path
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Errorf("decode agent request: %v", err)
+				return
+			}
+			stage := rxBot.ContextStageMetadata{
+				SchemaVersion:                  1,
+				TurnID:                         captured.Conversation.TurnID,
+				SelectedAgentID:                "DataAgent",
+				RouteSource:                    "explicit_selection",
+				RouteReasonCode:                "EXPLICIT_SELECTION",
+				BaseBusinessContextVersion:     captured.Conversation.BaseBusinessContextVersion,
+				ProposedBusinessContextVersion: captured.Conversation.BaseBusinessContextVersion + 1,
+				LastAppliedLedgerCursor:        captured.Conversation.LedgerCursor,
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "run-v1-data", "run_id": "run-v1-data",
+				"object": "agent.run", "agent": "data", "status": "succeeded",
+				"task_ids":             []string{},
+				"result":               map[string]interface{}{"formatted": map[string]interface{}{"answer": "ok"}},
+				"conversation_context": stage,
+			})
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+				SchemaVersion: 1, State: "committed", ContextVersion: 1,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
-	if hit != "" {
-		t.Errorf("disabled Expert must not call Bot, hit %q", hit)
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query:        "compare datasets",
+		Mode:         "expert",
+		Tool:         "DataAgent",
+		ClientTurnID: "expert-turn-1",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
+	if dispatchPath != "/v1/agents/data/runs" || settleCalls != 1 {
+		t.Fatalf("forced DataAgent under v1 dispatch/settle = %q/%d", dispatchPath, settleCalls)
+	}
+	if captured.Conversation == nil || captured.Conversation.RequestedAgentID == nil ||
+		*captured.Conversation.RequestedAgentID != "DataAgent" {
+		t.Fatalf("requested agent = %#v", captured.Conversation)
+	}
+	if out.ToolName != "DataAgent" {
+		t.Fatalf("tool_name = %q, want DataAgent", out.ToolName)
+	}
+	var rows int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("row count = %d, want 1", rows)
 	}
 }
 
-func TestQuery_ExpertRemotePolicyRejectsBeforeRoute(t *testing.T) {
-	setupExpertTestDB(t)
-	hits := 0
+func TestQuery_ExpertUsesServerOrderedAllowedTools(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "partial@example.com", "partial")
+	seedExpertPermissionTool(t, gdb, "partial", "AnalystAgent", 1)
+	seedExpertPermissionTool(t, gdb, "partial", "ChatAgent", 2)
+	seedExpertPermissionTool(t, gdb, "partial", "DataAgent", 3)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
+
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_route_reads"}, {AssetID: "file_route_variants"}}
+	out, err := NewService().Query(context.Background(), "partial@example.com", QueryInput{
+		Query: "q", Mode: "expert", Attachments: refs,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
+	want := []string{"ChatAgent", "DataAgent", "AnalystAgent"}
+	if !reflect.DeepEqual(captured.AllowedTools, want) {
+		t.Fatalf("allowed tools = %#v, want %#v", captured.AllowedTools, want)
+	}
+	if captured.ForcedTool != nil {
+		t.Fatalf("autonomous Expert forced tool = %q, want nil", *captured.ForcedTool)
+	}
+	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "partial@example.com" {
+		t.Fatalf("route attachments=%#v owner=%q, want %#v/partial@example.com", captured.Attachments, captured.OwnerSubject, refs)
+	}
+	if captured.UserQuery != "q" || len(captured.History) != 0 {
+		t.Fatalf("route query/history changed: %#v", captured)
+	}
+}
+
+// TestQuery_ExpertForwardsAllowedForcedTool locks the direct-dispatch contract:
+// a forced non-chat agent (DataAgent) in Expert mode is permission-gated and
+// then invoked directly on /v1/agents/{slug}/runs — never through the LLM router
+// at /v1/query/route. Only autonomous Expert (no forced tool) uses the router.
+func TestQuery_ExpertForwardsAllowedForcedTool(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "forced@example.com", "forced")
+	seedExpertPermissionTool(t, gdb, "forced", "AnalystAgent", 1)
+	seedExpertPermissionTool(t, gdb, "forced", "ChatAgent", 2)
+	seedExpertPermissionTool(t, gdb, "forced", "DataAgent", 3)
+	var hit string
+	var captured rxBot.AgentRunRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
+		hit = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"knowledge","status":"succeeded","result":{}}`))
+		if r.URL.Path == "/v1/agents/data/runs" {
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Errorf("decode forced agent request: %v", err)
+				return
+			}
+			_, _ = w.Write([]byte(`{"id":"run-forced-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
-	previous := rxBot.BotConfig
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: false,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
-	t.Cleanup(func() { rxBot.BotConfig = previous })
+	t.Cleanup(func() { rxBot.BotConfig = nil })
 
-	_, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "q", Tool: "StaleAgent", Mode: "expert",
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_forced_data"}}
+	out, err := NewService().Query(context.Background(), "forced@example.com", QueryInput{
+		Query: "q", Mode: "expert", Tool: "DataAgent", Attachments: refs,
 	})
-	if !errors.Is(err, ErrRemoteProductDisabled) {
-		t.Fatalf("Expert remote policy error = %v, want ErrRemoteProductDisabled", err)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
 	}
-	if hits != 0 {
-		t.Fatalf("Expert policy must reject before RouteQueryWithMeta (hits=%d)", hits)
+	_ = waitForQuestionRowTerminal(t, gdb, out.Id)
+	if hit != "/v1/agents/data/runs" {
+		t.Fatalf("forced DataAgent must dispatch directly to /v1/agents/data/runs, hit %q", hit)
+	}
+	if !reflect.DeepEqual(captured.Attachments, refs) || captured.OwnerSubject != "forced@example.com" {
+		t.Fatalf("forced agent attachments=%#v owner=%q, want %#v/forced@example.com", captured.Attachments, captured.OwnerSubject, refs)
+	}
+	if _, leaked := captured.Arguments["dataset_description"]; leaked {
+		t.Fatalf("agent arguments leaked structured description: %#v", captured.Arguments)
+	}
+}
+
+func TestQuery_InstantAllowsEffectiveChatAgent(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "chat@example.com", "chat")
+	seedExpertPermissionTool(t, gdb, "chat", "ChatAgent", 1)
+	effects := &queryPermissionEffects{}
+	permissionRouteServer(t, effects, nil)
+
+	if _, err := NewService().Query(context.Background(), "chat@example.com", QueryInput{Query: "q", Mode: "instant"}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if effects.botCalls != 1 || effects.uploads != 0 {
+		t.Fatalf("instant Chat effects = %+v, want one chat call and no upload", effects)
+	}
+}
+
+func TestQuery_ExpertAllowsOneRemoteProductGrant(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seedExpertPermissionUser(t, gdb, "research@example.com", "research-role")
+	seedExpertPermissionTool(t, gdb, "research-role", "InSilicoResearchAgent", 1)
+	expertRouteServer(t, `{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":["child-research"],"result":{}}`)
+
+	out, err := NewService().Query(context.Background(), "research@example.com", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
+}
+
+func TestQuery_ExpertAdminUsesEveryCurrentlyAvailableTool(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	effects := &queryPermissionEffects{}
+	var captured rxBot.RouteQueryRequest
+	permissionRouteServer(t, effects, &captured)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
+	want := rxBot.CanonicalAgentDisplayTools()
+	if !reflect.DeepEqual(captured.AllowedTools, want) {
+		t.Fatalf("admin allowed tools = %#v, want %#v", captured.AllowedTools, want)
+	}
+}
+
+func TestQuery_PermissionFailuresHaveNoSideEffects(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		mode      string
+		tool      string
+		setup     func(t *testing.T, gdb *gorm.DB)
+		configure func()
+		assertErr func(t *testing.T, err error)
+	}{
+		{
+			name:     "instant without ChatAgent",
+			username: "no-chat@example.com",
+			mode:     "instant",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "no-chat@example.com", "no-chat")
+				seedExpertPermissionTool(t, gdb, "no-chat", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "forced canonical but ungranted",
+			username: "ungranted@example.com",
+			mode:     "expert",
+			tool:     "AnalystAgent",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "ungranted@example.com", "ungranted")
+				seedExpertPermissionTool(t, gdb, "ungranted", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "no grants",
+			username: "empty@example.com",
+			mode:     "expert",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "empty@example.com", "empty")
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrNoExecutableAgentTools) {
+					t.Fatalf("error = %v, want ErrNoExecutableAgentTools", err)
+				}
+			},
+		},
+		{
+			name:     "missing user",
+			username: "missing@example.com",
+			mode:     "expert",
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped ErrAgentPermissionUserNotFound", err)
+				}
+			},
+		},
+		{
+			name:     "permission database failure",
+			username: "db-failure@example.com",
+			mode:     "expert",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "db-failure@example.com", "db-failure")
+				if err := gdb.Exec(`DROP TABLE user_tool_names`).Error; err != nil {
+					t.Fatalf("drop permission table: %v", err)
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				if err == nil || errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped permission database failure", err)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			if tc.configure != nil {
+				tc.configure()
+			}
+			observeQueryPermissionEffects(t, gdb)
+			clientTurnID := ""
+			conversationID := int64(77)
+			if tc.mode == "expert" && tc.tool == "InSilicoResearchAgent" {
+				clientTurnID = "permission-research-turn"
+			}
+
+			_, err := NewService().Query(context.Background(), tc.username, QueryInput{
+				Query: "permission check", Id: conversationID, Mode: tc.mode, Tool: tc.tool,
+				ClientTurnID: clientTurnID,
+				Attachments:  []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
+			})
+			tc.assertErr(t, err)
+			effects.assertNone(t)
+		})
+	}
+}
+
+func TestQueryStream_PermissionFailuresHaveNoSideEffects(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		setup     func(t *testing.T, gdb *gorm.DB)
+		assertErr func(t *testing.T, err error)
+	}{
+		{
+			name:     "instant without ChatAgent",
+			username: "stream-no-chat@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "stream-no-chat@example.com", "stream-no-chat")
+				seedExpertPermissionTool(t, gdb, "stream-no-chat", "DataAgent", 1)
+			},
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentToolForbidden) {
+					t.Fatalf("error = %v, want ErrAgentToolForbidden", err)
+				}
+			},
+		},
+		{
+			name:     "missing user",
+			username: "stream-missing@example.com",
+			assertErr: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped ErrAgentPermissionUserNotFound", err)
+				}
+			},
+		},
+		{
+			name:     "permission database failure",
+			username: "stream-db-failure@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "stream-db-failure@example.com", "stream-db-failure")
+				if err := gdb.Exec(`DROP TABLE user_tool_names`).Error; err != nil {
+					t.Fatalf("drop permission table: %v", err)
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				if err == nil || errors.Is(err, ErrAgentPermissionUserNotFound) || !strings.Contains(err.Error(), "resolve agent permissions") {
+					t.Fatalf("error = %v, want wrapped permission database failure", err)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			observeQueryPermissionEffects(t, gdb)
+
+			_, err := NewService().QueryStream(context.Background(), tc.username, QueryInput{
+				Query: "permission check", Id: 77, Mode: "instant",
+				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_permission"}},
+			}, nil, nil)
+			tc.assertErr(t, err)
+			effects.assertNone(t)
+		})
+	}
+}
+
+func TestQueryStream_InvalidRoutingHasNoSideEffects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode string
+		tool string
+	}{
+		{name: "instant non-ChatAgent", mode: "instant", tool: "AnalystAgent"},
+		{name: "unknown mode", mode: "autonomous", tool: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			effects := &queryPermissionEffects{}
+			permissionRouteServer(t, effects, nil)
+			observeQueryPermissionEffects(t, gdb)
+
+			_, err := NewService().QueryStream(context.Background(), "alice", QueryInput{
+				Query: "invalid routing", Id: 77, Mode: tc.mode, Tool: tc.tool,
+				Attachments: []rxBot.AssetAttachmentRef{{AssetID: "file_invalid"}},
+			}, nil, nil)
+			if !errors.Is(err, ErrInvalidChatRouting) {
+				t.Fatalf("error = %v, want ErrInvalidChatRouting", err)
+			}
+			effects.assertNone(t)
+			var rows int64
+			if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+				t.Fatalf("count question rows: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("invalid routing created %d question rows, want zero", rows)
+			}
+		})
 	}
 }
 
@@ -228,8 +754,29 @@ func expertRouteServer(t *testing.T, routeBody string) {
 	}))
 	t.Cleanup(srv.Close)
 	rxBot.BotConfig = &rxBot.Config{
-		BaseURL: srv.URL, ProxyEnabled: true, ExpertEnabled: true, TimeoutSeconds: 5,
-		ResearchEnabled: true, DesignEnabled: true, NetworkEnabled: true,
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+}
+
+// agentRunServer returns an httptest Bot whose /v1/agents/{slug}/runs answers
+// with the supplied body, so a test can exercise a forced agent dispatched
+// directly (not through the LLM router at /v1/query/route). Any other path 404s
+// so a mis-dispatch to the router surfaces as a hard test failure.
+func agentRunServer(t *testing.T, slug, runBody string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/agents/"+slug+"/runs" {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(runBody))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
 	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 }
@@ -239,17 +786,21 @@ func expertRouteServer(t *testing.T, routeBody string) {
 // task id from task_ids, and surface the task id in the answer.
 func TestQuery_ExpertRunningArm(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-async","run_id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
+	expertRouteServer(t, `{"id":"run-async","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-async-1"],"result":{}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.Status != "RUNNING" {
-		t.Errorf("expected out.Status=RUNNING, got %q", out.Status)
+	if out == nil || out.Id <= 0 || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("Query = %#v, want durable RUNNING/SUBMITTING row", out)
 	}
-	if !strings.Contains(out.Answer, "task-async-1") {
-		t.Errorf("expected answer to contain task-async-1, got %q", out.Answer)
+	row := waitForDetachedQueryProgress(t, gdb, out.Id)
+	if row.Status != "RUNNING" {
+		t.Errorf("expected row.Status=RUNNING, got %q", row.Status)
+	}
+	if !strings.Contains(row.Answer, "task-async-1") {
+		t.Errorf("expected answer to contain task-async-1, got %q", row.Answer)
 	}
 	var botRunID, taskID string
 	gdb.Raw(`SELECT COALESCE(bot_run_id,''), COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).
@@ -268,12 +819,16 @@ func TestQuery_ExpertRunningArm(t *testing.T) {
 // persisted task_id is "" and the row strands RUNNING forever.
 func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-dedup","run_id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
+	expertRouteServer(t, `{"id":"run-dedup","object":"agent.run","agent":"analyst","status":"running","task_ids":[],"result":{"dedup_hit":true,"task_id":"dedup-77"}}`)
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+	}
+	_ = waitForDetachedQueryProgress(t, gdb, out.Id)
 	var taskID string
 	gdb.Raw(`SELECT COALESCE(task_id,'') FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&taskID)
 	if taskID != "dedup-77" {
@@ -281,19 +836,25 @@ func TestQuery_ExpertRunningArmDedupHit(t *testing.T) {
 	}
 }
 
+// TestQuery_ExpertResolvedRemoteUsesCanonicalProjection: a forced remote agent
+// (analyst) dispatched directly to /v1/agents/{slug}/runs persists a RUNNING row
+// carrying the reconciliation join key (bot_run_id) plus the legacy compatibility
+// fields, so the GA cron can later poll and settle it by bot_run_id. A non-interop
+// async agent gets no projection row at submit time (the cron writes it on the
+// first poll) — the row itself is the durable recovery anchor.
 func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 	gdb := setupExpertTestDB(t)
-	expertRouteServer(t, `{"id":"completion-expert","run_id":"run-expert-1","object":"agent.run","agent":"research","status":"running","task_ids":["child-1"],"result":{}}`)
+	agentRunServer(t, "analyst", `{"id":"run-expert-1","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-1"],"result":{}}`)
 
-	ctx := context.WithValue(context.Background(), "x-request-id", "web-request-1")
+	ctx := utils.WithRequestID(context.Background(), "web-request-1")
 	out, err := NewService().Query(ctx, "alice", QueryInput{
-		Query: "find a candidate gene", Tool: "StaleAgent", Mode: "expert",
+		Query: "find a candidate gene", Tool: "AnalystAgent", Mode: "expert",
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if out.ToolName != "InSilicoResearchAgent" {
-		t.Fatalf("tool_name=%q, want InSilicoResearchAgent", out.ToolName)
+	if out.ToolName != "AnalystAgent" {
+		t.Fatalf("tool_name=%q, want AnalystAgent", out.ToolName)
 	}
 	if out.BotRunID != "run-expert-1" || out.TaskId != "child-1" {
 		t.Fatalf("identity mismatch: bot_run_id=%q task_id=%q", out.BotRunID, out.TaskId)
@@ -302,18 +863,17 @@ func TestQuery_ExpertResolvedRemoteUsesCanonicalProjection(t *testing.T) {
 		t.Fatalf("lifecycle/correlation mismatch: status=%q request_id=%q", out.Status, out.RequestID)
 	}
 
-	projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
-	if err != nil {
-		t.Fatalf("LoadBotRunProjection: %v", err)
+	// The persisted row is the reconciliation anchor: owner + bot_run_id join key +
+	// RUNNING status + legacy compatibility fields (tool_name, task_id).
+	var storedRunID, storedStatus, storedTool, storedTask string
+	if err := gdb.Raw(`SELECT bot_run_id, status, tool_name, task_id FROM question_agent_logs WHERE id=? AND user_name='alice'`, out.Id).
+		Row().Scan(&storedRunID, &storedStatus, &storedTool, &storedTask); err != nil {
+		t.Fatalf("read persisted reconciliation fields: %v", err)
 	}
-	if projection.RunID != "run-expert-1" || projection.Agent != "research" || projection.Status != "RUNNING" {
-		t.Fatalf("projection identity mismatch: %+v", projection)
+	if storedRunID != "run-expert-1" || storedStatus != "RUNNING" {
+		t.Fatalf("reconciliation key mismatch: bot_run_id=%q status=%q", storedRunID, storedStatus)
 	}
-	var storedTool, storedTask string
-	if err := gdb.Raw(`SELECT tool_name, task_id FROM question_agent_logs WHERE id=?`, out.Id).Row().Scan(&storedTool, &storedTask); err != nil {
-		t.Fatalf("read legacy compatibility fields: %v", err)
-	}
-	if storedTool != "InSilicoResearchAgent" || storedTask != "child-1" {
+	if storedTool != "AnalystAgent" || storedTask != "child-1" {
 		t.Fatalf("legacy fields mismatch: tool=%q task=%q", storedTool, storedTask)
 	}
 }
@@ -331,14 +891,18 @@ func TestQuery_ExpertResolvedCanonicalRemoteSlugsKeepWebMappings(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			gdb := setupExpertTestDB(t)
-			expertRouteServer(t, `{"id":"completion-`+tc.slug+`","run_id":"run-`+tc.slug+`","object":"agent.run","agent":"`+tc.slug+`","status":"running","task_ids":["child-`+tc.slug+`"],"result":{}}`)
+			expertRouteServer(t, `{"id":"run-`+tc.slug+`","object":"agent.run","agent":"`+tc.slug+`","status":"running","task_ids":["child-`+tc.slug+`"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
-			if out.ToolName != tc.tool || out.Status != "RUNNING" {
-				t.Fatalf("output=%+v, want tool=%q status=RUNNING", out, tc.tool)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("Query = %#v, want durable Expert Auto row", out)
+			}
+			row := waitForDetachedQueryProgress(t, gdb, out.Id)
+			if row.ToolName != tc.tool || row.Status != "RUNNING" {
+				t.Fatalf("row=%+v, want tool=%q status=RUNNING", row, tc.tool)
 			}
 			projection, err := LoadBotRunProjection(context.Background(), "alice", out.Id)
 			if err != nil {
@@ -378,20 +942,113 @@ func TestQuery_ExpertUnknownOrMalformedResolvedSlugFailsClosed(t *testing.T) {
 			expertRouteServer(t, `{"id":"completion-bad","run_id":"run-bad","object":"agent.run","agent":`+string(agentJSON)+`,"status":"running","task_ids":["child-bad"],"result":{}}`)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-			if !errors.Is(err, ErrUnknownTool) {
-				t.Fatalf("err=%v, want ErrUnknownTool", err)
+			if err != nil {
+				t.Fatalf("Query: %v", err)
 			}
-			if out != nil {
-				t.Fatalf("unknown resolved slug returned output: %+v", out)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("unknown resolved slug returned %#v, want durable selecting row", out)
 			}
-			var count int64
-			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
-				t.Fatalf("count rows: %v", err)
-			}
-			if count != 0 {
-				t.Fatalf("unknown resolved slug wrote %d row(s)", count)
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "FAILED" {
+				t.Fatalf("unknown resolved slug row=%#v, want FAILED", row)
 			}
 		})
+	}
+}
+
+func TestQuery_ExpertResolvedToolContractFailuresHaveNoRows(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		tool     string
+		setup    func(t *testing.T, gdb *gorm.DB)
+		body     string
+	}{
+		{
+			name:     "outside allowlist",
+			username: "outside-allowlist@example.com",
+			setup: func(t *testing.T, gdb *gorm.DB) {
+				seedExpertPermissionUser(t, gdb, "outside-allowlist@example.com", "outside-allowlist")
+				seedExpertPermissionTool(t, gdb, "outside-allowlist", "DataAgent", 1)
+			},
+			body: `{"id":"run-outside","object":"agent.run","agent":"analyst","status":"running","task_ids":["child-outside"],"result":{}}`,
+		},
+		// NOTE: the former "forced mismatch" case (a forced tool the router
+		// resolved to a different agent) is gone by construction: a forced tool no
+		// longer reaches /v1/query/route — the gateway dispatches SlugFor(in.Tool)
+		// directly, so there is no router resolution that could diverge from the
+		// caller's selection. That guarantee is now structural, not a runtime check.
+		{
+			name:     "unknown agent",
+			username: "alice",
+			body:     `{"id":"run-unknown","object":"agent.run","agent":"missing","status":"running","task_ids":["child-unknown"],"result":{}}`,
+		},
+		{
+			name:     "malformed envelope",
+			username: "alice",
+			body:     `{"id":"run-malformed","object":"agent.run","agent":"data","status":`,
+		},
+		{
+			name:     "invalid projection status",
+			username: "alice",
+			body:     `{"id":"run-invalid-status","object":"agent.run","agent":"data","status":"unknown","task_ids":[],"result":{}}`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			if tc.setup != nil {
+				tc.setup(t, gdb)
+			}
+			expertRouteServer(t, tc.body)
+
+			out, err := NewService().Query(context.Background(), tc.username, QueryInput{
+				Query: "contract check", Mode: "expert", Tool: tc.tool,
+			})
+			if strings.TrimSpace(tc.tool) != "" {
+				if !errors.Is(err, ErrExpertRouteContract) {
+					t.Fatalf("err=%v, want ErrExpertRouteContract", err)
+				}
+				if out != nil {
+					t.Fatalf("contract failure returned output=%+v", out)
+				}
+				var rows int64
+				if err := gdb.Model(&model.QuestionAgentLog{}).Count(&rows).Error; err != nil {
+					t.Fatalf("count question rows: %v", err)
+				}
+				if rows != 0 {
+					t.Fatalf("contract failure persisted %d question rows", rows)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Query: %v", err)
+				}
+				if out == nil || out.Id <= 0 {
+					t.Fatalf("contract failure returned %#v, want durable selecting row", out)
+				}
+				row := waitForQuestionRowTerminal(t, gdb, out.Id)
+				if row.Status != "FAILED" {
+					t.Fatalf("contract failure row=%#v, want FAILED", row)
+				}
+			}
+		})
+	}
+}
+
+func TestQuery_ExpertMissingRunIdentityKeepsConflictSentinel(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	expertRouteServer(t, `{"object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{"formatted":{"answer":"ok"}}}`)
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "missing run", Mode: "expert"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out == nil || out.Id <= 0 {
+		t.Fatalf("missing run identity returned %#v, want durable selecting row", out)
+	}
+	row := waitForQuestionRowTerminal(t, gdb, out.Id)
+	if row.Status != "FAILED" {
+		t.Fatalf("missing run identity row=%#v, want FAILED", row)
 	}
 }
 
@@ -415,38 +1072,312 @@ func TestQuery_ExpertDuplicateRouteKeysFailsBeforePersistence(t *testing.T) {
 			expertRouteServer(t, tc.body)
 
 			out, err := NewService().Query(context.Background(), "alice", QueryInput{Query: "q", Mode: "expert"})
-			if err == nil {
-				t.Fatalf("duplicate route response returned output=%+v", out)
+			if err != nil {
+				t.Fatalf("Query: %v", err)
 			}
-			var count int64
-			if err := gdb.Raw(`SELECT COUNT(*) FROM question_agent_logs`).Row().Scan(&count); err != nil {
-				t.Fatalf("count rows: %v", err)
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("duplicate route response returned %#v, want durable selecting row", out)
 			}
-			if count != 0 {
-				t.Fatalf("duplicate route response persisted %d row(s)", count)
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "FAILED" {
+				t.Fatalf("duplicate route response row=%#v, want FAILED", row)
 			}
 		})
 	}
 }
 
-// TestExpertModeEnabled_TracksBotConfig pins the UI flag source: it mirrors
-// BotConfig.ExpertEnabled (single source of truth) — false when BotConfig is
-// nil OR the flag is off, true only when ExpertEnabled is true.
-func TestExpertModeEnabled_TracksBotConfig(t *testing.T) {
-	// Register cleanup before mutating the global so it runs even if a future
-	// regression panics on the nil path (mirrors botRouter's t.Cleanup idiom).
+func TestExpertModeEnabledIsAlwaysOn(t *testing.T) {
 	t.Cleanup(func() { rxBot.BotConfig = nil })
-
 	rxBot.BotConfig = nil
-	if NewService().ExpertModeEnabled() {
-		t.Error("nil BotConfig must report ExpertModeEnabled=false")
-	}
-	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: false}
-	if NewService().ExpertModeEnabled() {
-		t.Error("ExpertEnabled=false must report ExpertModeEnabled=false")
-	}
-	rxBot.BotConfig = &rxBot.Config{ExpertEnabled: true}
 	if !NewService().ExpertModeEnabled() {
-		t.Error("ExpertModeEnabled must be true when BotConfig.ExpertEnabled=true")
+		t.Error("ExpertModeEnabled must stay true without BotConfig")
+	}
+	rxBot.BotConfig = &rxBot.Config{}
+	if !NewService().ExpertModeEnabled() {
+		t.Error("ExpertModeEnabled must stay true")
+	}
+}
+
+// TestQueryExpertContextSelectionSettlement covers autonomous Expert and a
+// forced Expert selection. Both use the canonical context route; the forced
+// turn bypasses the LLM router through requested_agent_id in the V1 envelope.
+func TestQueryExpertContextSelectionSettlement(t *testing.T) {
+	useConversationV1(t)
+	tests := []struct {
+		name, requestedTool, selectedTool, selectedSlug, routeSource, expectedPath string
+	}{
+		{"router", "", "KnowledgeAgent", "knowledge", "router", "/v1/query/route"},
+		{"forced", "KnowledgeAgent", "KnowledgeAgent", "knowledge", "explicit_selection", "/v1/query/route"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			var captured rxBot.RouteQueryRequest
+			var settleCalls int
+			var dispatchPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v1/query/route":
+					dispatchPath = r.URL.Path
+					if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+						t.Errorf("decode route request: %v", err)
+						return
+					}
+					stage := rxBot.ContextStageMetadata{
+						SchemaVersion: 1, TurnID: captured.Conversation.TurnID,
+						SelectedAgentID: test.selectedTool, RouteSource: test.routeSource,
+						RouteReasonCode:                strings.ToUpper(test.routeSource),
+						BaseBusinessContextVersion:     captured.Conversation.BaseBusinessContextVersion,
+						ProposedBusinessContextVersion: captured.Conversation.BaseBusinessContextVersion + 1,
+						LastAppliedLedgerCursor:        captured.Conversation.LedgerCursor,
+					}
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"id": "run-context", "run_id": "run-context",
+						"object": "agent.run", "agent": test.selectedSlug,
+						"status": "succeeded", "task_ids": []string{},
+						"result": map[string]interface{}{"formatted": map[string]interface{}{
+							"answer": "expert answer", "references": []interface{}{},
+						}},
+						"conversation_context": stage,
+					})
+				case "/v1/conversation-context/settle":
+					settleCalls++
+					_ = json.NewEncoder(w).Encode(rxBot.ContextMutationResponse{
+						SchemaVersion: 1, State: "committed", ContextVersion: 1,
+					})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			previous := rxBot.BotConfig
+			rxBot.BotConfig = &rxBot.Config{
+				BaseURL: server.URL, ProxyEnabled: true,
+				TimeoutSeconds: 2,
+			}
+			t.Cleanup(func() { rxBot.BotConfig = previous })
+
+			out, err := NewService().Query(context.Background(), "alice", QueryInput{
+				Query: "route this", History: `[{"role":"user","content":"browser poison"}]`,
+				Mode: "expert", Tool: test.requestedTool,
+				ClientTurnID: "expert-context-" + test.name,
+			})
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if out == nil || out.Id <= 0 {
+				t.Fatalf("Query = %#v, want durable row", out)
+			}
+			row := waitForQuestionRowTerminal(t, gdb, out.Id)
+			if row.Status != "SUCCEEDED" || row.ToolName != test.selectedTool ||
+				dispatchPath != test.expectedPath || settleCalls != 1 {
+				t.Fatalf("result=%#v row=%#v settle calls=%d", out, row, settleCalls)
+			}
+			if len(captured.History) != 0 || captured.Conversation == nil {
+				t.Fatalf("route request leaked browser history: %#v", captured)
+			}
+			if captured.ForcedTool != nil ||
+				!reflect.DeepEqual(captured.Conversation.AllowedAgentIDs, captured.AllowedTools) {
+				t.Fatalf("router constraints=%#v", captured)
+			}
+			if test.requestedTool != "" &&
+				(captured.Conversation.RequestedAgentID == nil ||
+					*captured.Conversation.RequestedAgentID != test.requestedTool) {
+				t.Fatalf("forced conversation=%#v", captured.Conversation)
+			}
+		})
+	}
+}
+
+func TestQueryExpertContextAsyncKeepsRunningLifecycleWithoutSettlement(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	var settleCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/query/route":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "run-async-context", "run_id": "run-async-context",
+				"object": "agent.run", "agent": "research", "status": "running",
+				"task_ids": []string{"task-async-context"}, "result": map[string]interface{}{},
+			})
+		case "/v1/conversation-context/settle":
+			settleCalls++
+			http.Error(w, "unexpected", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "long research", Mode: "expert", ClientTurnID: "expert-async-context",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if out == nil || out.Id <= 0 || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("Query = %#v, want durable RUNNING/SUBMITTING row", out)
+	}
+	row := waitForDetachedQueryProgress(t, gdb, out.Id)
+	if row.Status != "RUNNING" || row.BotRunId != "run-async-context" || settleCalls != 0 {
+		t.Fatalf("async row=%#v settle calls=%d", row, settleCalls)
+	}
+}
+
+func TestQueryExpertReplacementPinsAutonomousResolvedTool(t *testing.T) {
+	gdb := setupExpertTestDB(t)
+	seed := seedResearchReplacementTarget(t, gdb)
+	var routeCalls, pollCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/query/route":
+			routeCalls++
+			_, _ = w.Write([]byte(`{"id":"run-autonomous-replacement","run_id":"run-autonomous-replacement","object":"agent.run","agent":"research","status":"running","task_ids":["task-autonomous-replacement"],"result":{}}`))
+		case "/v1/runs/run-autonomous-replacement":
+			pollCalls++
+			_, _ = w.Write([]byte(`{"run_id":"run-autonomous-replacement","agent":"research","status":"succeeded","task_ids":["task-autonomous-replacement"],"result":{"report_revision":1,"final_report":"# autonomous replacement"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: server.URL, ProxyEnabled: true,
+		TimeoutSeconds: 2,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	out, err := NewService().Query(context.Background(), "alice", QueryInput{
+		Query: "autonomously replace the prior result", Mode: "expert",
+		ClientTurnID: "autonomous-replacement-key", RefreshId: seed.Id,
+		Surface: QuerySurfaceChat,
+	})
+	if err != nil {
+		t.Fatalf("autonomous replacement: %v", err)
+	}
+	if out == nil || out.Id != seed.Id || (out.Status != "RUNNING" && out.Status != "SUBMITTING") {
+		t.Fatalf("autonomous replacement Query=%#v, want RUNNING on seed id %d", out, seed.Id)
+	}
+	private := waitForReplacementResolved(t, "alice", seed.Id)
+	if private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
+		t.Fatalf("autonomous resolved tool was not pinned: out=%+v private=%+v", out, private.Replacement)
+	}
+
+	SyncBotRuns([]model.QuestionAgentLog{{Id: seed.Id, UserName: "alice"}})
+	var promoted model.QuestionAgentLog
+	if err := gdb.First(&promoted, seed.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted.Status != statusSucceeded || promoted.ToolName != "InSilicoResearchAgent" ||
+		promoted.BotRunId != "run-autonomous-replacement" || private.Replacement != nil ||
+		routeCalls != 1 || pollCalls != 1 {
+		t.Fatalf("autonomous replacement did not promote canonically: row=%+v private=%+v calls=%d/%d", promoted, private, routeCalls, pollCalls)
+	}
+}
+
+func TestQueryExpertAutonomousReplacementRetainsUnresolvedTerminalIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{
+			name:       "Bot 4xx before selection",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"code":"invalid_request","message":"private upstream detail","retryable":false}}`,
+		},
+		{
+			name:       "malformed 2xx before selection",
+			statusCode: http.StatusOK,
+			body:       `{"id":"run-unresolved","agent":`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupExpertTestDB(t)
+			seed := seedResearchReplacementTarget(t, gdb)
+			botCalls := 0
+			v1SubmissionServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/query/route" {
+					http.NotFound(w, r)
+					return
+				}
+				botCalls++
+				w.Header().Set("Content-Type", "application/json")
+				if botCalls == 1 {
+					w.WriteHeader(tc.statusCode)
+					_, _ = w.Write([]byte(tc.body))
+					return
+				}
+				_, _ = w.Write([]byte(`{"id":"run-next-autonomous","run_id":"run-next-autonomous","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+			})
+			service := NewService()
+			key := "autonomous-unresolved-" + strings.ReplaceAll(tc.name, " ", "-")
+			input := QueryInput{
+				Query: "replace before autonomous agent selection", Mode: "expert",
+				ClientTurnID: key, RefreshId: seed.Id, Surface: QuerySurfaceChat,
+			}
+
+			out, err := service.Query(context.Background(), "alice", input)
+			if err != nil {
+				t.Fatalf("first unresolved Query: %v", err)
+			}
+			if out == nil || out.Id != seed.Id {
+				t.Fatalf("first unresolved Query=%#v, want seed id %d", out, seed.Id)
+			}
+			private := waitForReplacementResolved(t, "alice", seed.Id)
+			if private.Replacement == nil || private.Replacement.ClientTurnID != key ||
+				private.Replacement.ToolName != "" || private.Replacement.TerminalResult == nil ||
+				private.Replacement.TerminalResult.ToolName != "" ||
+				private.Replacement.TerminalResult.Status != "FAILED" {
+				t.Fatalf("unresolved terminal identity=%+v", private.Replacement)
+			}
+			retry, err := service.Query(context.Background(), "alice", input)
+			if err != nil || retry == nil || retry.Status != "FAILED" || retry.ToolName != "" {
+				t.Fatalf("unresolved retry=%+v error=%v", retry, err)
+			}
+			if botCalls != 1 {
+				t.Fatalf("unresolved retry Bot calls=%d, want 1", botCalls)
+			}
+
+			nextInput := input
+			nextInput.ClientTurnID = key + "-next"
+			nextInput.Query = "replace again after terminal failure"
+			next, err := service.Query(context.Background(), "alice", nextInput)
+			if err != nil || next == nil || next.Id != seed.Id {
+				t.Fatalf("new replacement after unresolved terminal=%+v error=%v", next, err)
+			}
+			private = waitForReplacementResolved(t, "alice", seed.Id)
+			if private.Replacement == nil || private.Replacement.ToolName != "InSilicoResearchAgent" {
+				t.Fatalf("new replacement after unresolved terminal private=%+v", private.Replacement)
+			}
+			private, err = LoadBotConversationContext(context.Background(), "alice", seed.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			retired := false
+			for _, identity := range private.RetiredIdentities {
+				if identity.ClientTurnID == key {
+					retired = true
+				}
+			}
+			if !retired || private.Replacement == nil ||
+				private.Replacement.ClientTurnID != nextInput.ClientTurnID || botCalls != 2 {
+				t.Fatalf("terminal retirement/private=%+v calls=%d", private, botCalls)
+			}
+		})
 	}
 }

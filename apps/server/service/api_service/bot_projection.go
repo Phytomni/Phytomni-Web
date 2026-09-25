@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	rxBot "phytomni-server/external/bot"
 )
@@ -15,6 +16,8 @@ const (
 	maxProjectionRunID          = 128
 	maxProjectionAgent          = 64
 	maxProjectionStatus         = 32
+	maxProjectionWorkStage      = 64
+	maxProjectionChildTasks     = 256
 	maxProjectionReportStage    = 64
 	maxProjectionCompleteness   = 32
 	maxProjectionDegraded       = rxBot.MaxProjectionFailureMessage
@@ -28,7 +31,19 @@ const (
 	maxInteropMetadataEntries   = 16
 )
 
-var interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+var (
+	interopProjectionTargetPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+	childTokenPattern              = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+)
+
+// BotRunChild is the bounded, identity-free child snapshot retained on a run
+// projection. Child task ids never cross this type.
+type BotRunChild struct {
+	Ordinal   int     `json:"ordinal"`
+	Phase     string  `json:"phase"`
+	Kind      string  `json:"kind"`
+	ErrorCode *string `json:"error_code"`
+}
 
 // InteropProvenance is the Web-owned explanation of how a research/design
 // request was executed. It intentionally contains only bounded, allowlisted
@@ -62,31 +77,55 @@ type ProjectionArtifacts struct {
 	Paths       []string
 }
 
+// ProjectionDelivery is the bounded delivery state retained by Web. The
+// inventory digest and archive resolver reference are server-only and are
+// excluded from accidental JSON serialization.
+type ProjectionDelivery struct {
+	SchemaVersion   int    `json:"schema_version"`
+	Required        bool   `json:"required"`
+	Status          string `json:"status"`
+	Revision        int64  `json:"revision"`
+	InventoryDigest string `json:"-"`
+	ArchiveName     string `json:"name,omitempty"`
+	ArchiveSize     int64  `json:"size_bytes,omitempty"`
+	ArchiveRef      string `json:"-"`
+	ErrorCode       string `json:"error_code,omitempty"`
+	Retryable       bool   `json:"retryable"`
+}
+
 // BotRunProjection is the Web-owned, sanitized lifecycle snapshot. It never
-// carries Bot's raw result, SQL, credentials, child task payloads, or provider
-// diagnostics. RawPayload exists only as a nil compatibility sentinel for
-// older callers that asserted raw state was absent; DecodeRunProjection never
-// assigns it.
+// carries Bot's raw result, SQL, credentials, child task identities, or
+// provider diagnostics. RawPayload exists only as a nil compatibility sentinel
+// for older callers that asserted raw state was absent; DecodeRunProjection
+// never assigns it.
 type BotRunProjection struct {
-	RunID              string
-	Agent              string
-	Status             string
-	ReportStage        string
-	ReportCompleteness string
-	ReportRevision     int64
-	ReportUpdatedAt    *time.Time
-	IntermediateReport string
-	FinalReport        string
-	Progress           ProjectionProgress
-	Degraded           bool
-	DegradedReason     string
-	Failures           []string
-	Artifacts          ProjectionArtifacts
-	RequestID          string
-	TrackingDegraded   bool
-	DegradedInterop    bool
-	InterOp            *InteropProvenance
-	RawPayload         []byte
+	RunID                string
+	Agent                string
+	Status               string
+	WorkStage            string
+	ChildTaskCount       int
+	Children             []BotRunChild
+	ReportStage          string
+	ReportCompleteness   string
+	ReportRevision       int64
+	ReportUpdatedAt      *time.Time
+	IntermediateReport   string
+	FinalReport          string
+	Report               *rxBot.RunReport
+	ReportWarningCodes   []string
+	Progress             ProjectionProgress
+	Degraded             bool
+	DegradedReason       string
+	Failures             []string
+	Artifacts            ProjectionArtifacts
+	OutputDirectoryCount int
+	ResultArchiveV1      bool
+	Delivery             *ProjectionDelivery
+	RequestID            string
+	TrackingDegraded     bool
+	DegradedInterop      bool
+	InterOp              *InteropProvenance
+	RawPayload           []byte
 }
 
 // ProjectionDecodeError identifies malformed data at the Bot/Web projection
@@ -110,14 +149,14 @@ func projectionDecodeError(field, reason string) error {
 	return &ProjectionDecodeError{Field: field, Reason: reason}
 }
 
-// VisibleReport prefers a non-blank final synthesis and otherwise returns the
-// latest non-empty intermediate report. The original report text is returned
+// VisibleReport prefers valid final science and otherwise returns the
+// latest valid intermediate report. The original report text is returned
 // unchanged so Markdown formatting is not rewritten at this boundary.
 func (p BotRunProjection) VisibleReport() string {
-	if strings.TrimSpace(p.FinalReport) != "" {
+	if validReportText(p.Agent, p.FinalReport) {
 		return p.FinalReport
 	}
-	return p.IntermediateReport
+	return normalizeReportText(p.Agent, p.IntermediateReport)
 }
 
 // DecodeRunProjection accepts only a pollable bot.RunRecord. A submission
@@ -171,6 +210,9 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	if len(record.TaskIDs) > maxProjectionChildTasks {
+		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")
+	}
 
 	envelope, err := decodeProjectionEnvelope(record.Result)
 	if err != nil {
@@ -180,7 +222,30 @@ func decodeRunRecord(record rxBot.RunRecord) (BotRunProjection, error) {
 	if err != nil {
 		return BotRunProjection{}, err
 	}
-	return projection, nil
+	projection.Children = decodeBotRunChildrenForAgent(envelope.Execution, agent)
+	projection.ChildTaskCount = projectionChildTaskCount(len(record.TaskIDs), len(projection.Children))
+	if agent == "deep_genome" {
+		projection.ChildTaskCount = len(projection.Children)
+	}
+	projection.WorkStage = sanitizeRunWorkStage(record.Stage)
+	projection.TrackingDegraded = projection.TrackingDegraded || record.DegradedTracking
+	return normalizeCompletedReviewProjection(projection), nil
+}
+
+// reviewAnswerCompletesPause resolves one contradictory Review envelope
+// defensively. A genuine input-required pause has no visible answer; once an
+// answer is non-blank, the accompanying interrupt is stale.
+func reviewAnswerCompletesPause(agent, status, answer string) bool {
+	return strings.EqualFold(strings.TrimSpace(agent), "review") &&
+		strings.EqualFold(strings.TrimSpace(status), "input_required") &&
+		strings.TrimSpace(answer) != ""
+}
+
+func normalizeCompletedReviewProjection(projection BotRunProjection) BotRunProjection {
+	if reviewAnswerCompletesPause(projection.Agent, projection.Status, projection.VisibleReport()) {
+		projection.Status = "SUCCEEDED"
+	}
+	return projection
 }
 
 func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, error) {
@@ -191,6 +256,9 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 	status, err := normalizeProjectionStatus(response.Status)
 	if err != nil {
 		return BotRunProjection{}, err
+	}
+	if len(response.TaskIDs) > maxProjectionChildTasks {
+		return BotRunProjection{}, projectionDecodeError("task_ids", "too many child tasks")
 	}
 	var interopMetadata botInteropMetadata
 	if interopAgent(agent) {
@@ -206,35 +274,66 @@ func decodeAgentRunResponse(response rxBot.AgentRunResponse) (BotRunProjection, 
 		// row.
 		status = "FAILED"
 	}
-
-	runID := ""
-	if response.RunID != nil {
-		runID, err = normalizeProjectionRunID(*response.RunID)
-		if err != nil {
-			return BotRunProjection{}, err
-		}
+	execution, err := rxBot.DecodeRunExecutionDelivery(response.Result.Execution, agent)
+	if err != nil {
+		return BotRunProjection{}, projectionDecodeError("execution", err.Error())
 	}
-	if runID == "" && !response.DegradedTracking && status != "FAILED" {
+	trackingDegraded := response.DegradedTracking || execution.TrackingDegraded
+
+	runID, err := normalizeAgentRunResponseID(response)
+	if err != nil {
+		return BotRunProjection{}, err
+	}
+	if runID == "" && !trackingDegraded && status != "FAILED" {
 		return BotRunProjection{}, projectionDecodeError("run_id", "missing umbrella run id")
 	}
 
+	children := decodeBotRunChildrenForAgent(response.Result.Execution, agent)
 	projection := BotRunProjection{
 		RunID:            runID,
 		Agent:            agent,
 		Status:           status,
+		ChildTaskCount:   projectionChildTaskCount(len(response.TaskIDs), len(children)),
+		Children:         children,
 		ReportRevision:   -1,
-		TrackingDegraded: response.DegradedTracking,
-		DegradedInterop:  interopMetadata.DegradedInterop,
-		InterOp:          interopMetadata.projection(),
+		TrackingDegraded: trackingDegraded,
+		Artifacts: ProjectionArtifacts{
+			Directories: append([]string(nil), execution.OutputDirs...),
+			OutputDirs:  append([]string(nil), execution.OutputDirs...),
+		},
+		OutputDirectoryCount: execution.OutputDirectoryCount,
+		ResultArchiveV1:      execution.ResultArchiveV1,
+		Delivery:             projectRunDelivery(execution.Delivery),
+		Report:               cloneProjectionReport(execution.Report),
+		ReportWarningCodes:   cloneReportWarningCodes(execution.ReportWarningCodes),
+		DegradedInterop:      interopMetadata.DegradedInterop,
+		InterOp:              interopMetadata.projection(),
 	}
 	if response.Result.Formatted != nil {
 		answer, err := boundProjectionText(response.Result.Formatted.Answer, rxBot.MaxProjectionReportLength, "formatted.answer")
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		projection.FinalReport = answer
+		projection.FinalReport = normalizeReportText(agent, answer)
 	}
-	return projection, nil
+	if agent == "deep_genome" {
+		projection.ChildTaskCount = len(children)
+		formattedJSON, err := json.Marshal(response.Result.Formatted)
+		if err != nil {
+			return BotRunProjection{}, projectionDecodeError("formatted", "malformed formatted envelope")
+		}
+		canonical, err := buildProjectionFromEnvelope(runID, agent, status, "", projectionEnvelope{
+			Formatted: formattedJSON, Execution: response.Result.Execution,
+		}, len(response.TaskIDs) == 0)
+		if err != nil {
+			return BotRunProjection{}, err
+		}
+		canonical.Children = children
+		canonical.ChildTaskCount = len(children)
+		canonical.TrackingDegraded = trackingDegraded
+		projection = canonical
+	}
+	return normalizeCompletedReviewProjection(projection), nil
 }
 
 type projectionEnvelope struct {
@@ -250,6 +349,7 @@ type projectionEnvelope struct {
 	Failures           json.RawMessage `json:"failures"`
 	Artifacts          json.RawMessage `json:"artifacts"`
 	Formatted          json.RawMessage `json:"formatted"`
+	Execution          json.RawMessage `json:"execution"`
 	Interop            json.RawMessage `json:"interop"`
 	DegradedInterop    bool            `json:"degraded_interop"`
 }
@@ -459,6 +559,59 @@ func (metadata botInteropMetadata) projection() *InteropProvenance {
 	return nil
 }
 
+// applyDeepGenomeMetadataFallback copies current Bot HTTP snapshot fields
+// from formatted.metadata.deep_genome when the compatibility top-level
+// report_* keys are absent. Current Bot owner-reads keep those values
+// only in the formatted envelope.
+func applyDeepGenomeMetadataFallback(envelope *projectionEnvelope) {
+	if envelope == nil || len(bytes.TrimSpace(envelope.Formatted)) == 0 {
+		return
+	}
+	var formatted struct {
+		Metadata struct {
+			DeepGenome struct {
+				Stage        string          `json:"stage"`
+				Completeness string          `json:"completeness"`
+				Revision     *int64          `json:"revision"`
+				UpdatedAt    string          `json:"updated_at"`
+				Progress     json.RawMessage `json:"progress"`
+				Degraded     bool            `json:"degraded"`
+			} `json:"deep_genome"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(envelope.Formatted, &formatted); err != nil {
+		return
+	}
+	meta := formatted.Metadata.DeepGenome
+	if envelope.ReportStage == "" {
+		envelope.ReportStage = meta.Stage
+	}
+	if envelope.ReportCompleteness == "" {
+		envelope.ReportCompleteness = meta.Completeness
+	}
+	if envelope.ReportRevision == nil {
+		envelope.ReportRevision = meta.Revision
+	}
+	if envelope.ReportUpdatedAt == "" {
+		envelope.ReportUpdatedAt = meta.UpdatedAt
+	}
+	if len(bytes.TrimSpace(envelope.Progress)) == 0 {
+		envelope.Progress = meta.Progress
+		var counters map[string]json.RawMessage
+		if json.Unmarshal(meta.Progress, &counters) == nil && counters != nil {
+			// Bot's canonical work-item counters name successful work "succeeded".
+			// Normalize at this boundary; the public projection keeps "completed".
+			counters["completed"] = counters["succeeded"]
+			if normalized, err := json.Marshal(counters); err == nil {
+				envelope.Progress = normalized
+			}
+		}
+	}
+	if !envelope.Degraded && meta.Degraded {
+		envelope.Degraded = true
+	}
+}
+
 func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return projectionEnvelope{}, nil
@@ -471,6 +624,7 @@ func decodeProjectionEnvelope(raw json.RawMessage) (projectionEnvelope, error) {
 }
 
 func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, envelope projectionEnvelope, noTaskIDs bool) (BotRunProjection, error) {
+	applyDeepGenomeMetadataFallback(&envelope)
 	revision := int64(-1)
 	if envelope.ReportRevision != nil {
 		if *envelope.ReportRevision < 0 {
@@ -502,6 +656,9 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, err
 	}
+	intermediate = normalizeReportText(agent, intermediate)
+	finalReport = normalizeReportText(agent, finalReport)
+	formattedAnswerUsed := false
 	if strings.TrimSpace(intermediate) == "" && strings.TrimSpace(finalReport) == "" && len(envelope.Formatted) > 0 {
 		var formatted struct {
 			Answer string `json:"answer"`
@@ -513,14 +670,15 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		intermediate = formattedAnswer
+		intermediate = normalizeReportText(agent, formattedAnswer)
+		formattedAnswerUsed = intermediate != ""
 	}
 	if strings.TrimSpace(intermediate) == "" && strings.TrimSpace(finalReport) == "" {
 		legacy, err := boundProjectionText(legacyAnswer, rxBot.MaxProjectionReportLength, "answer")
 		if err != nil {
 			return BotRunProjection{}, err
 		}
-		intermediate = legacy
+		intermediate = normalizeReportText(agent, legacy)
 	}
 
 	updatedAt, err := parseProjectionTime(envelope.ReportUpdatedAt)
@@ -539,9 +697,19 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 	if err != nil {
 		return BotRunProjection{}, projectionDecodeError("progress", err.Error())
 	}
-	runArtifacts, err := rxBot.ParseRunProjectionArtifacts(envelope.Artifacts)
+	executionDelivery, err := rxBot.DecodeRunExecutionDelivery(envelope.Execution, agent)
 	if err != nil {
-		return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
+		return BotRunProjection{}, projectionDecodeError("execution.delivery", err.Error())
+	}
+	if formattedAnswerUsed && ((executionDelivery.Report != nil && executionDelivery.Report.State == "final") || (stage == "final" && completeness == "complete")) {
+		finalReport, intermediate = intermediate, ""
+	}
+	var runArtifacts []rxBot.BoundedRunArtifact
+	if !executionDelivery.ResultArchiveV1 {
+		runArtifacts, err = rxBot.ParseRunProjectionArtifacts(envelope.Artifacts)
+		if err != nil {
+			return BotRunProjection{}, projectionDecodeError("artifacts", err.Error())
+		}
 	}
 	var interop *InteropProvenance
 	if interopAgent(agent) {
@@ -564,13 +732,25 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 		}
 	}
 
-	directories := make([]string, 0, len(runArtifacts))
+	directories := append([]string(nil), executionDelivery.OutputDirs...)
+	directoryCount := executionDelivery.OutputDirectoryCount
+	seenDirectories := make(map[string]struct{}, len(directories))
+	for _, directory := range directories {
+		seenDirectories[directory] = struct{}{}
+	}
 	paths := make([]string, 0)
 	for _, artifact := range runArtifacts {
 		if artifact.OutputDir != "" {
-			directories = append(directories, artifact.OutputDir)
+			if _, exists := seenDirectories[artifact.OutputDir]; !exists {
+				directories = append(directories, artifact.OutputDir)
+				seenDirectories[artifact.OutputDir] = struct{}{}
+				directoryCount++
+			}
 		}
 		paths = append(paths, artifact.Paths...)
+	}
+	if directoryCount > rxBot.MaxProjectionArtifactCount {
+		return BotRunProjection{}, projectionDecodeError("execution.output_dirs", "too many output roots")
 	}
 	artifacts := ProjectionArtifacts{
 		Directories: directories,
@@ -594,15 +774,42 @@ func buildProjectionFromEnvelope(runID, agent, status, legacyAnswer string, enve
 			Pending:         runProgress.Pending,
 			BriefGeneStatus: runProgress.BriefGeneStatus,
 		},
-		Degraded:       envelope.Degraded,
-		DegradedReason: degradedReason,
-		Failures:       failures,
-		Artifacts:      artifacts,
+		Degraded:             envelope.Degraded,
+		DegradedReason:       degradedReason,
+		Failures:             failures,
+		Artifacts:            artifacts,
+		OutputDirectoryCount: directoryCount,
+		TrackingDegraded:     executionDelivery.TrackingDegraded,
+		ResultArchiveV1:      executionDelivery.ResultArchiveV1,
+		Delivery:             projectRunDelivery(executionDelivery.Delivery),
+		Report:               cloneProjectionReport(executionDelivery.Report),
+		ReportWarningCodes:   cloneReportWarningCodes(executionDelivery.ReportWarningCodes),
 		// RequestID intentionally remains empty. A Bot request id is response
 		// metadata, not public run state, and is never copied from provider data.
 		DegradedInterop: interopAgent(agent) && (envelope.DegradedInterop || formattedInterop.DegradedInterop),
 		InterOp:         interop,
 	}, nil
+}
+
+func projectRunDelivery(delivery *rxBot.RunDelivery) *ProjectionDelivery {
+	if delivery == nil {
+		return nil
+	}
+	projected := &ProjectionDelivery{
+		SchemaVersion:   delivery.SchemaVersion,
+		Required:        delivery.Required,
+		Status:          delivery.Status,
+		Revision:        delivery.Revision,
+		InventoryDigest: delivery.InventoryDigest,
+		ErrorCode:       delivery.ErrorCode,
+		Retryable:       delivery.Retryable,
+	}
+	if delivery.Archive != nil {
+		projected.ArchiveName = delivery.Archive.Name
+		projected.ArchiveSize = delivery.Archive.SizeBytes
+		projected.ArchiveRef = delivery.Archive.ObjectRef
+	}
+	return projected
 }
 
 // interopProvenancePtr returns a private copy so response/projection callers
@@ -685,10 +892,37 @@ func normalizeProjectionRunID(value string) (string, error) {
 	if value == "" {
 		return "", projectionDecodeError("run_id", "missing umbrella run id")
 	}
-	if len([]rune(value)) > maxProjectionRunID || strings.ContainsAny(value, "/\\\r\n\t") {
+	if len([]rune(value)) > maxProjectionRunID ||
+		strings.ContainsAny(value, "/\\") ||
+		strings.IndexFunc(value, unicode.IsControl) >= 0 {
 		return "", projectionDecodeError("run_id", "malformed umbrella run id")
 	}
 	return value, nil
+}
+
+func normalizeAgentRunResponseID(response rxBot.AgentRunResponse) (string, error) {
+	nativeID, err := normalizeOptionalAgentRunID(response.ID)
+	if err != nil {
+		return "", err
+	}
+	compatibilityID, err := normalizeOptionalAgentRunID(response.RunID)
+	if err != nil {
+		return "", err
+	}
+	if nativeID != "" && compatibilityID != "" && nativeID != compatibilityID {
+		return "", projectionDecodeError("run_id", "conflicting umbrella run ids")
+	}
+	if nativeID != "" {
+		return nativeID, nil
+	}
+	return compatibilityID, nil
+}
+
+func normalizeOptionalAgentRunID(value *string) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	return normalizeProjectionRunID(*value)
 }
 
 func normalizeProjectionAgent(value string) (string, error) {
@@ -718,6 +952,29 @@ func normalizeProjectionStatus(value string) (string, error) {
 			return "", projectionDecodeError("status", "malformed status")
 		}
 		return "", projectionDecodeError("status", "unsupported status")
+	}
+}
+
+func sanitizeRunWorkStage(value string) string {
+	normalized, err := normalizeProjectionWorkStage(value)
+	if err != nil {
+		return ""
+	}
+	return normalized
+}
+
+func normalizeProjectionWorkStage(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if len([]rune(value)) > maxProjectionWorkStage {
+		return "", projectionDecodeError("stage", "malformed stage")
+	}
+	switch value {
+	case "input_resolution", "planning", "execution", "report_assembly":
+		return value, nil
+	default:
+		return "", projectionDecodeError("stage", "unsupported stage")
 	}
 }
 
@@ -765,4 +1022,157 @@ func validProjectionCompleteness(value string) bool {
 	default:
 		return false
 	}
+}
+
+type botRunChildWire struct {
+	Status    string          `json:"status"`
+	Kind      string          `json:"kind"`
+	ErrorCode json.RawMessage `json:"error_code"`
+}
+
+func decodeBotRunChildrenForAgent(execution json.RawMessage, agent string) []BotRunChild {
+	trimmed := bytes.TrimSpace(execution)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var envelope struct {
+		Tasks json.RawMessage `json:"tasks"`
+	}
+	if err := json.Unmarshal(trimmed, &envelope); err != nil {
+		return nil
+	}
+	tasksRaw := bytes.TrimSpace(envelope.Tasks)
+	if len(tasksRaw) == 0 || bytes.Equal(tasksRaw, []byte("null")) {
+		return nil
+	}
+	var wires []botRunChildWire
+	if err := json.Unmarshal(tasksRaw, &wires); err != nil {
+		return nil
+	}
+	children := make([]BotRunChild, 0, len(wires))
+	for _, wire := range wires {
+		phase := childPhaseFromStatus(wire.Status)
+		if phase == "" {
+			continue
+		}
+		kind := strings.TrimSpace(wire.Kind)
+		if !childTokenPattern.MatchString(kind) {
+			kind = ""
+		}
+		if agent == "deep_genome" && !isDeepGenomeAnalysisKind(kind) {
+			continue
+		}
+		children = append(children, BotRunChild{
+			Ordinal:   len(children) + 1,
+			Phase:     phase,
+			Kind:      kind,
+			ErrorCode: decodeChildErrorCode(wire.ErrorCode),
+		})
+		if len(children) == maxProjectionChildTasks {
+			break
+		}
+	}
+	if len(children) == 0 {
+		return nil
+	}
+	return children
+}
+
+// publicBotProjection exposes validated scientific state without private
+// conversation context, child identities, storage paths, or archive resolvers.
+func publicBotProjection(p BotRunProjection) map[string]interface{} {
+	if p.RunID == "" && p.Report == nil && p.ReportWarningCodes == nil {
+		return nil
+	}
+	p = normalizeProjectionReports(p)
+	public := map[string]interface{}{
+		"run_id":              p.RunID,
+		"agent":               p.Agent,
+		"status":              p.Status,
+		"report_revision":     p.ReportRevision,
+		"intermediate_report": p.IntermediateReport,
+		"final_report":        p.FinalReport,
+		"progress": map[string]interface{}{
+			"completed": p.Progress.Completed, "total": p.Progress.Total,
+			"failed": p.Progress.Failed, "pending": p.Progress.Pending,
+			"brief_gene_status": p.Progress.BriefGeneStatus,
+		},
+		"degraded":          p.Degraded,
+		"tracking_degraded": p.TrackingDegraded,
+		"child_task_count":  p.ChildTaskCount,
+		"children":          cloneBotRunChildren(p.Children),
+	}
+	for key, value := range map[string]string{"work_stage": p.WorkStage, "report_stage": p.ReportStage, "report_completeness": p.ReportCompleteness} {
+		if value != "" {
+			public[key] = value
+		}
+	}
+	if p.ReportUpdatedAt != nil {
+		public["report_updated_at"] = cloneProjectionTime(p.ReportUpdatedAt)
+	}
+	if p.Report != nil {
+		public["report"] = cloneProjectionReport(p.Report)
+	}
+	if p.ReportWarningCodes != nil {
+		public["report_warning_codes"] = cloneReportWarningCodes(p.ReportWarningCodes)
+	}
+	return public
+}
+
+func childPhaseFromStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending":
+		return "PREPARING"
+	case "submitted", "running", "queued":
+		return "RUNNING"
+	case "succeeded", "success", "completed", "done":
+		return "SUCCEEDED"
+	case "failed", "error":
+		return "FAILED"
+	case "cancelled", "canceled":
+		return "CANCELLED"
+	default:
+		return ""
+	}
+}
+
+func decodeChildErrorCode(raw json.RawMessage) *string {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil
+	}
+	value = strings.TrimSpace(value)
+	if !childTokenPattern.MatchString(value) {
+		return nil
+	}
+	return &value
+}
+
+func projectionChildTaskCount(taskIDCount, childCount int) int {
+	if childCount == 0 {
+		return taskIDCount
+	}
+	if taskIDCount != 0 && taskIDCount != childCount {
+		return taskIDCount
+	}
+	return childCount
+}
+
+func cloneBotRunChildren(in []BotRunChild) []BotRunChild {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]BotRunChild, len(in))
+	for i, child := range in {
+		out[i] = child
+		if child.ErrorCode != nil {
+			code := *child.ErrorCode
+			out[i].ErrorCode = &code
+		}
+	}
+	return out
 }

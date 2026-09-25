@@ -8,7 +8,7 @@ export type ActionObserverEvent = {
 export type ActionObserverSink = (event: ActionObserverEvent) => void;
 
 export function createActionObserverPlugin(
-  sink: ActionObserverSink = () => undefined,
+  sink: ActionObserverSink = () => undefined
 ) {
   return ({ store }: PiniaPluginContext) => {
     store.$onAction(({ name, after, onError }) => {

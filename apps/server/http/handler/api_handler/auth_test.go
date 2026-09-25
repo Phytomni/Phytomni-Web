@@ -147,6 +147,39 @@ func newRegisterPostContext(t *testing.T, form url.Values) (*gin.Context, *httpt
 	return c, w
 }
 
+func TestApiUserRegister_DisabledBeforeValidationOrDatabase(t *testing.T) {
+	previous := viper.Get(utils.RegistrationEnabledKey)
+	viper.Set(utils.RegistrationEnabledKey, false)
+	t.Cleanup(func() { viper.Set(utils.RegistrationEnabledKey, previous) })
+
+	c, w := newRegisterPostContext(t, url.Values{
+		"email":    {"not-an-email"},
+		"password": {"weak"},
+	})
+	NewHandler().UserRegister(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("disabled registration status = %d, want 403 (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["message"] != "Registration is currently unavailable" {
+		t.Fatalf("disabled registration message = %v", body["message"])
+	}
+}
+
+func TestApiUserRegister_EnabledKeepsExistingValidation(t *testing.T) {
+	viper.Set(utils.RegistrationEnabledKey, true)
+	t.Cleanup(func() { viper.Set(utils.RegistrationEnabledKey, nil) })
+	c, w := newRegisterPostContext(t, url.Values{})
+	NewHandler().UserRegister(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("enabled registration empty credentials status = %d, want 400", w.Code)
+	}
+}
+
 // TestApiUserRegister_EmptyCredentialsUsesMessageEnvelope pins the error-envelope key:
 // the empty-credentials branch must place the localized text in "message"
 // (the frontend interceptor reads only res.data.message), not the legacy "error"

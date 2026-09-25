@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { formatLogContentWithColors } from "@/views/chat/utils/agent-log";
 
-// This function's output is injected into the DOM via index.vue's v-html, and the
+// This function's output is injected into the DOM via ChatView.vue's v-html, and the
 // log body is analyst-agent output (influenceable by agent/tool/RAG), so it must be
 // HTML-escaped before the ANSI→HTML conversion. Removing the escapeHtml call would
 // turn the XSS cases below red (regression lock).
@@ -28,6 +28,13 @@ describe("formatLogContentWithColors", () => {
   it("valid ANSI red still renders as <span style>", () => {
     const out = formatLogContentWithColors("[31mred[0m");
     expect(out).toContain('<span style="color: #ff0000;">red</span>');
+  });
+
+  it("replaces repeated ANSI color sequences globally", () => {
+    const out = formatLogContentWithColors("[32mgreen[0m and [32magain[0m");
+    expect(out).toBe(
+      '<span style="color: #00ff00;">green</span> and <span style="color: #00ff00;">again</span>'
+    );
   });
 
   it("valid ANSI bold still renders as <strong>", () => {

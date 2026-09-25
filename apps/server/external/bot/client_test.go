@@ -2,7 +2,10 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,10 +44,11 @@ func TestListRunsSendsDialogueFilter(t *testing.T) {
 }
 
 func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
+	const sensitiveMessage = "PAPER_FULLTEXT_MARKER path=/private/papers/input.pdf prompt=classify-this"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"type":"bad_request","code":400,"message":"streaming unsupported","request_id":"req-7"}}`))
+		_, _ = w.Write([]byte(`{"error":{"type":"bad_request","code":400,"message":"` + sensitiveMessage + `","request_id":"req-7"}}`))
 	}))
 	defer srv.Close()
 
@@ -52,11 +56,232 @@ func TestDoJSONDecodesErrorEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 400 response")
 	}
-	if want := "streaming unsupported"; !contains(err.Error(), want) {
-		t.Errorf("error %q does not surface envelope message %q", err.Error(), want)
+	if contains(err.Error(), sensitiveMessage) || contains(err.Error(), "/private/papers/input.pdf") {
+		t.Fatalf("typed error leaked Bot envelope message: %q", err.Error())
 	}
-	if !contains(err.Error(), "req-7") {
-		t.Errorf("error %q does not surface request id", err.Error())
+	if got, want := err.Error(), "bot request failed: status 400"; got != want {
+		t.Errorf("error = %q, want ordinary-log-safe text %q", got, want)
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %T, want *APIError", err)
+	}
+	if apiErr.Method != http.MethodGet || apiErr.Path != "/v1/agents" ||
+		apiErr.Status != http.StatusBadRequest || apiErr.Message != sensitiveMessage ||
+		apiErr.RequestID != "req-7" {
+		t.Fatalf("structured APIError metadata changed: %#v", apiErr)
+	}
+	if message, ok := SurfaceableMessage(err); !ok || message != sensitiveMessage {
+		t.Fatalf("same-user correction message changed: ok=%v message=%q", ok, message)
+	}
+}
+
+func TestUploadControlStrictModeRejectsDuplicateNon2xxEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":{"code":"unknown","code":"upload_state_conflict","message":"upload state conflict"}}`))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, strictErr := client.doJSONWithMetaOptions(
+		context.Background(), http.MethodPost, "/v1/files", nil, nil, true,
+	)
+	if !errors.Is(strictErr, errDuplicateJSONKey) {
+		t.Fatalf("strict upload error = %T %v, want duplicate-key rejection", strictErr, strictErr)
+	}
+	var strictAPIError *APIError
+	if errors.As(strictErr, &strictAPIError) {
+		t.Fatalf("strict upload error was decoded before duplicate validation: %#v", strictAPIError)
+	}
+
+	_, nonUploadErr := client.doJSONWithMetaOptions(
+		context.Background(), http.MethodPost, "/v1/agents/analyst/runs", nil, nil, true,
+	)
+	var nonUploadAPIError *APIError
+	if !errors.As(nonUploadErr, &nonUploadAPIError) || nonUploadAPIError.Code != "upload_state_conflict" {
+		t.Fatalf("non-upload error behavior changed: %T %#v", nonUploadErr, nonUploadErr)
+	}
+}
+
+func TestChatCompletionClientsDropObsoleteDatasetDescriptionAcrossRequestPaths(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode %s request: %v", r.URL.Path, err)
+			return
+		}
+		if _, leaked := body["dataset_description"]; leaked {
+			t.Errorf("%s leaked obsolete dataset_description: %#v", r.URL.Path, body)
+		}
+		if body["owner_subject"] != "alice@example.com" {
+			t.Errorf("%s owner_subject=%v, want authenticated owner", r.URL.Path, body["owner_subject"])
+		}
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			if body["stream"] == true {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: RunFinished\\ndata: {\\\"type\\\":\\\"RunFinished\\\"}\\n\\n"))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"chat","object":"chat.completion","choices":[],"formatted":{}}`))
+		case "/v1/agents/data/runs", "/v1/query/route":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"run","run_id":"run","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	var chat ChatCompletionRequest
+	if err := json.Unmarshal([]byte(`{"model":"phyto-chat","messages":[{"role":"user","content":"analyze"}],"attachments":[{"asset_id":"file_chat"}],"owner_subject":"alice@example.com","dataset_description":"obsolete"}`), &chat); err != nil {
+		t.Fatalf("decode crafted chat request: %v", err)
+	}
+	if _, err := client.ChatCompletion(context.Background(), chat); err != nil {
+		t.Fatalf("ChatCompletion: %v", err)
+	}
+	stream, _, err := client.ChatCompletionStreamWithMeta(context.Background(), chat)
+	if err != nil {
+		t.Fatalf("ChatCompletionStream: %v", err)
+	}
+	_ = stream.Close()
+	var agent AgentRunRequest
+	if err := json.Unmarshal([]byte(`{"arguments":{"user_query":"analyze","gene_id":"AT1G01010"},"attachments":[{"asset_id":"file_agent"}],"owner_subject":"alice@example.com","dataset_description":"obsolete"}`), &agent); err != nil {
+		t.Fatalf("decode crafted agent request: %v", err)
+	}
+	if _, err := client.InvokeAgent(context.Background(), "data", agent); err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	var route RouteQueryRequest
+	if err := json.Unmarshal([]byte(`{"user_query":"analyze","attachments":[{"asset_id":"file_route"}],"owner_subject":"alice@example.com","allowed_tools":["ChatAgent","DataAgent"],"forced_tool":null,"dataset_description":"obsolete"}`), &route); err != nil {
+		t.Fatalf("decode crafted route request: %v", err)
+	}
+	if _, err := client.RouteQuery(context.Background(), route); err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+	if got := strings.Join(paths, ","); got != "/v1/chat/completions,/v1/chat/completions,/v1/agents/data/runs,/v1/query/route" {
+		t.Fatalf("request paths=%q", got)
+	}
+}
+
+func TestChatCompletionRejectsMismatchedContextTurn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"conversation_context":{"schema_version":1,"turn_id":"8","selected_agent_id":"ChatAgent","route_source":"instant_lock","route_reason_code":"INSTANT_LOCK","base_business_context_version":0,"proposed_business_context_version":1,"last_applied_ledger_cursor":6,"context_truncated":false,"context_rebuilt":false,"context_degraded":false}}`))
+	}))
+	defer srv.Close()
+	envelope := validConversationEnvelope()
+	envelope.Mode = "instant"
+	envelope.RequestedAgentID = nil
+	envelope.AllowedAgentIDs = []string{"ChatAgent"}
+	_, err := newTestClient(srv.URL).ChatCompletion(context.Background(), ChatCompletionRequest{Model: "phyto-chat", Conversation: &envelope})
+	if err == nil || !contains(err.Error(), "turn_id") {
+		t.Fatalf("mismatched response turn was accepted: %v", err)
+	}
+}
+
+func TestInvokeAgentForwardsConversationAndValidatesContext(t *testing.T) {
+	envelope := validConversationEnvelope()
+	var captured AgentRunRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Errorf("decode agent request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],
+			"result":{"formatted":{"answer":"ok"}},
+			"conversation_context":{
+				"schema_version":1,"turn_id":"7","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"data",
+		AgentRunRequest{
+			Arguments:    map[string]interface{}{"user_query": "next"},
+			DialogueID:   envelope.DialogueID,
+			Conversation: &envelope,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	if captured.Conversation == nil || captured.Conversation.TurnID != envelope.TurnID {
+		t.Fatalf("conversation envelope=%#v", captured.Conversation)
+	}
+	if response.ConversationContext == nil || response.ConversationContext.SelectedAgentID != "DataAgent" {
+		t.Fatalf("conversation context=%#v", response.ConversationContext)
+	}
+}
+
+func TestInvokeAgentSendsIdempotencyKeyAsHeaderOnly(t *testing.T) {
+	const key = "turn-research-runtime"
+	var rawBody map[string]json.RawMessage
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Idempotency-Key"); got != key {
+			t.Errorf("Idempotency-Key=%q, want %q", got, key)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
+			t.Errorf("decode agent request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-research","object":"agent.run","agent":"research","status":"running","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"research",
+		AgentRunRequest{
+			Arguments:      map[string]interface{}{"user_query": "research"},
+			IdempotencyKey: key,
+		},
+	)
+	if err != nil {
+		t.Fatalf("InvokeAgent: %v", err)
+	}
+	if _, leaked := rawBody["idempotency_key"]; leaked {
+		t.Fatalf("idempotency key leaked into JSON body: %#v", rawBody)
+	}
+}
+
+func TestInvokeAgentRejectsMismatchedContextTurn(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-data","object":"agent.run","agent":"data","status":"succeeded","task_ids":[],
+			"conversation_context":{
+				"schema_version":1,"turn_id":"8","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+	envelope := validConversationEnvelope()
+	_, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"data",
+		AgentRunRequest{Arguments: map[string]interface{}{}, Conversation: &envelope},
+	)
+	if err == nil || !contains(err.Error(), "turn_id") {
+		t.Fatalf("mismatched response turn was accepted: %v", err)
 	}
 }
 
@@ -77,6 +302,26 @@ func TestInvokeAgentDedupHit(t *testing.T) {
 	}
 	if !resp.Result.DedupHit || resp.Result.TaskID != "task-prior" {
 		t.Errorf("dedup hit not surfaced: %+v", resp.Result)
+	}
+}
+
+func TestInvokeAgentRejectsDuplicateRunIdentityKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-first","id":"run-last","object":"agent.run","agent":"analyst","status":"running","task_ids":["task-1"],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).InvokeAgent(
+		context.Background(),
+		"analyst",
+		AgentRunRequest{Arguments: map[string]interface{}{"user_query": "x"}},
+	)
+	if err == nil {
+		t.Fatalf("InvokeAgent accepted duplicate identity keys: %#v", response)
+	}
+	if !errors.Is(err, errDuplicateJSONKey) {
+		t.Fatalf("InvokeAgent error = %T %v, want errDuplicateJSONKey", err, err)
 	}
 }
 
@@ -116,24 +361,88 @@ func TestSurfaceableMessage(t *testing.T) {
 	}
 }
 
-func TestAPIErrorTruncatesRawBody(t *testing.T) {
-	// No envelope message → Error() falls back to the raw body branch, which
-	// reaches the logs. An oversized body must be truncated, not echoed whole.
-	big := strings.Repeat("x", 1000)
-	got := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: big}).Error()
-	if contains(got, big) {
-		t.Fatalf("full 1000-char raw body leaked into error string: %q", got)
+func TestAPIErrorErrorEmitsOnlyLocalTextAndStatus(t *testing.T) {
+	const sensitiveMessage = "PAPER_PROMPT_MARKER path=/private/papers/study.pdf prompt=extract-all"
+	const methodMarker = "METHOD_MARKER\r\nforged-log-line"
+	const pathMarker = "PATH_MARKER\t/private/papers/study.pdf"
+	const stageMarker = "STAGE_MARKER\nresolver-detail"
+	const requestIDMarker = "REQUEST_ID_MARKER\rforged-correlation"
+	oversizedCode := "CODE_MARKER\n" + strings.Repeat("untrusted-code", 256)
+	err := &APIError{
+		Method:    methodMarker,
+		Path:      pathMarker,
+		Status:    http.StatusUnprocessableEntity,
+		Code:      oversizedCode,
+		Message:   sensitiveMessage,
+		Stage:     stageMarker,
+		Retryable: true,
+		RequestID: requestIDMarker,
 	}
-	if !contains(got, "(truncated)") {
-		t.Fatalf("oversized body should be marked truncated: %q", got)
+
+	for name, tc := range map[string]struct {
+		got  string
+		want string
+	}{
+		"direct": {
+			got:  err.Error(),
+			want: "bot request failed: status 422",
+		},
+		"wrapped": {
+			got:  fmt.Errorf("submit research: %w", err).Error(),
+			want: "submit research: bot request failed: status 422",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, marker := range []string{
+				"METHOD_MARKER", "PATH_MARKER", "CODE_MARKER", "STAGE_MARKER",
+				"REQUEST_ID_MARKER", "PAPER_PROMPT_MARKER", "forged-log-line",
+			} {
+				if contains(tc.got, marker) {
+					t.Fatalf("error leaked untrusted marker %q: %q", marker, tc.got)
+				}
+			}
+			if tc.got != tc.want {
+				t.Errorf("error = %q, want %q", tc.got, tc.want)
+			}
+		})
 	}
-	// A short body is diagnostic and stays intact.
-	short := (&APIError{Method: "GET", Path: "/v1/runs", Status: 500, body: "oops"}).Error()
-	if !contains(short, "oops") {
-		t.Fatalf("short body should be preserved for diagnostics: %q", short)
+}
+
+func TestAPIErrorErrorRedactsShortAndLongRawBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "short", body: "RAW_PAPER_PATH_MARKER=/private/papers/short.pdf"},
+		{name: "long", body: "RAW_LONG_PROMPT_MARKER=" + strings.Repeat("secret-paper-content", 100)},
 	}
-	if contains(short, "(truncated)") {
-		t.Fatalf("short body should not be marked truncated: %q", short)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := botError("GET", "/v1/runs", http.StatusInternalServerError, []byte(tt.body))
+			for name, tc := range map[string]struct {
+				got  string
+				want string
+			}{
+				"direct": {
+					got:  err.Error(),
+					want: "bot request failed: status 500",
+				},
+				"wrapped": {
+					got:  fmt.Errorf("poll research: %w", err).Error(),
+					want: "poll research: bot request failed: status 500",
+				},
+			} {
+				t.Run(name, func(t *testing.T) {
+					if contains(tc.got, tt.body) || contains(tc.got, "RAW_PAPER_PATH_MARKER") || contains(tc.got, "RAW_LONG_PROMPT_MARKER") {
+						t.Fatalf("error leaked raw Bot body: %q", tc.got)
+					}
+					if tc.got != tc.want {
+						t.Errorf("error = %q, want %q", tc.got, tc.want)
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -180,4 +489,104 @@ func TestChatCompletionWrapperPreservesTimeoutContract(t *testing.T) {
 	if err == nil || !errors.Is(err, ErrBotTimeout) {
 		t.Fatalf("err=%v, want wrapped ErrBotTimeout", err)
 	}
+}
+
+func TestNewClientWithTimeoutUsesExplicitDuration(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewClientWithTimeout(125 * time.Millisecond)
+	if got := client.http.Timeout; got != 125*time.Millisecond {
+		t.Fatalf("explicit timeout=%s, want 125ms", got)
+	}
+}
+
+func TestNewClientUsesGlobalTimeout(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewClient()
+	if got := client.http.Timeout; got != 17*time.Second {
+		t.Fatalf("global timeout=%s, want 17s", got)
+	}
+}
+
+func TestNewStreamingClientHasNoOverallTimeout(t *testing.T) {
+	previous := BotConfig
+	BotConfig = &Config{
+		BaseURL:        "http://bot.test",
+		UserAPIKey:     "ptm_test",
+		TimeoutSeconds: 17,
+	}
+	t.Cleanup(func() { BotConfig = previous })
+
+	client := NewStreamingClient()
+	if got := client.http.Timeout; got != 0 {
+		t.Fatalf("streaming timeout=%s, want no overall client timeout", got)
+	}
+}
+
+func TestCancelRunUsesStrictAuthenticatedPost(t *testing.T) {
+	var gotMethod, gotEscapedPath, gotAuth, gotContentType string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotEscapedPath = r.URL.EscapedPath()
+		gotAuth = r.Header.Get("Authorization")
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"run/with space","agent":"analyst","status":"cancelled","result":{}}`))
+	}))
+	defer srv.Close()
+
+	got, err := newTestClient(srv.URL).CancelRun(context.Background(), "run/with space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RunID != "run/with space" || got.Status != "cancelled" {
+		t.Fatalf("record = %#v", got)
+	}
+	if gotMethod != http.MethodPost || gotEscapedPath != "/v1/runs/run%2Fwith%20space/cancel" {
+		t.Fatalf("request = %s %s", gotMethod, gotEscapedPath)
+	}
+	if gotAuth != "Bearer ptm_test" || gotContentType != "" || len(gotBody) != 0 {
+		t.Fatalf("headers/body auth=%q content-type=%q body=%q", gotAuth, gotContentType, gotBody)
+	}
+}
+
+func TestCancelRunRejectsDuplicateKeysAndSurfacesConflict(t *testing.T) {
+	t.Run("duplicate keys", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"run_id":"run-1","run_id":"run-2","agent":"analyst","status":"cancelled","result":{}}`))
+		}))
+		defer srv.Close()
+		if _, err := newTestClient(srv.URL).CancelRun(context.Background(), "run-1"); err == nil {
+			t.Fatal("duplicate cancel keys accepted")
+		}
+	})
+	t.Run("conflict", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":{"code":"run_state_conflict","message":"Run cancellation is no longer available.","stage":"execution","retryable":false}}`))
+		}))
+		defer srv.Close()
+		_, err := newTestClient(srv.URL).CancelRun(context.Background(), "run-1")
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict || apiErr.Code != "run_state_conflict" {
+			t.Fatalf("err=%v", err)
+		}
+	})
 }

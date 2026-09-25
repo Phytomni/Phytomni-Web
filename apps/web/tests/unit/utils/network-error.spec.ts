@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { AxiosError } from "axios";
 import { isNetworkError } from "@/utils/network-error";
 
 describe("isNetworkError", () => {
@@ -7,11 +8,18 @@ describe("isNetworkError", () => {
   });
 
   it('returns true for { message: "timeout of 30000ms exceeded" } (detection rule b — substring match)', () => {
-    expect(isNetworkError({ message: "timeout of 30000ms exceeded" })).toBe(true);
+    expect(isNetworkError({ message: "timeout of 30000ms exceeded" })).toBe(
+      true
+    );
   });
 
   it('returns true for { code: "ECONNABORTED" } (detection rule c — axios timeout code)', () => {
     expect(isNetworkError({ code: "ECONNABORTED" })).toBe(true);
+  });
+
+  it("accepts an AxiosError timeout without inspecting its config", () => {
+    const error = new AxiosError("timeout of 30000ms exceeded", "ECONNABORTED");
+    expect(isNetworkError(error)).toBe(true);
   });
 
   it('returns true for { message: "ERR_GENERIC" } with no response/code (detection rule d — catchall)', () => {
@@ -25,7 +33,15 @@ describe("isNetworkError", () => {
   });
 
   it("returns false for null/undefined/string/number/empty-object inputs (no throw, no false positive)", () => {
-    const inputs: unknown[] = [null, undefined, "string literal", 42, {}, true, false];
+    const inputs: unknown[] = [
+      null,
+      undefined,
+      "string literal",
+      42,
+      {},
+      true,
+      false,
+    ];
     for (const input of inputs) {
       expect(isNetworkError(input)).toBe(false);
     }

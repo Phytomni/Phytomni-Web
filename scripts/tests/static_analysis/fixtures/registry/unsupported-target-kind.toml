@@ -1,0 +1,14 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "unsupported-target"
+tool = "eslint"
+rule = "rule"
+classification = "structural"
+mechanism = "inline"
+target_kind = "tree"
+path = "apps/web/src/a.ts"
+target = "name"

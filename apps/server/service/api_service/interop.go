@@ -100,8 +100,8 @@ func (ps *Service) CheckInteropAllowed(ctx context.Context, email string) error 
 // the Bot call, preserving a zero-call boundary for dormant or unauthorized
 // requests.
 func (ps *Service) InteropCapabilities(ctx context.Context, email string) (InteropCapabilities, error) {
-	if rxBot.BotConfig == nil || !rxBot.BotConfig.InteropEnabled {
-		return InteropCapabilities{Targets: []InteropTarget{}}, ErrInteropDisabled
+	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
+		return InteropCapabilities{Targets: []InteropTarget{}}, ErrInteropUnavailable
 	}
 	if err := ps.CheckInteropAllowed(ctx, email); err != nil {
 		return InteropCapabilities{Targets: []InteropTarget{}}, err

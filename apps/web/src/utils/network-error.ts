@@ -29,8 +29,10 @@ export function isNetworkError(error: unknown): boolean {
     response?: unknown;
   };
   if (e.message === "Network Error") return true;
-  if (typeof e.message === "string" && e.message.includes("timeout")) return true;
+  if (typeof e.message === "string" && e.message.includes("timeout"))
+    return true;
   if (e.code === "ECONNABORTED") return true;
-  if (!e.response && typeof e.message === "string" && e.message.length > 0) return true;
+  if (!e.response && typeof e.message === "string" && e.message.length > 0)
+    return true;
   return false;
 }

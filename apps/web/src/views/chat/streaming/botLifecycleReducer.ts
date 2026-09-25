@@ -2,24 +2,45 @@ import {
   MAX_BOT_ARTIFACTS,
   MAX_BOT_ARTIFACT_PATHS,
   MAX_BOT_FAILURES,
+  isBotReportWarningCode,
 } from "../botProjection";
+import { isApprovedReportText } from "../utils/valid-report-ledger";
 import type {
   BotArtifact,
   BotInteropProvenance,
   BotRunProjection,
   BotRunStatus,
+  BotWorkStage,
+  BotReport,
+  BotReportWarningCode,
+  BotReportStage,
+  BotProgress,
 } from "../botProjection";
+import type {
+  AgentResultDelivery,
+  ConversationContextNotice,
+} from "@/api/types";
+import type { AguiEvent } from "./aguiEvents";
 
 export type BotLifecycleStatus =
   | "RUNNING"
   | "INPUT_REQUIRED"
   | "SUCCEEDED"
-  | "FAILED";
+  | "FAILED"
+  | "TIMED_OUT"
+  | "CANCELLED";
 
 export interface BotLifecycleState {
   runId: string | null;
   status: BotLifecycleStatus;
+  workStage?: BotWorkStage | null;
   reportRevision: number;
+  report?: BotReport;
+  reportWarningCodes?: BotReportWarningCode[];
+  reportStage?: BotReportStage;
+  reportUpdatedAt?: string | null;
+  progress?: BotProgress;
+  trackingDegraded?: boolean;
   visibleReport: string;
   intermediateReport: string;
   finalReport: string;
@@ -28,9 +49,48 @@ export interface BotLifecycleState {
   interop?: BotInteropProvenance | null;
   failures: string[];
   artifacts: BotArtifact[];
+  delivery?: AgentResultDelivery;
 }
 
-const TERMINAL_STATUSES = new Set<BotLifecycleStatus>(["SUCCEEDED", "FAILED"]);
+const TERMINAL_STATUSES = new Set<BotLifecycleStatus>([
+  "SUCCEEDED",
+  "FAILED",
+  "TIMED_OUT",
+  "CANCELLED",
+]);
+
+export function reduceContextStagedNotice(
+  current: ConversationContextNotice,
+  event: AguiEvent
+): ConversationContextNotice {
+  if (
+    event.type !== "Custom" ||
+    event.data.name !== "phyto.context_staged" ||
+    typeof event.data.value !== "object" ||
+    event.data.value === null ||
+    Array.isArray(event.data.value)
+  ) {
+    return current;
+  }
+  const value = event.data.value as Record<string, unknown>;
+  const rebuilt =
+    typeof value.context_rebuilt === "boolean"
+      ? value.context_rebuilt
+      : undefined;
+  const degraded =
+    typeof value.context_degraded === "boolean"
+      ? value.context_degraded
+      : undefined;
+  if (rebuilt === undefined && degraded === undefined) return current;
+  return {
+    ...(current.context_rebuilt === true || rebuilt === true
+      ? { context_rebuilt: true }
+      : {}),
+    ...(current.context_degraded === true || degraded === true
+      ? { context_degraded: true }
+      : {}),
+  };
+}
 
 const SAFE_FAILURE_MESSAGES: Record<string, string> = {
   failed: "analysis task failed",
@@ -79,6 +139,33 @@ function cloneArtifacts(artifacts: readonly BotArtifact[]): BotArtifact[] {
   }
 
   return cloned;
+}
+
+function cloneDelivery(
+  delivery: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  return delivery ? { ...delivery } : undefined;
+}
+
+function mergeDelivery(
+  current: AgentResultDelivery | undefined,
+  incoming: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  if (!incoming) return cloneDelivery(current);
+  if (!current || incoming.revision > current.revision) {
+    return cloneDelivery(incoming);
+  }
+  if (incoming.revision < current.revision) return cloneDelivery(current);
+  if (
+    (current.status === "ready" || current.status === "failed") &&
+    incoming.status === "pending"
+  ) {
+    return cloneDelivery(current);
+  }
+  if (current.status === "ready" && incoming.status === "failed") {
+    return cloneDelivery(current);
+  }
+  return cloneDelivery(incoming);
 }
 
 const INTEROP_MODES = new Set(["off", "auto", "required"]);
@@ -159,9 +246,11 @@ function mapStatus(status: BotRunStatus): BotLifecycleStatus {
     case "SUCCEEDED":
       return "SUCCEEDED";
     case "FAILED":
-    case "CANCELLED":
-    case "TIMED_OUT":
       return "FAILED";
+    case "CANCELLED":
+      return "CANCELLED";
+    case "TIMED_OUT":
+      return "TIMED_OUT";
     case "RUNNING":
     case "PENDING":
     case "QUEUED":
@@ -298,6 +387,7 @@ export function initBotLifecycleState(): BotLifecycleState {
   return {
     runId: null,
     status: "RUNNING",
+    workStage: null,
     reportRevision: -1,
     visibleReport: "",
     intermediateReport: "",
@@ -307,15 +397,15 @@ export function initBotLifecycleState(): BotLifecycleState {
     interop: null,
     failures: [],
     artifacts: [],
+    delivery: undefined,
   };
 }
 
 /**
  * Fold one sanitized Bot projection into a fresh lifecycle snapshot.
  *
- * Revision order controls status and report replacement. Metadata is merged
- * by union/OR so a blank or stale poll can never erase user-visible content,
- * failures, or artifact references.
+ * Revision order controls report facts. Empty content preserves real science;
+ * an explicit fresh warning list may clear warnings from an earlier report.
  */
 export function reduceBotProjection(
   state: BotLifecycleState,
@@ -324,24 +414,22 @@ export function reduceBotProjection(
   const currentRevision = normalizedRevision(state.reportRevision);
   const incomingRevision = normalizedRevision(incoming.reportRevision);
   const stale = isStaleRevision(currentRevision, incomingRevision);
+  const valid = (value: string) =>
+    isApprovedReportText(incoming.agent, value) ? value : "";
   const nextIntermediate = stale
-    ? state.intermediateReport
+    ? valid(state.intermediateReport)
     : mergeReport(
-        state.intermediateReport,
-        typeof incoming.intermediateReport === "string"
-          ? incoming.intermediateReport
-          : "",
+        valid(state.intermediateReport),
+        valid(incoming.intermediateReport),
         false
       );
   const nextFinal = stale
-    ? state.finalReport
-    : mergeReport(
-        state.finalReport,
-        typeof incoming.finalReport === "string" ? incoming.finalReport : "",
-        false
-      );
+    ? valid(state.finalReport)
+    : mergeReport(valid(state.finalReport), valid(incoming.finalReport), false);
   const incomingStatus = mapStatus(incoming.status);
   const nextStatus = mergeStatus(state.status, incomingStatus, stale);
+  const nextWorkStage =
+    stale || incoming.workStage === null ? state.workStage : incoming.workStage;
   const nextRunId = state.runId ?? incoming.runId ?? null;
   const nextRevision = Math.max(currentRevision, incomingRevision);
   const interopEnabled = INTEROP_AGENT_NAMES.has(incoming.agent);
@@ -350,24 +438,42 @@ export function reduceBotProjection(
     interopEnabled ? incoming.interop : null,
     stale
   );
+  const report = stale ? state.report : (incoming.report ?? state.report);
+  const warnings = stale
+    ? state.reportWarningCodes
+    : (incoming.reportWarningCodes ?? state.reportWarningCodes);
 
   return {
     runId: nextRunId,
     status: nextStatus,
+    workStage: nextWorkStage,
     reportRevision: nextRevision,
+    report: report ? { ...report } : undefined,
+    reportWarningCodes: warnings
+      ? [...new Set(warnings.filter(isBotReportWarningCode))]
+      : undefined,
+    reportStage: stale ? state.reportStage : incoming.reportStage,
+    reportUpdatedAt: stale ? state.reportUpdatedAt : incoming.reportUpdatedAt,
+    progress: stale ? state.progress : { ...incoming.progress },
     intermediateReport: nextIntermediate,
     finalReport: nextFinal,
     visibleReport: hasText(nextFinal) ? nextFinal : nextIntermediate,
-    degraded:
-      state.degraded === true ||
-      incoming.degraded === true ||
-      incoming.trackingDegraded === true,
+    degraded: stale
+      ? state.degraded
+      : report
+        ? report.degraded || report.state === "degraded"
+        : incoming.degraded,
+    trackingDegraded:
+      state.trackingDegraded === true || incoming.trackingDegraded === true,
     degradedInterop:
       state.degradedInterop === true ||
       (interopEnabled && incoming.degradedInterop === true),
     interop: nextInterop,
     failures: mergeFailures(state.failures, incoming.failures),
-    artifacts: mergeArtifacts(state.artifacts, incoming.artifacts),
+    artifacts: incoming.resultArchiveV1
+      ? []
+      : mergeArtifacts(state.artifacts, incoming.artifacts),
+    delivery: mergeDelivery(state.delivery, incoming.delivery),
   };
 }
 
@@ -378,9 +484,19 @@ export function reduceBotFailure(
 ): BotLifecycleState {
   const safeMessage = safeFailureMessage(failure);
   const terminal = isTerminal(state.status);
+  const cancelled = safeMessage === SAFE_FAILURE_MESSAGES.cancelled;
   return {
+    workStage: state.workStage,
+    report: state.report ? { ...state.report } : undefined,
+    reportWarningCodes: state.reportWarningCodes?.filter(
+      isBotReportWarningCode
+    ),
+    reportStage: state.reportStage,
+    reportUpdatedAt: state.reportUpdatedAt,
+    progress: state.progress ? { ...state.progress } : undefined,
+    trackingDegraded: state.trackingDegraded,
     runId: state.runId,
-    status: terminal ? state.status : "FAILED",
+    status: terminal ? state.status : cancelled ? "CANCELLED" : "FAILED",
     reportRevision: normalizedRevision(state.reportRevision),
     intermediateReport: state.intermediateReport,
     finalReport: state.finalReport,
@@ -392,5 +508,6 @@ export function reduceBotFailure(
     interop: cloneBotInterop(state.interop),
     failures: mergeFailures(state.failures, [safeMessage]),
     artifacts: cloneArtifacts(state.artifacts),
+    delivery: cloneDelivery(state.delivery),
   };
 }

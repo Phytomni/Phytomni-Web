@@ -1,0 +1,13 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "missing-target"
+tool = "eslint"
+rule = "rule"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"

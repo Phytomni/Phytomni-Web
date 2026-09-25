@@ -1,0 +1,17 @@
+data_authorized_structure
+_audit_creation_method 'visual contract fixture'
+_cell.length_a 10.0
+_cell.length_b 10.0
+_cell.length_c 10.0
+_cell.angle_alpha 90
+_cell.angle_beta 90
+_cell.angle_gamma 90
+loop_
+_atom_site.label
+_atom_site.type_symbol
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+C1 C 0.000 0.000 0.000
+O1 O 1.200 0.000 0.000
+N1 N 0.000 1.200 0.000

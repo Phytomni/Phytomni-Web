@@ -1,14 +1,12 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import type {
+  ChatMessage,
+  CitationDocument,
+  ContentBlock,
+} from "@/views/chat/types";
 import type {
   A2uiActionTransport,
   A2uiTransportError,
 } from "@/views/chat/streaming/a2uiAction";
-import {
-  decodeA2uiOpenSurface,
-  decodeA2uiActionResponse,
-} from "@/views/chat/streaming/a2uiParse";
 import type {
   A2uiActionEnvelope,
   A2uiActionResponse,
@@ -16,13 +14,10 @@ import type {
   A2uiTerminalSurface,
   A2uiWidgetKind,
 } from "@/views/chat/streaming/a2uiContract";
-
-const FIXTURE_ROOT = resolve(process.cwd(), "tests/fixtures/a2ui");
-const OPEN_SURFACE_FIXTURES: Record<A2uiWidgetKind, string> = {
-  confirm: "upstream/chat_confirm/downlink.json",
-  form: "upstream/chat_form/downlink.json",
-  choice: "upstream/chat_choice/downlink.json",
-};
+import {
+  createA2uiInputRequiredResponse,
+  createA2uiOpenSurface,
+} from "./a2uiFixtures";
 
 export interface A2uiScenarioOptions {
   dialogueId?: string;
@@ -34,6 +29,8 @@ export interface A2uiScenarioOptions {
 
 export interface A2uiSuccessOptions {
   answer?: string;
+  references?: CitationDocument[];
+  followUpQuestions?: string[];
   terminal?: A2uiTerminalSurface;
 }
 
@@ -51,22 +48,11 @@ interface PendingReply {
   reject: (error: unknown) => void;
 }
 
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(resolve(FIXTURE_ROOT, path), "utf8"));
-}
-
 function readOpenSurface(
   widget: A2uiWidgetKind,
   options: A2uiScenarioOptions
 ): A2uiOpenSurface {
-  const decoded = decodeA2uiOpenSurface(
-    readJson(OPEN_SURFACE_FIXTURES[widget])
-  );
-  if (!decoded.ok) {
-    throw new Error(`Invalid committed A2UI fixture for ${widget}`);
-  }
-
-  const surface = decoded.value;
+  const surface = createA2uiOpenSurface(widget);
   const surfaceId = options.surfaceId ?? surface.surface_id;
   if (surface.widget !== "choice" || options.multiple === undefined) {
     return surfaceId === surface.surface_id
@@ -130,16 +116,7 @@ function terminalFor(
 }
 
 function responseForInputRequired(runId: string): A2uiActionResponse {
-  const decoded = decodeA2uiActionResponse(
-    readJson("http/input_required_round2.json")
-  );
-  if (!decoded.ok || decoded.value.status !== "input_required") {
-    throw new Error("Invalid committed A2UI input-required fixture");
-  }
-  return {
-    ...decoded.value,
-    run_id: runId,
-  };
+  return createA2uiInputRequiredResponse(runId);
 }
 
 export function buildA2uiScenario(
@@ -189,14 +166,23 @@ export function buildA2uiScenario(
       const reply = takePending();
       const envelope = calls[calls.length - 1];
       if (!envelope) throw new Error("A2UI scenario has no action envelope");
+      const formatted = {
+        ...(options.answer === undefined ? {} : { answer: options.answer }),
+        ...(options.references === undefined
+          ? {}
+          : { references: options.references }),
+        ...(options.followUpQuestions === undefined
+          ? {}
+          : { follow_up_questions: options.followUpQuestions }),
+      };
+      const hasFormatted = Object.keys(formatted).length > 0;
+
       reply.resolve({
         status: "succeeded",
         run_id: runId,
         result: {
           a2ui: options.terminal ?? terminalFor(surface, envelope),
-          ...(options.answer === undefined
-            ? {}
-            : { formatted: { answer: options.answer } }),
+          ...(hasFormatted ? { formatted } : {}),
         },
       });
     },

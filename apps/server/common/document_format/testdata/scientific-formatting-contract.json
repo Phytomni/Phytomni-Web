@@ -1,0 +1,64 @@
+{
+  "content": "# Scientific formatting validation: H<sub>2</sub>O\n\n## Abstract\n\nThis is synthetic layout evidence, not a scientific report. The source explicitly distinguishes the *OsD18* gene from the OsD18 protein and preserves the botanical name *Arabidopsis thaliana*. An *in silico* example supplies typography only [1].\n\n## Mixed scientific notation: Fe<sup>3+</sup>\n\nOrdinary area m<sup>2</sup>, water H<sub>2</sub>O, and a literal raised reference-shaped token <sup>[2]</sup> remain source typography. Only this outside reference [2] navigates to the bibliography. **Strong text**, *italic text*, and ***combined text*** retain their faces.\n\n### Linked labels and combinations\n\nThe authored [H<sub>2</sub>O label](https://example.org/molecules) remains one ordinary link. A composed *italic x<sup>2</sup>* and **bold y<sub>i</sub>** preserve both styles. Adjacent x<sup>2</sup><sub>i</sub> remains two independent spans.\n\n- List notation: H<sub>2</sub>O alongside the *OsD18* gene.\n- A second list item retains its explicit citation [1].\n\n> A quoted Fe<sup>3+</sup> example must keep its raised charge inside the line box.\n\n## Table containment\n\n| Specimen | Source-authored notation | Deliberately long explanation | Evidence |\n| --- | --- | --- | --- |\n| *Arabidopsis thaliana* | H<sub>2</sub>O; Fe<sup>3+</sup> | This synthetic cell is deliberately long so that the current writer must wrap words within the column without overlapping the neighboring cell or table borders. | [1] |\n| *OsD18* gene / OsD18 protein | **x<sup>2</sup>** and *y<sub>i</sub>* | Adjacent styles must not split a word unnecessarily; the mixed upper and lower runs must contribute to the measured row height. | [2] |\n| Synthetic long identifier | ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 | Long tokens remain complete and use the existing measured break policy. | Literal <sup>[2]</sup> |\n\nFigure 1. Synthetic H<sub>2</sub>O and Fe<sup>3+</sup> caption text; no image is fetched by this fixture.\n\n## Literal and rejected input\n\nEncoded &lt;sup&gt;2&lt;/sup&gt; and inline code `<sub>2</sub>` stay literal. A mismatched <sup>2</sub> is visible and does not consume this outside citation [1]. Nested scripts <sup><sub>2</sub></sup> remain literal.\n\nEntity-decoded line breaks stay within one source-authored script: x<sub>i&#10;j&#13;k&#13;&#10;l</sub>. This case tests text preservation, not a scientific formula.",
+  "references": [
+    {
+      "au": "Tester, A",
+      "ti": "Synthetic H<sub>2</sub>O and *OsD18* study",
+      "so": "Fixture Journal",
+      "vl": "1",
+      "bp": "1",
+      "ep": "3",
+      "py": "2026",
+      "dl": "https://example.org/synthetic-water"
+    },
+    {
+      "formatted_citation": "Sample, B. Synthetic Fe<sup>3+</sup> study. *Fixture Reports* **2**, 4–5 (2026)."
+    }
+  ],
+  "expected": {
+    "origin": "Hand-authored synthetic typography fixture; references are fictional.",
+    "citation_indices": [[1], [2], [1], [1], [2], [1]],
+    "ordinary_script_citation_links": 0,
+    "reference_runs": [
+      [
+        { "text": "Tester, A. Synthetic H" },
+        { "text": "2", "vertical": "subscript" },
+        { "text": "O and " },
+        { "text": "OsD18", "italic": true },
+        { "text": " study. " },
+        { "text": "Fixture Journal", "italic": true },
+        { "text": " " },
+        { "text": "1", "bold": true },
+        { "text": ", 1–3 (2026)." }
+      ],
+      [
+        { "text": "Sample, B. Synthetic Fe" },
+        { "text": "3+", "vertical": "superscript" },
+        { "text": " study. " },
+        { "text": "Fixture Reports", "italic": true },
+        { "text": " " },
+        { "text": "2", "bold": true },
+        { "text": ", 4–5 (2026)." }
+      ]
+    ],
+    "role_base_pt": {
+      "title": 16,
+      "section": 14,
+      "subsection": 12,
+      "body": 12,
+      "reference": 12,
+      "table": 10,
+      "caption": 10,
+      "reference_links": 10
+    },
+    "native_word_vertical_once": true,
+    "pdf_script_size_fraction": [2, 3],
+    "pdf_script_rise_fraction": [1, 4],
+    "required_text": [
+      "Arabidopsis thaliana",
+      "OsD18",
+      "in silico",
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    ]
+  }
+}

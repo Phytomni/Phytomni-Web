@@ -487,3 +487,78 @@ func TestRenameAgentToolNames(t *testing.T) {
 		t.Errorf("second run affected %d rows; want 0", n2)
 	}
 }
+
+func TestSyncDefaultRoleToolGrants(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.Exec(`CREATE TABLE tool_names (
+		id INTEGER PRIMARY KEY,
+		tool_name TEXT,
+		description TEXT
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Exec(`CREATE TABLE user_tool_names (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT,
+		tool_id TEXT
+	)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	names := []string{
+		"ChatAgent", "KnowledgeAgent", "DataAgent", "ReviewAgent", "BriefGeneAgent",
+		"AnalystAgent", "DeepGenomeAgent", "InSilicoResearchAgent", "GeneNetworkAgent",
+		"DigitalDesignAgent",
+	}
+	for i, name := range names {
+		if err := gdb.Exec(`INSERT INTO tool_names (id, tool_name) VALUES (?, ?)`, i+1, name).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := gdb.Exec(`INSERT INTO user_tool_names (code, tool_id) VALUES
+		('user', '1'), ('user', '7'), ('user', '10'),
+		('ten_agent_e2e', '7')`).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := syncDefaultRoleToolGrants(gdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("expected rows to change on first sync")
+	}
+	assertRoleTools(t, gdb, "guest", []string{"1", "2", "3"})
+	assertRoleTools(t, gdb, "user", []string{"1", "2", "3", "4", "5"})
+	assertRoleTools(t, gdb, "vip_user", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"})
+	assertRoleTools(t, gdb, "ten_agent_e2e", []string{"7"})
+
+	n2, err := syncDefaultRoleToolGrants(gdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n2 != 0 {
+		t.Fatalf("second sync changed %d rows", n2)
+	}
+}
+
+func assertRoleTools(t *testing.T, gdb *gorm.DB, role string, want []string) {
+	t.Helper()
+	var ids []string
+	if err := gdb.Model(&model.UserToolName{}).
+		Where("code = ?", role).
+		Order("CAST(tool_id AS INTEGER)").
+		Pluck("tool_id", &ids).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != len(want) {
+		t.Fatalf("%s grants=%v want=%v", role, ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("%s grants=%v want=%v", role, ids, want)
+		}
+	}
+}

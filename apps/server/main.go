@@ -43,6 +43,7 @@ func initConfig(*cli.Context) error {
 	// falls back to the Bot relay listing (gene-examples/md/). SetDefault ""
 	// keeps the relay fallback as the safe dormant default.
 	viper.SetDefault("gene_obsfs_path", "")
+	viper.SetDefault("auth.registration_enabled", true)
 	if err := utils.LoadConfigInFile(configFile); err != nil {
 		return err
 	}

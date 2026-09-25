@@ -87,6 +87,14 @@ ratelimit:
     limit: 30
     window: 60s
 
+# Durable registration floor (MySQL operation-log count; always on). This is
+# the outage/abuse floor beneath the Redis limiter and fails closed on a count
+# error. Run the production DDL/backfill procedure separately; this block only
+# tunes the read window and threshold.
+register:
+  durable_floor:
+    limit: 30
+    window: 1h
 
 # OBS listing cache (Web→Bot→OBS directory-listing results for terminal-state
 # tasks, fail-open). Defaults to ON; caches only when Redis is available and the
@@ -121,6 +129,12 @@ http:
 cron:
   switch: true
 
+# Public self-registration. The default is ON for compatibility.
+# Set false to close POST /api/v1/auth/registrations; administrator-token
+# POST /api/v1/users remains available. Restart the Go service after changes.
+auth:
+  registration_enabled: true
+
 # ---------------------------------------------------------------------
 # Gene example obsfs mount root. When set to a readable directory, the
 # gene list/detail and image endpoints read <root>/md/ and <root>/img/
@@ -145,6 +159,17 @@ guest_default_chat_limit: 5
 # after measuring p99 login latency on production hardware.
 # ---------------------------------------------------------------------
 bcrypt_cost: 10
+
+# ---------------------------------------------------------------------
+# Academic cited-report fonts. This server-owned directory must contain
+# authorized Times New Roman files named times.ttf, timesbd.ttf,
+# timesi.ttf, and timesbi.ttf. Fonts are validated when a cited PDF is
+# requested; missing/invalid resources fail that export without blocking
+# service startup or ordinary Chat exports. The browser cannot set this
+# path. No font is downloaded or silently substituted.
+# ---------------------------------------------------------------------
+document_export:
+  font_dir: "/opt/phytomni/report-fonts"
 
 # ---------------------------------------------------------------------
 # Bot service integration (Wave A multi-tenant proxy).
@@ -175,26 +200,10 @@ bcrypt_cost: 10
 # `key_audit_redact` — when true, loggers must never emit the full
 #                      user_api_key string (only first 8 chars prefix).
 #                      The bot HTTP client honors this (landed by B-2).
-# `expert_enabled`   — dark-launch master switch for the Expert routing mode.
-#                      While false the gateway returns 503 for mode=expert
-#                      (no Bot call) and the SPA disables the Expert pill. Set
-#                      true only after the question_agent_logs.mode column ALTER
-#                      and Bot's POST /v1/query/route endpoint are deployed (see
-#                      deploy manual §5.6). Zero value false = safe dormant
-#                      default, mirroring proxy_enabled.
-# `stream_enabled`   — dark-launch switch for AG-UI SSE streaming on /query.
-#                      Keep false until Web/Bot/ops activation evidence is
-#                      complete and reviewed. OFF stays a local pre-dispatch
-#                      503 with no Bot call; authorized operators, not this
-#                      implementation, change the value after external review.
-# `a2ui_actions_enabled` — dark-launch switch for A2UI action uplink.
-#                      Keep false until the A-G1 through A-G8 review and full
-#                      external acceptance evidence are recorded. OFF stays a
-#                      local pre-dispatch 503 with no Bot call; only authorized
-#                      operators change the value after that review.
-# `interop_enabled`  — dark-launch switch for sanitized Bot interop capability
-#                      discovery. Keep false until Web authorization,
-#                      redaction, and external acceptance evidence are reviewed.
+# Expert routing, AG-UI streaming, A2UI actions, interop discovery,
+# conversation-context v1, and Analyst/Design/Network product surfaces are
+# locally always enabled. Admission still follows Bot advertisements,
+# permissions, and ownership checks.
 # Rotate `user_api_key` per Bot runbook ~90 days; ops procedure is
 # (1) issue new key via service-token curl above,
 # (2) edit production app.yml,
@@ -204,34 +213,15 @@ bcrypt_cost: 10
 bot:
   base_url: "http://localhost:8000"
   user_api_key: "REPLACE_ME"
-  timeout_seconds: 900    # gateway↔Bot HTTP client timeout. MUST exceed the slowest SYNC agent's latency — prod observed chat ~140s / knowledge ~198s / review >300s (RAG-heavy). Async agents (analyst/deep_genome) return a task_id fast and are not bound by this. Legacy Python used a 10h request timeout; pick per the slowest sync agent you serve.
+  # Fallback for uploads, control calls, and background-Agent submission.
+  timeout_seconds: 900
+  # Per synchronous Agent execution request; keys are canonical Bot slugs.
+  agent_timeout_seconds:
+    chat: 3000
+    knowledge: 15000
+    data: 9000
+    review: 30000
+    brief_gene: 30000
   proxy_enabled: true
   key_audit_redact: true
-  expert_enabled: false   # dark-launch: Expert routing mode OFF until Bot /v1/query/route ships
-  stream_enabled: false   # OFF: local pre-dispatch 503/no Bot call; operator flips only with Web/Bot/ops evidence
-  a2ui_actions_enabled: false   # OFF: local pre-dispatch 503/no Bot call; operator flips only after A-G1 through A-G8 review
-  interop_enabled: false        # OFF: capability discovery stays hidden until security and external review
-  research_enabled: false   # dark-launch: Research product surface remains unavailable until external acceptance
-  design_enabled: false     # dark-launch: Design product surface remains unavailable until external acceptance
-  network_enabled: false    # dark-launch: Network product surface remains unavailable until external acceptance
-  # /query upload bounds (0 or omitted = built-in default). Tune without recompiling.
-  max_upload_file_bytes: 26214400    # 25 MiB per file (matches Bot /v1/files 413)
-  max_upload_file_count: 10
-  max_upload_total_bytes: 52428800   # 50 MiB per request
-
-# ---------------------------------------------------------------------
-# Outbound notification email — common/email/email_send.go.
-# `web_base_url` / `api_base_url` are stitched into the link bodies of
-# the notification email (chat page + OBS file download). `from_*` are
-# the QQ-SMTP credentials used to actually send. The auth code is a
-# real production credential previously inlined as a literal; rotating
-# requires updating config/app.yml + restarting the Go service.
-# ---------------------------------------------------------------------
-email:
-  web_base_url: "http://your-web-host"
-  api_base_url: "http://your-api-host:8080"
-  smtp_server: "smtp.qq.com"
-  smtp_port: 587
-  from_display: "nky_email <your-sender@qq.com>"
-  from_address: "your-sender@qq.com"
-  from_auth_code: "your-qq-smtp-auth-code"
+  upload_public_origin: "http://localhost:8000" # browser-reachable Bot origin; never derive from base_url. Upload enablement is negotiated from this origin plus Bot obs-multipart-v2.

@@ -1,28 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import AgentDemoShell from "@/components/demo/AgentDemoShell.vue";
-import enUS from "@/locales/langs/en-US";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/demo/AgentDemoShell.vue"),
   "utf8"
 );
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS },
-});
-
 describe("AgentDemoShell", () => {
   it("owns the scroll surface, renders slots, and associates static status with the result", async () => {
-    const wrapper = mount(AgentDemoShell, {
+    const wrapper = mountWithApp(AgentDemoShell, {
       props: { title: "Knowledge Agent", subtitle: "A static report" },
-      global: { plugins: [i18n, ElementPlus] },
       slots: {
         question: '<p data-test="question">Example question</p>',
         result: '<article data-test="result">Example result</article>',
@@ -61,5 +51,17 @@ describe("AgentDemoShell", () => {
     expect(SOURCE).not.toContain(".app-footer");
     expect(SOURCE).not.toContain("color-mix(");
     expect(SOURCE).toContain("overflow-x: hidden");
+  });
+
+  it("uses the shared fluid document and artifact measures without desktop lower bounds", () => {
+    expect(SOURCE).toContain("container-type: inline-size;");
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-document-max-width));"
+    );
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-artifact-wide-max-width));"
+    );
+    expect(SOURCE).not.toContain("width: min(100%, clamp(1160px");
+    expect(SOURCE).not.toContain("width: min(100%, clamp(1040px");
   });
 });

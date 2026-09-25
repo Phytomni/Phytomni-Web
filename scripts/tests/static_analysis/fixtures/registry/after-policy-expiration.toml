@@ -1,0 +1,24 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "after-policy-expiration"
+tool = "eslint"
+rule = "rule"
+classification = "temporary"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"
+fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+expires_on = 2026-09-01
+remediation = "Remove the directive."
+rationale = "A narrow reason."
+counterfactual = "Removing it would worsen the boundary."
+risk = "A bounded test risk."
+tests = ["scripts/tests/static_analysis/test_model.py"]

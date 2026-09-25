@@ -1,0 +1,10 @@
+{
+  "run_id": "run-b5-failed",
+  "agent": "analyst",
+  "status": "failed",
+  "task_ids": ["child-b5-failed"],
+  "result": {
+    "report_revision": 2,
+    "intermediate_report": "Synthetic partial report"
+  }
+}

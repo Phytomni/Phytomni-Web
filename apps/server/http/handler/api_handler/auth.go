@@ -38,6 +38,14 @@ func (ph *Handler) GetUserProfile(ctx *gin.Context) {
 }
 
 func (ph *Handler) UserRegister(ctx *gin.Context) {
+	if !utils.RegistrationEnabled() {
+		ctx.JSON(http.StatusForbidden, gin.H{
+			"code":    http.StatusForbidden,
+			"message": i18n.T(ctx, "auth.registration_disabled"),
+		})
+		return
+	}
+
 	email := ctx.PostForm("email")
 	password := ctx.PostForm("password")
 

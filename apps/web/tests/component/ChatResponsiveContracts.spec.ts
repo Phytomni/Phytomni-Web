@@ -7,8 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
+import { setViewport } from "../helpers/responsiveMatrix";
 import {
   SIDEBAR_COMPACT_BREAKPOINT,
   SIDEBAR_MOBILE_BREAKPOINT,
@@ -16,9 +16,10 @@ import {
 } from "@/views/chat/composables/useSidebarResponsive";
 import PhyAdaptiveShell from "@/components/shell/PhyAdaptiveShell.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const COMPOSER_SOURCE = readFileSync(
@@ -30,24 +31,20 @@ const NAV_SOURCE = readFileSync(
   "utf8"
 );
 const SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 const SHELL_SOURCE = readFileSync(
   resolve(__dirname, "../../src/components/shell/PhyAdaptiveShell.vue"),
   "utf8"
 );
+const CHAT_FIXTURE_SOURCE = readFileSync(
+  resolve(__dirname, "../visual/chat/ChatVisualFixtureApp.vue"),
+  "utf8"
+);
 
 const countOccurrences = (source: string, needle: string) =>
   source.split(needle).length - 1;
-
-function setInnerWidth(width: number) {
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    writable: true,
-    value: width,
-  });
-}
 
 function makeHarness(opts?: {
   collapsed?: () => boolean;
@@ -74,7 +71,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
-    setInnerWidth(1440);
+    setViewport(1440, 768);
   });
 
   afterEach(() => {
@@ -108,6 +105,12 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
       sidebarCollapsed: true,
     },
     {
+      label: "compact at 1024",
+      width: 1024,
+      isMobile: false,
+      sidebarCollapsed: true,
+    },
+    {
       label: "compact below 1280",
       width: 1279,
       isMobile: false,
@@ -122,8 +125,8 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   ])(
     "maps $label ($width CSS px) without geometry claims",
     async ({ width, isMobile, sidebarCollapsed }) => {
-      setInnerWidth(width);
-      const wrapper = mount(makeHarness());
+      setViewport(width, 768);
+      const wrapper = mountWithApp(makeHarness());
       await nextTick();
 
       expect(wrapper.vm.isMobile).toBe(isMobile);
@@ -134,9 +137,9 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
   );
 
   it("opens and closes the mobile drawer only below the mobile breakpoint", async () => {
-    setInnerWidth(899);
+    setViewport(899, 768);
     const onDrawer = vi.fn();
-    const wrapper = mount(makeHarness({ onDrawerOpenChange: onDrawer }));
+    const wrapper = mountWithApp(makeHarness({ onDrawerOpenChange: onDrawer }));
 
     expect(wrapper.vm.isMobile).toBe(true);
     wrapper.vm.openDrawer();
@@ -144,8 +147,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
     expect(wrapper.vm.drawerOpen).toBe(true);
     expect(onDrawer).toHaveBeenCalledWith(true);
 
-    setInnerWidth(900);
-    window.dispatchEvent(new Event("resize"));
+    setViewport(900, 768);
     vi.advanceTimersByTime(100);
     await nextTick();
     expect(wrapper.vm.isMobile).toBe(false);
@@ -161,7 +163,7 @@ describe("ChatResponsiveContracts — breakpoint controller", () => {
 
 describe("ChatResponsiveContracts — shell class and drawer presentation", () => {
   it("applies collapsed and drawer-open classes from props", () => {
-    const expanded = mount(PhyAdaptiveShell, {
+    const expanded = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: false },
       slots: { sidebar: "<nav />", main: "<main />" },
     });
@@ -169,13 +171,13 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
     expect(expanded.classes()).not.toContain("is-sidebar-collapsed");
     expect(expanded.attributes("data-scroll-root")).toBe("adaptive");
 
-    const collapsed = mount(PhyAdaptiveShell, {
+    const collapsed = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: true },
       slots: { sidebar: "<nav />", main: "<main />" },
     });
     expect(collapsed.classes()).toContain("is-sidebar-collapsed");
 
-    const drawer = mount(PhyAdaptiveSidebar, {
+    const drawer = mountWithApp(PhyAdaptiveSidebar, {
       props: { collapsed: false, drawerOpen: true },
       slots: { default: "<nav />" },
     });
@@ -183,7 +185,7 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
   });
 
   it("makes the main surface inert while the mobile drawer owns focus", async () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: false, mainInert: true },
       slots: {
         sidebar: "<nav />",
@@ -217,6 +219,25 @@ describe("ChatResponsiveContracts — shell class and drawer presentation", () =
 });
 
 describe("ChatResponsiveContracts — single scroll owner and stable hooks", () => {
+  it("caps tall empty-state compositions in production and visual evidence", () => {
+    for (const source of [CHAT_SOURCE, CHAT_FIXTURE_SOURCE]) {
+      expect(source).toMatch(
+        /@media \(min-width: 900px\)[\s\S]*?\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-block:\s*auto;/
+      );
+      expect(source).toMatch(
+        /@media \(min-width: 1920px\)[\s\S]*?\.chat-content-stack\.is-empty\s*\{[\s\S]*?max-height:\s*840px;[\s\S]*?margin-top:\s*auto;[\s\S]*?margin-bottom:\s*0;/
+      );
+    }
+  });
+
+  it("reserves a clean mobile Cases landing after the Composer", () => {
+    for (const source of [CHAT_SOURCE, CHAT_FIXTURE_SOURCE]) {
+      expect(source).toMatch(
+        /@media \(min-width: 390px\) and \(max-width: 600px\)[\s\S]*?\.chat-cases-region\s*\{[\s\S]*?padding-bottom:\s*calc\([\s\S]*?var\(--phy-space-48\)[\s\S]*?var\(--phy-space-48\)/
+      );
+    }
+  });
+
   it("keeps the architecture dialog within the mobile viewport", () => {
     expect(CHAT_SOURCE).toContain('width="min(800px, calc(100vw - 32px))"');
   });
@@ -250,8 +271,8 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
       countOccurrences(NAV_SOURCE, 'data-testid="chat-account-identity"')
     ).toBe(1);
     expect(
-      countOccurrences(CHAT_SOURCE, 'data-testid="chat-primary-action"')
-    ).toBe(0);
+      CHAT_SOURCE.match(/\sdata-testid="chat-primary-action"/g) ?? []
+    ).toHaveLength(0);
   });
 
   it("locks Composer safe-area padding on the composer root class", () => {
@@ -285,5 +306,23 @@ describe("ChatResponsiveContracts — single scroll owner and stable hooks", () 
     expect(CHAT_SOURCE).toContain(
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
+  });
+
+  it("keeps temporary Explore Agents disclosure inside a collapsed desktop sidebar", () => {
+    expect(SIDEBAR_SOURCE).toContain("compactDisclosureExpanded");
+    expect(SIDEBAR_SOURCE).toContain(
+      "window.innerWidth >= SIDEBAR_MOBILE_BREAKPOINT"
+    );
+    expect(SIDEBAR_SOURCE).toContain(
+      "window.innerWidth < SIDEBAR_COMPACT_BREAKPOINT"
+    );
+    expect(SIDEBAR_SOURCE).toContain("watch(isMobile, closeAgentDisclosure)");
+    expect(SIDEBAR_SOURCE).toContain(
+      "closeAgentDisclosure();\n  closeDrawer();"
+    );
+    expect(NAV_SOURCE).toContain("width: min(100%, 248px);");
+    expect(NAV_SOURCE).toContain("max-height: min(400px, 52vh);");
+    expect(NAV_SOURCE).toContain("overflow-y: auto;");
+    expect(NAV_SOURCE).toContain("overflow-wrap: anywhere;");
   });
 });

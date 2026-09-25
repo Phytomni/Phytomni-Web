@@ -1,6 +1,7 @@
 import { nextTick, watch } from "vue";
-import type { Ref, WritableComputedRef } from "vue";
-import type { ChatMessage, ChatUIState } from "../types";
+import type { Ref } from "vue";
+import type { AnalystAgentLog } from "@/api/types";
+import type { ChatMessage, ChatUIState, ChatView } from "../types";
 import { ElMessage } from "element-plus";
 import i18n from "@/locales";
 import { getAnalystAgentLog, updateAnalystAgentLog } from "@/api/chat";
@@ -31,27 +32,23 @@ export function analystLogActivityKey(rowId: string): string {
   return `log:${rowId}`;
 }
 
-function parseLogPayload(data: unknown): unknown {
-  if (typeof data === "string") {
-    return data;
+function mergeLogResponse(
+  cached: AnalystAgentLog | undefined,
+  next: AnalystAgentLog
+): AnalystAgentLog {
+  if (next.state !== "DEGRADED" || next.text !== "" || !cached?.text) {
+    return next;
   }
-  try {
-    return JSON.parse(data as string);
-  } catch (parseError) {
-    console.error("JSON parse failed:", parseError);
-    return data;
-  }
+  return { ...next, text: cached.text };
 }
 
 export function useLogView(opts: {
-  isSending: WritableComputedRef<boolean>;
-  currentChat: Ref<any>;
+  currentChat: Ref<ChatView | null>;
   currentChatId: Ref<string>;
   getChatState: (dialogueId: string) => ChatUIState;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
 }) {
-  const { isSending, currentChat, currentChatId, getChatState, scrollToBottom } =
-    opts;
+  const { currentChat, currentChatId, getChatState, scrollToBottom } = opts;
 
   const fetchLogIfNeeded = async (
     rowId: string,
@@ -59,25 +56,19 @@ export function useLogView(opts: {
     force = false
   ) => {
     // Use `in` so a successful empty payload ("") still counts as cached.
-    if (
-      !force &&
-      (rowId in chatState.logData || chatState.loadingLog[rowId])
-    ) {
+    if (!force && (rowId in chatState.logData || chatState.loadingLog[rowId])) {
       return;
     }
     chatState.loadingLog[rowId] = true;
     try {
       const res = await getAnalystAgentLog({ id: rowId });
-      // code===200 is success even when TaskLog is empty/falsy (show no-data).
+      // Preserve the bounded DTO; presentation owns state-specific labels.
       if (res.code === 200) {
-        chatState.logData[rowId] =
-          res.data == null || res.data === ""
-            ? ""
-            : parseLogPayload(res.data);
+        chatState.logData[rowId] = mergeLogResponse(
+          chatState.logData[rowId],
+          res.data
+        );
         delete chatState.logErrorKinds[rowId];
-        nextTick(() => {
-          scrollToBottom();
-        });
       } else {
         console.error("Failed to fetch log:", res);
         chatState.logErrorKinds[rowId] = "fetch";
@@ -93,17 +84,18 @@ export function useLogView(opts: {
   /** One-time legacy open: showLog===true seeds the Activity map once. */
   const ensureLegacyLogActivityInit = () => {
     if (!currentChatId.value) return;
-    const messages = currentChat.value?.messages as ChatMessage[] | undefined;
+    const messages = currentChat.value?.messages;
     if (!messages) return;
     const chatState = getChatState(currentChatId.value);
     for (const message of messages) {
+      if (!message || typeof message !== "object") continue;
       if (message.showLog !== true) continue;
       const rowId = deriveAnalystLogRowId(message);
       if (!rowId) continue;
       const key = analystLogActivityKey(rowId);
       if (!(key in chatState.activityExpandedByMessage)) {
         chatState.activityExpandedByMessage[key] = true;
-        void fetchLogIfNeeded(rowId, chatState);
+        fetchLogIfNeeded(rowId, chatState).catch(() => undefined);
       }
     }
   };
@@ -117,7 +109,6 @@ export function useLogView(opts: {
   );
 
   const setLogExpanded = async (message: ChatMessage, expanded: boolean) => {
-    if (isSending.value) return;
     if (!currentChatId.value) return;
 
     const rowId = deriveAnalystLogRowId(message);
@@ -130,12 +121,11 @@ export function useLogView(opts: {
       expanded;
 
     if (expanded) {
-      await fetchLogIfNeeded(rowId, chatState);
+      const cached = chatState.logData[rowId];
+      const forcePending =
+        cached?.source === "BOT_RUN" && cached.state === "PENDING";
+      await fetchLogIfNeeded(rowId, chatState, forcePending);
     }
-
-    nextTick(() => {
-      scrollToBottom();
-    });
   };
 
   /** @deprecated Prefer setLogExpanded — kept name for call-site clarity during fold. */
@@ -157,6 +147,13 @@ export function useLogView(opts: {
 
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
+    const cached = chatState.logData[rowId];
+    if (
+      cached?.source !== "LEGACY_TASK" ||
+      cached.can_request_legacy_refresh !== true
+    ) {
+      return;
+    }
 
     chatState.updatingLog[rowId] = true;
 
@@ -192,8 +189,8 @@ export function useLogView(opts: {
       chatState.updatingLog[rowId] = false;
 
       nextTick(() => {
-        scrollToBottom();
-      });
+        scrollToBottom().catch(() => undefined);
+      }).catch(() => undefined);
     }
   };
 
@@ -213,11 +210,27 @@ export function useLogView(opts: {
     await fetchLogIfNeeded(rowId, chatState, true);
   };
 
+  const refreshModernLog = async (message: ChatMessage) => {
+    if (!currentChatId.value) return;
+    const rowId = deriveAnalystLogRowId(message);
+    if (!rowId) return;
+    const chatState = getChatState(currentChatId.value);
+    if (
+      chatState.activityExpandedByMessage[analystLogActivityKey(rowId)] !== true
+    ) {
+      return;
+    }
+    const cached = chatState.logData[rowId];
+    if (cached && cached.source !== "BOT_RUN") return;
+    await fetchLogIfNeeded(rowId, chatState, cached?.source === "BOT_RUN");
+  };
+
   return {
     setLogExpanded,
     toggleLogView,
     updateLog,
     retryLog,
+    refreshModernLog,
     ensureLegacyLogActivityInit,
   };
 }

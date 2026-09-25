@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const SOURCE = readFileSync(
-  resolve(__dirname, "../../src/layout/index.vue"),
+  resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
 

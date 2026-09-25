@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
 import ChatHistoryList, {
   type ChatHistoryGroup,
 } from "@/views/chat/components/ChatHistoryList.vue";
 import type { Chat } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const HISTORY_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatHistoryList.vue"),
@@ -47,7 +47,7 @@ const groups: ChatHistoryGroup[] = [
 ];
 
 const mountList = (overrides: Record<string, unknown> = {}) =>
-  mount(ChatHistoryList, {
+  mountWithApp(ChatHistoryList, {
     props: {
       groups,
       currentChatId: "dialogue-2",
@@ -102,7 +102,7 @@ describe("ChatHistoryList", () => {
 
     expect(wrapper.findAll(".time-group")).toHaveLength(2);
     expect(wrapper.findAll(".time-label").map((label) => label.text())).toEqual(
-      ["chat.timeGroup.today", "chat.timeGroup.week"]
+      ["Today", "Within 7 Days"]
     );
     expect(wrapper.findAll(".chat-item")).toHaveLength(2);
   });
@@ -133,5 +133,39 @@ describe("ChatHistoryList", () => {
 
     expect(wrapper.emitted("action")).toEqual([["delete", groups[0].items[0]]]);
     expect(wrapper.emitted("select")).toBeUndefined();
+  });
+
+  it("keys pending conversations by dialogue and hides server-only actions", () => {
+    const pendingGroups: ChatHistoryGroup[] = [
+      {
+        key: "today",
+        labelKey: "chat.timeGroup.today",
+        items: [
+          makeChat({
+            id: 0,
+            dialogue_id: "pending-a",
+            title: "Pending A",
+            isPending: true,
+          }),
+          makeChat({
+            id: 0,
+            dialogue_id: "pending-b",
+            title: "Pending B",
+            isPending: true,
+          }),
+          makeChat({
+            id: 9,
+            dialogue_id: "persisted",
+            title: "Persisted",
+          }),
+        ],
+      },
+    ];
+
+    const wrapper = mountList({ groups: pendingGroups });
+
+    expect(wrapper.findAll(".chat-item")).toHaveLength(3);
+    expect(wrapper.findAll(".chat-actions")).toHaveLength(1);
+    expect(HISTORY_SOURCE).toContain(':key="chat.dialogue_id"');
   });
 });

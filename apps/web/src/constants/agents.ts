@@ -1,6 +1,7 @@
 // Single source of truth for agent tool names on the Web side. These MUST equal
 // the Bot /v1/agents tool names (see apps/server external/bot CanonicalAgentTool
-// and its drift-guard test). The @-able subset is what users can mention/send.
+// and its drift-guard test). Every server-granted canonical tool is eligible for
+// Chat selection and mention; derivePickerOptions applies the grant intersection.
 export const CANONICAL_AGENT_TOOLS = [
   "ChatAgent",
   "KnowledgeAgent",
@@ -16,26 +17,39 @@ export const CANONICAL_AGENT_TOOLS = [
 
 export type CanonicalAgentTool = (typeof CANONICAL_AGENT_TOOLS)[number];
 
-export const CANONICAL_AT_ABLE_TOOLS = [
+/**
+ * Stable product order for every user-facing Chat agent selector.
+ *
+ * This intentionally stays separate from CANONICAL_AGENT_TOOLS: the latter
+ * mirrors the Bot capability manifest order, while the former preserves the
+ * product's fixed tool-permission display order.
+ */
+export const CANONICAL_AGENT_DISPLAY_ORDER = [
   "ChatAgent",
   "KnowledgeAgent",
   "DataAgent",
+  "AnalystAgent",
   "ReviewAgent",
+  "InSilicoResearchAgent",
+  "GeneNetworkAgent",
   "BriefGeneAgent",
+  "DeepGenomeAgent",
+  "DigitalDesignAgent",
 ] as const;
 
-export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> = {
-  ChatAgent: "Chat Agent",
-  KnowledgeAgent: "Knowledge Agent",
-  DataAgent: "Data Agent",
-  ReviewAgent: "Review Agent",
-  BriefGeneAgent: "Brief Gene Agent",
-  AnalystAgent: "Analyst Agent",
-  DeepGenomeAgent: "Deep Genome Agent",
-  InSilicoResearchAgent: "In Silico Research Agent",
-  DigitalDesignAgent: "Digital Design Agent",
-  GeneNetworkAgent: "Gene Network Agent",
-} as const;
+export const CANONICAL_AGENT_DISPLAY_NAMES: Record<CanonicalAgentTool, string> =
+  {
+    ChatAgent: "Chat Agent",
+    KnowledgeAgent: "Knowledge Agent",
+    DataAgent: "Data Agent",
+    ReviewAgent: "Review Agent",
+    BriefGeneAgent: "Brief Gene Agent",
+    AnalystAgent: "Analyst Agent",
+    DeepGenomeAgent: "Deep Genome Agent",
+    InSilicoResearchAgent: "In Silico Research Agent",
+    DigitalDesignAgent: "Digital Design Agent",
+    GeneNetworkAgent: "Gene Network Agent",
+  } as const;
 
 export const CANONICAL_AGENT_ZH_NAMES: Record<CanonicalAgentTool, string> = {
   ChatAgent: "对话智能体",
@@ -63,11 +77,29 @@ export const CANONICAL_AGENT_I18N_KEYS: Record<CanonicalAgentTool, string> = {
   GeneNetworkAgent: "chat.agents.geneNetworkAgent",
 } as const;
 
+/** Short localized names used by the compact @ picker surfaces. */
+export const CANONICAL_AGENT_LABEL_I18N_KEYS: Record<
+  CanonicalAgentTool,
+  string
+> = {
+  ChatAgent: "chat.agentLabels.chatAgent",
+  KnowledgeAgent: "chat.agentLabels.knowledgeAgent",
+  DataAgent: "chat.agentLabels.dataAgent",
+  ReviewAgent: "chat.agentLabels.reviewAgent",
+  BriefGeneAgent: "chat.agentLabels.briefGeneAgent",
+  AnalystAgent: "chat.agentLabels.analystAgent",
+  DeepGenomeAgent: "chat.agentLabels.deepGenomeAgent",
+  InSilicoResearchAgent: "chat.agentLabels.inSilicoResearchAgent",
+  DigitalDesignAgent: "chat.agentLabels.digitalDesignAgent",
+  GeneNetworkAgent: "chat.agentLabels.geneNetworkAgent",
+} as const;
+
 export const CANONICAL_AGENT_PAGE_TITLE_KEYS: Partial<
   Record<CanonicalAgentTool, string>
 > = {
   KnowledgeAgent: "agents.knowledge.title",
   DataAgent: "agents.data.title",
+  ReviewAgent: "agents.review.title",
   BriefGeneAgent: "agents.briefGene.title",
   AnalystAgent: "agents.analyst.title",
   DeepGenomeAgent: "agents.deepGenome.title",
@@ -79,6 +111,7 @@ export const CANONICAL_AGENT_ROUTES = {
   KnowledgeAgent: "/knowledge-agent",
   DataAgent: "/data-agent",
   AnalystAgent: "/analyst-agent",
+  ReviewAgent: "/review-agent",
   BriefGeneAgent: "/brief-gene-agent",
   GeneNetworkAgent: "/gene-network-agent",
   DeepGenomeAgent: "/deep-genome-agent",
@@ -86,18 +119,38 @@ export const CANONICAL_AGENT_ROUTES = {
 } as const;
 
 /**
- * Remote product surfaces are intentionally separate from the seven sidebar
- * routes above.  The three records describe a future capability-gated route
+ * Permission-independent destinations used by the eight Chat case cards.
+ *
+ * Every case card is permission-independent and must not enter
+ * capability-gated live surfaces.
+ */
+export const CANONICAL_AGENT_CASE_ROUTES: Record<RoutedAgentTool, string> = {
+  KnowledgeAgent: "/cases/knowledge-agent",
+  DataAgent: "/cases/data-agent",
+  AnalystAgent: "/cases/analyst-agent",
+  ReviewAgent: "/cases/review-agent",
+  BriefGeneAgent: "/cases/brief-gene-agent",
+  GeneNetworkAgent: "/cases/gene-network-agent",
+  DeepGenomeAgent: "/cases/deep-genome-agent",
+  DigitalDesignAgent: "/cases/digital-design-agent",
+};
+
+/**
+ * Remote product surfaces are intentionally separate from the eight sidebar
+ * routes above. The records describe future capability-gated routes
  * contract; they do not make a demo route look like a live product surface.
  */
 export type RemoteAgentTool = Extract<
   CanonicalAgentTool,
-  "InSilicoResearchAgent" | "DigitalDesignAgent" | "GeneNetworkAgent"
+  | "AnalystAgent"
+  | "InSilicoResearchAgent"
+  | "DigitalDesignAgent"
+  | "GeneNetworkAgent"
 >;
 
 export interface RemoteAgentProductMetadata {
   tool: RemoteAgentTool;
-  slug: "research" | "design" | "network";
+  slug: "analyst" | "research" | "design" | "network";
   route: string;
   routeName: string;
   capability: "agent_run";
@@ -111,6 +164,17 @@ export const REMOTE_AGENT_PRODUCT_REGISTRY: Record<
   RemoteAgentTool,
   RemoteAgentProductMetadata
 > = {
+  AnalystAgent: {
+    tool: "AnalystAgent",
+    slug: "analyst",
+    route: "/analyst-agent",
+    routeName: "analystAgent",
+    capability: "agent_run",
+    requiredRole: "AnalystAgent",
+    attachments: true,
+    artifacts: true,
+    live: false,
+  },
   InSilicoResearchAgent: {
     tool: "InSilicoResearchAgent",
     slug: "research",
@@ -148,6 +212,7 @@ export const REMOTE_AGENT_PRODUCT_REGISTRY: Record<
 
 /** Route values consumed by future guarded product views, never by the @ picker. */
 export const REMOTE_AGENT_ROUTES: Record<RemoteAgentTool, string> = {
+  AnalystAgent: "/analyst-agent",
   InSilicoResearchAgent: "/research-agent",
   DigitalDesignAgent: "/digital-design-agent",
   GeneNetworkAgent: "/gene-network-agent",
@@ -157,25 +222,27 @@ export const REMOTE_AGENT_ROUTE_CONTRACTS = REMOTE_AGENT_PRODUCT_REGISTRY;
 
 export type RoutedAgentTool = keyof typeof CANONICAL_AGENT_ROUTES;
 
-export type CanonicalAtAbleTool = (typeof CANONICAL_AT_ABLE_TOOLS)[number];
-
 export type PickerAgentOption = {
-  tool: CanonicalAtAbleTool;
+  tool: CanonicalAgentTool;
   labelKey: string;
   displayName: string;
 };
 
 export function derivePickerOptions(
-  rolesTool: readonly string[]
+  roles: readonly string[]
 ): PickerAgentOption[] {
-  return CANONICAL_AT_ABLE_TOOLS.filter((tool) => rolesTool.includes(tool)).map(
-    (tool) => ({
-      tool,
-      labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
-      displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
-    })
-  );
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter((tool) =>
+    roles.includes(tool)
+  ).map((tool) => ({
+    tool,
+    labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
+    displayName: CANONICAL_AGENT_DISPLAY_NAMES[tool],
+  }));
 }
+
+export type AgentCaseMedia =
+  | Readonly<{ kind: "image"; src: string }>
+  | Readonly<{ kind: "monogram"; text: string }>;
 
 export type SidebarRouteOption = {
   id: number;
@@ -183,31 +250,85 @@ export type SidebarRouteOption = {
   toolName: RoutedAgentTool;
   icon: string;
   route: string;
-  img: string;
+  media: AgentCaseMedia;
 };
+
+function isRoutedAgentTool(tool: CanonicalAgentTool): tool is RoutedAgentTool {
+  return Object.prototype.hasOwnProperty.call(CANONICAL_AGENT_ROUTES, tool);
+}
 
 const SIDEBAR_ROUTE_META: Record<
   RoutedAgentTool,
-  { id: number; icon: string; img: string }
+  { id: number; icon: string; media: AgentCaseMedia }
 > = {
-  KnowledgeAgent: { id: 2, icon: "Search", img: "/KnowledgeAgent.jpg" },
-  DataAgent: { id: 3, icon: "DataLine", img: "/DataAgent.jpg" },
-  AnalystAgent: { id: 4, icon: "Edit", img: "/AnalystAgent.jpg" },
-  BriefGeneAgent: { id: 5, icon: "Edit", img: "/BriefGeneAgent.jpg" },
-  GeneNetworkAgent: { id: 6, icon: "Edit", img: "/GeneNetworkAgent.jpg" },
-  DeepGenomeAgent: { id: 7, icon: "Edit", img: "/DeepGenomeAgent.jpg" },
-  DigitalDesignAgent: { id: 8, icon: "Edit", img: "/DigitalDesignAgent.jpg" },
+  KnowledgeAgent: {
+    id: 2,
+    icon: "Search",
+    media: { kind: "image", src: "/agent-icons/KnowledgeAgent.jpg" },
+  },
+  DataAgent: {
+    id: 3,
+    icon: "DataLine",
+    media: { kind: "image", src: "/agent-icons/DataAgent.jpg" },
+  },
+  AnalystAgent: {
+    id: 4,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/AnalystAgent.jpg" },
+  },
+  ReviewAgent: {
+    id: 9,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/ReviewAgent.jpg" },
+  },
+  BriefGeneAgent: {
+    id: 5,
+    icon: "Edit",
+    media: { kind: "monogram", text: "BG" },
+  },
+  GeneNetworkAgent: {
+    id: 6,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/GeneNetworkAgent.jpg" },
+  },
+  DeepGenomeAgent: {
+    id: 7,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/DeepGenomeAgent.jpg" },
+  },
+  DigitalDesignAgent: {
+    id: 8,
+    icon: "Edit",
+    media: { kind: "image", src: "/agent-icons/DigitalDesignAgent.jpg" },
+  },
 };
 
 export function deriveSidebarRouteOptions(): SidebarRouteOption[] {
-  return (Object.keys(CANONICAL_AGENT_ROUTES) as RoutedAgentTool[]).map(
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter(isRoutedAgentTool).map(
     (toolName) => ({
       id: SIDEBAR_ROUTE_META[toolName].id,
       name: CANONICAL_AGENT_DISPLAY_NAMES[toolName],
       toolName,
       icon: SIDEBAR_ROUTE_META[toolName].icon,
       route: CANONICAL_AGENT_ROUTES[toolName],
-      img: SIDEBAR_ROUTE_META[toolName].img,
+      media: SIDEBAR_ROUTE_META[toolName].media,
     })
   );
+}
+
+/**
+ * Cases are the routed subset of agents, but still follow the fixed product
+ * display order rather than the route-registry insertion order.
+ */
+export function deriveCaseRouteOptions(): SidebarRouteOption[] {
+  return deriveSidebarRouteOptions()
+    .map((option) => ({
+      ...option,
+      route: CANONICAL_AGENT_CASE_ROUTES[option.toolName],
+    }))
+    .sort(
+      (left, right) =>
+        CANONICAL_AGENT_DISPLAY_ORDER.indexOf(left.toolName) -
+        CANONICAL_AGENT_DISPLAY_ORDER.indexOf(right.toolName)
+    );
 }

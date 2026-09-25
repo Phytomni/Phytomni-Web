@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { nextTick } from "vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
 
 const CHAT_SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../../src/views/chat/ChatSidebar.vue"),
+  "utf8"
+);
+const SIDEBAR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyAdaptiveSidebar.vue"),
   "utf8"
 );
 
 describe("PhyAdaptiveSidebar", () => {
   it("renders expanded and collapsed presentation states", () => {
-    const expanded = mount(PhyAdaptiveSidebar, {
+    const expanded = mountWithApp(PhyAdaptiveSidebar, {
       slots: { default: '<nav data-test="navigation">Navigation</nav>' },
     });
-    const collapsed = mount(PhyAdaptiveSidebar, {
+    const collapsed = mountWithApp(PhyAdaptiveSidebar, {
       props: { collapsed: true },
       slots: { default: '<nav data-test="navigation">Navigation</nav>' },
     });
@@ -26,7 +30,7 @@ describe("PhyAdaptiveSidebar", () => {
   });
 
   it("emits toggle only from the optional toggle control slot", async () => {
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       slots: {
         toggle: '<span data-test="toggle-label">Toggle</span>',
       },
@@ -39,7 +43,7 @@ describe("PhyAdaptiveSidebar", () => {
   });
 
   it("emits close when the open drawer scrim is activated", async () => {
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       props: { drawerOpen: true },
       slots: { default: "<p>History</p>" },
     });
@@ -56,7 +60,7 @@ describe("PhyAdaptiveSidebar", () => {
     document.body.appendChild(opener);
     opener.focus();
 
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       attachTo: document.body,
       props: { drawerOpen: true, dialogLabel: "Conversation navigation" },
       slots: {
@@ -103,7 +107,7 @@ describe("PhyAdaptiveSidebar", () => {
     expect(Object.keys(props)).toEqual(
       expect.arrayContaining(["collapsed", "drawerOpen"])
     );
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       props: {
         drawerOpen: true,
         closeLabel: "Close navigation",
@@ -121,7 +125,7 @@ describe("PhyAdaptiveSidebar", () => {
   });
 
   it("shows the explicit close control only for an open drawer", async () => {
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       props: { drawerOpen: false },
       slots: { close: "Close" },
     });
@@ -136,7 +140,7 @@ describe("PhyAdaptiveSidebar", () => {
   });
 
   it("keeps navigation, history, and account regions inside one surface", () => {
-    const wrapper = mount(PhyAdaptiveSidebar, {
+    const wrapper = mountWithApp(PhyAdaptiveSidebar, {
       slots: {
         default: `
           <div class="sidebar">
@@ -166,5 +170,13 @@ describe("PhyAdaptiveSidebar", () => {
       ":close-label=\"$t('common.close')\""
     );
     expect(CHAT_SIDEBAR_SOURCE).toContain("<Close />");
+  });
+
+  it("contains rejected drawer focus scheduling", () => {
+    expect(SIDEBAR_SOURCE).toContain("}).catch(() => undefined);");
+  });
+
+  it("keeps the sidebar root shrink-safe", () => {
+    expect(SIDEBAR_SOURCE).toContain("min-width: 0;");
   });
 });

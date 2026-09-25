@@ -44,8 +44,14 @@ func (c *Client) GetObsObjectStream(ctx context.Context, path string) (io.ReadCl
 		return nil, 0, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		// Error bodies are buffered before callers can enforce their object limit.
+		// Keep only a bounded envelope; successful object streams stay caller-owned.
+		const maxErrorBytes = 64 << 10
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes))
 		resp.Body.Close()
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		return nil, 0, botError(http.MethodGet, "/v1/relay/obs/object", resp.StatusCode, raw)
 	}
 	return resp.Body, resp.ContentLength, nil

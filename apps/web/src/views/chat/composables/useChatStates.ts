@@ -1,5 +1,7 @@
 import { ref, computed } from "vue";
-import type { UploadFile, ChatUIState, ChatView } from "../types";
+import type { ChatMessage, ChatUIState, ChatView } from "../types";
+import type { AnalystAgentLog } from "@/api/types";
+import type { ResumableUploadItem } from "../upload/types";
 import type { RekeyChatStateOutcome } from "../types";
 
 function createDefaultChatUIState(): ChatUIState {
@@ -7,19 +9,23 @@ function createDefaultChatUIState(): ChatUIState {
     isSending: false,
     messageInput: "",
     fileList: [],
+    attachmentAnnouncementNonce: 0,
     historyQuestion: null,
+    historyHydration: "new",
+    historyErrorKind: null,
     copyVisible: 0,
     copyTimeRef: undefined,
     logData: {},
     loadingLog: {},
     refreshingMessages: {},
+    agentRunLifecycles: {},
     reactions: {},
     updatingLog: {},
     logErrorKinds: {},
     sendStartedAt: null,
     activeAgentName: "",
     completing: false,
-    mode: "instant",
+    mode: "expert",
     isStreaming: false,
     streamingMessageId: null,
     uploadTransfer: null,
@@ -27,11 +33,16 @@ function createDefaultChatUIState(): ChatUIState {
     renderedChat: null,
     activeRequestId: "",
     generationStopped: false,
+    pendingTurnId: null,
+    pendingTurnFingerprint: null,
+    refreshTurnIds: {},
     activityExpandedByMessage: {},
     artifactOpen: false,
-    activeArtifactMessageId: null,
+    activeArtifactIdentity: null,
     artifactTab: "content",
-    autoOpenedArtifactMessageIds: [],
+    handledArtifactIdentities: [],
+    archiveRetryingByMessageId: {},
+    materialDetailsByArtifact: {},
   };
 }
 
@@ -97,12 +108,16 @@ export function useChatStates() {
   // routing mode - per the current conversation (locked after the first send)
   const chatMode = computed({
     get: (): "instant" | "expert" => {
-      if (!currentChatId.value) return "instant";
+      if (!currentChatId.value) return "expert";
       return getChatState(currentChatId.value).mode;
     },
     set: (value: "instant" | "expert") => {
       if (!currentChatId.value) return;
-      getChatState(currentChatId.value).mode = value;
+      const chatState = getChatState(currentChatId.value);
+      chatState.mode = value;
+      if (value === "instant") {
+        chatState.selectedAgent = "";
+      }
     },
   });
 
@@ -125,12 +140,45 @@ export function useChatStates() {
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.fileList : [];
     },
-    set: (value: UploadFile[]) => {
+    set: (value: ResumableUploadItem[]) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
         chatState.fileList = value;
       }
+    },
+  });
+
+  const focusedUploadLocalId = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).focusedUploadLocalId ?? "";
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).focusedUploadLocalId = value;
+    },
+  });
+
+  const attachmentAnnouncement = computed({
+    get: (): string => {
+      if (!currentChatId.value) return "";
+      return getChatState(currentChatId.value).attachmentAnnouncement ?? "";
+    },
+    set: (value: string) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).attachmentAnnouncement = value;
+    },
+  });
+
+  const attachmentAnnouncementNonce = computed({
+    get: (): number => {
+      if (!currentChatId.value) return 0;
+      return getChatState(currentChatId.value).attachmentAnnouncementNonce;
+    },
+    set: (value: number) => {
+      if (!currentChatId.value) return;
+      getChatState(currentChatId.value).attachmentAnnouncementNonce = value;
     },
   });
 
@@ -178,13 +226,13 @@ export function useChatStates() {
   });
 
   // log state management - now based on the current conversation
-  const logData = computed({
+  const logData = computed<Record<string, AnalystAgentLog | undefined>>({
     get: () => {
       if (!currentChatId.value) return {};
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.logData : {};
     },
-    set: (value: Record<string, any>) => {
+    set: (value: Record<string, AnalystAgentLog | undefined>) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
@@ -225,13 +273,13 @@ export function useChatStates() {
   });
 
   // history question - now based on the current conversation
-  const historyQuestion = computed({
+  const historyQuestion = computed<readonly ChatMessage[] | null>({
     get: () => {
       if (!currentChatId.value) return null;
       const chatState = getChatState(currentChatId.value);
       return chatState ? chatState.historyQuestion : null;
     },
-    set: (value: any) => {
+    set: (value: readonly ChatMessage[] | null) => {
       if (!currentChatId.value) return;
       const chatState = getChatState(currentChatId.value);
       if (chatState) {
@@ -275,10 +323,16 @@ export function useChatStates() {
     return { outcome: "moved" };
   };
 
+  const removeChatState = (dialogueId: string): void => {
+    delete chatStates.value[dialogueId];
+    if (currentChatId.value === dialogueId) currentChatId.value = "";
+  };
+
   return {
     chatStates,
     getChatState,
     rekeyChatState,
+    removeChatState,
     currentChatId,
     currentChat,
     messageInput,
@@ -286,6 +340,9 @@ export function useChatStates() {
     chatMode,
     selectedAgent,
     fileList,
+    focusedUploadLocalId,
+    attachmentAnnouncement,
+    attachmentAnnouncementNonce,
     uploadTransfer,
     copyVisible,
     copyTimeRef,

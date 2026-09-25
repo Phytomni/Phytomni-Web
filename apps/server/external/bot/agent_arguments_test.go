@@ -2,27 +2,35 @@ package bot
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
-func TestBuildAgentArgumentsResearchDefaultsToLocalEmptyDataset(t *testing.T) {
-	got, err := BuildAgentArguments("research", AgentArgumentInput{
-		UserQuery:   "paper",
-		OBSFileList: []string{"/obs/bucket/paper.pdf"},
-	})
-	if err != nil {
-		t.Fatal(err)
+func TestBuildAgentArgumentsAnalystAndResearchUseCanonicalEmptyFiles(t *testing.T) {
+	for _, slug := range []string{"analyst", "research"} {
+		t.Run(slug, func(t *testing.T) {
+			got, err := BuildAgentArguments(slug, AgentArgumentInput{UserQuery: "run"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got["data_list"], map[string]string{}) {
+				t.Fatalf("%s data_list=%#v", slug, got["data_list"])
+			}
+			if !reflect.DeepEqual(got["obs_file_list"], []string{}) {
+				t.Fatalf("%s obs_file_list=%#v", slug, got["obs_file_list"])
+			}
+		})
 	}
-	want := map[string]interface{}{
-		"user_query":      "paper",
-		"data_list":       map[string]interface{}{},
-		"obs_file_list":   []string{"/obs/bucket/paper.pdf"},
-		"interop_mode":    "off",
-		"interop_targets": []string{},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("payload=%#v want=%#v", got, want)
+}
+
+func TestBuildAgentArgumentsAllowsEmptyQueryForUploadedAnalysisInputs(t *testing.T) {
+	for _, slug := range []string{"analyst", "research"} {
+		t.Run(slug, func(t *testing.T) {
+			if _, err := BuildAgentArguments(slug, AgentArgumentInput{
+				HasAttachments: true,
+			}); err != nil {
+				t.Fatalf("uploaded %s input rejected: %v", slug, err)
+			}
+		})
 	}
 }
 
@@ -33,18 +41,67 @@ func TestBuildAgentArgumentsDesignAndNetworkUseResolverFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if design["resolve_gene_id"] != true || design["gene_id"] != "AT1G01010" {
-		t.Fatalf("design=%#v", design)
+	wantDesign := map[string]interface{}{
+		"user_query":      "design",
+		"interop_mode":    "off",
+		"interop_targets": []string{},
+		"obs_file_list":   []string{},
+		"resolve_gene_id": true,
+		"gene_id":         "AT1G01010",
+		"species_code":    "ath",
+	}
+	if !reflect.DeepEqual(design, wantDesign) {
+		t.Fatalf("design=%#v want=%#v", design, wantDesign)
 	}
 
 	network, err := BuildAgentArguments("network", AgentArgumentInput{
-		UserQuery: "network", ToID: "TO:0001", SpeciesCode: "ath",
+		UserQuery: "network", ToID: "TO:0000207", SpeciesCode: "osa",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if network["resolve_trait_id"] != true || network["to_id"] != "TO:0001" {
-		t.Fatalf("network=%#v", network)
+	wantNetwork := map[string]interface{}{
+		"user_query":       "network",
+		"obs_file_list":    []string{},
+		"resolve_trait_id": true,
+		"to_id":            "TO:0000207",
+		"species_code":     "osa",
+	}
+	if !reflect.DeepEqual(network, wantNetwork) {
+		t.Fatalf("network=%#v want=%#v", network, wantNetwork)
+	}
+}
+
+func TestBuildAgentArgumentsNetworkDefaultsBareTraitToRice(t *testing.T) {
+	got, err := BuildAgentArguments("network", AgentArgumentInput{
+		UserQuery: "network", ToID: "TO:0000207",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["resolve_trait_id"] != true || got["to_id"] != "TO:0000207" ||
+		got["species_code"] != "osa" {
+		t.Fatalf("network=%#v; want bare trait to default to osa", got)
+	}
+}
+
+func TestBuildAgentArgumentsCanonicalEmptyFilesAreFresh(t *testing.T) {
+	first, err := BuildAgentArguments("analyst", AgentArgumentInput{UserQuery: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first["data_list"].(map[string]string)["obs://mutated"] = "mutated"
+	first["obs_file_list"] = append(first["obs_file_list"].([]string), "obs://mutated")
+
+	second, err := BuildAgentArguments("analyst", AgentArgumentInput{UserQuery: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(second["data_list"], map[string]string{}) {
+		t.Fatalf("second data_list=%#v", second["data_list"])
+	}
+	if !reflect.DeepEqual(second["obs_file_list"], []string{}) {
+		t.Fatalf("second obs_file_list=%#v", second["obs_file_list"])
 	}
 }
 
@@ -70,9 +127,7 @@ func TestBuildAgentArgumentsRejectsUntrustedInput(t *testing.T) {
 	}{
 		{name: "unknown slug", slug: "unknown", input: AgentArgumentInput{UserQuery: "q"}},
 		{name: "empty query", slug: "research", input: AgentArgumentInput{}},
-		{name: "non OBS attachment", slug: "research", input: AgentArgumentInput{
-			UserQuery: "q", OBSFileList: []string{"/tmp/paper.pdf"},
-		}},
+		{name: "empty query without attachments", slug: "analyst", input: AgentArgumentInput{}},
 		{name: "invalid interop mode", slug: "research", input: AgentArgumentInput{
 			UserQuery: "q", InteropMode: "always",
 		}},
@@ -87,15 +142,5 @@ func TestBuildAgentArgumentsRejectsUntrustedInput(t *testing.T) {
 				t.Fatal("BuildAgentArguments unexpectedly accepted invalid input")
 			}
 		})
-	}
-}
-
-func TestBuildAgentArgumentsRejectsInvalidDatasetPath(t *testing.T) {
-	_, err := BuildAgentArguments("research", AgentArgumentInput{
-		UserQuery: "q",
-		DataList:  map[string]interface{}{strings.TrimSpace("relative.tsv"): "dataset"},
-	})
-	if err == nil {
-		t.Fatal("expected invalid dataset path to be rejected")
 	}
 }

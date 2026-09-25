@@ -36,7 +36,7 @@ func TestApiDownloadAnalystAgentObsImages_StoredPaths(t *testing.T) {
 		t.Fatalf("expected 2 png urls (csv filtered), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?token=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
 	}
@@ -82,7 +82,7 @@ func TestApiDownloadAnalystAgentObsImages_ContainmentBypass(t *testing.T) {
 		t.Fatalf("expected 2 in-scope png urls (cross-root dropped), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?token=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
 	}
@@ -126,9 +126,68 @@ func TestApiDownloadAnalystAgentObsImages_FallbackListingContainment(t *testing.
 		t.Fatalf("expected 2 in-scope png urls from fallback listing (cross-root + csv excluded), got %d: %v", len(urls), urls)
 	}
 	for _, u := range urls {
-		if !strings.Contains(u, "/api/v1/downloads/relay-file?t=") {
+		if !strings.Contains(u, "/api/v1/downloads/relay-file?token=") {
 			t.Errorf("url not a signed relay url: %q", u)
 		}
+	}
+}
+
+// TestApiDownloadAnalystAgentObsImages_LegacyListIsEmptyGallery: chat auto-
+// fetches this endpoint for every GeneNetworkAgent row that still has a
+// download_path. A Bot 403 (relay prefix miss, including the unallocated
+// AnalystConfig.OUTPUT_DIR dump /obs/phytomni/agent_data/test/output/...)
+// must not become a 500 "pre-cutover historical data" toast. Gallery is
+// best-effort: unservable prefixes return no images.
+func TestApiDownloadAnalystAgentObsImages_LegacyListIsEmptyGallery(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dump = "/obs/phytomni/agent_data/test/output/children/part-001"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, download_path, image_paths, status, created_at) VALUES
+		(75, 'alice', ?, '', 'SUCCEEDED', '2026-08-17 18:45:29')`, dump).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"list prefix outside the output root"}}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	urls, err := NewService().DownloadAnalystAgentObsImages(context.Background(), "alice", dump)
+	if err != nil {
+		t.Fatalf("legacy/unservable gallery prefix must not error, got %v", err)
+	}
+	if len(urls) != 0 {
+		t.Fatalf("legacy/unservable gallery prefix must yield no image URLs, got %v", urls)
+	}
+}
+
+// TestApiDownloadAnalystAgentObsImages_NoPngIsEmptyGallery: a listed prefix
+// with no .png objects is an empty gallery, not a 500. Chat prefetch would
+// otherwise toast "no png image file found" on every finished network row
+// that only has reports/archives.
+func TestApiDownloadAnalystAgentObsImages_NoPngIsEmptyGallery(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, download_path, image_paths, status, created_at) VALUES
+		(76, 'alice', '/obs/bucket/user/runs/run-1', '', 'SUCCEEDED', '2026-08-17 18:45:29')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":["/obs/bucket/user/runs/run-1/report.md","/obs/bucket/user/runs/run-1/t.csv"]}`))
+	}))
+	defer srv.Close()
+	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	t.Cleanup(func() { rxBot.BotConfig = nil })
+
+	urls, err := NewService().DownloadAnalystAgentObsImages(context.Background(), "alice", "/obs/bucket/user/runs/run-1")
+	if err != nil {
+		t.Fatalf("no-png listing must not error, got %v", err)
+	}
+	if len(urls) != 0 {
+		t.Fatalf("no-png listing must yield no image URLs, got %v", urls)
 	}
 }
 
@@ -278,6 +337,77 @@ func TestGeneSearch_ZeroPageSizeNoPanic(t *testing.T) {
 	}
 }
 
+func TestGeneMatchesQuery_CaseInsensitive(t *testing.T) {
+	rice := &model.GeneExample{SpeciesCode: "Osa", GeneId: "Os01g0107900"}
+	wheat := &model.GeneExample{SpeciesCode: "tae", GeneId: "TraesCS1A02G000100"}
+
+	cases := []struct {
+		name  string
+		item  *model.GeneExample
+		query string
+		want  bool
+	}{
+		{name: "empty query matches", item: rice, query: "", want: true},
+		{name: "exact gene id", item: rice, query: "Os01g0107900", want: true},
+		{name: "lower gene id", item: rice, query: "os01g0107900", want: true},
+		{name: "upper gene substring", item: rice, query: "OS01G", want: true},
+		{name: "lower species", item: rice, query: "osa", want: true},
+		{name: "upper species", item: rice, query: "OSA", want: true},
+		{name: "canonical species", item: rice, query: "Osa", want: true},
+		{name: "stored-lower species upper query", item: wheat, query: "TAE", want: true},
+		{name: "other species", item: rice, query: "Ath", want: false},
+		{name: "other gene prefix", item: rice, query: "AT1G", want: false},
+		{name: "unrelated", item: rice, query: "nogene", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := geneMatchesQuery(tc.item, tc.query); got != tc.want {
+				t.Fatalf("geneMatchesQuery(%q) = %v, want %v", tc.query, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestGeneSearch_CaseInsensitiveTitle: the list filter lowercases both the
+// query and the derived species/gene fields. Delete the ToLower in
+// geneMatchesQuery and os01g / OSA stop matching the rice row.
+func TestGeneSearch_CaseInsensitiveTitle(t *testing.T) {
+	writeGeneObsfs(t, []string{"Os01g0107900_result.md", "AT1G01010_result.md"})
+	ps := NewService()
+
+	list, total, _, err := ps.GeneSearch(context.Background(), 1, 10, "os01g0107900")
+	if err != nil {
+		t.Fatalf("lower gene id: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].GeneId != "Os01g0107900" {
+		t.Fatalf("os01g0107900 should hit rice, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "OSA")
+	if err != nil {
+		t.Fatalf("upper species: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].SpeciesCode != "Osa" {
+		t.Fatalf("OSA should hit rice species, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "AT1G")
+	if err != nil {
+		t.Fatalf("canonical arabidopsis substring: %v", err)
+	}
+	if total != 1 || len(list) != 1 || list[0].GeneId != "AT1G01010" {
+		t.Fatalf("AT1G should hit arabidopsis, got total=%d list=%+v", total, list)
+	}
+
+	list, total, _, err = ps.GeneSearch(context.Background(), 1, 10, "nogene")
+	if err != nil {
+		t.Fatalf("unrelated query: %v", err)
+	}
+	if total != 0 || len(list) != 0 {
+		t.Fatalf("nogene should miss, got total=%d list=%+v", total, list)
+	}
+}
+
 // TestGeneDetails_ObsfsRead: with the mount set, GeneDetails returns the md body
 // verbatim; image URLs already in /api/v1/gene-images/ form are left untouched
 // (no backend rewrite).
@@ -332,5 +462,15 @@ func TestGeneDetails_MissingGene(t *testing.T) {
 	ps := NewService()
 	if _, err := ps.GeneDetails(context.Background(), "Os01g0107900_result.md"); err == nil {
 		t.Fatal("expected error for missing md object")
+	}
+}
+
+func TestGeneDownloadPathValidationRejectsUnsafePaths(t *testing.T) {
+	for _, raw := range []string{"", "../escape", "http://private/secret", "obs://bucket/../escape"} {
+		t.Run(raw, func(t *testing.T) {
+			if err := validateDownloadArtifactPath(raw); err == nil {
+				t.Fatalf("validateDownloadArtifactPath(%q) returned nil", raw)
+			}
+		})
 	}
 }

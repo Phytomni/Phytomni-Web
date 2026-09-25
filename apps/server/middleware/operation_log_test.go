@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const wantA2uiAuditBody = `{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":"[REDACTED]"}`
@@ -46,7 +47,7 @@ func TestA2uiRedactRejectsMalformedEnvelope(t *testing.T) {
 func TestA2uiRedactRejectsInvalidIdentifiers(t *testing.T) {
 	for _, body := range [][]byte{
 		[]byte(`{"surface_id":7,"widget":"form","action_id":"act-1","run_id":"run-1","payload":{}}`),
-		[]byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":"form","action_id":%q,"run_id":"run-1","payload":{}}`, strings.Repeat("界", 257))),
+		[]byte(fmt.Sprintf(`{"surface_id":"sfc-1","widget":"form","action_id":%q,"run_id":"run-1","payload":{}}`, strings.Repeat("\u754C", 257))),
 	} {
 		if got := redactA2uiActionBody(body); got != "[redacted: invalid a2ui action]" {
 			t.Fatalf("invalid A2UI identifier = %q, want fixed placeholder", got)
@@ -65,6 +66,48 @@ func TestGenericJSONRedactionKeepsRecursiveCredentialMasking(t *testing.T) {
 	}
 	if !strings.Contains(out, `"email":"researcher@example.com"`) {
 		t.Fatalf("generic JSON redaction changed ordinary email: %s", out)
+	}
+}
+
+func TestUploadCreateAuditMarkerDropsMetadata(t *testing.T) {
+	body := []byte(`{"filename":"patient-cohort.fastq.gz","size_bytes":42,"content_type_hint":"application/octet-stream"}`)
+	out := redactOperationLogBody("POST", "/api/v1/files", "/api/v1/files", "application/json", body)
+	if out != uploadCreateAuditMarker {
+		t.Fatalf("upload audit body = %q, want fixed marker", out)
+	}
+	if strings.Contains(out, "patient-cohort.fastq.gz") || strings.Contains(out, "application/octet-stream") {
+		t.Fatalf("upload metadata leaked into audit body: %q", out)
+	}
+}
+
+// TestLongResearchMultipartRedactionDropsBody catches any change that buffers
+// or serializes multipart query text into user_operation_logs.
+func TestLongResearchMultipartRedactionDropsBody(t *testing.T) {
+	const (
+		maxCodePoints = 131_072
+		paperMarker   = "Synthetic paper abstract: rice root development evidence."
+		pathMarker    = "scrubbed-bucket/synthetic-study/late/reads.fastq.gz"
+	)
+	prefix := paperMarker + "\n"
+	suffix := "\n" + pathMarker
+	fillerCount := maxCodePoints - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
+	query := prefix + strings.Repeat("\u7A3B", fillerCount) + suffix
+	if got := utf8.RuneCountInString(query); got != maxCodePoints {
+		t.Fatalf("synthetic query code points = %d, want %d", got, maxCodePoints)
+	}
+
+	got := redactOperationLogBody(
+		"POST",
+		"/api/v1/conversations/0/messages",
+		"/api/v1/conversations/:id/messages",
+		"multipart/form-data; boundary=synthetic-boundary",
+		[]byte(query),
+	)
+	if got != "[Multipart Content - Body Ignored]" {
+		t.Fatalf("multipart audit body used an unexpected finite marker")
+	}
+	if strings.Contains(got, paperMarker) || strings.Contains(got, pathMarker) {
+		t.Fatal("multipart audit body retained a synthetic Research marker")
 	}
 }
 
@@ -104,8 +147,8 @@ func TestRedactBodyURLEncoded(t *testing.T) {
 // body with invalid percent-encoding (e.g. a bare '%' in the password) makes
 // url.ParseQuery fail; in that case we must NOT fall back to the raw body, or the
 // plaintext credentials of /login, /modify/password would land directly in
-// user_operation_logs. This is exactly the fork point where the query-string path
-// (redactQueryParams) intentionally keeps the raw text while the body path must mask it.
+// user_operation_logs. The query-string path follows the same no-raw-fallback
+// rule as the body path.
 func TestRedactBodyURLEncodedMalformed(t *testing.T) {
 	// "%pa" in "100%pass" is not valid hex → ParseQuery fails.
 	out := redactBodyByContentType(
@@ -117,5 +160,18 @@ func TestRedactBodyURLEncodedMalformed(t *testing.T) {
 	}
 	if out != "[redacted: unparseable body]" {
 		t.Fatalf("malformed body should collapse to the redaction placeholder, got %q", out)
+	}
+}
+
+// TestRedactQueryParamsMalformed pins the query-redaction invariant: malformed
+// percent-encoding must not fall back to raw query text that can contain a
+// credential.
+func TestRedactQueryParamsMalformed(t *testing.T) {
+	out := redactQueryParams("email=a@b.com&new_password=100%pass")
+	if strings.Contains(out, "100%pass") {
+		t.Fatalf("malformed query leaked plaintext credential verbatim: %s", out)
+	}
+	if out != "[redacted: unparseable query]" {
+		t.Fatalf("malformed query should collapse to the redaction placeholder, got %q", out)
 	}
 }

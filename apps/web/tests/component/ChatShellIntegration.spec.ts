@@ -5,7 +5,7 @@ import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CHAT_MESSAGE_ROW_SOURCE = readFileSync(
@@ -17,7 +17,7 @@ const CHAT_COMPOSER_SOURCE = readFileSync(
   "utf8"
 );
 const SIDEBAR_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/sidebar.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatSidebar.vue"),
   "utf8"
 );
 const CHAT_HISTORY_SOURCE = readFileSync(
@@ -29,15 +29,15 @@ const CHAT_NAV_SOURCE = readFileSync(
   "utf8"
 );
 const HISTORY_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/history/index.vue"),
+  resolve(__dirname, "../../src/views/history/HistoryView.vue"),
   "utf8"
 );
 const FAVORITES_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/favorites/index.vue"),
+  resolve(__dirname, "../../src/views/favorites/FavoritesView.vue"),
   "utf8"
 );
 const LAYOUT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/layout/index.vue"),
+  resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
 const FORM_LABEL_SOURCES = [
@@ -82,17 +82,27 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain(
       '@drawerOpenChange="leftSidebarDrawerOpen = $event"'
     );
-    expect(CHAT_SOURCE).toContain('ref="tourSidebarTarget"');
     expect(CHAT_SOURCE).toContain('ref="tourCasesTarget"');
-    expect(CHAT_SOURCE).toContain(':set-tour-input-target="setTourInputTarget"');
+    expect(CHAT_SOURCE).toContain(
+      ':set-tour-input-target="setTourInputTarget"'
+    );
     expect(CHAT_SOURCE).toContain("const setTourInputTarget");
     expect(CHAT_COMPOSER_SOURCE).toContain(':ref="bindTourInputTarget"');
-    expect(countOccurrences(CHAT_SOURCE, 'ref="tourSidebarTarget"')).toBe(1);
+    expect(CHAT_SOURCE).not.toContain('ref="tourSidebarTarget"');
     expect(countOccurrences(CHAT_SOURCE, 'ref="tourCasesTarget"')).toBe(1);
     expect(
-      countOccurrences(CHAT_SOURCE, ':set-tour-input-target="setTourInputTarget"')
+      countOccurrences(
+        CHAT_SOURCE,
+        ':set-tour-input-target="setTourInputTarget"'
+      )
     ).toBe(1);
     expect(CHAT_SOURCE).toContain(':target="tourSidebarTarget"');
+    expect(CHAT_SOURCE).toContain("const tourSidebarTarget = () =>");
+    expect(CHAT_SOURCE).toContain('[data-testid="chat-primary-action"]');
+    expect(CHAT_SOURCE).toContain(':placement="tutorialSidebarPlacement"');
+    expect(CHAT_SOURCE).toContain(':content-style="tutorialContentStyle"');
+    expect(CHAT_SOURCE).toContain("beforeStart: prepareTutorialTarget");
+    expect(CHAT_SOURCE).toContain('@change="handleTutorialStepChange"');
     expect(CHAT_SOURCE).toContain(':target="tourCasesTarget"');
     expect(CHAT_SOURCE).toContain(':target="tourInputTarget"');
   });
@@ -118,8 +128,34 @@ describe("Chat adaptive shell integration", () => {
       /renderedSidebarCollapsed[\s\S]*props\.effectiveCollapsed \?\? sidebarCollapsed\.value/
     );
     expect(SIDEBAR_SOURCE).toContain(':drawer-open="drawerOpen"');
-    expect(SIDEBAR_SOURCE).toContain('@close="closeDrawer"');
+    expect(SIDEBAR_SOURCE).toContain('@close="handleDrawerClose"');
+    expect(SIDEBAR_SOURCE).toMatch(
+      /const handleDrawerClose = \(\) => \{[\s\S]*?closeAgentDisclosure\(\);[\s\S]*?closeDrawer\(\);/
+    );
     expect(SIDEBAR_SOURCE).toContain('@toggle="toggle"');
+  });
+
+  it("settles sidebar agent navigation rejections", () => {
+    expect(SIDEBAR_SOURCE).toContain(
+      "Promise.resolve(router.push(agent.route)).catch(() => undefined);"
+    );
+  });
+
+  it("keeps Explore Agents as a click-to-expand sidebar disclosure", () => {
+    expect(SIDEBAR_SOURCE).toContain("const showAgentsList = ref(false);");
+    expect(SIDEBAR_SOURCE).toContain(
+      "showAgentsList.value = !showAgentsList.value;"
+    );
+    expect(SIDEBAR_SOURCE).toContain(':show-agents-list="showAgentsList"');
+    expect(SIDEBAR_SOURCE).toContain("<template #explore-agents>");
+    expect(CHAT_NAV_SOURCE).toContain(':aria-expanded="showAgentsList"');
+    expect(CHAT_NAV_SOURCE).toContain('data-testid="chat-explore-agents-list"');
+  });
+
+  it("routes sidebar product labels through the safe display component", () => {
+    expect(SIDEBAR_SOURCE).toContain("<AgentDisplayName");
+    expect(SIDEBAR_SOURCE).toContain(':label="agent.name"');
+    expect(SIDEBAR_SOURCE).not.toContain("v-html");
   });
 
   it("keeps both empty and populated transcript branches in one scroll root", () => {
@@ -130,17 +166,12 @@ describe("Chat adaptive shell integration", () => {
     expect(
       countOccurrences(
         TRANSCRIPT_SOURCE,
-        'v-if="!currentChat?.messages?.length"'
-      )
-    ).toBe(1);
-    expect(
-      countOccurrences(
-        TRANSCRIPT_SOURCE,
         'v-if="currentChat?.messages?.length"'
       )
     ).toBe(1);
     expect(CHAT_SOURCE).toContain("<PhyEmptyState");
-    expect(CHAT_SOURCE).toContain("<Prompts");
+    expect(CHAT_SOURCE).toContain("<ChatCases");
+    expect(CHAT_SOURCE).not.toContain("<" + "Prompts");
     expect(CHAT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
@@ -172,7 +203,10 @@ describe("Chat adaptive shell integration", () => {
       ':data-sidebar-drawer-state="sidebarDrawerStateAttr"'
     );
     expect(
-      countOccurrences(CHAT_MESSAGE_ROW_SOURCE, 'data-testid="chat-message-row"')
+      countOccurrences(
+        CHAT_MESSAGE_ROW_SOURCE,
+        'data-testid="chat-message-row"'
+      )
     ).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, "<ChatMessageRow")).toBe(2);
   });
@@ -182,9 +216,38 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("chatHeaderTitle");
     expect(CHAT_SOURCE).toContain("chat-expert-indicator");
     expect(CHAT_SOURCE).not.toContain('data-test="chat-header-overflow"');
-    expect(CHAT_SOURCE).not.toContain("<LangSwitch");
     expect(CHAT_SOURCE).not.toContain('class="chat-footer"');
     expect(CHAT_SOURCE).toContain('@showArchitecture="showAgentsView"');
+  });
+
+  it("renders language and theme preferences in the Chat header", () => {
+    expect(CHAT_SOURCE).toContain('data-testid="chat-header-preferences"');
+    expect(countOccurrences(CHAT_SOURCE, "<LangSwitch")).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ThemeSwitch")).toBe(1);
+    expect(CHAT_SOURCE).toContain('class="header-controls"');
+  });
+
+  it("assigns one state-specific landing scroll owner without duplicating Composer", () => {
+    expect(
+      countOccurrences(CHAT_SOURCE, 'data-testid="chat-content-stack"')
+    ).toBe(1);
+    expect(countOccurrences(CHAT_SOURCE, "<ChatComposer")).toBe(1);
+    expect(CHAT_SOURCE).toContain("'is-empty': chatStateAttr === 'empty'");
+    expect(CHAT_SOURCE).toContain(
+      "'is-populated': chatStateAttr === 'populated'"
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-empty\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s*\{[\s\S]*?overflow:\s*hidden/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s+\.message-container\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /<el-backtop[\s\S]*?v-if="currentChat\?\.messages\?\.length"[\s\S]*?target="\.message-container"/
+    );
   });
 
   it("routes help through the sidebar utility group and exposes shell capture hooks", () => {
@@ -206,7 +269,9 @@ describe("Chat adaptive shell integration", () => {
     expect(
       countOccurrences(CHAT_NAV_SOURCE, 'data-testid="chat-account-identity"')
     ).toBe(1);
-    expect(CHAT_NAV_SOURCE).not.toContain("box-shadow: var(--sidebar-btn-shadow)");
+    expect(CHAT_NAV_SOURCE).not.toContain(
+      "box-shadow: var(--sidebar-btn-shadow)"
+    );
     expect(CHAT_NAV_SOURCE).not.toContain("transform: scale(1.05)");
     expect(CHAT_NAV_SOURCE).not.toContain("transform: translateY(-1px)");
   });
@@ -280,26 +345,20 @@ describe("Chat adaptive shell integration", () => {
 
   it("keeps agent selection scoped through per-dialogue chat state into useComposer", () => {
     expect(CHAT_SOURCE).toContain("selectedAgent");
-    expect(CHAT_SOURCE).toMatch(
-      /useComposer\(\{[\s\S]*selectedAgent/
-    );
+    expect(CHAT_SOURCE).toMatch(/useComposer\(\{[\s\S]*selectedAgent/);
     expect(CHAT_SOURCE).toContain("pickerOptions");
     expect(CHAT_SOURCE).toContain("derivePickerOptions");
   });
 
-  it("removes the permanent bottom agent stage while keeping one inline selection path", () => {
+  it("keeps one picker and one bounded direct-selection surface in the composer", () => {
     expect(CHAT_SOURCE).not.toContain('class="input-container-bottom"');
-    expect(CHAT_SOURCE).not.toContain("@wheel.prevent=\"handleScroll\"");
-    expect(CHAT_SOURCE).not.toContain(":style=\"containerStyle\"");
-    expect(CHAT_SOURCE).not.toContain("v-for=\"agent in presetAgents\"");
-    expect(CHAT_SOURCE).not.toContain(".input-container-bottom {");
-
-    expect(CHAT_COMPOSER_SOURCE).not.toContain('class="agent-button"');
+    expect(CHAT_SOURCE).not.toContain('v-for="agent in presetAgents"');
     expect(CHAT_COMPOSER_SOURCE).toContain("<ChatAgentPicker");
-    expect(CHAT_COMPOSER_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_COMPOSER_SOURCE).toContain("<ChatAgentQuickSelect");
     expect(CHAT_COMPOSER_SOURCE).toContain(':options="pickerOptions"');
+    expect(CHAT_COMPOSER_SOURCE).not.toContain("rolesTool");
     expect(CHAT_SOURCE).toContain(':picker-options="pickerOptions"');
-    expect(CHAT_SOURCE).toContain(':selected-agent="selectedAgent"');
+    expect(CHAT_SOURCE).toContain('@toggle-agent="handleButtonClick"');
     expect(CHAT_SOURCE).toContain('@clear-agent="clearSelectedAgent"');
   });
 
@@ -309,6 +368,9 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).toContain("restorePendingChats(formattedData");
     expect(CHAT_SOURCE).toContain("skipRestoreTempIds");
     expect(CHAT_SOURCE).toContain("skipTempIds?: ReadonlySet<string>");
+    expect(CHAT_SOURCE).toContain(
+      "isLocalStorageChat(urlChatId) || chatExists"
+    );
     expect(CHAT_SOURCE).toMatch(
       /getHistoryQuestionData\([\s\S]*sendingDialogueId/
     );
@@ -317,9 +379,14 @@ describe("Chat adaptive shell integration", () => {
     expect(CHAT_SOURCE).not.toMatch(/restorePendingChats\(\s*\)/);
 
     const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
-    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordEnd = CHAT_SOURCE.indexOf(
+      "// Copy conversation + file download",
+      coordStart
+    );
     const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
-    expect(coordBlock).toContain("const wasCurrent = currentChatId.value === tempId");
+    expect(coordBlock).toContain(
+      "const wasCurrent = currentChatId.value === tempId"
+    );
     expect(coordBlock).toMatch(
       /clearPendingChat|localStorage\.removeItem[\s\S]*currentChatId\.value = serverId/
     );
@@ -332,10 +399,11 @@ describe("Chat adaptive shell integration", () => {
       "utf8"
     );
     expect(sendMessageSource).toContain("blockingDialogueId");
-    expect(sendMessageSource).not.toContain("clearPendingChat(sendingDialogueId)");
-    expect(sendMessageSource).not.toMatch(
-      /chatList\.value\[0\]\.dialogue_id/
+    expect(sendMessageSource).not.toContain(
+      "clearPendingChat(currentChatId.value)"
     );
+    expect(sendMessageSource).toContain("clearPendingChat(sendingDialogueId)");
+    expect(sendMessageSource).not.toMatch(/chatList\.value\[0\]\.dialogue_id/);
     expect(sendMessageSource).toContain("chatState.uploadTransfer");
     expect(sendMessageSource).toContain("getStreamChatState");
     expect(sendMessageSource).toContain("id === sendingDialogueId ? chatState");
@@ -368,20 +436,26 @@ describe("Chat adaptive shell integration", () => {
     );
     // Abort targets only the owning dialogue's activeRequestId — never abortAll
     const abortStart = CHAT_SOURCE.indexOf("const abortDialogueRequest");
-    const abortEnd = CHAT_SOURCE.indexOf("// Use a preset question", abortStart);
+    const abortEnd = CHAT_SOURCE.indexOf(
+      "// Use a preset question",
+      abortStart
+    );
     const abortBlock = CHAT_SOURCE.slice(abortStart, abortEnd);
     expect(abortBlock).toContain("chatState.activeRequestId");
     expect(abortBlock).toContain("abortRequest(requestId)");
+    expect(abortBlock).toContain("cancelTask(resolvedRowId)");
+    expect(abortBlock).toContain("applyCancelledTaskDraft");
     expect(abortBlock).not.toContain("abortAllRequests");
     expect(abortBlock).toContain("generationStopped = true");
-    expect(abortBlock).toContain(
-      "if (!requestId || chatState.generationStopped) return"
-    );
+    expect(abortBlock).toContain("if (chatState.generationStopped) return");
     expect(abortBlock).not.toContain("chatState.isSending = false");
     expect(abortBlock).not.toMatch(/\bid:\s/);
 
     const streamSource = readFileSync(
-      resolve(__dirname, "../../src/views/chat/composables/useStreamMessage.ts"),
+      resolve(
+        __dirname,
+        "../../src/views/chat/composables/useStreamMessage.ts"
+      ),
       "utf8"
     );
     expect(streamSource).toContain(
@@ -395,8 +469,17 @@ describe("Chat adaptive shell integration", () => {
       "utf8"
     );
     expect(chatStatesSource).toContain("renderedChat: null");
-    expect(chatStatesSource).toContain("getChatState(currentChatId.value).renderedChat");
-    expect(CHAT_SOURCE).toContain("getChatState(dialogueId).renderedChat");
+    expect(chatStatesSource).toContain(
+      "getChatState(currentChatId.value).renderedChat"
+    );
+    const selectChatSource = readFileSync(
+      resolve(__dirname, "../../src/views/chat/composables/useSelectChat.ts"),
+      "utf8"
+    );
+    expect(selectChatSource).toContain("chatState.renderedChat =");
+    expect(selectChatSource).toContain(
+      "isLocalStorageChat(capturedDialogueId)"
+    );
 
     const selectStart = CHAT_SOURCE.indexOf("useSelectChat({");
     const selectEnd = CHAT_SOURCE.indexOf("});", selectStart);
@@ -415,14 +498,19 @@ describe("Chat adaptive shell integration", () => {
     expect(chatStatesSource).toContain(
       "chatStates.value[toDialogueId] = source"
     );
-    expect(chatStatesSource).toContain("delete chatStates.value[fromDialogueId]");
+    expect(chatStatesSource).toContain(
+      "delete chatStates.value[fromDialogueId]"
+    );
     expect(chatStatesSource).toContain('outcome: "target-collision"');
     expect(chatStatesSource).toMatch(
       /if \(chatStates\.value\[toDialogueId\]\)[\s\S]*return \{ outcome: "target-collision" \}/
     );
 
     const coordStart = CHAT_SOURCE.indexOf("reconcileMatchedDialogue = (");
-    const coordEnd = CHAT_SOURCE.indexOf("// Starter prompt cards", coordStart);
+    const coordEnd = CHAT_SOURCE.indexOf(
+      "// Copy conversation + file download",
+      coordStart
+    );
     const coordBlock = CHAT_SOURCE.slice(coordStart, coordEnd);
     expect(coordBlock).toContain('rekey.outcome === "target-collision"');
     expect(coordBlock).toContain('reason: "collision"');

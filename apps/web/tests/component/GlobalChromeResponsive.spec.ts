@@ -3,9 +3,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import {
+  RESPONSIVE_VIEWPORTS,
+  SEMANTIC_BOUNDARIES,
+} from "../helpers/responsiveMatrix";
 
 const LAYOUT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/layout/index.vue"),
+  resolve(__dirname, "../../src/layout/LayoutView.vue"),
   "utf8"
 );
 const THEME_SOURCE = readFileSync(
@@ -17,7 +21,7 @@ const LANG_SOURCE = readFileSync(
   "utf8"
 );
 const USER_LIST_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/user-list/index.vue"),
+  resolve(__dirname, "../../src/views/user-list/UserListView.vue"),
   "utf8"
 );
 const TABLE_FRAME_SOURCE = readFileSync(
@@ -33,11 +37,11 @@ const AUTH_LAYOUT_SOURCE = readFileSync(
   "utf8"
 );
 const HELP_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/help/index.vue"),
+  resolve(__dirname, "../../src/views/help/HelpView.vue"),
   "utf8"
 );
 const LEGAL_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/legal/index.vue"),
+  resolve(__dirname, "../../src/views/legal/LegalView.vue"),
   "utf8"
 );
 const CHAT_ROW_SOURCE = readFileSync(
@@ -52,6 +56,29 @@ const CHAT_FIXTURE_SOURCE = readFileSync(
   resolve(__dirname, "../../tests/visual/chat/ChatVisualFixtureApp.vue"),
   "utf8"
 );
+const DESIGN_SYSTEM_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../docs/frontend-design-system.md"),
+  "utf8"
+);
+
+describe("responsive matrix", () => {
+  it("contains the agreed widths and boundaries", () => {
+    expect(RESPONSIVE_VIEWPORTS.map(({ width }) => width)).toEqual([
+      320, 390, 480, 768, 899, 900, 1024, 1199, 1279, 1280, 1366, 1920, 2560,
+    ]);
+    expect(SEMANTIC_BOUNDARIES).toEqual({
+      small: 600,
+      medium: 900,
+      large: 1280,
+    });
+  });
+
+  it("records continuous responsive geometry in the design-system contract", () => {
+    expect(DESIGN_SYSTEM_SOURCE).toContain("continuous geometry");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("container queries");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("2560x1440");
+  });
+});
 
 describe("Global application chrome", () => {
   it("removes the empty brand spacer and constrains both header groups", () => {
@@ -70,6 +97,19 @@ describe("Global application chrome", () => {
     expect(THEME_SOURCE).not.toMatch(/min-width:\s*80px/);
     expect(LANG_SOURCE).toMatch(/\.lang-label-compact/);
     expect(LANG_SOURCE).toMatch(/@media\s*\(max-width:\s*599px\)/);
+  });
+
+  it("keeps compact preference controls native and keyboard reachable", () => {
+    expect(THEME_SOURCE).toMatch(
+      /<button[\s\S]*type="button"[\s\S]*aria-label="\$t\('common\.themeSelector'\)"/
+    );
+    expect(LANG_SOURCE).toMatch(
+      /<button[\s\S]*type="button"[\s\S]*aria-label="\$t\('common\.languageSelector'\)"/
+    );
+    expect(THEME_SOURCE).toContain(":focus-visible");
+    expect(LANG_SOURCE).toContain(":focus-visible");
+    expect(THEME_SOURCE).not.toContain('tabindex="-1"');
+    expect(LANG_SOURCE).not.toContain('tabindex="-1"');
   });
 
   it("keeps bilingual theme and control labels in parity", () => {
@@ -123,6 +163,6 @@ describe("Global application chrome", () => {
       /\.phy-adaptive-shell__main\[aria-hidden="true"\][\s\S]*visibility:\s*hidden/
     );
     expect(CHAT_FIXTURE_SOURCE).toContain(".empty-chat");
-    expect(CHAT_FIXTURE_SOURCE).toContain("flex: 1 1 auto");
+    expect(CHAT_FIXTURE_SOURCE).toContain("flex: 1;");
   });
 });

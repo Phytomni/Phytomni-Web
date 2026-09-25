@@ -9,12 +9,14 @@ This update implements parallel dialogue support for the chat system, giving eac
 ### 1. State Management Refactor
 
 **Previous problems:**
+
 - All dialogues shared global state (`isSending`, `messageInput`, `fileList`, etc.)
 - Multiple dialogues could not be processed at the same time
 - Switching between dialogues caused state loss or corruption
 - A single top-level `currentChat` ref owned the live message tree, so A→B→A lost streaming placeholders / blocks
 
 **Solution:**
+
 - Introduce a `chatStates` object to manage all per-dialogue state
 - Each dialogue maintains its own independent state set, including `renderedChat`
 - Use computed properties for reactive bindings; `currentChat` is only a keyed view
@@ -54,12 +56,12 @@ type ChatView = Partial<Chat> & { messages: ChatMessage[] };
 
 ### 3. Per-dialogue data vs shell state
 
-| Owned by `chatStates[dialogueId]` | Shell / focus (not per-message owner) |
-|---|---|
-| `renderedChat` (messages, streaming placeholders, blocks, A2UI surfaces) | `currentChatId` |
-| Composer drafts (`messageInput`, `fileList`, `selectedAgent`) | URL `dialogue_id` |
-| Send/stream flags (`isSending`, `isStreaming`, …) | Transcript scroll position |
-| Reactions / refresh / log maps | Global toasts while that dialogue is active |
+| Owned by `chatStates[dialogueId]`                                        | Shell / focus (not per-message owner)       |
+| ------------------------------------------------------------------------ | ------------------------------------------- |
+| `renderedChat` (messages, streaming placeholders, blocks, A2UI surfaces) | `currentChatId`                             |
+| Composer drafts (`messageInput`, `fileList`, `selectedAgent`)            | URL `dialogue_id`                           |
+| Send/stream flags (`isSending`, `isStreaming`, …)                        | Transcript scroll position                  |
+| Reactions / refresh / log maps                                           | Global toasts while that dialogue is active |
 
 `currentChat` is a writable computed that reads/writes `chatStates[currentChatId].renderedChat`. There is no second message owner.
 
@@ -76,6 +78,7 @@ type ChatView = Partial<Chat> & { messages: ChatMessage[] };
 ### 6. Core Functions
 
 #### getChatState(dialogueId: string)
+
 ```typescript
 const getChatState = (dialogueId: string) => {
   if (!chatStates.value[dialogueId]) {
@@ -89,6 +92,7 @@ const getChatState = (dialogueId: string) => {
 ```
 
 #### currentChat keyed view
+
 ```typescript
 const currentChat = computed({
   get: () => {
@@ -105,17 +109,20 @@ const currentChat = computed({
 ## Feature Highlights
 
 ### 1. Parallel Processing
+
 - Messages can be sent in multiple dialogues simultaneously
 - Loading state of each dialogue is independent
 - Fast switching between different dialogues is supported
 - Full context of each dialogue is preserved, including live rendered messages
 
 ### 2. State Independence
+
 - Each dialogue maintains its own input content, files, history, and UI maps
 - Each dialogue owns its `renderedChat` message tree
 - Switching A→B→A restores the exact same arrays / message / block objects
 
 ### 3. User Experience Improvements
+
 - State is correctly restored when switching dialogues
 - Input content is never lost
 - File upload state is managed independently
@@ -124,16 +131,19 @@ const currentChat = computed({
 ## Technical Implementation Details
 
 ### 1. State Initialization
+
 - Ensure dialogue state exists inside `selectChat()` / `getChatState()`
 - Create new dialogue state inside `startNewChat()` and write `renderedChat: { messages: [] }` via `currentChat`
 - Pending restore writes `getChatState(id).renderedChat` (and sets `currentChatId`) so hydration is not lost when the ID was previously empty
 
 ### 2. State Synchronization
+
 - Use Vue 3 computed properties for reactive bindings
 - Ensure the UI updates correctly when state changes
 - Maintain compatibility with existing components that read `currentChat`
 
 ### 3. Error Handling
+
 - Added null checks to prevent accessing non-existent dialogue state
 - Ensure stale async history/refresh results cannot change another dialogue's message array or steal shell focus
 
@@ -149,11 +159,13 @@ Covered by unit specs under `tests/unit/views/chat/`:
 ## Compatibility Notes
 
 ### Backward Compatibility
+
 - Template and send consumers still use `currentChat` (now a computed view)
 - Existing message-sending logic is not rewritten here (send/stream capture is a separate follow-up)
 - File upload, logging, and refresh features continue to work
 
 ### Performance Optimizations
+
 - Computed properties avoid unnecessary recomputation
 - State is created on demand, avoiding memory waste
 - Rekey moves references instead of deep-cloning message trees
@@ -161,11 +173,13 @@ Covered by unit specs under `tests/unit/views/chat/`:
 ## Usage Guide
 
 ### For Developers
+
 1. State is automatically initialized when a new dialogue is created
 2. The corresponding state is automatically loaded when switching dialogues
 3. All state operations go through `getChatState()`; write rendered messages to that state's `renderedChat` (or via `currentChat` only when `currentChatId` matches)
 
 ### For Users
+
 1. Multiple dialogues can be open at the same time
 2. State is preserved when switching between dialogues
 3. Input and files are independent per dialogue

@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { defineComponent, h, inject, provide } from "vue";
+import { mountWithApp } from "../../helpers/test-app-context";
 import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+
+const SHELL_SOURCE = readFileSync(
+  resolve(
+    __dirname,
+    "../../../src/components/research/ResearchArtifactShell.vue"
+  ),
+  "utf8"
+);
 
 const tabs = {
   content: "Report",
@@ -9,22 +20,68 @@ const tabs = {
   downloads: "Downloads",
 };
 
+const dropdownStubs = {
+  ElDropdown: defineComponent({
+    name: "ElDropdown",
+    emits: ["command"],
+    setup(_, { emit, slots }) {
+      provide("emitOverflowCommand", (id: string) => emit("command", id));
+      return () =>
+        h("div", { class: "el-dropdown-stub" }, [
+          slots.default?.(),
+          slots.dropdown?.(),
+        ]);
+    },
+  }),
+  ElDropdownMenu: defineComponent({
+    name: "ElDropdownMenu",
+    setup(_, { slots }) {
+      return () => h("div", slots.default?.());
+    },
+  }),
+  ElDropdownItem: defineComponent({
+    name: "ElDropdownItem",
+    props: {
+      command: { type: [String, Number], required: true },
+    },
+    setup(props, { slots }) {
+      const emitCommand = inject<(id: string) => void>("emitOverflowCommand");
+      return () =>
+        h(
+          "button",
+          {
+            type: "button",
+            "data-test": `artifact-action-${props.command}`,
+            onClick: () => emitCommand?.(String(props.command)),
+          },
+          slots.default?.()
+        );
+    },
+  }),
+};
+
 function mountShell(
   tab: keyof typeof tabs = "content",
-  contentLayout: "reading" | "wide" = "reading"
+  contentLayout: "reading" | "wide" = "reading",
+  visibleTabs?: Array<keyof typeof tabs>
 ) {
-  return mount(ResearchArtifactShell, {
+  return mountWithApp(ResearchArtifactShell, {
     attachTo: document.body,
     props: {
       title: "Os01g0177400 functional analysis",
       metadata: ["Deep Genome Agent", "Oryza sativa"],
       status: "Complete",
       tab,
+      ...(visibleTabs ? { tabs: visibleTabs } : {}),
       contentLayout,
       tabLabels: tabs,
       backLabel: "Back to conversation",
       closeLabel: "Close artifact",
       actionLabel: "Artifact actions",
+      menuItems: [
+        { id: "copy", label: "Copy" },
+        { id: "close", label: "Close panel" },
+      ],
     },
     slots: {
       toc: '<nav data-test="toc">Contents</nav>',
@@ -33,6 +90,7 @@ function mountShell(
       activity: '<section data-test="activity">Activity body</section>',
       downloads: '<section data-test="downloads">Downloads body</section>',
     },
+    global: { stubs: dropdownStubs },
   });
 }
 
@@ -70,7 +128,7 @@ describe("ResearchArtifactShell", () => {
   });
 
   it("exposes a header slot in place of the default header", () => {
-    const wrapper = mount(ResearchArtifactShell, {
+    const wrapper = mountWithApp(ResearchArtifactShell, {
       props: {
         title: "Report",
         tab: "content",
@@ -86,7 +144,26 @@ describe("ResearchArtifactShell", () => {
     expect(wrapper.find(".research-artifact-header").exists()).toBe(false);
   });
 
-  it("forwards back, close, and action events from its default header", async () => {
+  it("forwards scientific agent formatting to the default header", () => {
+    const wrapper = mountWithApp(ResearchArtifactShell, {
+      props: {
+        title: "Report",
+        metadata: "In Silico Research Agent",
+        formatScientificAgentName: true,
+        tab: "content",
+        tabLabels: tabs,
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+    });
+
+    expect(
+      wrapper.get(".research-artifact-header__metadata-item em").text()
+    ).toBe("In Silico");
+  });
+
+  it("forwards back, close, and selected overflow commands from its default header", async () => {
     const wrapper = mountShell();
 
     await wrapper.get("[data-test=artifact-back]").trigger("click");
@@ -95,7 +172,10 @@ describe("ResearchArtifactShell", () => {
 
     expect(wrapper.emitted("back")).toHaveLength(1);
     expect(wrapper.emitted("close")).toHaveLength(1);
-    expect(wrapper.emitted("action")).toHaveLength(1);
+    expect(wrapper.emitted("action")).toBeUndefined();
+
+    await wrapper.get("[data-test=artifact-action-copy]").trigger("click");
+    expect(wrapper.emitted("action")).toEqual([["copy"]]);
   });
 
   it("links each tab to its labelled panel with roving tabindex", () => {
@@ -119,6 +199,33 @@ describe("ResearchArtifactShell", () => {
       expect(panel.attributes("aria-labelledby")).toBe(button.attributes("id"));
       expect(panel.attributes("hidden")).toBe(selected ? undefined : "");
     });
+  });
+
+  it("mounts only explicitly enabled tabs and keeps keyboard focus within them", async () => {
+    const wrapper = mountShell("activity", "reading", ["activity"]);
+
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(1);
+    expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(1);
+    expect(wrapper.get('[data-tab-id="activity"]').attributes("tabindex")).toBe(
+      "0"
+    );
+    expect(
+      wrapper.get('[data-panel-id="activity"]').attributes("hidden")
+    ).toBeUndefined();
+    expect(wrapper.find('[data-test="activity"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="content"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="evidence"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="downloads"]').exists()).toBe(false);
+
+    await wrapper.get('[data-tab-id="activity"]').trigger("keydown", {
+      key: "ArrowRight",
+    });
+
+    expect(wrapper.emitted("tab")?.at(-1)).toEqual(["activity"]);
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-tab-id="activity"]').element
+    );
+    wrapper.unmount();
   });
 
   it.each([
@@ -177,9 +284,23 @@ describe("ResearchArtifactShell", () => {
     const wrapper = mountShell("content", "wide");
 
     expect(
-      wrapper
-        .find(".research-artifact-shell__narrative-content")
-        .classes()
+      wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
+  });
+
+  it("contains rejected roving-focus scheduling", () => {
+    expect(SHELL_SOURCE).toContain("}).catch(() => undefined);");
+  });
+
+  it("retains a selected-tab border when forced colors replace background fills", () => {
+    const forcedColors =
+      SHELL_SOURCE.match(
+        /@media\s*\(forced-colors:\s*active\)\s*\{([\s\S]*?)\n\}/
+      )?.[1] ?? "";
+
+    expect(forcedColors).toMatch(
+      /\.research-artifact-shell__tab\.is-active::after\s*\{[^}]*border-block-end:\s*2px solid Highlight;/
+    );
+    expect(forcedColors).not.toMatch(/forced-color-adjust:\s*none/);
   });
 });

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -10,21 +9,16 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: routerBack }),
 }));
 
-vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div />" },
-}));
-
-const MarkdownViewerStub = {
-  props: ["content", "instantMessage", "surface"],
+const ScientificMarkdownStub = {
+  props: ["source", "surface"],
   template: `
     <div
       class="phy-markdown phy-markdown--chat"
       data-test="markdown-result"
       :data-surface="surface"
-      :data-instant="String(instantMessage)"
-      :data-content="content"
+      :data-content="source"
     >
-      <table><tbody><tr><td>{{ content }}</td></tr></tbody></table>
+      <table><tbody><tr><td>{{ source }}</td></tr></tbody></table>
     </div>
   `,
 };
@@ -43,27 +37,33 @@ const AgentDemoShellStub = {
   `,
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
 function mountDemo() {
-  return mount(DataAgent, {
+  return mountWithApp(DataAgent, {
     global: {
-      plugins: [i18n],
       stubs: {
         AgentDemoShell: AgentDemoShellStub,
-        MarkdownViewer: MarkdownViewerStub,
+        ScientificMarkdown: ScientificMarkdownStub,
       },
     },
   });
 }
 
-import DataAgent from "@/views/data-agent/index.vue";
+import DataAgent from "@/views/data-agent/DataAgentView.vue";
+
+const DATA_AGENT_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/views/data-agent/DataAgentView.vue"),
+  "utf8"
+);
 
 describe("Data Agent static demonstration", () => {
+  it("keeps result columns shrinkable while table overflow stays local", () => {
+    expect(DATA_AGENT_SOURCE).toContain(
+      "grid-template-columns: minmax(0, 1fr);"
+    );
+    expect(DATA_AGENT_SOURCE).toContain("overflow-x: auto;");
+    expect(DATA_AGENT_SOURCE).not.toContain("citation-namespace");
+  });
+
   it("keeps the three sample rounds in their exact order", () => {
     const wrapper = mountDemo();
     const rounds = wrapper.findAll("[data-test=data-agent-round]");
@@ -83,7 +83,7 @@ describe("Data Agent static demonstration", () => {
       )
     ).toEqual([
       "|  Transcript ID  |\n| :-------------: |\n| Os01t0177400-01 |\n",
-      "| LENGTH([sequence_2]) |\n| :------------------: |\n|         1113         |",
+      "| CDS length (bp) |\n| :-------------: |\n|      1113       |",
       "| Query Gene ID | Query Species | Homology Gene ID | Homology Species |\n| ------------- | :-----------: | :--------------: | :--------------: |\n| Os01g0177400  |      osa      | Zm00001eb122500  |       zma        |",
     ]);
   });
@@ -109,9 +109,6 @@ describe("Data Agent static demonstration", () => {
         expect(
           region.find(".phy-markdown--chat").attributes("data-surface")
         ).toBe("chat");
-        expect(
-          region.find(".phy-markdown--chat").attributes("data-instant")
-        ).toBe("true");
       });
   });
 
@@ -123,9 +120,16 @@ describe("Data Agent static demonstration", () => {
     await wrapper.get("[data-test=shell-back]").trigger("click");
     expect(routerBack).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(
-      wrapper.findAll("[data-test*=progress], [aria-label*=progress i]")
-    ).toHaveLength(0);
+    const progressNodes = wrapper
+      .findAll("[data-test], [aria-label]")
+      .filter((node) =>
+        /progress/i.test(
+          `${node.attributes("data-test") ?? ""} ${
+            node.attributes("aria-label") ?? ""
+          }`
+        )
+      );
+    expect(progressNodes).toHaveLength(0);
     expect(wrapper.findAll("button")).toHaveLength(1);
     expect(wrapper.text()).not.toMatch(/export|download|loading/i);
 

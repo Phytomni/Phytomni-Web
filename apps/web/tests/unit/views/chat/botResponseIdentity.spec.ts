@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
+import { decodeQueryData } from "@/api/types";
+import type { ChatMessage, ChatUIState, ChatView } from "@/views/chat/types";
+import { buildChatState } from "../../../helpers/chatBuilders";
+import { mustGet } from "../../../helpers/mockFactories";
 
 const mockGetQueryAbortable = vi.hoisted(() => vi.fn());
 
@@ -19,52 +23,62 @@ vi.mock("element-plus", () => ({
   ElMessageBox: { alert: vi.fn() },
 }));
 
-vi.mock("@/utils/pending-chat", () => ({
-  writePendingChat: vi.fn(),
-  clearPendingChat: vi.fn(),
-  isLocalStorageChat: vi.fn(() => false),
-}));
+vi.mock("@/utils/pending-chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/pending-chat")>();
+  return {
+    ...actual,
+    writePendingChat: vi.fn(),
+    clearPendingChat: vi.fn(),
+    isLocalStorageChat: vi.fn(() => false),
+  };
+});
 
 vi.mock("@/utils/network-error", () => ({
   isNetworkError: vi.fn(() => false),
 }));
 
 import { useSendMessage } from "@/views/chat/composables/useSendMessage";
+import type {
+  BotCapabilityByTool,
+  BotResearchInputCapability,
+} from "@/views/chat/composables/useBotCapabilities";
 
-function makeState() {
-  return {
-    isSending: false,
-    messageInput: "question",
-    fileList: [],
-    historyQuestion: null,
-    reactions: {},
-    uploadTransfer: null,
-    activeRequestId: "",
-    generationStopped: false,
-    renderedChat: null as { messages: any[] } | null,
-    mode: "instant" as const,
-    sendStartedAt: null,
-    activeAgentName: "",
-    completing: false,
-  };
+function makeState(): ChatUIState {
+  return buildChatState({ messageInput: "question" });
+}
+
+function lastMessage(state: ChatUIState, label: string): ChatMessage {
+  const renderedChat = mustGet(state.renderedChat, `${label}: rendered chat`);
+  return mustGet(renderedChat.messages.at(-1), `${label}: last message`);
 }
 
 describe("blocking Bot response identity", () => {
   let state: ReturnType<typeof makeState>;
-  let currentChat: ReturnType<typeof ref<any>>;
+  let currentChat: Ref<ChatView | null>;
   let getHistoryQuestionData: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_STREAM_ENABLED", "false");
     state = makeState();
-    currentChat = ref({ messages: [] });
+    currentChat = ref<ChatView | null>({ messages: [] });
     getHistoryQuestionData = vi.fn().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  function researchInputCapability(): BotResearchInputCapability {
+    return {
+      enabled: false,
+      protocol: "research_input_resolution_v1",
+      max_user_query_chars: 131072,
+      max_attachments_per_request: 64,
+      max_research_dataset_paths: 64,
+      max_research_input_references: 128,
+    };
+  }
 
   function makeComposable() {
     const currentChatId = ref("dialogue-a");
@@ -76,8 +90,18 @@ describe("blocking Bot response identity", () => {
         currentChat,
         composerRef: ref(null),
         t: (key: string) => key,
-        userStore: () => ({}),
+        userStore: () => ({
+          FedLogOut: vi
+            .fn<() => Promise<unknown>>()
+            .mockResolvedValue(undefined),
+        }),
         getHistoryQuestionData,
+        reconcileDialogueIdentity: (tempId, serverId) => ({
+          status: "reconciled",
+          tempId,
+          serverId,
+          rekey: { outcome: tempId === serverId ? "same-id" : "moved" },
+        }),
         chatList: ref([
           {
             id: 41,
@@ -90,6 +114,8 @@ describe("blocking Bot response identity", () => {
         timestamp: ref(0),
         selectChat: vi.fn(),
         scrollToBottom: vi.fn().mockResolvedValue(undefined),
+        researchInputCapability: ref(researchInputCapability()),
+        botCapabilitiesByTool: ref({} as BotCapabilityByTool),
       }).sendMessage,
     };
   }
@@ -107,10 +133,11 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "bot run identity");
     expect(assistant.id).toBe(41);
     expect(assistant.botProjection?.runId).toBe("run-41");
     expect(assistant.botProjection?.status).toBe("SUCCEEDED");
+    expect(state.agentRunLifecycles).toEqual({});
   });
 
   it("does not synthesize identity for tracking-degraded success", async () => {
@@ -127,7 +154,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "tracking-degraded response");
     expect(assistant.id).toBe(42);
     expect(assistant.botProjection?.runId).toBeNull();
     expect(assistant.botProjection?.trackingDegraded).toBe(true);
@@ -149,11 +176,96 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "report metadata response");
     expect(assistant.botProjection).toMatchObject({
       reportRevision: 4,
       requestId: "web-request-43",
     });
+  });
+
+  it("defensively completes a Review answer with a contradictory input-required status", async () => {
+    const completeReviewAnswer = `INITIAL-START\n${"review ".repeat(
+      900
+    )}\nINITIAL-END`;
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: {
+        id: 44,
+        bot_run_id: "run-review-complete",
+        dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
+        answer: JSON.stringify({
+          content: completeReviewAnswer,
+          doc_list: [{ title: "Review source" }],
+        }),
+        status: "INPUT_REQUIRED",
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: "surface-stale",
+          widget: "confirm",
+          props: { title: "Approve" },
+        },
+      },
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessage(state, "completed Review response");
+    expect(assistant).toMatchObject({
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      doc_list: [{ title: "Review source" }],
+    });
+    expect(assistant.content).toBe(completeReviewAnswer);
+    expect(assistant.doc_list).toEqual([
+      { title: "Review source", citation: null },
+    ]);
+    expect(assistant.status).toBe("SUCCEEDED");
+    expect(assistant.blocks).toBeUndefined();
+    expect(assistant.a2uiRuntime).toBeUndefined();
+  });
+
+  it("renders a complete nested formatted Review answer without an A2UI prompt", async () => {
+    const completeReviewContent = `NESTED-START\n${"review ".repeat(
+      900
+    )}\nNESTED-END`;
+    const completeReviewAnswer = JSON.stringify({
+      content: completeReviewContent,
+      doc_list: [{ title: "Nested Review source" }],
+    });
+    mockGetQueryAbortable.mockResolvedValueOnce({
+      data: decodeQueryData({
+        id: 47,
+        bot_run_id: "run-review-nested",
+        dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
+        answer: "",
+        status: "INPUT_REQUIRED",
+        result: { formatted: { answer: completeReviewAnswer } },
+        a2ui: {
+          catalog_version: "v1.0",
+          surface_id: "surface-nested",
+          widget: "confirm",
+          props: {
+            title: "Review approval",
+            body: completeReviewContent.slice(0, 500),
+          },
+        },
+      }),
+    });
+
+    const { sendMessage } = makeComposable();
+    await sendMessage();
+
+    const assistant = lastMessage(state, "nested formatted Review response");
+    expect(assistant).toMatchObject({
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      doc_list: [{ title: "Nested Review source" }],
+    });
+    expect(assistant.content).toBe(completeReviewContent);
+    expect(assistant.blocks).toBeUndefined();
+    expect(assistant.a2uiRuntime).toBeUndefined();
   });
 
   it("preserves legacy task and download fields on an Analyst response", async () => {
@@ -171,7 +283,7 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "legacy analyst response");
     expect(assistant).toMatchObject({
       task_id: "task-45",
       download_path: "obs://bucket/report-45",
@@ -185,6 +297,7 @@ describe("blocking Bot response identity", () => {
         id: 44,
         bot_run_id: "run-44",
         dialogue_id: "dialogue-a",
+        tool_name: "ReviewAgent",
         answer: "",
         status: "INPUT_REQUIRED",
         a2ui: {
@@ -205,9 +318,12 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "A2UI input-required response");
+    expect(assistant.status).toBe("INPUT_REQUIRED");
+    expect(assistant.botProjection?.status).toBe("INPUT_REQUIRED");
     expect(assistant.blocks).toHaveLength(1);
-    expect(assistant.blocks[0]).toMatchObject({
+    const block = mustGet(assistant.blocks?.[0], "A2UI first block");
+    expect(block).toMatchObject({
       type: "agent-surface",
       authority: "agent",
       interactive: true,
@@ -226,7 +342,9 @@ describe("blocking Bot response identity", () => {
         state: { status: "ready", round: 1 },
       },
     });
-    expect(JSON.stringify(assistant.blocks)).not.toContain("raw_provider_field");
+    expect(JSON.stringify(assistant.blocks)).not.toContain(
+      "raw_provider_field"
+    );
   });
 
   it("retains the decoded A2UI surface without creating a runtime for an unsafe dialogue id", async () => {
@@ -254,9 +372,11 @@ describe("blocking Bot response identity", () => {
     const { sendMessage } = makeComposable();
     await sendMessage();
 
-    const assistant = state.renderedChat!.messages.at(-1);
+    const assistant = lastMessage(state, "unsafe dialogue A2UI response");
     expect(assistant.blocks).toHaveLength(1);
-    expect(assistant.blocks[0].a2ui.surface.surface_id).toBe("surface-46");
+    expect(assistant.blocks?.[0]).toMatchObject({
+      a2ui: { surface: { surface_id: "surface-46" } },
+    });
     expect(assistant.a2uiRuntime).toBeUndefined();
   });
 });

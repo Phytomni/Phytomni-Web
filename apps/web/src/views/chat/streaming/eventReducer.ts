@@ -1,6 +1,12 @@
-import type { ContentBlock } from "../types";
-import type { AGUIEvent } from "./aguiEvents";
+import {
+  normalizeChatContextNotice,
+  type ChatContextNotice,
+  type CitationDocument,
+  type ContentBlock,
+} from "../types";
+import type { AguiEvent } from "./aguiEvents";
 import { parseA2uiCustomValue } from "./a2uiParse";
+import { decodeCitationDocuments } from "../utils/format";
 
 // ReducerState folds the AG-UI event stream into ordered content blocks plus
 // the fields the message needs to finalize (run id, follow-ups, done/error).
@@ -8,19 +14,29 @@ export interface ReducerState {
   blocks: ContentBlock[];
   runId: string;
   followUp: string[];
-  references: any[]; // phyto.references doc_list (P1 cited streaming)
+  references: CitationDocument[]; // phyto.references doc_list (P1 cited streaming)
+  contextNotice?: ChatContextNotice;
   done: boolean;
   error?: { message: string };
 }
 
 export function initReducerState(): ReducerState {
-  return { blocks: [], runId: "", followUp: [], references: [], done: false };
+  return {
+    blocks: [],
+    runId: "",
+    followUp: [],
+    references: [],
+    done: false,
+  };
 }
 
 // reduceAGUIEvent folds one event into a NEW state (pure; never mutates input).
 // UI copy is the Web app's job: tool/step blocks carry structured identifiers
 // (toolName/label), not Bot-authored display strings.
-export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerState {
+export function reduceAGUIEvent(
+  state: ReducerState,
+  ev: AguiEvent
+): ReducerState {
   const blocks = state.blocks.map((b) => ({ ...b }));
   const next: ReducerState = { ...state, blocks };
   switch (ev.type) {
@@ -28,53 +44,73 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
       // Guard against a later RunStarted (retry / duplicate frame) with a
       // blank run_id clobbering an already-captured id — mirrors the Go
       // accumulator's non-overwrite invariant.
-      const rid = String(ev.data.run_id ?? "");
+      const rid = stringField(ev.data.run_id);
       if (rid) next.runId = rid;
       break;
     }
     case "TextMessageContent":
-      appendText(blocks, "markdown", String(ev.data.delta ?? ""));
+      appendText(blocks, "markdown", stringField(ev.data.delta));
       break;
     case "ReasoningMessageContent":
-      appendText(blocks, "reasoning", String(ev.data.delta ?? ""));
+      appendText(blocks, "reasoning", stringField(ev.data.delta));
       break;
     case "ToolCallStart":
       blocks.push({
         type: "tool",
         authority: "web",
-        toolName: String(ev.data.tool_name ?? ""),
+        toolName: stringField(ev.data.tool_name),
       });
       break;
     case "ToolCallResult": {
-      const count = ev.data.result_summary?.count;
+      const summary = isRecord(ev.data.result_summary)
+        ? ev.data.result_summary
+        : undefined;
+      const count = summary?.count;
       const tool = [...blocks].reverse().find((b) => b.type === "tool");
-      if (tool && typeof count === "number") tool.count = count;
+      if (tool && typeof count === "number" && Number.isFinite(count)) {
+        tool.count = count;
+      }
       break;
     }
     case "StepStarted":
       blocks.push({
         type: "step",
         authority: "web",
-        label: String(ev.data.step_name ?? ""),
+        label: stringField(ev.data.step_name),
       });
       break;
-    case "Custom":
-      if (ev.data.name === "phyto.follow_up" && Array.isArray(ev.data.value)) {
-        next.followUp = ev.data.value.map((v: any) => String(v));
-      } else if (
-        ev.data.name === "phyto.references" &&
-        Array.isArray(ev.data.value?.doc_list)
-      ) {
+    case "Custom": {
+      const name = stringField(ev.data.name);
+      const value = ev.data.value;
+      if (name === "phyto.follow_up" && Array.isArray(value)) {
+        next.followUp = value.filter(
+          (item): item is string => typeof item === "string"
+        );
+      } else if (name === "phyto.references" && isRecord(value)) {
         // P1 cited streaming: finalize copies these into message.doc_list so
         // the ns-aware cited render path engages (citation ns invariant).
-        next.references = ev.data.value.doc_list;
-      } else if (ev.data.name === "phyto.a2ui") {
-        const parsed = parseA2uiCustomValue(ev.data.value);
+        const references = decodeCitationDocuments(value.doc_list);
+        if (references?.length) next.references = references;
+      } else if (name === "phyto.context_staged") {
+        const contextNotice = decodeContextStagedValue(value);
+        if (!contextNotice) break;
+        if (!next.contextNotice) {
+          next.contextNotice = contextNotice;
+        } else if (
+          next.contextNotice.rebuilt !== contextNotice.rebuilt ||
+          next.contextNotice.degraded !== contextNotice.degraded
+        ) {
+          // Keep the first valid notice; a conflicting duplicate is not a
+          // trustworthy UI signal and must not replace it.
+          break;
+        }
+      } else if (name === "phyto.a2ui") {
+        const parsed = parseA2uiCustomValue(value);
         if (parsed.ok) {
           const surface = parsed.value;
           if (
             blocks.some(
-              (block) => block.a2ui?.surface.surface_id === surface.surface_id,
+              (block) => block.a2ui?.surface.surface_id === surface.surface_id
             )
           ) {
             console.warn("[phyto.a2ui] skipped frame: duplicate_surface_id");
@@ -95,6 +131,14 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
         }
       }
       break;
+    }
+    case "TextMessageStart":
+      break;
+    case "TextMessageEnd":
+      for (const block of blocks) {
+        if (block.type === "markdown") block.complete = true;
+      }
+      break;
     case "RunFinished":
       next.done = true;
       break;
@@ -102,7 +146,9 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
       // RunError is terminal. Preserve the first upstream message if a
       // transport layer later tries to append a synthetic error event.
       if (!next.error) {
-        next.error = { message: String(ev.data.message ?? "stream error") };
+        next.error = {
+          message: stringField(ev.data.message) || "stream error",
+        };
       }
       next.done = true;
       // A failed run expires only surfaces that are still open or submitting.
@@ -138,12 +184,44 @@ export function reduceAGUIEvent(state: ReducerState, ev: AGUIEvent): ReducerStat
   return next;
 }
 
+function decodeContextStagedValue(
+  value: unknown
+): ChatContextNotice | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    !Object.prototype.hasOwnProperty.call(value, "context_rebuilt") ||
+    !Object.prototype.hasOwnProperty.call(value, "context_degraded") ||
+    typeof value.context_rebuilt !== "boolean" ||
+    typeof value.context_degraded !== "boolean"
+  ) {
+    return undefined;
+  }
+  return normalizeChatContextNotice(value);
+}
+
+function stringField(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // appendText appends a delta to the LAST block of the given type if it is the
 // tail block, otherwise starts a new one — so interleaved tool/step events
 // break text into separate markdown/reasoning blocks in arrival order.
-function appendText(blocks: ContentBlock[], type: string, delta: string): void {
+function appendText(
+  blocks: ContentBlock[],
+  type: "markdown" | "reasoning",
+  delta: string
+): void {
+  if (!delta) return;
   const tail = blocks[blocks.length - 1];
-  if (tail && tail.type === type) {
+  if (
+    tail &&
+    tail.type === type &&
+    (tail.type !== "markdown" || tail.complete !== true)
+  ) {
     tail.text = (tail.text ?? "") + delta;
   } else {
     blocks.push({ type, authority: "web", text: delta });

@@ -1,0 +1,296 @@
+import type { Plugin } from "unified";
+import {
+  rawHtmlBoundary,
+  transformScientificInlineFormatting,
+} from "./inline-formatting";
+import type { ScientificMarkdownNode as MdNode } from "./types";
+
+export interface CitationOptions {
+  namespace: string;
+  referenceCount: number;
+}
+
+export interface ParsedCitation {
+  display: string;
+  indices: number[];
+}
+
+interface MdParent extends MdNode {
+  children: MdNode[];
+}
+
+const MAX_CITATION_INDEX = 999;
+const MAX_EXPANDED_INDICES = 100;
+const CITATION_NAMESPACE_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,255})?$/;
+const PROTECTED_NODE_TYPES = new Set([
+  "inlineCode",
+  "code",
+  "link",
+  "linkReference",
+  "image",
+  "imageReference",
+  "inlineMath",
+  "math",
+]);
+
+export function requireCitationNamespace(namespace: string): string {
+  if (
+    typeof namespace !== "string" ||
+    !CITATION_NAMESPACE_PATTERN.test(namespace)
+  ) {
+    throw new TypeError("citation namespace is invalid");
+  }
+  return namespace;
+}
+
+function normalizeCitationSource(source: string): string | null {
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+  let body = trimmed;
+  if (trimmed.startsWith("[") || trimmed.endsWith("]")) {
+    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
+    body = trimmed.slice(1, -1).trim();
+  }
+  return body.replace(/^document(?:\s*:\s*|\s+)/i, "");
+}
+
+export function parseCitationBody(source: string): ParsedCitation | null {
+  const normalized = normalizeCitationSource(source);
+  if (
+    !normalized ||
+    !/^\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*$/.test(
+      normalized
+    )
+  ) {
+    return null;
+  }
+  const display = normalized.replace(/\s+/g, "");
+
+  const indices: number[] = [];
+  const seen = new Set<number>();
+  for (const segment of display.split(",")) {
+    const [startSource, endSource] = segment.split("-");
+    const start = Number(startSource);
+    const end = endSource === undefined ? start : Number(endSource);
+    if (
+      start < 1 ||
+      end < start ||
+      end > MAX_CITATION_INDEX ||
+      end - start + 1 > MAX_EXPANDED_INDICES
+    ) {
+      return null;
+    }
+    for (let index = start; index <= end; index += 1) {
+      if (seen.has(index) || indices.length >= MAX_EXPANDED_INDICES)
+        return null;
+      seen.add(index);
+      indices.push(index);
+    }
+  }
+
+  return { display, indices };
+}
+
+function isInteractiveCitation(
+  parsed: ParsedCitation,
+  options: CitationOptions
+): boolean {
+  return (
+    Boolean(options.namespace) &&
+    options.referenceCount > 0 &&
+    parsed.indices.every((index) => index <= options.referenceCount)
+  );
+}
+
+function citationNode(
+  parsed: ParsedCitation,
+  options: CitationOptions,
+  adjacent: boolean
+): MdNode {
+  const display = parsed.display.replace(/-/g, "–");
+  const interactive = isInteractiveCitation(parsed, options);
+  const hChildren = interactive
+    ? [
+        {
+          type: "element",
+          tagName: "a",
+          properties: {
+            href: `#${options.namespace}-ref-${parsed.indices[0]}`,
+            className: ["scientific-citation__link"],
+            ariaLabel: `Citation ${parsed.display}`,
+          },
+          children: [{ type: "text", value: display }],
+        },
+      ]
+    : [{ type: "text", value: display }];
+
+  return {
+    type: "scientificCitation",
+    data: {
+      hName: "sup",
+      hProperties: {
+        className: [
+          "scientific-citation",
+          ...(adjacent ? ["scientific-citation--adjacent"] : []),
+        ],
+      },
+      hChildren,
+    },
+  };
+}
+
+function rewriteTextCitations(
+  parent: MdParent,
+  options: CitationOptions,
+  source?: string
+): void {
+  const parentSourceStart = parent.position?.start?.offset;
+  const parentSourceEnd = parent.position?.end?.offset;
+  const rawParentSource =
+    typeof source === "string" &&
+    typeof parentSourceStart === "number" &&
+    typeof parentSourceEnd === "number"
+      ? source.slice(parentSourceStart, parentSourceEnd)
+      : undefined;
+  let parentRawOffset = 0;
+
+  for (let index = 0; index < parent.children.length; index += 1) {
+    const node = parent.children[index];
+    const sourceStart = node.position?.start?.offset;
+    const sourceEnd = node.position?.end?.offset;
+    let rawNodeSource: string | undefined;
+    if (
+      typeof source === "string" &&
+      typeof sourceStart === "number" &&
+      typeof sourceEnd === "number"
+    ) {
+      rawNodeSource = source.slice(sourceStart, sourceEnd);
+      if (typeof parentSourceStart === "number") {
+        parentRawOffset = Math.max(
+          parentRawOffset,
+          sourceEnd - parentSourceStart
+        );
+      }
+    }
+    if (
+      node.type !== "text" ||
+      !node.value ||
+      node.data?.scientificRawHtml ||
+      node.data?.scientificRawHtmlContent
+    ) {
+      continue;
+    }
+
+    const parts: MdNode[] = [];
+    let offset = 0;
+    const rawCitationSource = rawNodeSource ?? rawParentSource;
+    let rawOffset = rawNodeSource ? 0 : parentRawOffset;
+    const matcher =
+      /\[(?:document(?:\s*:\s*|\s+))?\d{1,3}(?:\s*-\s*\d{1,3})?(?:\s*,\s*\d{1,3}(?:\s*-\s*\d{1,3})?)*\]/gi;
+    for (const match of node.value.matchAll(matcher)) {
+      const matchIndex = match.index ?? 0;
+      const parsed = parseCitationBody(match[0]);
+      if (!parsed) continue;
+      if (rawCitationSource !== undefined) {
+        const rawMatchIndex = rawCitationSource.indexOf(match[0], rawOffset);
+        if (rawMatchIndex < 0) continue;
+        rawOffset = rawMatchIndex + match[0].length;
+        if (!rawNodeSource) parentRawOffset = rawOffset;
+        let backslashCount = 0;
+        for (
+          let cursor = rawMatchIndex - 1;
+          cursor >= 0 && rawCitationSource[cursor] === "\\";
+          cursor -= 1
+        ) {
+          backslashCount += 1;
+        }
+        if (backslashCount % 2 === 1) continue;
+      }
+      if (matchIndex > offset) {
+        parts.push({
+          type: "text",
+          value: node.value.slice(offset, matchIndex),
+        });
+      }
+      const previous = parts.at(-1) ?? parent.children[index - 1];
+      parts.push(
+        citationNode(parsed, options, previous?.type === "scientificCitation")
+      );
+      offset = matchIndex + match[0].length;
+    }
+    if (!parts.length) continue;
+    if (offset < node.value.length) {
+      parts.push({ type: "text", value: node.value.slice(offset) });
+    }
+    parent.children.splice(index, 1, ...parts);
+    index += parts.length - 1;
+  }
+}
+
+function rewriteHtmlNodes(parent: MdParent): void {
+  const rawTags: string[] = [];
+  for (const node of parent.children) {
+    if (node.type === "html") {
+      const boundary = rawHtmlBoundary(node.value ?? "");
+      if (boundary?.kind === "close" && rawTags.at(-1) === boundary.tagName) {
+        rawTags.pop();
+      }
+      node.type = "text";
+      node.data = { ...node.data, scientificRawHtml: true };
+      if (boundary?.kind === "open") rawTags.push(boundary.tagName);
+      continue;
+    }
+    if (rawTags.length > 0) {
+      node.data = { ...node.data, scientificRawHtmlContent: true };
+    }
+  }
+}
+
+function visit(
+  parent: MdParent,
+  options: CitationOptions,
+  protectedByAncestor = false,
+  source?: string
+): void {
+  const protectedHere =
+    protectedByAncestor ||
+    PROTECTED_NODE_TYPES.has(parent.type) ||
+    Boolean(parent.data?.scientificVertical) ||
+    parent.data?.scientificRawHtmlContent === true;
+  if (!protectedHere) {
+    rewriteHtmlNodes(parent);
+    rewriteTextCitations(parent, options, source);
+  }
+
+  for (const child of parent.children) {
+    if (child.children)
+      visit(child as MdParent, options, protectedHere, source);
+  }
+}
+
+export function transformScientificCitations(
+  tree: MdNode,
+  options: CitationOptions,
+  source?: string
+): void {
+  if (!options.namespace && options.referenceCount > 0) {
+    throw new TypeError("citation namespace is invalid");
+  }
+  const validatedOptions = {
+    ...options,
+    namespace: options.namespace
+      ? requireCitationNamespace(options.namespace)
+      : "",
+  };
+  if (source !== undefined) transformScientificInlineFormatting(tree, source);
+  if (tree.children) visit(tree as MdParent, validatedOptions, false, source);
+}
+
+export function createScientificCitationRemarkPlugin(
+  source: string
+): Plugin<[CitationOptions]> {
+  return function (options) {
+    return (tree) =>
+      transformScientificCitations(tree as MdNode, options, source);
+  };
+}

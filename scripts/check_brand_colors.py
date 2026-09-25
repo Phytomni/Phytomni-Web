@@ -73,12 +73,12 @@ VISUAL_CONTRACT_EXCEPTIONS: dict[str, tuple[ContractException, ...]] = {
             "adaptive chat shell owns its viewport scroll root",
         ),
         (
-            "apps/web/src/views/help/index.vue",
+            "apps/web/src/views/help/HelpView.vue",
             ".help-page",
             "help document owns its viewport scroll root",
         ),
         (
-            "apps/web/src/views/legal/index.vue",
+            "apps/web/src/views/legal/LegalView.vue",
             ".legal-page",
             "legal document owns its viewport scroll root",
         ),

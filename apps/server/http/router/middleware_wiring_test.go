@@ -25,7 +25,7 @@ import (
 
 // TestRelayFileRouteSkipsJWTAuth: the relay download is the browser-direct face —
 // window.open / <img src> / email links carry no Authorization header, so auth is
-// the ?t= signed token, not a JWT. A valid-token request with no Authorization
+// the ?token= signed token, not a JWT. A valid-token request with no Authorization
 // must reach the handler (which then fails at the unreachable Bot → 502), proving
 // the route is not behind AuthMiddleware.
 func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
@@ -47,11 +47,18 @@ func TestRelayFileRouteSkipsJWTAuth(t *testing.T) {
 	Api(engine.Group("/"))
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?t="+url.QueryEscape(tok), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?token="+url.QueryEscape(tok), nil)
 	engine.ServeHTTP(w, req)
 
 	if w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden {
 		t.Fatalf("relay-file rejected the no-JWT request with %d; it must NOT sit behind AuthMiddleware (got body=%s)", w.Code, w.Body.String())
+	}
+
+	legacy := httptest.NewRecorder()
+	legacyReq := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/relay-file?t="+url.QueryEscape(tok), nil)
+	engine.ServeHTTP(legacy, legacyReq)
+	if legacy.Code != http.StatusUnauthorized {
+		t.Fatalf("legacy relay alias was accepted with status %d; want 401", legacy.Code)
 	}
 }
 

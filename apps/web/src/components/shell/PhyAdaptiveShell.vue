@@ -111,7 +111,7 @@ function restoreArtifactFocus(): void {
 }
 
 function handleArtifactKeydown(event: KeyboardEvent): void {
-  if (!props.artifactFullscreen) return;
+  if (!props.artifactFullscreen || event.defaultPrevented) return;
 
   if (event.key === "Escape") {
     event.preventDefault();
@@ -124,6 +124,11 @@ function handleArtifactKeydown(event: KeyboardEvent): void {
 
   if (event.key !== "Tab") return;
   const artifact = getArtifactSection();
+  if (
+    event.target instanceof Element &&
+    event.target.closest('[role="dialog"][aria-modal="true"]') !== artifact
+  )
+    return;
   const focusables = getArtifactFocusables();
   if (!artifact || focusables.length === 0) {
     event.preventDefault();
@@ -150,7 +155,7 @@ watch(
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
-      void focusArtifact();
+      focusArtifact().catch(() => undefined);
       return;
     }
     if (!isFullscreen && wasFullscreen) {
@@ -167,8 +172,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .phy-adaptive-shell {
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: var(--phy-layout-sidebar-expanded-width) minmax(0, 1fr);
+  grid-template-columns: var(--phy-layout-sidebar-expanded-width) minmax(
+      0,
+      1fr
+    );
   width: 100%;
   height: 100vh;
   height: 100dvh;

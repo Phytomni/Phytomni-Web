@@ -119,6 +119,10 @@ const ariaLabel = computed(() =>
     :deep(.message-text.phy-bubble-assistant) {
       width: 100%;
     }
+
+    :deep(.message-text.phy-bubble-assistant.agent-wait) {
+      width: fit-content;
+    }
   }
 
   .message-avatar {

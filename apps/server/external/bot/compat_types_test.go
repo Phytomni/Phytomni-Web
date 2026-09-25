@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -38,6 +39,17 @@ func TestHeadFixturesPreserveNullRunAndInputRequired(t *testing.T) {
 	decodeFixture(t, "review_input_required.json", &paused)
 	if paused.Status != "input_required" || paused.Interrupt == nil || paused.Interrupt.ThreadID != "run-review-1" || paused.Interrupt.RunID != "run-review-1" {
 		t.Fatalf("paused=%#v", paused)
+	}
+	var draft struct {
+		A2UI struct {
+			Props map[string]json.RawMessage `json:"props"`
+		} `json:"a2ui"`
+	}
+	if err := json.Unmarshal(paused.Interrupt.Draft, &draft); err != nil {
+		t.Fatalf("decode review draft: %v", err)
+	}
+	if len(draft.A2UI.Props) != 1 || string(draft.A2UI.Props["title"]) != `"Synthetic review"` {
+		t.Fatalf("review props=%s", paused.Interrupt.Draft)
 	}
 }
 
@@ -103,5 +115,113 @@ func TestHeadFixturesDecodeRemoteTerminalArtifacts(t *testing.T) {
 	}
 	if got.RunID != "run-terminal-1" || len(projection.Artifacts) == 0 {
 		t.Fatalf("terminal projection = %#v", projection)
+	}
+}
+
+func TestHeadFixturesDecodeCanonicalResultArchiveDelivery(t *testing.T) {
+	tests := []struct {
+		fixture string
+		agent   string
+		name    string
+	}{
+		{fixture: "analyst_terminal.json", agent: "analyst", name: "analyst-results.zip"},
+		{fixture: "research_terminal.json", agent: "research", name: "research-results.zip"},
+		{fixture: "network_terminal.json", agent: "network", name: "network-results.zip"},
+		{fixture: "design_terminal.json", agent: "design", name: "design-results.zip"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.agent, func(t *testing.T) {
+			var record RunRecord
+			decodeFixture(t, tt.fixture, &record)
+			var projection struct {
+				Execution json.RawMessage `json:"execution"`
+			}
+			if err := json.Unmarshal(record.Result, &projection); err != nil {
+				t.Fatalf("decode result: %v", err)
+			}
+			delivery, err := DecodeRunExecutionDelivery(projection.Execution, tt.agent)
+			if err != nil {
+				t.Fatalf("decode delivery: %v", err)
+			}
+			if !delivery.ResultArchiveV1 || len(delivery.OutputDirs) != 1 || delivery.Delivery == nil ||
+				delivery.Delivery.Status != "ready" || delivery.Delivery.Archive == nil ||
+				delivery.Delivery.Archive.Name != tt.name || delivery.Delivery.Archive.SizeBytes <= 0 {
+				t.Fatalf("canonical delivery = %#v", delivery)
+			}
+		})
+	}
+}
+
+func TestHeadFixturesKeepHistoricalTerminalArtifactsLegacy(t *testing.T) {
+	var record RunRecord
+	decodeFixture(t, "remote_terminal_artifacts.json", &record)
+	var projection struct {
+		Execution json.RawMessage `json:"execution"`
+	}
+	if err := json.Unmarshal(record.Result, &projection); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	delivery, err := DecodeRunExecutionDelivery(projection.Execution, "research")
+	if err != nil {
+		t.Fatalf("decode legacy execution: %v", err)
+	}
+	if delivery.ResultArchiveV1 || delivery.Delivery != nil {
+		t.Fatalf("legacy terminal fixture became v1 delivery: %#v", delivery)
+	}
+}
+
+func TestDecodeRunExecutionRetainsCurrentFieldsWithoutDelivery(t *testing.T) {
+	execution, err := DecodeRunExecutionDelivery(json.RawMessage(`{
+		"tracking":{"degraded":true},
+		"output_dirs":["internal/runs/synthetic","obs://bucket/owner/run"],
+		"delivery":null
+	}`), "research")
+	if err != nil {
+		t.Fatalf("decode current execution: %v", err)
+	}
+	if execution.ResultArchiveV1 || execution.Delivery != nil {
+		t.Fatalf("execution unexpectedly activated archive delivery: %#v", execution)
+	}
+	if !execution.TrackingDegraded || execution.OutputDirectoryCount != 2 ||
+		!reflect.DeepEqual(execution.OutputDirs, []string{"obs://bucket/owner/run"}) {
+		t.Fatalf("current execution projection = %#v", execution)
+	}
+}
+
+func TestDecodeRunExecutionRejectsMalformedCurrentFieldsWithoutDelivery(t *testing.T) {
+	tests := []json.RawMessage{
+		json.RawMessage(`{"tracking":{"degraded":"yes"},"output_dirs":["obs://bucket/owner/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true},"output_dirs":["https://private.invalid/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true},"output_dirs":["internal/../private/run"]}`),
+		json.RawMessage(`{"tracking":{"degraded":true,"private":"secret"},"output_dirs":["obs://bucket/owner/run"]}`),
+	}
+	for _, raw := range tests {
+		if got, err := DecodeRunExecutionDelivery(raw, "research"); err == nil {
+			t.Fatalf("malformed execution accepted: %#v", got)
+		}
+	}
+}
+
+func TestHeadFixturesDecodeRemoteLifecycleStates(t *testing.T) {
+	tests := []struct {
+		fixture    string
+		wantStatus string
+		wantChilds int
+	}{
+		{fixture: "remote_preparing.json", wantStatus: "running", wantChilds: 0},
+		{fixture: "remote_running.json", wantStatus: "running", wantChilds: 1},
+		{fixture: "remote_failed.json", wantStatus: "failed", wantChilds: 1},
+		{fixture: "remote_cancelled.json", wantStatus: "cancelled", wantChilds: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fixture, func(t *testing.T) {
+			var got RunRecord
+			decodeFixture(t, tt.fixture, &got)
+			if got.Status != tt.wantStatus || len(got.TaskIDs) != tt.wantChilds {
+				t.Fatalf("remote lifecycle = %#v, want status=%q children=%d", got, tt.wantStatus, tt.wantChilds)
+			}
+		})
 	}
 }

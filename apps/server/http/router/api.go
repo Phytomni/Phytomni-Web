@@ -17,6 +17,7 @@ func Api(r *gin.RouterGroup) {
 	{
 		apiAuthRouter.POST("/sessions", middleware.PerIPRateLimit("login"), authHandler.Login)                // login (create session, per-IP rate limited)
 		apiAuthRouter.POST("/registrations", middleware.PerIPRateLimit("register"), authHandler.UserRegister) // self-registration (per-IP rate limited)
+		apiAuthRouter.GET("/capabilities", authHandler.AuthCapabilities)
 	}
 
 	// /api/v1/downloads keeps the disabled legacy email-link route visible. It
@@ -32,6 +33,9 @@ func Api(r *gin.RouterGroup) {
 	{
 		apiV1Router.GET("/bot/capabilities", apiHandler.BotCapabilities)             // Web-owned, authenticated Bot capability manifest
 		apiV1Router.GET("/bot/interop/capabilities", apiHandler.InteropCapabilities) // opt-in, sanitized interop capability discovery
+		// Upload control plane: metadata allocation and owner-scoped renewal.
+		apiV1Router.POST("/files", apiHandler.CreateUpload)
+		apiV1Router.POST("/files/:asset_id/capability", apiHandler.RenewUploadCapability)
 		apiV1Router.POST("/users", apiHandler.Register)                              // admin registers a user or vip user
 		apiV1Router.GET("/users", apiHandler.PermissionUserList)                     // admin user list
 		apiV1Router.GET("/users/me", apiHandler.GetUserProfile)                      // get own profile (email from JWT, IDOR closed)
@@ -41,23 +45,34 @@ func Api(r *gin.RouterGroup) {
 		apiV1Router.GET("/users/me/tool-permissions", apiHandler.PermissionUserTool) // user tool-permission listing
 		apiV1Router.POST("/user-feedback", apiHandler.UserFeedback)                  // submit user feedback
 
-		apiV1Router.GET("/conversations", apiHandler.Conversations)                                             // conversation list (?favorite=true for favourites)
-		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                  // all child messages for a conversation
-		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query) // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
-		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)                                    // soft-delete conversation
-		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)                                     // rename conversation
-		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType)                            // like/dislike
-		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)                                 // favourite/unfavourite
+		apiV1Router.GET("/conversations", apiHandler.Conversations)                                                                                // conversation list (?favorite=true for favourites)
+		apiV1Router.GET("/conversations/:id/messages", apiHandler.AnswerCheck)                                                                     // all child messages for a conversation
+		apiV1Router.GET("/conversations/:id/messages/:message_id/stream", middleware.PerUserRateLimit("query"), apiHandler.ResumeQuestionStream)   // owner-only AG-UI resume
+		apiV1Router.GET("/conversations/:id/messages/:message_id/artifacts/:artifact_id/download-url", apiHandler.ConversationArtifactDownloadURL) // click-time artifact signer
+		apiV1Router.POST("/conversations/:id/messages/:message_id/artifacts/archive/retry", apiHandler.ConversationArtifactRetry)                  // owner-authorized archive retry
+		apiV1Router.POST("/conversations/:id/messages", middleware.PerUserRateLimit("query"), apiHandler.Query)                                    // send message (id=0 for new conversation, relayed to Bot, per-user rate limited)
+		apiV1Router.POST(
+			"/agent-products/:tool/runs",
+			middleware.PerUserRateLimit("query"),
+			apiHandler.AgentProductRun,
+		)
+		apiV1Router.DELETE("/conversations/:id", apiHandler.QueryListDelete)         // soft-delete conversation
+		apiV1Router.PATCH("/conversations/:id", apiHandler.QueryListRename)          // rename conversation
+		apiV1Router.PUT("/conversations/:id/reaction", apiHandler.QueryReactionType) // like/dislike
+		apiV1Router.PUT("/conversations/:id/favorite", apiHandler.QueryCollect)      // favourite/unfavourite
 
 		apiV1Router.GET("/async-tasks", apiHandler.AsyncTaskList)                       // task list (owner-scoped)
 		apiV1Router.GET("/async-tasks/:id", apiHandler.AsyncTaskInfo)                   // task status (owner-scoped)
+		apiV1Router.GET("/async-tasks/:id/lifecycle", apiHandler.AgentTaskLifecycle)    // bounded lifecycle (owner-scoped)
+		apiV1Router.POST("/async-tasks/:id/cancel", apiHandler.AgentTaskCancel)         // owner-authorized cancel
 		apiV1Router.GET("/async-tasks/:id/analyst-log", apiHandler.AnalystAgentGetLog)  // analyst log
 		apiV1Router.PATCH("/async-tasks/analyst-log", apiHandler.QueryAnalystUpdateLog) // async result write-back (Bot via legacy alias /query/analyst/update_log)
 
-		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)   // operation log query (admin-only)
-		apiV1Router.GET("/admin/cron-entries", apiHandler.GetCronEntries) // cron schedule inspection (admin-only)
-		apiV1Router.GET("/genes", apiHandler.GeneList)                    // gene test data list
-		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)             // gene detail (resource id = file_name)
+		apiV1Router.GET("/operation-logs", apiHandler.GetOperationLogs)               // operation log query (admin-only)
+		apiV1Router.GET("/admin/cron-entries", apiHandler.GetCronEntries)             // cron schedule inspection (admin-only)
+		apiV1Router.GET("/genes", apiHandler.GeneList)                                // gene test data list
+		apiV1Router.GET("/genes/:id", apiHandler.GeneDetails)                         // gene detail (resource id = file_name)
+		apiV1Router.GET("/genes/:id/resources/:resource_id", apiHandler.GeneResource) // current report-registered resource
 
 		apiV1Router.GET("/downloads/analyst-agent/obs-file", apiHandler.DownloadAnalystAgentObsFile)     // AnalystAgent OBS file download link
 		apiV1Router.GET("/downloads/analyst-agent/obs-images", apiHandler.DownloadAnalystAgentObsImages) // AnalystAgent OBS image download links
@@ -105,12 +120,12 @@ func Api(r *gin.RouterGroup) {
 		relayDownloadRouter.GET("/relay-file", apiHandler.RelayFileDownload) // token-authenticated OBS relay streaming download
 	}
 
-	// /api/v1/gene-images: public gene-example image surface (obsfs-backed).
+	// /api/v1/gene-images: public raster examples (mount or curated PNG relay).
 	// Browser-direct <img src> cannot carry an Authorization header, so this
 	// group carries no AuthMiddleware. The handler's traversal gate is the
 	// authorization boundary (gene data is public).
 	apiGeneImageRouter := r.Group("api/v1").Use(i18n.Localize(), middleware.GlobalMiddleware(), middleware.CORS())
 	{
-		apiGeneImageRouter.GET("/gene-images/:gene/:file", apiHandler.GeneImage) // public gene-example image (obsfs-backed)
+		apiGeneImageRouter.GET("/gene-images/:gene/:file", apiHandler.GeneImage) // public gene-example image
 	}
 }

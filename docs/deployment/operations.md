@@ -150,7 +150,7 @@ Two windows, matching the staged §6:
    still-running Python service (reverse whichever method §6 step 2 used —
    nginx upstream or slot swap). Instantly restored — no git changes, no
    redeploy. This is exactly why §6 keeps Python standing until after smoke
-   + soak.
+   - soak.
 2. **After the production decommission:** the in-repo Python service was
    already removed in the cutover commit (in `main` history), so restore it
    with `git revert` of that commit, redeploy it, repoint `/query` at the
@@ -177,9 +177,12 @@ Two windows, matching the staged §6:
   `UPDATE question_agent_logs SET status='FAILED' WHERE status='RUNNING' AND (bot_run_id IS NULL OR bot_run_id='') AND created_at < '<cutover-date>';`
   Run only after confirming such rows exist and are genuinely stale.
 
-## 11. `0.1.3` dark-launched features — Bot-coordination activation gates
+## 11. `0.1.3` / `0.1.4` dark-launched features — Bot-coordination activation gates
 
-The `0.1.3` release ships several Web↔Bot capabilities **dark** on the Web side
+The `0.1.4` compatibility follow-up preserves the `0.1.3` dark-launch contract
+for the capabilities listed below. The extended Research input rollout is a
+separate, no-new-flag deployment contract with storage and proxy preconditions
+in §12. The `0.1.3` release ships several Web↔Bot capabilities **dark** on the Web side
 (default-OFF flags, byte-identical to the blocking behavior until flipped). Each
 flip requires a matching Bot-side capability, security review where applicable,
 and owner/CI/staging/live evidence **first**, or the feature breaks on
@@ -188,80 +191,18 @@ lockstep. Local G15–G17 checks are readiness evidence only; every row in the
 activation matrix remains **External Pending** until an authorized packet is
 reviewed.
 
-### 11.1 Expert routing mode (`bot.expert_enabled`)
+### 11.1 Expert routing, streaming, A2UI, interop, and remote products
 
-- **Web state:** the Instant/Expert selector and the `mode` column are live but
-  dark (`bot.expert_enabled=false`). Instant is unaffected; any `mode=expert`
-  request returns **503** while dark.
-- **Bot precondition to flip ON:** the Bot must serve
-  **`POST /v1/query/route`** (the blocking Expert routing endpoint). Expert never
-  streams — it is a blocking call regardless of the streaming flag below.
-- **Activation order:** (1) Bot deploys `/v1/query/route`; (2) ops adds the
-  `question_agent_logs.mode` column (repo-reorg manual §5.6); (3) ops sets
-  `bot.expert_enabled=true` and restarts Web Go. Rollback = flip the flag back
-  (instant; the column is additive and harmless).
-
-### 11.2 AG-UI SSE streaming (`bot.stream_enabled` + `VITE_STREAM_ENABLED`)
-
-- **Web state:** the streaming spine (Go tee-forward + `useStreamMessage`) is
-  complete but dark. With `bot.stream_enabled=false`, `/query` keeps the blocking
-  ChatCompletion path byte-for-byte.
-- **⚠️ Bot precondition to flip ON (load-bearing):** the Bot must persist the
-  **real accumulated answer** in its run record — not the `"[streamed]"`
-  placeholder. The persisted `bot_run_id` is the Bot run-**registry** id from the
-  `RunStarted` frame, which is what makes a streamed chat row overlay-matchable on
-  reload. **If the flag is flipped before Bot persists the real answer, reloading
-  a streamed conversation overwrites the real answer with the placeholder.**
-- **Activation order:** (1) Bot ships real-answer persistence in the run record;
-  (2) ops sets `bot.stream_enabled=true` **and** the frontend `VITE_STREAM_ENABLED`
-  in lockstep (a mismatch either leaves streaming dead or points a streaming SPA at
-  a blocking gateway); (3) smoke a streamed chat + reload to confirm the persisted
-  answer survives. Rollback = flip both flags back (instant; the blocking path is
-  unchanged underneath).
-- **Scope:** streaming is Instant×chat only. Expert (§11.1) and analyst/deep_genome
-  async stay non-streaming.
-
-### 11.3 A2UI actions (`bot.a2ui_actions_enabled`)
-
-- **Web state:** typed A2UI surfaces and the owner/run-bound action relay are
-  deployed, but the gateway flag is `false`; the disabled path returns before a
-  Bot call. Submitted surfaces expire when their in-flight run is gone.
-- **Bot and review preconditions:** Bot must emit the accepted catalog and
-  accept the matching action contract. Web G15, the A2UI action review, owner
-  checks, expiry/retry tests, and staging/live evidence must be linked in the
-  acceptance record before a flag change.
-- **Activation order:** (1) Bot owner returns emit/action evidence; (2) Web
-  owner and security review the acceptance row; (3) ops enables
-  `bot.a2ui_actions_enabled` and smoke-tests a synthetic owner/run-matched
-  action. Rollback = set the flag back to `false` and restart; no schema
-  rollback is needed.
-
-### 11.4 Remote Research, Design, and Network surfaces
-
-- **Web state:** `bot.research_enabled`, `bot.design_enabled`, and
-  `bot.network_enabled` are all `false`. With a flag off, Web must not dispatch
-  to Bot and the user sees the documented unavailable state.
-- **Preconditions:** each surface needs its own Bot capability, resolver and
-  attachment checks, permission/owner checks, bounded result/artifact evidence,
-  and Bot/CI/staging/live smoke results. Do not treat the presence of a route or
-  a local fixture as evidence.
-- **Activation order:** enable one flag at a time after its acceptance row is
-  reviewed; record the Web/Bot SHAs and operator. Rollback = disable only the
-  affected flag and repeat its unavailable-state smoke check.
-
-### 11.5 Interop capability and provenance (`bot.interop_enabled`)
-
-- **Web state:** capability discovery is hidden/off while the flag is `false`.
-  The Web boundary remains the allowlist, owner-scope, bounded-size, and
-  redaction authority; the browser never calls Bot interop directly.
-- **Preconditions:** security review must confirm that capability/provenance
-  output excludes raw Bot envelopes, provider diagnostics, private paths,
-  credentials, and cross-user data. Bot owner, CI, staging/live, and operations
-  evidence must be linked before activation.
-- **Activation order:** ops flips `bot.interop_enabled` only after review and
-  restarts Web Go; smoke a permitted capability and a denied/owner-mismatch
-  request. Rollback = set it back to `false`; retain the sanitized projection
-  schema and legacy history.
+- **Web state:** these surfaces are locally always enabled. There is no
+  `bot.expert_enabled`, `bot.stream_enabled`, `bot.a2ui_actions_enabled`,
+  `bot.interop_enabled`, `bot.multiturn_v1_enabled`, `bot.analyst_enabled`,
+  `bot.design_enabled`, `bot.network_enabled`, or `VITE_STREAM_ENABLED` switch.
+- **Remaining gates:** Bot advertisements, role grants, ownership checks, and
+  the dedicated-page `live` registry. Streaming still requires
+  `capabilities.streaming=true` on the exact agent descriptor. Research still
+  requires a compatible `research_input_resolution_v1` contract.
+- **Rollback:** there is no Web flag to flip. Roll back by redeploying a prior
+  Web release if the Bot contract is not ready.
 
 ### 11.6 History dual-read (`bot.history_dual_read`)
 
@@ -277,7 +218,42 @@ reviewed.
   history into MySQL. Rollback = set it back to `false`; do not drop
   `bot_projection_json`, `bot_report_revision`, or their index.
 
-### 11.7 Shared evidence and deployment boundary
+### 11.7 Resumable biological uploads (Bot `obs-multipart-v2`)
+
+- **Web state:** there is no Web-side upload feature flag. The control/data-plane
+  client and five-state UI follow the Bot catalog: per-agent attachment
+  channels come from the Bot descriptor, and `upload.enabled` is true only
+  when Bot advertises `obs-multipart-v2` v2 and `upload_public_origin` is a
+  valid browser-reachable origin. The current checkout still contains legacy
+  multipart relay code; the source-boundary checker therefore remains a
+  deliberate pre-cutover diagnostic and must not be treated as a pass.
+- **Bot preconditions:** the Bot owner must return a clean SHA and receipt for
+  `obs-multipart-v2` v2, durable upload state, Huawei OBS ownership, bounded
+  part streaming, cleanup, owner-scoped AssetResolver/Agent wiring, capability
+  revocation, redaction, and no Web/Go cloud credentials. The receipt must
+  separately identify development, staging, and production evidence; an
+  unexecuted 10 GiB case is `Needs Verification`.
+- **Web preconditions:** the Web full gate passes; capability negotiation
+  returns `upload.enabled=false` until the Bot protocol and public origin
+  agree; the browser matrix covers queued, uploading, paused, failed, and
+  completed at `320`, `390`, `480`, `768`, `1024`, `1366`, `1920`, and `2560`
+  CSS pixels in both themes. Synthetic screenshots are not live storage
+  acceptance.
+- **Activation order:** (1) deploy the accepted Bot data plane; (2) deploy Web
+  with the exact browser-reachable `upload_public_origin`; (3) verify
+  `/api/v1/bot/capabilities` exposes only the bounded manifest and no
+  credentials, with `upload.enabled=true` and attachment purposes matching
+  Bot; (4) smoke one small file and generated biological fixtures, then
+  exercise interruption/resume, capability renewal, cancel, cross-user
+  denial, and Agent resolution.
+- **Rollback:** unset or invalidate `upload_public_origin`, or stop advertising
+  `obs-multipart-v2` on Bot, then restart Web and preserve the failed
+  evidence. Do not silently fall back to a body relay after the breaking
+  cutover; a full release rollback is a separately reviewed operation and must
+  retain additive Bot persistence. Never delete completed assets as part of a
+  rollback.
+
+### 11.8 Shared evidence and deployment boundary
 
 The 0.1.3 projection migration is a deployment prerequisite, not an activation
 gate. Run `go run main.go migrate add-bot-projection` before new binary traffic
@@ -285,3 +261,74 @@ as documented in [`upgrading.md`](upgrading.md). The local
 `validate_web_local.sh` G13–G17 result cannot substitute for Bot-owner,
 operations, staging, or live acceptance. Keep all flags false on the initial
 deploy unless a separately authorized acceptance packet says otherwise.
+
+### 11.9 Canonical agent names and local verification
+
+The Bot `/v1/agents` registry is the source of truth for the English tool names
+used by `tool_names`, Web Go, persisted projections, and the frontend. The
+current registry is:
+
+| Slug          | Canonical tool name     |
+| ------------- | ----------------------- |
+| `chat`        | `ChatAgent`             |
+| `knowledge`   | `KnowledgeAgent`        |
+| `data`        | `DataAgent`             |
+| `review`      | `ReviewAgent`           |
+| `brief_gene`  | `BriefGeneAgent`        |
+| `analyst`     | `AnalystAgent`          |
+| `deep_genome` | `DeepGenomeAgent`       |
+| `research`    | `InSilicoResearchAgent` |
+| `design`      | `DigitalDesignAgent`    |
+| `network`     | `GeneNetworkAgent`      |
+
+The one-time clean-break migrations are idempotent and must run before the Go
+binary and frontend are switched together:
+
+```bash
+go run main.go migrate rename-tool-names
+go run main.go migrate backfill-agent-tool-names
+```
+
+Before a development smoke test, inspect rather than blindly re-seed the local
+database. It must contain one row for each canonical name and no legacy alias;
+the `user_tool_names` grants remain an explicit product permission decision and
+must not be bulk-granted merely to satisfy this check. The product defaults
+are guest = Chat/Knowledge/Data, user = those plus Review/BriefGene, and
+vip_user = all ten agents (`go run main.go migrate seed-default-role-tools`). Production operators
+must run the migrations against a verified backup and follow the rollback
+procedure for the deployed release. Never apply these statements to production
+from a developer workstation.
+
+## 12. Extended Research input rollout
+
+This rollout does not add a hidden switch, cohort, path field, or description
+field. Every user already authorized for Research uses the same ordinary query
+and Attach action. Protocol compatibility is the mixed-version safety boundary.
+
+After the operator storage/proxy preflight completes, Bot deployment must
+complete before Web deployment. The Bot must advertise
+`research_input_resolution_v1` version `1` with compatible query, attachment,
+path, reference, and scientific-format limits. Web then consumes that contract
+and fails Research closed when it is absent or incompatible; it never silently
+falls back to a smaller query limit.
+
+Production widening of `question_agent_logs.query` and
+`question_agent_logs.answer` to `MEDIUMTEXT`, plus any reverse-proxy request-body
+adjustment, follows the separately transferred operator handoff. Operators own
+the backup, lock/performance assessment, execution, verification, rollout
+observation, and rollback. Repository code and local gates do not execute or
+prove those production actions.
+
+Deploy and smoke in this order:
+
+1. Verify the widened columns and proxy allowance using sanitized evidence.
+2. Deploy Bot and verify the versioned capability without exposing private
+   paths, document text, credentials, or resolver internals.
+3. Deploy Web and exercise the supported Research submission forms with a
+   non-production account.
+4. Record Bot, Web, staging, and operations results independently; a local Web
+   pass is not paired-runtime or production acceptance.
+
+On rollback, revert Web before Bot so the active Web never depends on a missing
+protocol. Keep both widened columns and the larger safe proxy allowance; do not
+delete uploads, Research runs, or user history.

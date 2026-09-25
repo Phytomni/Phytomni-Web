@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhyAsyncState from "@/components/state/PhyAsyncState.vue";
+
+const ASYNC_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/state/PhyAsyncState.vue"),
+  "utf8"
+);
 
 describe("PhyAsyncState", () => {
   it("renders loading with a busy boundary and a polite status", () => {
-    const wrapper = mount(PhyAsyncState, {
+    expect(ASYNC_SOURCE).toContain("aria-busy");
+    const wrapper = mountWithApp(PhyAsyncState, {
       props: { state: "loading" },
       slots: { loading: '<div data-test="loading-content">Loading</div>' },
     });
@@ -18,7 +26,7 @@ describe("PhyAsyncState", () => {
   });
 
   it("renders empty content as a status without animation semantics", () => {
-    const wrapper = mount(PhyAsyncState, {
+    const wrapper = mountWithApp(PhyAsyncState, {
       props: { state: "empty" },
       slots: { empty: '<p data-test="empty-content">Nothing here</p>' },
     });
@@ -34,7 +42,7 @@ describe("PhyAsyncState", () => {
   });
 
   it("renders error content as an alert", () => {
-    const wrapper = mount(PhyAsyncState, {
+    const wrapper = mountWithApp(PhyAsyncState, {
       props: { state: "error" },
       slots: { error: '<p data-test="error-content">Could not load</p>' },
     });
@@ -47,7 +55,7 @@ describe("PhyAsyncState", () => {
   });
 
   it("renders ready content and optional actions", () => {
-    const wrapper = mount(PhyAsyncState, {
+    const wrapper = mountWithApp(PhyAsyncState, {
       props: { state: "ready" },
       slots: {
         ready: '<div data-test="ready-content">Loaded</div>',
@@ -64,7 +72,7 @@ describe("PhyAsyncState", () => {
   });
 
   it("uses the default slot as ready content when no named slot is supplied", () => {
-    const wrapper = mount(PhyAsyncState, {
+    const wrapper = mountWithApp(PhyAsyncState, {
       props: { state: "ready" },
       slots: { default: '<div data-test="default-content">Ready</div>' },
     });

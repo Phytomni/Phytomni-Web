@@ -2,28 +2,36 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineComponent, nextTick } from "vue";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import DeepGenomeArtifact from "@/components/research/DeepGenomeArtifact.vue";
+import DeepGenomeResultViewerActual from "@/components/DeepGenomeResultViewer.vue";
 
 const download = vi.fn<(format: "pdf" | "markdown") => Promise<void>>(
   async () => undefined
 );
+
+const passthrough = defineComponent({
+  template: "<div><slot /></div>",
+});
 
 const DeepGenomeResultViewerStub = defineComponent({
   name: "DeepGenomeResultViewer",
   props: {
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
+    resources: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
     showActions: { type: Boolean, default: true },
     showReferences: { type: Boolean, default: true },
+    renderingFileId: { type: String, default: "" },
   },
+  emits: ["citation-activate"],
   setup(props, { expose }) {
     expose({ download });
     return { props };
   },
   template:
-    '<article data-test="deep-genome-renderer" :data-markdown="props.markdown" :data-ns="props.ns" :data-actions="String(props.showActions)" :data-references="String(props.showReferences)"><a href="#artifactunder-ref-2" style="display:inline-block">[2]</a></article>',
+    '<article data-test="deep-genome-renderer" :data-markdown="props.markdown" :data-ns="props.ns" :data-actions="String(props.showActions)" :data-references="String(props.showReferences)"><button data-test="deep-genome-citation" @click="$emit(\'citation-activate\', { namespace: props.ns, indices: [2] })">[2]</button></article>',
 });
 
 const referenceList = [
@@ -32,9 +40,9 @@ const referenceList = [
 ];
 
 function mountArtifact() {
-  return mount(DeepGenomeArtifact, {
+  return mountWithApp(DeepGenomeArtifact, {
     props: {
-      markdown: "# Full report\\nEvidence [1].",
+      markdown: "# Full report\n\nEvidence [1].",
       references: referenceList,
       ns: "artifact_under",
       title: "Deep genome report",
@@ -59,6 +67,46 @@ function mountArtifact() {
   });
 }
 
+function mountArtifactWithActualViewer() {
+  return mountWithApp(DeepGenomeArtifact, {
+    props: {
+      markdown: "## Evidence\n\nSupported claim [1-2].",
+      references: referenceList,
+      ns: "artifact_under",
+      title: "Deep genome report",
+      metadata: "Deep Genome Agent",
+      status: "Finished",
+      tabLabels: {
+        content: "Report",
+        evidence: "Evidence",
+        activity: "Activity",
+        downloads: "Downloads",
+      },
+      backLabel: "Back",
+      closeLabel: "Close",
+      actionLabel: "Actions",
+    },
+    global: {
+      stubs: {
+        DeepGenomeResultViewer: DeepGenomeResultViewerActual,
+        ElContainer: passthrough,
+        ElAside: passthrough,
+        ElMain: passthrough,
+        ElCard: passthrough,
+        ElMenu: passthrough,
+        ElMenuItem: passthrough,
+        ElSubMenu: passthrough,
+        ElDialog: passthrough,
+        ElButton: passthrough,
+        ElDropdown: passthrough,
+        ElDropdownMenu: passthrough,
+        ElDropdownItem: passthrough,
+      },
+      mocks: { $t: (key: string) => key },
+    },
+  });
+}
+
 describe("DeepGenomeArtifact", () => {
   it("mounts one embedded report and one namespaced evidence panel", () => {
     const wrapper = mountArtifact();
@@ -73,28 +121,88 @@ describe("DeepGenomeArtifact", () => {
     expect(renderer.attributes("data-references")).toBe("false");
 
     expect(wrapper.findAll(".research-evidence-panel__item")).toHaveLength(2);
-    expect(wrapper.find(".research-evidence-panel__item").attributes("id")).toBe(
-      "artifactunder-ref-1"
-    );
     expect(
-      wrapper
-        .find(".research-artifact-shell__narrative-content")
-        .classes()
+      wrapper.find(".research-evidence-panel__item").attributes("id")
+    ).toBe("artifact_under-ref-1");
+    expect(
+      wrapper.find(".research-artifact-shell__narrative-content").classes()
     ).toContain("research-artifact-shell__narrative-content--wide");
   });
 
-  it("delegates header download actions to the typed embedded viewer handle", async () => {
+  it("keeps export off the header and exposes download through the viewer handle", async () => {
     download.mockClear();
     const wrapper = mountArtifact();
 
-    await wrapper.get('[data-test="deep-genome-download-pdf"]').trigger("click");
-    await wrapper.get('[data-test="deep-genome-download-markdown"]').trigger(
-      "click"
-    );
+    expect(
+      wrapper.find('[data-test="deep-genome-download-pdf"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.find('[data-test="deep-genome-download-markdown"]').exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-tab-id="activity"]').exists()).toBe(false);
+    expect(wrapper.find('[data-tab-id="downloads"]').exists()).toBe(false);
+
+    await (
+      wrapper.vm as unknown as {
+        download: (format: "pdf" | "markdown") => Promise<void>;
+      }
+    ).download("pdf");
+    await (
+      wrapper.vm as unknown as {
+        download: (format: "pdf" | "markdown") => Promise<void>;
+      }
+    ).download("markdown");
     await nextTick();
 
     expect(download).toHaveBeenNthCalledWith(1, "pdf");
     expect(download).toHaveBeenNthCalledWith(2, "markdown");
+  });
+
+  it("forwards a persisted rendering-file id into the embedded viewer", () => {
+    const wrapper = mountWithApp(DeepGenomeArtifact, {
+      props: {
+        markdown: "# Full report",
+        references: referenceList,
+        ns: "artifact_under",
+        renderingFileId: "42",
+        title: "Deep genome report",
+        metadata: "Deep Genome Agent",
+        status: "Finished",
+        tabLabels: {
+          content: "Report",
+          evidence: "Evidence",
+          activity: "Activity",
+          downloads: "Downloads",
+        },
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+      global: {
+        stubs: {
+          DeepGenomeResultViewer: DeepGenomeResultViewerStub,
+        },
+        mocks: { $t: (key: string) => key },
+      },
+    });
+
+    expect(
+      wrapper.findComponent(DeepGenomeResultViewerStub).props("renderingFileId")
+    ).toBe("42");
+  });
+
+  it("contains a rejected embedded viewer download", async () => {
+    download.mockRejectedValueOnce(new Error("export failed"));
+    const wrapper = mountArtifact();
+
+    await expect(
+      (
+        wrapper.vm as unknown as {
+          download: (format: "pdf" | "markdown") => Promise<void>;
+        }
+      ).download("pdf")
+    ).resolves.toBeUndefined();
+    expect(download).toHaveBeenCalledWith("pdf");
   });
 
   it("expands the embedded report column on ultra-wide layouts", () => {
@@ -121,13 +229,102 @@ describe("DeepGenomeArtifact", () => {
     });
     const focus = vi.spyOn(row.element as HTMLElement, "focus");
 
-    await wrapper.get('a[href="#artifactunder-ref-2"]').trigger("click");
+    await wrapper.get('[data-test="deep-genome-citation"]').trigger("click");
     await nextTick();
 
-    expect(wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")).toBe(
-      "true"
-    );
+    expect(
+      wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")
+    ).toBe("true");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
     expect(focus).toHaveBeenCalledTimes(1);
+    expect(row.classes()).toContain("research-evidence-panel__item--active");
+  });
+
+  it("routes a grouped citation from the mounted viewer to evidence rows", async () => {
+    const wrapper = mountArtifactWithActualViewer();
+    await nextTick();
+    await nextTick();
+
+    const rows = wrapper.findAll(".research-evidence-panel__item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    await wrapper.get(".scientific-citation__link").trigger("click");
+    await nextTick();
+    await nextTick();
+
+    expect(
+      wrapper.get('[data-tab-id="evidence"]').attributes("aria-selected")
+    ).toBe("true");
+    expect(
+      rows.map((row) =>
+        row.classes().includes("research-evidence-panel__item--active")
+      )
+    ).toEqual([true, true]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes authorized resources through and relays opaque resource activation", async () => {
+    const resources = [
+      {
+        id: "attachment-1",
+        name: "Report",
+        kind: "attachment" as const,
+        markdownHref: "report.pdf",
+      },
+    ];
+    const wrapper = mountWithApp(DeepGenomeArtifact, {
+      props: {
+        markdown: "# Report\n\n[Download](report.pdf)",
+        references: referenceList,
+        resources,
+        ns: "artifact_under",
+        title: "Deep genome report",
+        metadata: "Deep Genome Agent",
+        status: "Finished",
+        tabLabels: {
+          content: "Report",
+          evidence: "Evidence",
+          activity: "Activity",
+          downloads: "Downloads",
+        },
+        backLabel: "Back",
+        closeLabel: "Close",
+        actionLabel: "Actions",
+      },
+      global: {
+        stubs: {
+          DeepGenomeResultViewer: DeepGenomeResultViewerActual,
+          ElContainer: passthrough,
+          ElAside: passthrough,
+          ElMain: passthrough,
+          ElCard: passthrough,
+          ElMenu: passthrough,
+          ElMenuItem: passthrough,
+          ElSubMenu: passthrough,
+          ElDialog: passthrough,
+          ElButton: passthrough,
+          ElDropdown: passthrough,
+          ElDropdownMenu: passthrough,
+          ElDropdownItem: passthrough,
+        },
+        mocks: { $t: (key: string) => key },
+      },
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(
+      wrapper.findComponent(DeepGenomeResultViewerActual).props("resources")
+    ).toEqual(resources);
+    await wrapper.get(".scientific-resource-link").trigger("click");
+    expect(wrapper.emitted("resource-activate")).toEqual([
+      [{ id: "attachment-1", kind: "attachment" }],
+    ]);
   });
 });

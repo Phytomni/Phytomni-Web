@@ -1,0 +1,6 @@
+name: fixture
+
+jobs:
+  lint:
+    steps:
+      - run: npm run lint

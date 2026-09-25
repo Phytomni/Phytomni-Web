@@ -1,5 +1,5 @@
 /**
- * Helpers for the pending-chat localStorage record shape used by chat/index.vue
+ * Helpers for the pending-chat localStorage record shape used by ChatView.vue
  * scanners and the chat-send/finish writer side.
  *
  * Contract:
@@ -19,7 +19,56 @@ export interface PendingChatRecord {
 export interface ChatListEntry {
   dialogue_id: string;
   title: string;
-  [k: string]: unknown;
+}
+
+export type SidebarChatListEntry = ChatListEntry & {
+  id: number;
+  date: string;
+  isFavorite: boolean;
+  isPending?: boolean;
+};
+
+function boundedPendingTitle(title: string): string {
+  return title.length > 50 ? title.substring(0, 50) + "..." : title;
+}
+
+/** Keep a local first turn reachable from the sidebar while its response runs. */
+export function upsertPendingChatListEntry(
+  entries: SidebarChatListEntry[],
+  dialogueId: string,
+  title: string,
+  options: { date?: string } = {}
+): void {
+  const pendingEntry: SidebarChatListEntry = {
+    id: 0,
+    dialogue_id: dialogueId,
+    title: boundedPendingTitle(title),
+    date: options.date ?? new Date().toISOString(),
+    isFavorite: false,
+    isPending: true,
+  };
+  const existingIndex = entries.findIndex(
+    (entry) => entry.dialogue_id === dialogueId
+  );
+  if (existingIndex === -1) {
+    entries.unshift(pendingEntry);
+    return;
+  }
+  entries[existingIndex] = {
+    ...entries[existingIndex],
+    ...pendingEntry,
+  };
+}
+
+/** Drop the local-only sidebar row for one rejected first turn. */
+export function removePendingChatListEntry(
+  entries: Array<{ dialogue_id: string; isPending?: boolean }>,
+  dialogueId: string
+): void {
+  const index = entries.findIndex(
+    (entry) => entry.dialogue_id === dialogueId && entry.isPending === true
+  );
+  if (index !== -1) entries.splice(index, 1);
 }
 
 /**
@@ -27,9 +76,7 @@ export interface ChatListEntry {
  * Strict predicate: isPending === true AND Array.isArray(messages) AND messages.length > 0.
  * Rejects truthy-but-non-boolean isPending values and empty / corrupt messages payloads.
  */
-export function isValidPendingRecord(
-  data: unknown
-): data is PendingChatRecord {
+export function isValidPendingRecord(data: unknown): data is PendingChatRecord {
   if (typeof data !== "object" || data === null) return false;
   const r = data as Record<string, unknown>;
   if (r.isPending !== true) return false;
@@ -40,32 +87,21 @@ export function isValidPendingRecord(
 
 /**
  * Returns true iff `chat` (chatList entry) corresponds to `pending` (localStorage record).
- * Strategy:
- *   1. ID match: chat.dialogue_id === pending.id OR chat.dialogue_id === tempChatId
- *   2. Fallback: exact title equality with first user-role message content
- * Substring / prefix matching is deliberately NOT supported — short prompts like
- * "hi" / "help" collided and silently merged unrelated chats.
+ * Only explicit ID equality is authoritative. Titles are display copy, not
+ * identities: repeated prompts can legitimately produce multiple conversations.
  */
 export function matchesChat(
   chat: ChatListEntry,
   pending: PendingChatRecord,
   tempChatId: string
 ): boolean {
-  if (
-    chat.dialogue_id === pending.id ||
-    chat.dialogue_id === tempChatId
-  ) {
-    return true;
-  }
-  const firstUserMsg = pending.messages.find((m) => m.role === "user");
-  if (!firstUserMsg || typeof firstUserMsg.content !== "string") return false;
-  return chat.title === firstUserMsg.content;
+  return chat.dialogue_id === pending.id || chat.dialogue_id === tempChatId;
 }
 
 /**
  * Parses JSON safely. Returns null on parse failure, on null input, or on empty-string
  * input. Logs to console.error on parse failure only. Caller decides whether to
- * removeItem the originating key (current consumers: 3 scanners in chat/index.vue).
+ * removeItem the originating key (current consumers: 3 scanners in ChatView.vue).
  */
 export function safeParse<T = PendingChatRecord>(
   raw: string | null | undefined
@@ -130,15 +166,10 @@ export function writePendingChat(
       titleSource =
         typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
     }
-    const title =
-      titleSource.length > 50
-        ? titleSource.substring(0, 50) + "..."
-        : titleSource;
+    const title = boundedPendingTitle(titleSource);
 
     const sanitizedMessages = messages.map((m) => {
-      if (
-        Array.isArray((m as Record<string, unknown>).attachedFiles)
-      ) {
+      if (Array.isArray((m as Record<string, unknown>).attachedFiles)) {
         const files = (m as Record<string, unknown>).attachedFiles as Array<{
           name?: string;
           size?: number;
@@ -167,10 +198,7 @@ export function writePendingChat(
       isPending: true as const,
       ...(options?.mode ? { mode: options.mode } : {}),
     };
-    localStorage.setItem(
-      `pending_chat_${dialogueId}`,
-      JSON.stringify(record),
-    );
+    localStorage.setItem(`pending_chat_${dialogueId}`, JSON.stringify(record));
   } catch (error) {
     console.error("[pendingChat] writePendingChat failed:", error);
     options?.onError?.(error);
@@ -208,7 +236,7 @@ export function clearPendingChat(dialogueId: string): void {
  * Predicate: does this dialogueId represent a localStorage-only pending chat?
  *
  * True iff dialogueId is a non-empty string matching /^new_.+$/ — the prefix
- * minted by startNewChat() at chat/index.vue:1946 (`"new_" + Date.now()`).
+ * minted by startNewChat() at ChatView.vue:1946 (`"new_" + Date.now()`).
  *
  * The require-at-least-one-char-after-prefix rule prevents the degenerate
  * 'new_' edge case (which would pass a startsWith-only check but cannot

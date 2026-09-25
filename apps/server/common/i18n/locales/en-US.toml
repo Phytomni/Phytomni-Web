@@ -7,6 +7,7 @@ account_locked_threshold = "Too many failed login attempts. Account locked for 1
 missing_context = "missing authentication context"
 user_lookup_failed = "user lookup failed"
 first_login_must_change_password = "first-login users must change their initial password before accessing other endpoints"
+registration_disabled = "Registration is currently unavailable"
 
 [register]
 email_required = "Email is required"
@@ -50,11 +51,28 @@ capabilities_unavailable = "bot capabilities unavailable"
 capabilities_not_found = "interop capabilities not found"
 capabilities_unavailable = "interop capabilities unavailable"
 
+[upload]
+invalid_request = "invalid upload request"
+attachment_type_unsupported = "file name does not identify a supported attachment type"
+attachment_type_ambiguous = "file name matches both document and analysis data"
+unsupported_media_type = "upload requests must use JSON"
+request_too_large = "upload metadata is too large"
+unavailable = "file upload is temporarily unavailable"
+state_conflict = "upload state changed; retry the upload"
+session_expired = "upload session expired; start the upload again"
+limit_exceeded = "too many uploads in progress; cancel a failed upload and retry"
+
 [gene]
 file_name_required = "parameter file_name cannot be empty"
 fetch_failed = "failed to fetch file"
 missing_parameter = "missing parameter"
 email_download_unavailable = "email download links are currently unavailable"
+
+[conversation_artifact]
+unauthorized = "unauthorized"
+not_found = "artifact not found"
+unavailable = "artifact download unavailable"
+retry_unavailable = "archive retry unavailable"
 
 [common]
 not_logged_in = "not logged in"
@@ -63,10 +81,13 @@ rate_limited = "too many requests, please try again later"
 
 [query]
 upload_too_large = "upload content too large"
+file_parts_unsupported = "file parts are not supported; upload an asset first"
 query_empty = "query content cannot be empty"
 file_unreadable = "cannot read uploaded file"
 task_id_required = "task_id is required"
 invalid_interop_controls = "invalid interop controls"
+invalid_artifact_ids = "invalid artifact identifiers"
+research_input_incompatible = "Research input compatibility is temporarily unavailable"
 
 [permission]
 user_id_required = "user ID cannot be empty"
@@ -83,6 +104,8 @@ not_admin_create = "you are not an administrator and cannot create users"
 [agent_task]
 invalid_reaction_type = "invalid reaction_type value"
 invalid_collect_type = "invalid collect_type value"
+not_found = "task not found"
+cancel_unavailable = "task cancellation is no longer available"
 
 [a2ui]
 invalid_body = "invalid body"

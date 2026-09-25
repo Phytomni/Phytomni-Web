@@ -4,16 +4,42 @@ import {
   registerAbortController,
   unregisterAbortController,
 } from "@/utils/request";
-import { splitSSEFrames, parseAGUIFrame } from "../streaming/aguiEvents";
+import {
+  splitSSEFrames,
+  parseAGUIFrame,
+  parseSSEFrameId,
+  type AguiEvent,
+} from "../streaming/aguiEvents";
 import { initReducerState, reduceAGUIEvent } from "../streaming/eventReducer";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
-import type { ChatMessage } from "../types";
+import { isDefinitePreDispatch4xx } from "../utils/client-turn-id";
+import {
+  normalizeChatContextNotice,
+  type ChatMessage,
+  type ChatUIState,
+} from "../types";
+import type { ConversationContextNotice } from "@/api/types";
+import { reduceContextStagedNotice } from "../streaming/botLifecycleReducer";
+import { getAnswerCheck, resumeMessageStream } from "@/api/chat";
+import { isRecord } from "@/api/contracts";
+import { decodeCitationDocuments, parseAgentAnswer } from "../utils/format";
 
 export interface StreamInput {
   dialogueId: string;
   formData: FormData;
   requestId: string;
   placeholder: ChatMessage;
+  /** Logical turn identity; the send path normally already appended it. */
+  clientTurnId?: string;
+  onIdentity?: (identity: { dialogueId: string; messageId: string }) => void;
+}
+
+export interface ResumeStreamInput {
+  dialogueId: string;
+  messageId: string;
+  placeholder: ChatMessage;
+  requestId?: string;
+  lastEventId?: string;
 }
 
 export interface StreamResult {
@@ -25,6 +51,20 @@ export interface StreamResult {
   requestId?: string;
   /** Safe upstream Bot request id, when the gateway exposes one. */
   botRequestId?: string;
+  /** True only after a terminal successful stream was fully reduced. */
+  completed?: boolean;
+  /** True when the gateway rejected the request before dispatching a turn. */
+  preDispatch4xx?: boolean;
+  contextNotice?: ConversationContextNotice;
+}
+
+/** Chat streaming accepts only scalar fields and JSON asset references. */
+export function assertReferenceOnlyFormData(formData: FormData): void {
+  for (const [, value] of formData.entries()) {
+    if (typeof value !== "string") {
+      throw new TypeError("Chat attachments must be asset references");
+    }
+  }
 }
 
 const UUID_PATTERN =
@@ -60,11 +100,52 @@ function isDoneFrame(frame: string): boolean {
   });
 }
 
+function isEventStreamResponse(resp: Response): boolean {
+  const contentType = resp.headers.get("Content-Type");
+  if (!contentType) return true;
+  return (
+    contentType.split(";", 1)[0].trim().toLowerCase() === "text/event-stream"
+  );
+}
+
+const MAX_GATEWAY_ERROR_MESSAGE = 512;
+
+async function readGatewayErrorMessage(
+  resp: Response
+): Promise<string | undefined> {
+  const contentType = resp.headers.get("Content-Type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) return undefined;
+  let text: string;
+  try {
+    text = await resp.text();
+  } catch {
+    return undefined;
+  }
+  if (text.length === 0 || text.length > 4096) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!isRecord(parsed)) return undefined;
+    const message = parsed.message;
+    if (typeof message !== "string") return undefined;
+    const trimmed = message.trim();
+    if (
+      trimmed === "" ||
+      trimmed.length > MAX_GATEWAY_ERROR_MESSAGE ||
+      trimmed.includes("\0")
+    ) {
+      return undefined;
+    }
+    return trimmed;
+  } catch {
+    return undefined;
+  }
+}
+
 // Keep transport acceptance bounded even when Bot adds a new AG-UI event. The
 // reducer owns the detailed payload handling; this gate prevents an unknown
 // event type from becoming an accidental UI surface while retaining the
 // existing tool/reasoning events used by the chat stream.
-const BOUNDED_AGUI_EVENTS = new Set([
+const BOUNDED_AGUI_EVENTS: ReadonlySet<AguiEvent["type"]> = new Set([
   "RunStarted",
   "StepStarted",
   "TextMessageStart",
@@ -84,43 +165,92 @@ const BOUNDED_AGUI_EVENTS = new Set([
 // finalizes on RunFinished/RunError. It coexists with the axios path in
 // useSendMessage; the branch decision lives there.
 export function useStreamMessage(opts: {
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   t: (key: string) => string; // i18n lookup (mirrors useSendMessage opts)
 }) {
   const { getChatState, t } = opts;
 
-  const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
-    const { dialogueId, formData, requestId, placeholder } = input;
-    const chatState = getChatState(dialogueId);
-    // The send route still accepts the captured parent row id. It is not a
-    // canonical conversation identity and must never address A2UI actions.
-    const parentRowId = formData.get("id")?.toString() ?? "0";
-
+  const executeStream = async (execution: {
+    placeholder: ChatMessage;
+    requestId: string;
+    chatState: ChatUIState;
+    open: (signal: AbortSignal) => Promise<Response>;
+    onIdentity?: StreamInput["onIdentity"];
+    abortFailure: "cancelled" | "resume";
+    seedReducer: boolean;
+  }): Promise<StreamResult> => {
+    const {
+      placeholder,
+      requestId,
+      chatState,
+      open,
+      onIdentity,
+      abortFailure,
+      seedReducer,
+    } = execution;
     const controller = new AbortController();
     registerAbortController(requestId, controller); // reuse the shared abort UI
     chatState.isStreaming = true;
     chatState.streamingMessageId = requestId;
+    placeholder.streamTerminalFailure = undefined;
 
     let state = initReducerState();
+    if (seedReducer) {
+      state = {
+        ...state,
+        blocks: (placeholder.blocks ?? []).map((block) => ({ ...block })),
+        runId: placeholder.a2uiRuntime?.runId ?? "",
+        followUp: placeholder.followUpQuestions
+          ? [...placeholder.followUpQuestions]
+          : [],
+        references: placeholder.doc_list ? [...placeholder.doc_list] : [],
+        contextNotice: placeholder.contextNotice,
+      };
+    }
+    let contextNotice: ConversationContextNotice = {};
     let result: StreamResult = {};
+    let finalizePlaceholder = true;
+    const applyTerminalState = () => {
+      placeholder.followUpQuestions = state.followUp;
+      if (state.followUp.length) {
+        // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
+        // completed Markdown path), so reveal the follow-up chips here.
+        placeholder.showFollowUpQuestions = true;
+      }
+      if (state.references.length) {
+        // Expose captured references so the namespace-aware cited render path
+        // can engage after finalization.
+        placeholder.doc_list = state.references;
+      }
+      if (state.contextNotice) {
+        placeholder.contextNotice = state.contextNotice;
+      }
+      if (state.error) {
+        placeholder.content = state.error.message;
+        placeholder.streamTerminalFailure = "run-error";
+        placeholder.a2uiRuntime = undefined;
+      } else if (state.done && !state.runId) {
+        // A completed stream without RunStarted cannot authorize an action.
+        placeholder.a2uiRuntime = undefined;
+      }
+      result.completed = state.done && !state.error;
+    };
     try {
-      const resp = await fetch(
-        `/api/v1/conversations/${parentRowId}/messages`,
-        {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-          headers: {
-            Accept: "text/event-stream",
-            "Accept-Language": i18n.global.locale.value,
-            platform: "bcemis",
-            Authorization: "Bearer " + getToken(),
-            satoken: getToken() ?? "",
-          },
-        }
-      );
+      const resp = await open(controller.signal);
       if (!resp.ok || !resp.body) {
-        throw new Error(`stream HTTP ${resp.status}`);
+        result.preDispatch4xx = isDefinitePreDispatch4xx({
+          response: { status: resp.status, headers: resp.headers },
+        });
+        const gatewayMessage = await readGatewayErrorMessage(resp);
+        placeholder.content = gatewayMessage ?? t("chat.streamInterrupted");
+        placeholder.streamTerminalFailure = result.preDispatch4xx
+          ? "run-error"
+          : "interrupted";
+        placeholder.a2uiRuntime = undefined;
+        return result;
+      }
+      if (!isEventStreamResponse(resp)) {
+        throw new Error("stream response content type mismatch");
       }
 
       const canonicalDialogueId = canonicalDialogueHeader(resp);
@@ -142,19 +272,26 @@ export function useStreamMessage(opts: {
         placeholder.a2uiRuntime = {
           dialogueId: canonicalDialogueId,
           messageId: canonicalMessageId,
-          runId: "",
+          runId: placeholder.a2uiRuntime?.runId ?? "",
           transport: createFetchA2uiTransport({
             conversationId: canonicalDialogueId,
             getToken,
             acceptLanguage: i18n.global.locale.value,
           }),
         };
+        // Rekey before the body loop so leave/resume can use the server id.
+        onIdentity?.({
+          dialogueId: canonicalDialogueId,
+          messageId: canonicalMessageId,
+        });
       }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       const consumeFrame = (frame: string) => {
+        const frameId = parseSSEFrameId(frame);
+        if (frameId) placeholder.streamSeq = frameId;
         // Some Bot-compatible providers close with the legacy [DONE] sentinel
         // instead of a RunFinished event. Treat that sentinel as terminal while
         // leaving all other AG-UI bytes untouched for the existing parser.
@@ -165,6 +302,15 @@ export function useStreamMessage(opts: {
         const ev = parseAGUIFrame(frame);
         if (!ev) return;
         if (!BOUNDED_AGUI_EVENTS.has(ev.type)) return;
+        contextNotice = reduceContextStagedNotice(contextNotice, ev);
+        if (
+          contextNotice.context_rebuilt === true ||
+          contextNotice.context_degraded === true
+        ) {
+          const normalizedNotice = normalizeChatContextNotice(contextNotice);
+          if (normalizedNotice) placeholder.contextNotice = normalizedNotice;
+          result.contextNotice = { ...contextNotice };
+        }
         state = reduceAGUIEvent(state, ev);
         if (state.runId && placeholder.a2uiRuntime) {
           placeholder.a2uiRuntime = {
@@ -188,49 +334,131 @@ export function useStreamMessage(opts: {
 
       if (!state.done) {
         placeholder.content = t("chat.streamInterrupted");
+        placeholder.streamTerminalFailure = "interrupted";
         placeholder.a2uiRuntime = undefined;
       }
-      // Finalize.
-      placeholder.followUpQuestions = state.followUp;
-      if (state.followUp.length) {
-        // StreamMessage/MarkdownBlock emit no @finish (unlike the blocking
-        // MarkdownViewer path), so reveal the follow-up chips here — otherwise
-        // captured phyto.follow_up questions stay hidden until a history reload.
-        placeholder.showFollowUpQuestions = true;
+      applyTerminalState();
+      // Deltas already shown cannot be retracted over SSE. Once EOF confirms
+      // settlement, reconcile the captured message with its owner-scoped read.
+      // This is a single read, never another agent call or a polling loop.
+      const runtime = placeholder.a2uiRuntime;
+      const receivedBlocks = placeholder.blocks;
+      const completedRunId = state.runId;
+      if (
+        result.completed &&
+        runtime?.runId &&
+        canonicalDialogueId &&
+        canonicalMessageId &&
+        [
+          "KnowledgeAgent",
+          "ReviewAgent",
+          "BriefGeneAgent",
+          "DeepGenomeAgent",
+        ].includes(placeholder.tool_name ?? "") &&
+        !controller.signal.aborted &&
+        chatState.streamingMessageId === requestId
+      ) {
+        const ownsCapturedMessage = () =>
+          placeholder.a2uiRuntime === runtime &&
+          placeholder.blocks === receivedBlocks &&
+          placeholder.id === canonicalMessageId &&
+          runtime.dialogueId === canonicalDialogueId &&
+          runtime.messageId === canonicalMessageId &&
+          runtime.runId === completedRunId;
+        // Forward cancellation to HTTP and release this owner even if a
+        // transport promise does not settle. Neither branch performs late writes.
+        let onReadAbort!: () => void;
+        const readAborted = new Promise<never>((_resolve, reject) => {
+          onReadAbort = () => reject(new DOMException("Aborted", "AbortError"));
+          controller.signal.addEventListener("abort", onReadAbort, {
+            once: true,
+          });
+        });
+        try {
+          const response = await Promise.race([
+            getAnswerCheck(
+              { dialogue_id: canonicalDialogueId },
+              controller.signal
+            ),
+            readAborted,
+          ]);
+          finalizePlaceholder = ownsCapturedMessage();
+          if (
+            controller.signal.aborted ||
+            chatState.streamingMessageId !== requestId ||
+            !finalizePlaceholder
+          )
+            return result;
+          const matches = response.data.filter(
+            (record) =>
+              record.id === canonicalMessageId &&
+              record.dialogue_id === canonicalDialogueId &&
+              record.bot_run_id === completedRunId &&
+              record.status === "SUCCEEDED"
+          );
+          if (matches.length !== 1 || typeof matches[0].answer !== "string")
+            return result;
+          const answer = parseAgentAnswer(matches[0].answer);
+          const references = decodeCitationDocuments(answer.doc_list);
+          if (typeof answer.content !== "string" || !references) return result;
+          let assigned = false;
+          const blocks = (receivedBlocks ?? []).map((block) => {
+            if (block.type !== "markdown") return block;
+            const text = assigned ? "" : (answer.content as string);
+            assigned = true;
+            return { ...block, text, complete: true };
+          });
+          if (!assigned)
+            blocks.push({
+              type: "markdown",
+              authority: "web",
+              text: answer.content,
+              complete: true,
+            });
+          placeholder.content = answer.content;
+          placeholder.blocks = blocks;
+          placeholder.doc_list = references;
+        } catch {
+          finalizePlaceholder = ownsCapturedMessage();
+          // A failed read retains the received terminal report. History can
+          // reconcile it later without revoking the completed agent outcome.
+        } finally {
+          controller.signal.removeEventListener("abort", onReadAbort);
+        }
       }
-      if (state.references.length) {
-        // P1 cited streaming: expose captured references so the ns-aware
-        // cited render path can engage after finalize (ns invariant).
-        placeholder.doc_list = state.references;
-      }
-      if (state.error) {
-        placeholder.content = state.error.message;
-        placeholder.a2uiRuntime = undefined;
-      } else if (state.done && !state.runId) {
-        // A completed stream without RunStarted cannot authorize an action.
-        placeholder.a2uiRuntime = undefined;
-      }
-    } catch (e: any) {
+    } catch (error: unknown) {
       // Once RunFinished has been reduced, a later transport close/error does
       // not revoke a successfully completed message. Before that terminal
       // event, Abort and broken streams invalidate the message-owned uplink.
       if (!state.done) {
         placeholder.a2uiRuntime = undefined;
-        if (e?.name !== "AbortError") {
+        if (isAbortError(error)) {
+          // Live POST Stop still marks cancelled. Resume unmount/leave must
+          // not; only owner Stop (generationStopped) uses that cancel path.
+          if (
+            abortFailure === "cancelled" ||
+            (abortFailure === "resume" && chatState.generationStopped)
+          ) {
+            placeholder.streamTerminalFailure = "cancelled";
+          }
+        } else {
           placeholder.content = t("chat.streamInterrupted");
+          placeholder.streamTerminalFailure = "interrupted";
         }
-      } else if (state.error) {
-        // RunError is already terminal. A later reader/transport failure must
-        // not replace its upstream message with a duplicate synthetic copy.
-        placeholder.a2uiRuntime = undefined;
-        placeholder.content = state.error.message;
+      } else {
+        // RunFinished and RunError are already terminal. A later transport
+        // failure must preserve and fully finalize the upstream outcome.
+        applyTerminalState();
       }
     } finally {
-      // Always finalize this request's placeholder and unregister its controller.
+      // Finalize this request's placeholder unless a replacement took ownership
+      // while the terminal read was pending; always unregister its controller.
       // Clear dialogue streaming fields only while this request still owns them —
       // a stale finally must not wipe a newer same-dialogue stream.
-      placeholder.streaming = false;
-      placeholder.instantMessage = true;
+      if (finalizePlaceholder) {
+        placeholder.streaming = false;
+        placeholder.instantMessage = true;
+      }
       if (chatState.streamingMessageId === requestId) {
         chatState.isStreaming = false;
         chatState.streamingMessageId = null;
@@ -240,5 +468,97 @@ export function useStreamMessage(opts: {
     return result;
   };
 
-  return { streamMessage };
+  const streamMessage = async (input: StreamInput): Promise<StreamResult> => {
+    const {
+      dialogueId,
+      formData,
+      requestId,
+      placeholder,
+      clientTurnId,
+      onIdentity,
+    } = input;
+    if (clientTurnId && !formData.has("client_turn_id")) {
+      formData.append("client_turn_id", clientTurnId);
+    }
+    assertReferenceOnlyFormData(formData);
+    const clientTurnHeader = formData.get("client_turn_id");
+    const chatState = getChatState(dialogueId);
+    // The send route still accepts the captured parent row id. It is not a
+    // canonical conversation identity and must never address A2UI actions.
+    const parentRowId = formData.get("id")?.toString() ?? "0";
+
+    return executeStream({
+      placeholder,
+      requestId,
+      chatState,
+      onIdentity,
+      abortFailure: "cancelled",
+      seedReducer: false,
+      open: (signal) =>
+        fetch(`/api/v1/conversations/${parentRowId}/messages`, {
+          method: "POST",
+          body: formData,
+          signal,
+          headers: {
+            Accept: "text/event-stream",
+            "Accept-Language": i18n.global.locale.value,
+            platform: "bcemis",
+            Authorization: "Bearer " + getToken(),
+            satoken: getToken() ?? "",
+            ...(typeof clientTurnHeader === "string" && clientTurnHeader !== ""
+              ? { "X-Phyto-Client-Turn-Id": clientTurnHeader }
+              : {}),
+          },
+        }),
+    });
+  };
+
+  const resumeStreamMessage = async (
+    input: ResumeStreamInput
+  ): Promise<StreamResult> => {
+    const { dialogueId, messageId, placeholder } = input;
+    const requestId = input.requestId ?? `resume:${messageId}`;
+    const lastEventId = (input.lastEventId ?? placeholder.streamSeq)?.trim();
+    const chatState = getChatState(dialogueId);
+    placeholder.streaming = true;
+    chatState.isSending = true;
+    chatState.activeRequestId = requestId;
+    chatState.sendStartedAt = chatState.sendStartedAt ?? Date.now();
+    chatState.activeAgentName =
+      typeof placeholder.tool_name === "string" ? placeholder.tool_name : "";
+    try {
+      return await executeStream({
+        placeholder,
+        requestId,
+        chatState,
+        abortFailure: "resume",
+        seedReducer: Boolean(lastEventId),
+        open: (signal) =>
+          resumeMessageStream({
+            dialogueId,
+            messageId,
+            lastEventId: lastEventId || undefined,
+            signal,
+          }),
+      });
+    } finally {
+      if (chatState.activeRequestId === requestId) {
+        chatState.activeRequestId = "";
+        chatState.isSending = false;
+        chatState.sendStartedAt = null;
+        chatState.completing = false;
+        chatState.activeAgentName = "";
+        chatState.generationStopped = false;
+      }
+    }
+  };
+
+  return { streamMessage, resumeStreamMessage };
+}
+
+function isAbortError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || Array.isArray(error)) {
+    return false;
+  }
+  return (error as { name?: unknown }).name === "AbortError";
 }

@@ -1,15 +1,23 @@
 import { ref, type Ref } from "vue";
-import { getQueryAbortable } from "@/api/chat";
+import { runAgentProductAbortable } from "@/api/chat";
+import { isSuccessfulDataEnvelope } from "@/api/contracts";
+import { cancelTask } from "@/api/task";
 import { abortRequest } from "@/utils/request";
 import {
-  createTransferTracker,
-  type TransferSnapshot,
-} from "@/utils/transfer-progress";
+  decodeAgentResultDelivery,
+  type AgentResultDelivery,
+  type AssetAttachmentRef,
+  type ConversationArtifactLink,
+} from "@/api/types";
+import type { TransferSnapshot } from "@/utils/transfer-progress";
 import {
   REMOTE_AGENT_PRODUCT_REGISTRY,
   type RemoteAgentTool,
 } from "@/constants/agents";
-import type { BotCapability } from "./useBotCapabilities";
+import type {
+  BotCapability,
+  BotResearchInputCapability,
+} from "./useBotCapabilities";
 import { useBotCapabilities } from "./useBotCapabilities";
 import { parseBotProjection, type BotRunProjection } from "../botProjection";
 import {
@@ -17,8 +25,14 @@ import {
   initBotLifecycleState,
   reduceBotFailure,
   reduceBotProjection,
+  type BotLifecycleStatus,
   type BotLifecycleState,
 } from "../streaming/botLifecycleReducer";
+import { isSafeAssetId } from "../utils/asset-attachments";
+import {
+  clientTurnDraftFingerprint,
+  createClientTurnId,
+} from "../utils/client-turn-id";
 
 export type RemoteAgentRunPhase =
   | "idle"
@@ -27,6 +41,7 @@ export type RemoteAgentRunPhase =
   | "input_required"
   | "succeeded"
   | "failed"
+  | "timed_out"
   | "cancelled";
 
 export type RemoteAgentResolver = {
@@ -38,25 +53,24 @@ export type RemoteAgentResolver = {
   species_code?: string;
 };
 
-export type RemoteAgentFile = File | { file: File };
-
 export type RemoteAgentSubmitInput = {
   query: string;
-  files?: RemoteAgentFile[];
+  attachments?: readonly AssetAttachmentRef[];
   resolver?: RemoteAgentResolver;
-  dataList?: Record<string, string>;
   interopMode?: "off" | "auto" | "required";
   interopTargets?: string[];
 };
 
 export interface RemoteAgentChatState {
   isSending?: boolean;
+  /** Upload progress is owned by the resumable queue, not this runner. */
   uploadTransfer?: TransferSnapshot | null;
   activeRequestId?: string;
   generationStopped?: boolean;
   activeAgentName?: string;
   botProjection?: BotRunProjection;
   botLifecycle?: BotLifecycleState;
+  artifactLinks?: ConversationArtifactLink[];
   dialogueId?: string;
   messageId?: string;
 }
@@ -68,6 +82,8 @@ export type RemoteAgentCapabilitySource =
       byTool:
         | RefLike<Record<string, Partial<BotCapability> | undefined>>
         | Record<string, Partial<BotCapability> | undefined>;
+      researchInput?:
+        RefLike<BotResearchInputCapability> | BotResearchInputCapability;
       load?: (force?: boolean) => Promise<unknown>;
     }
   | RefLike<unknown>
@@ -96,15 +112,14 @@ export class BotRemoteAgentRunError extends Error {
 export interface BotRemoteAgentRunState extends BotLifecycleState {
   phase: RemoteAgentRunPhase;
   requestId: string | null;
+  /** Upload progress is owned by the resumable queue, not this runner. */
   uploadTransfer: TransferSnapshot | null;
   projection: BotRunProjection | null;
+  artifactLinks: ConversationArtifactLink[];
   dialogueId: string | null;
   messageId: string | null;
   error:
-    | BotRemoteAgentRunErrorCode
-    | "request_failed"
-    | "projection_invalid"
-    | null;
+    BotRemoteAgentRunErrorCode | "request_failed" | "projection_invalid" | null;
 }
 
 export type UseBotRemoteAgentRunOptions = {
@@ -117,11 +132,15 @@ export type UseBotRemoteAgentRunOptions = {
 export type RemoteAgentRunIdentity = {
   dialogueId: string | null;
   messageId: string | null;
+  artifactLinks?: readonly ConversationArtifactLink[];
 };
 
 let requestSequence = 0;
 const localChatStates = new Map<string, RemoteAgentChatState>();
 const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+const LEGACY_REMOTE_AGENT_ATTACHMENT_LIMIT = 10;
+const HARD_REMOTE_AGENT_ATTACHMENT_LIMIT = 256;
+const RESEARCH_INPUT_PROTOCOL = "research_input_resolution_v1";
 
 type RemoteRequestToken = {
   id: string;
@@ -156,10 +175,10 @@ function capabilityFor(
     "byTool" in unwrappedSource
       ? (unwrappedSource as { byTool: unknown }).byTool
       : unwrappedSource &&
-        typeof unwrappedSource === "object" &&
-        "capabilities" in unwrappedSource
-      ? (unwrappedSource as { capabilities: unknown }).capabilities
-      : unwrappedSource;
+          typeof unwrappedSource === "object" &&
+          "capabilities" in unwrappedSource
+        ? (unwrappedSource as { capabilities: unknown }).capabilities
+        : unwrappedSource;
   const byTool = isRefLike(raw) ? raw.value : raw;
   if (Array.isArray(byTool)) {
     return byTool.find(
@@ -175,8 +194,43 @@ function capabilityFor(
   return undefined;
 }
 
+function researchAttachmentLimit(
+  source: RemoteAgentCapabilitySource
+): number | null {
+  const unwrappedSource = isRefLike(source) ? source.value : source;
+  if (
+    !unwrappedSource ||
+    typeof unwrappedSource !== "object" ||
+    !("researchInput" in unwrappedSource)
+  ) {
+    return null;
+  }
+  const raw = (unwrappedSource as { researchInput: unknown }).researchInput;
+  const capability = isRefLike(raw) ? raw.value : raw;
+  if (
+    !capability ||
+    typeof capability !== "object" ||
+    Array.isArray(capability)
+  ) {
+    return null;
+  }
+  const descriptor = capability as Partial<BotResearchInputCapability>;
+  const limit = descriptor.max_attachments_per_request;
+  if (
+    descriptor.enabled !== true ||
+    descriptor.protocol !== RESEARCH_INPUT_PROTOCOL ||
+    typeof limit !== "number" ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > HARD_REMOTE_AGENT_ATTACHMENT_LIMIT
+  ) {
+    return null;
+  }
+  return limit;
+}
+
 function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
-  const lifecycle = owned.botLifecycle
+  const cached = owned.botLifecycle
     ? {
         ...owned.botLifecycle,
         degradedInterop: owned.botLifecycle.degradedInterop === true,
@@ -184,16 +238,59 @@ function initialState(owned: RemoteAgentChatState): BotRemoteAgentRunState {
       }
     : initBotLifecycleState();
   const projection = safeProjectionCopy(owned.botProjection);
+  const lifecycle = projection
+    ? reduceBotProjection(cached, projection)
+    : cached;
+  const delivery = safeDeliveryCopy(lifecycle.delivery);
   return {
     ...lifecycle,
-    phase: projection ? phaseFor(projection.status) : "idle",
+    ...(delivery ? { delivery } : {}),
+    phase: initialPhase(lifecycle.status, projection),
     requestId: owned.activeRequestId?.trim() || null,
     uploadTransfer: owned.uploadTransfer ?? null,
     projection,
+    artifactLinks: cloneArtifactLinks(owned.artifactLinks),
     dialogueId: owned.dialogueId ?? null,
     messageId: owned.messageId ?? null,
     error: null,
   };
+}
+
+function safeDeliveryCopy(
+  delivery: AgentResultDelivery | undefined
+): AgentResultDelivery | undefined {
+  if (!delivery) return undefined;
+  try {
+    return decodeAgentResultDelivery(delivery);
+  } catch {
+    return undefined;
+  }
+}
+
+function cloneArtifactLinks(
+  links: readonly ConversationArtifactLink[] | undefined
+): ConversationArtifactLink[] {
+  if (!Array.isArray(links)) return [];
+  const kinds = new Set(["file", "report", "table", "image", "archive"]);
+  const seen = new Set<string>();
+  const cloned: ConversationArtifactLink[] = [];
+  for (const link of links) {
+    if (
+      !link ||
+      typeof link.id !== "string" ||
+      typeof link.name !== "string" ||
+      !kinds.has(link.kind) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(link.id) ||
+      link.name.length === 0 ||
+      seen.has(link.id) ||
+      cloned.length >= 50
+    ) {
+      continue;
+    }
+    seen.add(link.id);
+    cloned.push({ ...link });
+  }
+  return cloned;
 }
 
 function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
@@ -203,8 +300,9 @@ function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
     case "SUCCEEDED":
       return "succeeded";
     case "FAILED":
-    case "TIMED_OUT":
       return "failed";
+    case "TIMED_OUT":
+      return "timed_out";
     case "CANCELLED":
       return "cancelled";
     case "PENDING":
@@ -213,6 +311,35 @@ function phaseFor(status: BotRunProjection["status"]): RemoteAgentRunPhase {
     default:
       return "running";
   }
+}
+
+function committedPhase(
+  status: BotLifecycleStatus,
+  currentPhase?: RemoteAgentRunPhase
+): RemoteAgentRunPhase | null {
+  if (currentPhase === "cancelled") return "cancelled";
+  switch (status) {
+    case "SUCCEEDED":
+      return "succeeded";
+    case "FAILED":
+      return "failed";
+    case "TIMED_OUT":
+      return "timed_out";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      return null;
+  }
+}
+
+function initialPhase(
+  status: BotLifecycleStatus,
+  projection: BotRunProjection | null
+): RemoteAgentRunPhase {
+  return (
+    committedPhase(status) ??
+    (projection ? phaseFor(projection.status) : "idle")
+  );
 }
 
 function requestIdFor(dialogueId: string): string {
@@ -236,20 +363,6 @@ function normalizeDialogueId(dialogueId: string): string {
   return normalized;
 }
 
-function fileValue(file: RemoteAgentFile): File | null {
-  if (typeof File !== "undefined" && file instanceof File) return file;
-  if (
-    file &&
-    typeof file === "object" &&
-    "file" in file &&
-    typeof file.file !== "undefined" &&
-    (typeof File === "undefined" || file.file instanceof File)
-  ) {
-    return file.file;
-  }
-  return null;
-}
-
 function appendOptional(formData: FormData, key: string, value: unknown): void {
   if (typeof value === "string" && value.trim() !== "") {
     formData.append(key, value.trim());
@@ -258,22 +371,20 @@ function appendOptional(formData: FormData, key: string, value: unknown): void {
 
 function buildFormData(
   input: RemoteAgentSubmitInput,
+  dialogueId: string,
   tool: RemoteAgentTool,
-  dialogueId: string
+  clientTurnId?: string
 ): FormData {
   const formData = new FormData();
   formData.append("id", dialogueId);
   formData.append("query", input.query);
-  formData.append("tool", tool);
-  formData.append("mode", "instant");
-
-  for (const candidate of input.files ?? []) {
-    const file = fileValue(candidate);
-    if (file) formData.append("files", file);
+  formData.append("attachments", JSON.stringify(input.attachments ?? []));
+  if (clientTurnId) {
+    formData.append("client_turn_id", clientTurnId);
   }
 
   const resolver = input.resolver;
-  if (resolver) {
+  if (resolver && tool !== "InSilicoResearchAgent") {
     appendOptional(formData, "gene_id", resolver.geneId ?? resolver.gene_id);
     appendOptional(formData, "to_id", resolver.toId ?? resolver.to_id);
     appendOptional(
@@ -283,9 +394,6 @@ function buildFormData(
     );
   }
 
-  if (input.dataList) {
-    formData.append("data_list", JSON.stringify(input.dataList));
-  }
   appendOptional(formData, "interop_mode", input.interopMode);
   if (input.interopTargets && input.interopTargets.length > 0) {
     formData.append("interop_targets", JSON.stringify(input.interopTargets));
@@ -294,8 +402,7 @@ function buildFormData(
 }
 
 function responsePayload(response: unknown): unknown {
-  if (!response || typeof response !== "object") return response;
-  if ("data" in response) return (response as { data?: unknown }).data;
+  if (isSuccessfulDataEnvelope(response)) return response.data;
   return response;
 }
 
@@ -318,8 +425,8 @@ function safeIdentity(value: unknown, pattern: RegExp): string | null {
     typeof value === "number" && Number.isSafeInteger(value)
       ? String(value)
       : typeof value === "string"
-      ? value.trim()
-      : "";
+        ? value.trim()
+        : "";
   return normalized && pattern.test(normalized) ? normalized : null;
 }
 
@@ -341,6 +448,33 @@ function isCanceledRequest(error: unknown): boolean {
   return (
     candidate.code === "ERR_CANCELED" || candidate.name === "CanceledError"
   );
+}
+
+function normalizeAttachments(
+  attachments: readonly AssetAttachmentRef[] | undefined,
+  maxAttachments: number
+): AssetAttachmentRef[] {
+  if (attachments === undefined) return [];
+  if (!Array.isArray(attachments) || attachments.length > maxAttachments) {
+    throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
+  }
+  const seen = new Set<string>();
+  const normalized: AssetAttachmentRef[] = [];
+  for (const attachment of attachments) {
+    if (
+      !attachment ||
+      typeof attachment !== "object" ||
+      Array.isArray(attachment) ||
+      Object.keys(attachment).some((key) => key !== "asset_id") ||
+      !isSafeAssetId(attachment.asset_id) ||
+      seen.has(attachment.asset_id)
+    ) {
+      throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
+    }
+    seen.add(attachment.asset_id);
+    normalized.push({ asset_id: attachment.asset_id });
+  }
+  return normalized;
 }
 
 function capabilityLoader(
@@ -367,6 +501,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     identity?: Partial<RemoteAgentRunIdentity>
   ) => void;
   cancel: () => boolean;
+  abortTransport: () => boolean;
   reset: () => void;
 } {
   const { tool, dialogueId } = options;
@@ -378,14 +513,38 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
   const state = ref<BotRemoteAgentRunState>(initialState(owned));
   let activeToken: RemoteRequestToken | null = null;
   let capabilityLoadPromise: Promise<void> | null = null;
+  let pendingResearchTurn: { id: string; fingerprint: string } | null = null;
+
+  const clearPendingResearchTurn = (
+    clientTurnId: string | undefined,
+    fingerprint: string | undefined
+  ): void => {
+    if (
+      clientTurnId &&
+      fingerprint &&
+      pendingResearchTurn?.id === clientTurnId &&
+      pendingResearchTurn.fingerprint === fingerprint
+    ) {
+      pendingResearchTurn = null;
+    }
+  };
 
   const syncOwnedState = () => {
+    const delivery = safeDeliveryCopy(state.value.delivery);
     owned.botProjection =
       safeProjectionCopy(state.value.projection) ?? undefined;
     owned.botLifecycle = {
       runId: state.value.runId,
       status: state.value.status,
       reportRevision: state.value.reportRevision,
+      report: state.value.report ? { ...state.value.report } : undefined,
+      reportWarningCodes: state.value.reportWarningCodes
+        ? [...state.value.reportWarningCodes]
+        : undefined,
+      reportStage: state.value.reportStage,
+      reportUpdatedAt: state.value.reportUpdatedAt,
+      progress: state.value.progress ? { ...state.value.progress } : undefined,
+      trackingDegraded: state.value.trackingDegraded,
       visibleReport: state.value.visibleReport,
       intermediateReport: state.value.intermediateReport,
       finalReport: state.value.finalReport,
@@ -397,7 +556,9 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
         outputDir: artifact.outputDir,
         paths: [...artifact.paths],
       })),
+      ...(delivery ? { delivery } : {}),
     };
+    owned.artifactLinks = cloneArtifactLinks(state.value.artifactLinks);
   };
 
   const hydrate = (
@@ -405,6 +566,10 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     identity: Partial<RemoteAgentRunIdentity> = {}
   ): void => {
     const safeProjection = parseBotProjection(projection);
+    const previousTerminalPhase = committedPhase(
+      state.value.status,
+      state.value.phase
+    );
     const lifecycle = reduceBotProjection(state.value, safeProjection);
     const dialogueId =
       identity.dialogueId === undefined
@@ -417,10 +582,14 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     state.value = {
       ...state.value,
       ...lifecycle,
-      phase: phaseFor(safeProjection.status),
+      phase: previousTerminalPhase ?? phaseFor(safeProjection.status),
       requestId: null,
       uploadTransfer: null,
       projection: safeProjection,
+      artifactLinks:
+        identity.artifactLinks === undefined
+          ? cloneArtifactLinks(state.value.artifactLinks)
+          : cloneArtifactLinks(identity.artifactLinks),
       dialogueId,
       messageId,
       error: null,
@@ -504,14 +673,18 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
-    const files = input.files ?? [];
-    const validFiles = files
-      .map(fileValue)
-      .filter((file): file is File => file !== null);
-    if (validFiles.length !== files.length) {
-      throw new BotRemoteAgentRunError("invalid_query", "Invalid attachment");
+    const maxAttachments =
+      tool === "InSilicoResearchAgent"
+        ? researchAttachmentLimit(capabilities)
+        : LEGACY_REMOTE_AGENT_ATTACHMENT_LIMIT;
+    if (maxAttachments === null) {
+      throw new BotRemoteAgentRunError(
+        "capability_disabled",
+        "Research input capability is unavailable"
+      );
     }
-    if (validFiles.length > 0 && capability.attachments !== true) {
+    const attachments = normalizeAttachments(input.attachments, maxAttachments);
+    if (attachments.length > 0 && capability.attachments !== true) {
       throw new BotRemoteAgentRunError(
         "attachments_disabled",
         "Remote agent attachments are disabled"
@@ -520,6 +693,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
 
     const resolver = input.resolver;
     const hasResolverValues =
+      tool !== "InSilicoResearchAgent" &&
       !!resolver &&
       [
         resolver.geneId ?? resolver.gene_id,
@@ -543,17 +717,37 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       );
     }
 
+    let researchFingerprint: string | undefined;
+    let clientTurnId: string | undefined;
+    if (tool === "InSilicoResearchAgent") {
+      researchFingerprint = clientTurnDraftFingerprint({
+        parentRowId: 0,
+        operation: "append",
+        mode: "instant",
+        selectedAgent: tool,
+        query: input.query,
+        attachments: attachments.map(({ asset_id }) => asset_id),
+        interopMode: input.interopMode,
+        interopTargets: input.interopTargets,
+      });
+      clientTurnId =
+        pendingResearchTurn?.fingerprint === researchFingerprint
+          ? pendingResearchTurn.id
+          : createClientTurnId();
+      pendingResearchTurn = {
+        id: clientTurnId,
+        fingerprint: researchFingerprint,
+      };
+    }
     const formData = buildFormData(
-      { ...input, files: validFiles },
+      { ...input, attachments },
+      normalizedDialogueId,
       tool,
-      normalizedDialogueId
+      clientTurnId
     );
     const requestId = requestIdFor(normalizedDialogueId);
     const token: RemoteRequestToken = { id: requestId, cancelled: false };
     activeToken = token;
-    const tracker = validFiles.length
-      ? createTransferTracker({ phase: "upload", requestId })
-      : null;
     const freshLifecycle = initBotLifecycleState();
     owned.activeRequestId = requestId;
     owned.isSending = true;
@@ -565,6 +759,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       requestId,
       uploadTransfer: null,
       projection: null,
+      artifactLinks: [],
       dialogueId: null,
       messageId: null,
       error: null,
@@ -572,36 +767,18 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     syncOwnedState();
 
     try {
-      const response = await getQueryAbortable(
+      const response = await runAgentProductAbortable(
+        tool,
         formData,
-        requestId,
-        tracker
-          ? {
-              onUploadProgress: (event) => {
-                if (activeToken !== token || token.cancelled) return;
-                const snapshot = tracker.update({
-                  loaded: event.loaded,
-                  total: event.total ?? 0,
-                });
-                if (!snapshot) return;
-                owned.uploadTransfer = snapshot;
-                state.value = { ...state.value, uploadTransfer: snapshot };
-                if (
-                  !snapshot.indeterminate &&
-                  snapshot.total > 0 &&
-                  snapshot.loaded >= snapshot.total
-                ) {
-                  owned.uploadTransfer = null;
-                  state.value = { ...state.value, uploadTransfer: null };
-                }
-              },
-            }
-          : undefined
+        requestId
       );
 
       if (activeToken !== token || token.cancelled) return null;
 
-      const projection = parseBotProjection(responsePayload(response));
+      if (!isSuccessfulDataEnvelope(response)) {
+        throw new Error("invalid response envelope");
+      }
+      const projection = parseBotProjection(response.data);
       const lifecycle = reduceBotProjection(state.value, projection);
       const identity = responseIdentity(response);
       state.value = {
@@ -617,6 +794,7 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
       owned.dialogueId = identity.dialogueId ?? undefined;
       owned.messageId = identity.messageId ?? undefined;
       syncOwnedState();
+      clearPendingResearchTurn(clientTurnId, researchFingerprint);
       return projection;
     } catch (error) {
       if (
@@ -654,19 +832,47 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     }
   };
 
-  const cancel = (): boolean => {
+  const abortTransport = (): boolean => {
     const token = activeToken;
-    if (!token || token.cancelled || owned.activeRequestId !== token.id) {
+    if (!token || token.cancelled) {
       return false;
     }
     token.cancelled = true;
-    owned.generationStopped = true;
-    owned.activeAgentName = "";
-    syncCancelledOwner();
     return abortRequest(token.id);
   };
 
+  const cancel = (): boolean => {
+    const token = activeToken;
+    const messageId = owned.messageId ?? state.value.messageId;
+    if (
+      !messageId &&
+      !(token && !token.cancelled && owned.activeRequestId === token.id)
+    ) {
+      return false;
+    }
+    owned.generationStopped = true;
+    owned.activeAgentName = "";
+    syncCancelledOwner();
+    if (messageId) {
+      void Promise.resolve(cancelTask(messageId))
+        .catch(() => undefined)
+        .finally(() => {
+          if (token && !token.cancelled) {
+            token.cancelled = true;
+            abortRequest(token.id);
+          }
+        });
+      return true;
+    }
+    if (token && !token.cancelled) {
+      token.cancelled = true;
+      abortRequest(token.id);
+    }
+    return true;
+  };
+
   const reset = (): void => {
+    pendingResearchTurn = null;
     const token = activeToken;
     if (token) {
       token.cancelled = true;
@@ -682,17 +888,19 @@ export function useBotRemoteAgentRun(options: UseBotRemoteAgentRunOptions): {
     owned.messageId = undefined;
     delete owned.botProjection;
     delete owned.botLifecycle;
+    delete owned.artifactLinks;
     state.value = {
       ...initBotLifecycleState(),
       phase: "idle",
       requestId: null,
       uploadTransfer: null,
       projection: null,
+      artifactLinks: [],
       dialogueId: null,
       messageId: null,
       error: null,
     };
   };
 
-  return { state, submit, hydrate, cancel, reset };
+  return { state, submit, hydrate, cancel, abortTransport, reset };
 }

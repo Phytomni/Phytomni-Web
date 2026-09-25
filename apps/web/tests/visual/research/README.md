@@ -16,22 +16,41 @@ does not make authenticated API calls and is not a replacement for the live
 authenticated `/chat` → Artifact workflow; it is the deterministic real-content
 lane for responsive Artifact geometry and copy review.
 
+`case=scientific` mounts the hand-authored scientific-formatting contract from
+the Go testdata directory and its Go-normalized reference fixture. It exercises
+ordinary scripts, italics, mixed tables and reference titles without a live agent
+or remote resource request. Menu actions are recorded, and PDF/Markdown download
+actions delegate to the actual artifact's client-side exporter. Authentication,
+server-generated files, copy and history acceptance still need the development product.
+The fixture supplies the bounded artifact height normally owned by its product
+host so the real shell, rather than a hidden overflowing fixture root, owns
+scrolling. `theme=system` uses the existing theme store for media emulation checks.
+
+`case=cif` isolates the original report's CIF marker and authorized public resource
+without changing either source file. It uses the actual report renderer and native
+3Dmol, with a bounded 30-second readiness deadline for SES generation. Optional
+parameters exercise `host=chat` (shared inline renderer), `host=nested` (the actual
+fullscreen adaptive shell), `narrow=1` (440px host inside a wide viewport), and
+`multiple=1` (image and link forms of the same original CIF). `source=reader` uses
+the runtime-only CIF text seam with that public fixture resource; it is explicitly
+labelled synthetic and does not establish authenticated Database acceptance.
+
 ## Responsive viewport matrix
 
 The capture matrix uses one representative viewport per device category. The
 boundary smoke set additionally checks the edges where a category changes.
 
-| Category | CSS viewport | Device scale factor | Expected physical capture |
-| --- | ---: | ---: | ---: |
-| Compact phone | 320×568 | 1 | 320×568 |
-| Modern phone | 390×844 | 1 | 390×844 |
-| Large phone / small tablet | 480×900 | 1 | 480×900 |
-| Tablet / small desktop | 768×1024 | 1 | 768×1024 |
-| Notebook | 1024×768 | 1 | 1024×768 |
-| Notebook upper bound | 1366×768 | 1 | 1366×768 |
-| Desktop display | 1440×900 | 1 | 1440×900 |
-| Desktop upper bound | 1920×1080 | 1 | 1920×1080 |
-| Ultra-wide / 4K at 150% OS scaling | 2560×1440 | 1.5 | 3840×2160 |
+| Category                           | CSS viewport | Device scale factor | Expected physical capture |
+| ---------------------------------- | -----------: | ------------------: | ------------------------: |
+| Compact phone                      |      320×568 |                   1 |                   320×568 |
+| Modern phone                       |      390×844 |                   1 |                   390×844 |
+| Large phone / small tablet         |      480×900 |                   1 |                   480×900 |
+| Tablet / small desktop             |     768×1024 |                   1 |                  768×1024 |
+| Notebook                           |     1024×768 |                   1 |                  1024×768 |
+| Notebook upper bound               |     1366×768 |                   1 |                  1366×768 |
+| Desktop display                    |     1440×900 |                   1 |                  1440×900 |
+| Desktop upper bound                |    1920×1080 |                   1 |                 1920×1080 |
+| Ultra-wide / 4K at 150% OS scaling |    2560×1440 |                 1.5 |                 3840×2160 |
 
 The 4K case uses the CSS-equivalent viewport for a 3840×2160 display at 150%
 scaling. Capture names encode the CSS viewport, locale, and theme; the 4K

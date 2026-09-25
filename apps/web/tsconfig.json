@@ -1,44 +1,26 @@
 {
-  "include": [
-    "env.d.ts",
-    "src/**/*",
-    "src/**/*.vue",
-    "vite"
-, "public/modle/3Dmol-min.js", "public/modle"  ],
+  "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
     "jsx": "preserve",
     "noImplicitThis": true,
     "strict": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
     "target": "ESNext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "lib": [
-      "ES2016",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "baseUrl": ".",
-    "types": [
-      "element-plus/global"
-    ],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["element-plus/global"],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
     "allowSyntheticDefaultImports": true,
     "allowJs": true
   },
-  "exclude": [
-    "src/assets/**/*.md"
-  ],
   "references": [
     {
       "path": "./tsconfig.config.json"

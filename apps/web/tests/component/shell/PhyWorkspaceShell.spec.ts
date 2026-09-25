@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import PhyWorkspaceShell from "@/components/shell/PhyWorkspaceShell.vue";
 
 const SOURCE = readFileSync(
   resolve(__dirname, "../../../src/components/shell/PhyWorkspaceShell.vue"),
   "utf8"
 );
+const HEADER_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/shell/PhyPageHeader.vue"),
+  "utf8"
+);
 
 describe("PhyWorkspaceShell", () => {
   it("renders the named page regions and default content", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: {
         header: '<h1 data-test="header">Users</h1>',
         filters: '<div data-test="filters">Filters</div>',
@@ -27,7 +31,7 @@ describe("PhyWorkspaceShell", () => {
   });
 
   it("owns exactly one vertical scroll root", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: { default: "<p>Content</p>" },
     });
 
@@ -39,7 +43,7 @@ describe("PhyWorkspaceShell", () => {
   });
 
   it("does not render empty optional regions", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: { default: "<p>Content</p>" },
     });
 
@@ -58,8 +62,14 @@ describe("PhyWorkspaceShell", () => {
     expect(SOURCE).toMatch(/@media\s*\(max-width:\s*599px\)/);
   });
 
+  it("uses the shared fluid workspace gutter", () => {
+    expect(SOURCE).toContain(
+      "--phy-workspace-gutter: var(--phy-layout-content-gutter);"
+    );
+  });
+
   it("keeps long bilingual labels in normal-flow regions", () => {
-    const wrapper = mount(PhyWorkspaceShell, {
+    const wrapper = mountWithApp(PhyWorkspaceShell, {
       slots: {
         header: "<h1>超长的工作区标题和操作标签 Long workspace title</h1>",
         filters: "<label>超长筛选条件 Long filter label</label>",
@@ -72,5 +82,10 @@ describe("PhyWorkspaceShell", () => {
     expect(wrapper.find(".phy-workspace-shell__filters").exists()).toBe(true);
     expect(wrapper.find(".phy-workspace-shell__footer").exists()).toBe(true);
     expect(SOURCE).not.toMatch(/position:\s*fixed/);
+  });
+
+  it("lets page-header actions wrap within the workspace measure", () => {
+    expect(HEADER_SOURCE).toContain("flex-wrap: wrap;");
+    expect(HEADER_SOURCE).toContain("min-width: 0;");
   });
 });

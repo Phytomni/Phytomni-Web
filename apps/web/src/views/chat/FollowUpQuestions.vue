@@ -71,7 +71,8 @@ const handleQuestionClick = (question: string) => {
   overflow-wrap: anywhere;
   cursor: pointer;
   user-select: none;
-  transition: background-color var(--phy-motion-fast) ease,
+  transition:
+    background-color var(--phy-motion-fast) ease,
     color var(--phy-motion-fast) ease;
 
   &:hover {

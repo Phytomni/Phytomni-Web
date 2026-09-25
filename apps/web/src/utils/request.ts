@@ -8,6 +8,7 @@ import axios, {
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import { userStore } from "@/stores";
+import { isRecord, optionalString } from "@/api/contracts";
 import { getToken } from "@/utils/auth";
 import errorCode from "@/utils/error-code";
 import { tansParams, blobValidate } from "@/utils";
@@ -39,8 +40,57 @@ const service: AxiosInstance = axios.create({
   timeout: 100000000,
 });
 
+/** Request-local controls understood only by the Phytomni HTTP boundary. */
+export type PhytomniRequestConfig<D = unknown> = AxiosRequestConfig<D> & {
+  requestId?: string;
+  suppressErrorToast?: boolean;
+  skipSessionExpired?: boolean;
+};
+
+/** Axios returns the interceptor's unwrapped payload at runtime. */
+export interface UnwrappedHttpClient {
+  <T = unknown, D = unknown>(config: PhytomniRequestConfig<D>): Promise<T>;
+}
+
+const request = service as unknown as UnwrappedHttpClient;
+
+/**
+ * Axios types response interceptors as preserving `AxiosResponse<any>`, but
+ * this instance deliberately unwraps successful payloads before they reach
+ * callers. Keep that runtime contract explicit at the one third-party seam.
+ */
+interface UnwrappedResponseInterceptorManager {
+  use(
+    onFulfilled?: ((value: AxiosResponse<unknown>) => unknown) | null,
+    onRejected?: ((error: unknown) => unknown) | null
+  ): number;
+}
+
+const responseInterceptors = service.interceptors
+  .response as unknown as UnwrappedResponseInterceptorManager;
+
 // store active request controllers
 const activeControllers = new Map<string, AbortController>();
+
+type DuplicateRequestRecord = {
+  url?: string;
+  data?: unknown;
+  time?: number;
+};
+
+function readDuplicateRequestRecord(): DuplicateRequestRecord | undefined {
+  const raw: unknown = cache.session.getJSON("sessionObj");
+  if (!isRecord(raw)) return undefined;
+
+  return {
+    url: optionalString(raw, "url"),
+    data: raw.data,
+    time:
+      typeof raw.time === "number" && Number.isFinite(raw.time)
+        ? raw.time
+        : undefined,
+  };
+}
 
 // request interceptor
 service.interceptors.request.use(
@@ -73,20 +123,17 @@ service.interceptors.request.use(
       !isRepeatSubmit &&
       (config.method === "post" || config.method === "put")
     ) {
+      const requestData: unknown =
+        typeof config.data === "object"
+          ? JSON.stringify(config.data)
+          : (config.data as unknown);
       const requestObj = {
         url: config.url,
-        data:
-          typeof config.data === "object"
-            ? JSON.stringify(config.data)
-            : config.data,
+        data: requestData,
         time: new Date().getTime(),
       };
-      const sessionObj = cache.session.getJSON("sessionObj");
-      if (
-        sessionObj === undefined ||
-        sessionObj === null ||
-        sessionObj === ""
-      ) {
+      const sessionObj = readDuplicateRequestRecord();
+      if (!sessionObj) {
         cache.session.setJSON("sessionObj", requestObj);
       } else {
         const s_url = sessionObj.url; // request URL
@@ -96,6 +143,7 @@ service.interceptors.request.use(
         // pre-flight check
         if (
           s_data === requestObj.data &&
+          typeof s_time === "number" &&
           requestObj.time - s_time < interval &&
           s_url === requestObj.url
         ) {
@@ -113,11 +161,8 @@ service.interceptors.request.use(
     // Only log the redacted message; never log the raw error object: an axios error
     // carries config.headers (here including the Authorization Bearer + satoken), so
     // logging the whole thing would write live tokens into the browser console.
-    console.log(
-      "request error:",
-      error instanceof Error ? error.message : String(error)
-    );
-    Promise.reject(error);
+    console.log("request error:", readErrorMessage(error));
+    return Promise.reject(error);
   }
 );
 
@@ -128,37 +173,112 @@ service.interceptors.request.use(
 // runtime path.
 type ErrorCodeLookup = Record<string, (() => string) | string>;
 
+const errorCodeLookup: ErrorCodeLookup = errorCode;
+
+function resolveErrorCode(key: string): string | undefined {
+  const configured = errorCodeLookup[key];
+  if (typeof configured === "function") return configured();
+  return typeof configured === "string" ? configured : undefined;
+}
+
+type SafeErrorResponse = {
+  status?: number;
+  data?: unknown;
+};
+
+function readErrorResponse(error: unknown): SafeErrorResponse | undefined {
+  if (axios.isAxiosError<unknown>(error)) {
+    if (!error.response) return undefined;
+    return {
+      status: error.response.status,
+      data: error.response.data,
+    };
+  }
+  if (!isRecord(error) || !isRecord(error.response)) return undefined;
+  const status = error.response.status;
+  return {
+    status:
+      typeof status === "number" && Number.isFinite(status)
+        ? status
+        : undefined,
+    data: error.response.data,
+  };
+}
+
+function readErrorUrl(error: unknown): string | undefined {
+  if (axios.isAxiosError<unknown>(error)) return error.config?.url;
+  if (!isRecord(error) || !isRecord(error.config)) return undefined;
+  return optionalString(error.config, "url");
+}
+
+function readErrorMessage(error: unknown): string {
+  if (axios.isAxiosError<unknown>(error)) return error.message;
+  if (error instanceof Error) return error.message;
+  if (isRecord(error)) return optionalString(error, "message") ?? "";
+  return "";
+}
+
 function isCanceledRequest(error: unknown): boolean {
-  const err = error as { code?: unknown; name?: unknown };
-  return (
-    axios.isCancel(error) ||
-    err?.code === "ERR_CANCELED" ||
-    err?.name === "CanceledError"
-  );
+  if (axios.isCancel(error)) return true;
+  if (axios.isAxiosError<unknown>(error)) {
+    return error.code === "ERR_CANCELED" || error.name === "CanceledError";
+  }
+  if (!isRecord(error)) return false;
+  return error.code === "ERR_CANCELED" || error.name === "CanceledError";
+}
+
+function suppressesErrorToast(config: unknown): boolean {
+  return isRecord(config) && config.suppressErrorToast === true;
+}
+
+function skipsSessionExpired(config: unknown): boolean {
+  return isRecord(config) && config.skipSessionExpired === true;
 }
 
 // response interceptor
-service.interceptors.response.use(
-  (res: AxiosResponse) => {
+responseInterceptors.use(
+  (res: AxiosResponse<unknown>) => {
+    const responseData = isRecord(res.data) ? res.data : undefined;
     // default to a success status when no code is set
-    const code = res.data.code || 200;
+    const responseCode = responseData?.code;
+    const code =
+      typeof responseCode === "number" &&
+      Number.isFinite(responseCode) &&
+      responseCode !== 0
+        ? responseCode
+        : 200;
     // get the error message
     const msg =
-      (errorCode as ErrorCodeLookup)[code] ||
-      res.data.message ||
-      (errorCode as ErrorCodeLookup)["default"];
-    // return binary data directly
-    if (res.headers["content-type"] === "application/octet-stream") {
+      errorCodeLookup[code] ||
+      optionalString(responseData ?? {}, "message") ||
+      errorCodeLookup.default;
+    // Keep the AxiosResponse for binary downloads. Relayed zips/PDFs/images
+    // are application/zip (etc.), not octet-stream; unwrapping the Blob here
+    // made saveAs(response.data) receive undefined.
+    const responseType = isRecord(res.request)
+      ? res.request.responseType
+      : undefined;
+    const contentType =
+      typeof res.headers?.["content-type"] === "string"
+        ? res.headers["content-type"].split(";", 1)[0].trim().toLowerCase()
+        : "";
+    if (
+      responseType === "blob" ||
+      responseType === "arraybuffer" ||
+      contentType === "application/octet-stream"
+    ) {
       return res;
     }
-    if (
-      res.request.responseType === "blob" ||
-      res.request.responseType === "arraybuffer"
-    ) {
-      return res.data;
-    }
 
-    if (code === 401 || (res.data.detail && res.data.detail.code === 403)) {
+    const detailCode =
+      responseData && isRecord(responseData.detail)
+        ? responseData.detail.code
+        : undefined;
+    const suppressErrorToast = suppressesErrorToast(res.config);
+    if (
+      (code === 401 || detailCode === 403) &&
+      !skipsSessionExpired(res.config)
+    ) {
       if (!isRelogin.show) {
         isRelogin.show = true;
         ElMessageBox.alert(i18n.global.t("request.sessionExpired"), {
@@ -167,26 +287,31 @@ service.interceptors.response.use(
           callback: () => {
             isRelogin.show = false;
             const UserStore = userStore();
-            UserStore.FedLogOut().finally(() => {
-              // clear all caches and cookies
-              localStorage.clear();
-              sessionStorage.clear();
-              document.cookie.split(";").forEach(function (c) {
-                document.cookie = c
-                  .replace(/^ +/, "")
-                  .replace(
-                    /=.*/,
-                    "=;expires=" + new Date().toUTCString() + ";path=/"
-                  );
-              });
-              location.href = "/login";
-            });
+            UserStore.FedLogOut()
+              .finally(() => {
+                // clear all caches and cookies
+                localStorage.clear();
+                sessionStorage.clear();
+                document.cookie.split(";").forEach(function (c) {
+                  document.cookie = c
+                    .replace(/^ +/, "")
+                    .replace(
+                      /=.*/,
+                      "=;expires=" + new Date().toUTCString() + ";path=/"
+                    );
+                });
+                location.href = "/login";
+              })
+              .catch(() => undefined);
           },
-        });
+        }).catch(() => undefined);
       }
       return Promise.reject(i18n.global.t("request.sessionInvalid"));
     } else if (code === 500) {
-      if (msg !== "Cannot create property 'headers' on boolean 'false'") {
+      if (
+        !suppressErrorToast &&
+        msg !== "Cannot create property 'headers' on boolean 'false'"
+      ) {
         ElMessage({
           message: msg as string,
           type: "error",
@@ -194,54 +319,76 @@ service.interceptors.response.use(
       }
       return Promise.reject(new Error(msg as string));
     } else if (code !== 200) {
-      ElMessage({
-        message: msg as string,
-        type: "error",
-      });
+      if (!suppressErrorToast) {
+        ElMessage({
+          message: msg as string,
+          type: "error",
+        });
+      }
 
       return Promise.reject("error");
     } else {
       return res.data;
     }
   },
-  (error: any) => {
+  (error: unknown) => {
+    const response = readErrorResponse(error);
+    const responseData =
+      response && isRecord(response.data) ? response.data : undefined;
+    const suppressErrorToast = axios.isAxiosError<unknown>(error)
+      ? suppressesErrorToast(error.config)
+      : isRecord(error)
+        ? suppressesErrorToast(error.config)
+        : false;
+    let message = readErrorMessage(error);
     // Redacted log — the raw axios error embeds config.headers (Bearer token + satoken),
     // so we expose only the non-sensitive fields useful for debugging.
     console.log("response error:", {
-      status: error?.response?.status,
-      url: error?.config?.url,
-      message: error?.message,
+      status: response?.status,
+      url: readErrorUrl(error),
+      message,
     });
     if (isCanceledRequest(error)) {
       return Promise.reject(error);
     }
-    const { response } = error;
-    let { message } = error;
-    if (response?.data?.detail?.code === 403) {
+    const detailCode =
+      responseData && isRecord(responseData.detail)
+        ? responseData.detail.code
+        : undefined;
+    const errorConfig = axios.isAxiosError<unknown>(error)
+      ? error.config
+      : isRecord(error)
+        ? error.config
+        : undefined;
+    if (detailCode === 403 && !skipsSessionExpired(errorConfig)) {
       isRelogin.show = false;
       const UserStore = userStore();
-      UserStore.FedLogOut().finally(() => {
-        // clear all caches and cookies
-        localStorage.clear();
-        sessionStorage.clear();
-        document.cookie.split(";").forEach(function (c) {
-          document.cookie = c
-            .replace(/^ +/, "")
-            .replace(
-              /=.*/,
-              "=;expires=" + new Date().toUTCString() + ";path=/"
-            );
+      UserStore.FedLogOut()
+        .finally(() => {
+          // clear all caches and cookies
+          localStorage.clear();
+          sessionStorage.clear();
+          document.cookie.split(";").forEach(function (c) {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(
+                /=.*/,
+                "=;expires=" + new Date().toUTCString() + ";path=/"
+              );
+          });
+          location.href = "/login";
+        })
+        .catch(() => {
+          // The redirect in finally is the authoritative logout fallback.
         });
-        location.href = "/login";
-      });
     }
 
     if (message === "Data is being processed, please do not resubmit") return;
     // Prefer the readable server-returned message (Go gateway error body {code, message};
     // legacy Python service detail string), otherwise fall back to axios's generic error text.
     const serverMessage =
-      response?.data?.message ||
-      (typeof response?.data?.detail === "string" ? response.data.detail : "");
+      optionalString(responseData ?? {}, "message") ||
+      (typeof responseData?.detail === "string" ? responseData.detail : "");
     if (serverMessage) {
       message = serverMessage;
     } else if (message == "Network Error") {
@@ -253,7 +400,10 @@ service.interceptors.response.use(
         code: message.substr(message.length - 3),
       });
     }
-    if (message !== "Cannot create property 'headers' on boolean 'false'") {
+    if (
+      !suppressErrorToast &&
+      message !== "Cannot create property 'headers' on boolean 'false'"
+    ) {
       ElMessage({
         message: message,
         type: "error",
@@ -267,6 +417,23 @@ service.interceptors.response.use(
 
 let downloadRequestSeq = 0;
 
+/** Normalize interceptor/adapter output to a Blob-bearing Axios response. */
+export function asBinaryResponse(value: unknown): AxiosResponse<Blob> {
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return {
+      data: value,
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config: {} as InternalAxiosRequestConfig,
+    };
+  }
+  if (isRecord(value) && value.data instanceof Blob) {
+    return value as unknown as AxiosResponse<Blob>;
+  }
+  throw new TypeError("Invalid binary download body");
+}
+
 // generic download method
 export function download(
   url: string,
@@ -278,37 +445,40 @@ export function download(
   const tracker = createTransferTracker({ phase: "download", requestId });
   registerAbortController(requestId, controller);
 
-  // The response interceptor above unwraps `res.data` for `responseType:
-  // 'blob'`, so at runtime the promise resolves to a Blob rather than an
-  // AxiosResponse. The cast aligns axios's static type with that runtime
-  // contract — see the `responseType === 'blob'` branch in the interceptor
-  // for the source of the unwrap.
-  return (
-    service.post(url, params, {
-      transformRequest: [
-        (p: unknown) => tansParams(p as { [x: string]: unknown }),
-      ],
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      responseType: "blob",
-      signal: controller.signal,
-      onDownloadProgress: (event: AxiosProgressEvent) => {
-        upsertDownloadTransfer(tracker.update(event));
-      },
-    }) as unknown as Promise<Blob>
-  )
-    .then(async (data) => {
+  // Binary interceptor returns the AxiosResponse; adapters may still yield a Blob.
+  return request<unknown>({
+    url,
+    method: "post",
+    data: params,
+    transformRequest: [(p: unknown) => tansParams(p)],
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    responseType: "blob",
+    signal: controller.signal,
+    onDownloadProgress: (event: AxiosProgressEvent) => {
+      upsertDownloadTransfer(tracker.update(event));
+    },
+  })
+    .then(async (payload) => {
+      const data = asBinaryResponse(payload).data;
       const isLogin = await blobValidate(data);
       if (isLogin) {
         const blob = new Blob([data]);
         saveAs(blob, filename);
       } else {
         const resText = await data.text();
-        const rspObj = JSON.parse(resText);
+        const parsed: unknown = JSON.parse(resText);
+        const rspObj = isRecord(parsed) ? parsed : {};
+        const codeValue = rspObj.code;
+        const codeKey =
+          typeof codeValue === "string" || typeof codeValue === "number"
+            ? String(codeValue)
+            : undefined;
         const errMsg =
-          (errorCode as ErrorCodeLookup)[rspObj.code] ||
-          rspObj.msg ||
-          (errorCode as ErrorCodeLookup)["default"];
-        ElMessage.error(errMsg as string);
+          (codeKey ? resolveErrorCode(codeKey) : undefined) ||
+          optionalString(rspObj, "msg") ||
+          resolveErrorCode("default") ||
+          i18n.global.t("chat.downloadError");
+        ElMessage.error(errMsg);
       }
     })
     .catch((r) => {
@@ -328,9 +498,9 @@ export function download(
 // Create an abortable request — accept the public AxiosRequestConfig shape (headers
 // optional) so call sites can pass plain config literals; the stored
 // `requestId` is just a tag used to address controller entries.
-export const createAbortableRequest = (
-  config: AxiosRequestConfig & { requestId?: string }
-) => {
+export const createAbortableRequest = <T = unknown, D = unknown>(
+  config: PhytomniRequestConfig<D>
+): Promise<T> => {
   const controller = new AbortController();
   const requestId = config.requestId || Date.now().toString();
 
@@ -341,7 +511,7 @@ export const createAbortableRequest = (
   config.signal = controller.signal;
   config.requestId = requestId;
 
-  return service(config).finally(() => {
+  return request<T, D>(config).finally(() => {
     // clean up the controller after the request completes
     activeControllers.delete(requestId);
   });
@@ -383,4 +553,4 @@ export const abortAllRequests = (): void => {
   activeControllers.clear();
 };
 
-export default service;
+export default request;

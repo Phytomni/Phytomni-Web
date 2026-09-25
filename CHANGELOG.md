@@ -11,6 +11,292 @@ Newest first.
 > with no runtime contract change. "Dark-launched" = code shipped behind a
 > default-OFF flag, byte-identical to prior behavior until an operator flips it.
 
+## [Unreleased]
+
+_No changes recorded yet._
+
+## [0.1.4] — 2026-09-25
+
+Final Web release for the 0.1.3 compatibility baseline. The release keeps
+all new Bot-facing capabilities dark-launched and does not claim Bot,
+operations, staging, or production acceptance.
+
+### 🐛 Design terminal runs close without report_revision
+
+- A RUNNING Design ledger whose stored revision is 0 still takes a
+  succeeded Bot GET that omits `report_revision`, so the wait card
+  clears and the zip can download. Missing revision is no longer
+  written as 0.
+
+### 🐛 Deep Genome database search ignores case
+
+- Gene list `title` matches species code and gene id without regard to
+  letter case, so `os01g0177400` finds `Os01g0177400`.
+
+### 🐛 Demo case copy and citation markup
+
+- Citation rows render Bot `&lt;i&gt;` italics as emphasis and turn
+  filename-style `\_` separators into commas.
+- Knowledge, Review, and Brief Gene tapes no longer show raw HTML tags,
+  escaped underscores, or a `Title:` manuscript prefix.
+- Brief Gene asks as a rice gene question.
+- Data's CDS table is labeled `CDS length (bp)` instead of
+  `LENGTH([sequence_2])`.
+- Deep Genome opens with comma-separated aliases, `Discussion`, and
+  `Structure` / `Single-cell` figure names.
+- Network asks to analyze the rice hormone network, not "to analysis".
+- Case cards expose the agent title as the accessible name.
+
+### 🐛 Deep Genome case citations, figures, and references
+
+- The Os01g0177400 example uses superscript citation numbers instead of
+  `[document:N]` tokens, matching live Expert cited answers.
+- Case figures and the structure file load from `/attachments/Os01g0177400/`.
+- The report body no longer repeats the Reference list already shown under
+  the answer.
+
+### ✨ Unlisted model identity page
+
+- Add the original 1000-query identity verification HTML as a static file
+  at `/model-identity.html`. Nginx serves it before SPA fallback. Nothing
+  in the product UI links to it.
+- Restyle that page to Phytomni chrome (page surface, type, action blue).
+  The pie chart, category colors, counts, table, and copy stay the same.
+
+### ✨ Agent cases play inside Chat
+
+- The eight empty-state case cards and Explore Agents entries open a
+  read-only Chat transcript of the frozen example, not a separate demo
+  shell, and they do not appear in history.
+- Ask this agent returns to a new Expert chat with that agent selected
+  and does not copy the sample question.
+- Legacy `/knowledge-agent` (and four sibling demo URLs) redirect to
+  `/cases/…`. `/analyst-agent` stays the gated product page.
+- The cited list prefers a Bot `formatted_citation` Nature-style string
+  the same way a live Expert stream does.
+- Knowledge and Brief Gene example transcripts now use a live
+  Expert-path recapture of the original questions (cited Chat replies,
+  not the 2025-08 static wording). Demo `doc_list` keeps Bot
+  `formatted.references` rows (`formatted_citation`).
+- Review is recaptured the same way after A2UI confirm resume.
+  Bibliographic enrichment runs only after resume, so the demo list
+  includes Nature rows when the citation database hits.
+- Network and Design sample questions now name rice.
+- Deep Genome asks as a person for rice gene `Os01g0177400`.
+
+### 🐛 Chat query failures log Bot status and code
+
+- `ApiQuery` client and server failures record `bot_status`, `bot_code`,
+  and `bot_path` when the error is a Bot APIError, so a Request ID can be
+  joined to the Research 422 without logging the Bot message body.
+
+### 🐛 Expert send failures show the gateway 4xx message
+
+- Blocking chat send uses the Surfaceable 4xx `message` from the gateway
+  and still attaches the request id, so a Research planning 400 is no
+  longer only "Failed to send message".
+- 5xx and overlong or unsafe messages stay on the generic sendFailed copy.
+
+### 🐛 Explicit logout revokes the current token
+
+- The sidebar and layout logout actions call `POST /api/v1/auth/logout`
+  before clearing local storage, so a stolen JWT cannot outlive the click.
+- Session-expired 401 handling still only clears locally and does not post
+  logout, so an already-rejected token cannot loop.
+
+### 🐛 Failed chat logs include the request id
+
+- Query 5xx, 4xx, and stream failures log the same `request_id` the error
+  bubble shows, plus the conversation id when the route has one, so ops can
+  grep the id a user pasted.
+
+### 🐛 Ready ZIP with sibling child parts no longer stays RUNNING
+
+- Design and multi-goal Research no longer freeze on RUNNING after Bot
+  marks the result archive ready, when `execution.output_dirs` lists
+  several `children/part-NNN` directories under one run. The wait card
+  can complete; the ZIP still resolves under the shared
+  `children/delivery` root.
+- Ready decode counts unique publish roots after collapsing parts, so
+  Research's 20-goal cap is inside the archive-dir limit. `obs://` and
+  `/obs/` spellings of the same root collapse together.
+
+### 🐛 Design wait card no longer Failed on packing errors
+
+- When science succeeded and the result ZIP failed because a producer
+  manifest was invalid, the wait card stays completed and the ledger
+  row becomes SUCCEEDED. The archive strip explains that packaging is
+  incomplete. Retry is not offered.
+
+### 🐛 Stream and wait-card resume
+
+- Chat, Knowledge, and Brief Gene keep generating after refresh; the reply continues in the same stream.
+- Data and Review jobs survive leaving the tab and show the wait card until they finish.
+
+### 🐛 Text uploads default to document; unknown suffixes default to dataset
+
+- Known text suffixes (`.txt`, `.text`) create a `document` upload.
+- Unknown suffixes such as `.png` / `.py` / `.bin` create a `dataset`
+  upload instead of failing with 422.
+- Strong suffixes such as `.yaml` / `.pdf` / `.csv` keep their existing
+  classification. A single-channel agent still coerces only these
+  defaulted names onto its one channel.
+
+### 🐛 Downloaded Word and PDF keep heading styles
+
+- Generated Word downloads bind Markdown headings to built-in `Heading1`…
+  style IDs, so Word/WPS show heading formatting and an outline.
+- Generated PDF downloads add an outline bookmark per heading and use a
+  fixed heading size table (18/16/14…) instead of body-sized text.
+
+### 🐛 Instant Chat copy is no longer empty
+
+- Copy on Instant ChatAgent (and other stream-family replies) writes the
+  visible Markdown from stream blocks. An empty payload reports copy failed
+  instead of a successful blank clipboard.
+
+### 🐛 Wait card follows remote completion without reload
+
+- A running Chat wait card leaves the running state when lifecycle reports
+  SUCCEEDED, FAILED, or CANCELLED, including while the tab is in the
+  background.
+- Fan-out children (Design, Research) show on the wait card, including
+  destined-to-fail rows.
+
+### 🐛 Wait card keeps elapsed progress after reload
+
+- Reopening a running wait card after login or refresh reconstructs elapsed
+  time from the persisted assistant `created_at`, so the percent no longer
+  restarts at 0% while the task is still running.
+
+### 🐛 Wait card current step, spinner, and agent name
+
+- The live working-step row keeps a leading spinner in front of its number
+  (`[spinner] 18. …`) and stays bold through the last step until the official
+  answer replaces the wait card.
+- The assistant wait card shows the known agent name above the blue bubble.
+  Finished turns keep that name and drop the “This turn was answered by”
+  prefix.
+
+### 🐛 Agent preview no longer blocks neighboring clicks
+
+- Expert agent hover cards flip above the chip when there is more room
+  above, instead of sliding over the chip row and case links.
+- A click that lands on the card but belongs to another chip or case
+  passes through to that control.
+
+### 🧹 Chat console and form-field Issues
+
+- Drop the leftover `Theme initialized` boot log so a clean chat session no
+  longer prints a debug object in the console.
+- Give the Expert agent picker an `id` and `name` so Chrome no longer reports
+  a nameless form field on `/chat`.
+- An authenticated visit to `/` now replaces directly to `/chat` instead of
+  bouncing through `/login`, which Chrome was marking as a skippable history
+  item.
+
+### 🔐 Default role tool grants
+
+- `user_tool_names` defaults are now guest = Chat/Knowledge/Data, user =
+  those plus Review/BriefGene, and vip_user = all ten agents. Other role
+  codes are not rewritten.
+
+### 🐛 Expert forced-agent follow-up
+
+- An accepted Expert turn keeps the captured `selectedAgent`. A Knowledge
+  (or other forced-tool) follow-up still sends `tool=<that agent>` instead
+  of clearing back to Auto and hitting autonomous Expert routing.
+
+### 🛑 Owner-initiated task cancel
+
+- JWT owners can `POST /api/v1/async-tasks/:id/cancel`. The gateway authorizes
+  the Web row, then cancels the Bot run and last-claim jobs. The browser never
+  supplies a Bot run id.
+- Tasks without a Bot run id cancel locally. Already-emitted tokens stay on the
+  row as a cancelled draft and are not promoted to an official report.
+- Succeeded, failed, timed-out, and finalizing rows return 409. A cancelled
+  row is sticky against a later shared-fingerprint success snapshot.
+- Composer Stop, pollable wait, dedicated agent pages, and Task Manager all
+  call the same cancel API. Already-emitted tokens stay on the same assistant
+  row as a cancelled draft. Leaving a dedicated page only disconnects
+  transport and does not cancel the remote job.
+- Persist CANCELLED even when the Bot cancel snapshot cannot be merged, and
+  do not let a later Query persist overlay a cancelled owner row.
+- Expert Knowledge and BriefGene streams omit Instant conversation envelopes
+  so Bot can mint a run that owner cancel can stop.
+- After an owner row exists, Stop does not abort the in-flight Query. That
+  lets DeepGenome finish minting its Bot run so cancel can settle
+  `cancelled` instead of request-abort `failed`.
+
+### 🧬 Research input resolution
+
+- Research submissions retain one query and one Attach action while accepting
+  uploaded assets or pasted dataset paths; no path or description input is
+  added, and the complete user text remains available to the Bot-owned resolver.
+- The Web query default is 131,072 Unicode code points with a 1,048,576 hard
+  maximum. Version 1 of `research_input_resolution_v1` negotiates the effective
+  limits: 64 attachments, 64 pasted dataset paths, and 128 combined references
+  by default, each with a 256 hard maximum. No layer silently truncates or adds
+  a new rollout cohort.
+- Fresh schemas declare `question_agent_logs.query` and `answer` as
+  `MEDIUMTEXT`. Production widening and proxy allowance remain operator-owned;
+  deploy the compatible Bot before Web and keep widened columns on rollback.
+- Local Web gates cover repository behavior only. Bot delivery, production DDL,
+  proxy configuration, paired runtime, staging, and production acceptance
+  remain independently verified external work.
+
+### 🧪 Frontend toolchain contract reconciliation
+
+- Keep Vitest 4 coverage auto-update disabled through its supported
+  `coverage.thresholds.autoUpdate` option, align the Vite 8 checkpoint evidence,
+  and make TypeScript reverse probes independent of incremental build state.
+- Close the final Vite 8 contract gaps by removing the transitional Sass option,
+  reconciling the exact coverage inventory, hardening warning-oracle mode lookup,
+  and stabilizing upgraded Vue test fixtures without changing thresholds.
+
+### 🛡️ Quality gates and CI governance
+
+- Static-analysis governance now closes the exact registry with zero temporary
+  records while retaining target-level evidence and fail-closed reconciliation.
+- The complete local gate covers the read-only frontend and Go checks,
+  repository policy checks, G13 i18n, G14 visual, G15 A2UI, G16 Bot/Web
+  compatibility, and G17 activation evidence.
+- Node 26, Python 3.12, and the repository quality runners are aligned without
+  changing application coverage behavior; coverage G12 is unchanged, and Bot, operations, and deployment code remain outside this scope.
+- The frontend now uses the direct Vite `8.1.5` toolchain with Vitest `4.1.10`,
+  TypeScript `6.0.3`, vue-tsc `3.3.8`, ESLint `10.7.0`, and Prettier `3.9.6`.
+  The explicit browser floor is Chrome/Edge 111, Firefox 114, and Safari 16.4.
+- Build, test, and coverage release evidence runs through the warning oracle;
+  raw frontend commands remain diagnostic-only. TypeScript 7 remains a
+  documented compatibility boundary until a stable typescript-eslint peer
+  release supports it and the complete gate passes.
+
+### 🔗 Bot compatibility and chat continuity
+
+- Native Bot responses normalize a compatible top-level `id` to the Web
+  `run_id` contract while rejecting conflicting identities.
+- Failed or ambiguous new-chat submissions retain temporary dialogue identity
+  until an authoritative Web dialogue id is returned.
+- Typed Bot upstream failures preserve 504 timeouts, map other upstream 5xx
+  responses to safe 502 errors, and keep genuine Web failures at 500.
+- Server-derived permissions now constrain Expert routing, while Instant keeps
+  the ChatAgent-only contract and dedicated Research, Design, and Network
+  product runs use their own authenticated endpoint.
+- Expert selection is kept across rejection, abort, timeout, and uncertain
+  transport outcomes, then cleared only after an accepted turn.
+- All eight Bot/Web acceptance rows remain **External Pending** and all new
+  capability flags remain default-off.
+
+### 🎨 Frontend visual evidence
+
+- Chat visual refinement and the current release candidate were captured with
+  the deterministic fixture harness; the human-reviewed package covers desktop
+  light/dark, mobile drawer states, and wide desktop geometry.
+- Local production-preview self-review now covers login, public legal pages,
+  lazy Chinese locale loading, light/dark Chat fixture shells, and the mobile
+  drawer. Real authenticated Chat, 200% zoom, and forced-colors remain
+  explicitly `Needs Verification` pending owner-provided evidence.
+
 ---
 
 ## [0.1.3] — 2026-07-18

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -625,7 +626,10 @@ def parse_diff_path(line: str) -> str:
     Returns:
         The normalized new-file path, or `<unknown>` for malformed headers.
     """
-    parts = line.split()
+    try:
+        parts = shlex.split(line)
+    except ValueError:
+        return "<unknown>"
     if len(parts) < 4:
         return "<unknown>"
     path = parts[3]
@@ -741,6 +745,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     mode.add_argument(
         "--git-range",
+        "--range",
         metavar="RANGE",
         help="scan added lines and changed paths in a Git revision range",
     )
@@ -757,12 +762,16 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code. Zero means no findings were detected.
     """
     args = parse_args(argv or sys.argv[1:])
-    if args.staged:
-        findings = scan_paths(staged_files(), staged=True)
-    elif args.git_range:
-        findings = scan_git_range(args.git_range)
-    else:
-        findings = scan_paths(tracked_files(), staged=False)
+    try:
+        if args.staged:
+            findings = scan_paths(staged_files(), staged=True)
+        elif args.git_range:
+            findings = scan_git_range(args.git_range)
+        else:
+            findings = scan_paths(tracked_files(), staged=False)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"Secret scan failed: {str(exc)[:160]}", file=sys.stderr)
+        return 2
 
     if findings:
         print_findings(findings)

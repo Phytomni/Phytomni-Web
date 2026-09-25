@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "tool_name": "DeepGenomeAgent",
+      "text": "  ",
+      "valid": false
+    },
+    {
+      "name": "task-created",
+      "tool_name": "DeepGenomeAgent",
+      "text": "Server task created: synthetic-task",
+      "valid": false
+    },
+    {
+      "name": "task-created-zh",
+      "tool_name": "DigitalDesignAgent",
+      "text": "任务创建成功: synthetic-task",
+      "valid": false
+    },
+    {
+      "name": "no-text-en",
+      "tool_name": "DigitalDesignAgent",
+      "text": "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.",
+      "valid": false
+    },
+    {
+      "name": "no-text-zh",
+      "tool_name": "DigitalDesignAgent",
+      "text": "分析已到达终态，但没有可用于综合的已验证科学文本产物。在形成结论前，请结合可下载的科学产物和执行警告进行审阅。",
+      "valid": false
+    },
+    {
+      "name": "synthesis-en",
+      "tool_name": "DigitalDesignAgent",
+      "text": "The analysis reached a terminal outcome, but scientific report synthesis was unavailable. The validated scientific artifacts remain available for review before drawing conclusions. The terminal outcome covered 12 tasks, with 12 successful.",
+      "valid": false
+    },
+    {
+      "name": "synthesis-zh",
+      "tool_name": "GeneNetworkAgent",
+      "text": "分析已到达终态，但科学报告综合不可用。在形成结论前，仍可审阅已验证的科学产物。 本次终态包含 12 个任务，其中 10 个任务成功。",
+      "valid": false
+    },
+    {
+      "name": "synthesis-base-en",
+      "tool_name": "AnalystAgent",
+      "text": "The analysis reached a terminal outcome, but scientific report synthesis was unavailable. The validated scientific artifacts remain available for review before drawing conclusions.",
+      "valid": false
+    },
+    {
+      "name": "synthesis-base-zh",
+      "tool_name": "InSilicoResearchAgent",
+      "text": "分析已到达终态，但科学报告综合不可用。在形成结论前，仍可审阅已验证的科学产物。",
+      "valid": false
+    },
+    {
+      "name": "partial-science",
+      "tool_name": "DeepGenomeAgent",
+      "text": "# Partial report\n\nThe alignment failed at locus 12 and was retried successfully [1].",
+      "valid": true
+    },
+    {
+      "name": "final-science",
+      "tool_name": "DigitalDesignAgent",
+      "text": "  # Final report\n\nBinding was detected in three synthetic controls [1].  ",
+      "valid": true
+    },
+    {
+      "name": "failure-discussion",
+      "tool_name": "DeepGenomeAgent",
+      "text": "Scientific report synthesis was unavailable for one comparison; measured expression increased twofold.",
+      "valid": true
+    },
+    {
+      "name": "template-followed-by-science",
+      "tool_name": "DigitalDesignAgent",
+      "text": "The analysis reached a terminal outcome, but scientific report synthesis was unavailable. The validated scientific artifacts remain available for review before drawing conclusions.\n\nThe control measurement was 2.4 units [1].",
+      "valid": true
+    },
+    {
+      "name": "no-text-followed-by-science",
+      "tool_name": "DigitalDesignAgent",
+      "text": "The analysis reached a terminal outcome, but no validated scientific text artifact was available for synthesis. Review the downloadable scientific artifacts and execution warnings before drawing conclusions.\n\nRetained observation: the synthetic control measured 2.4 units.",
+      "valid": true
+    },
+    {
+      "name": "non-template-scope",
+      "tool_name": "DigitalDesignAgent",
+      "text": "The analysis reached a terminal outcome, but scientific report synthesis was unavailable. The validated scientific artifacts remain available for review before drawing conclusions. The terminal outcome covered an unmeasured biological pathway.",
+      "valid": true
+    }
+  ]
+}

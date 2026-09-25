@@ -90,7 +90,8 @@ const handleCommand = (command: ThemeType) => {
     cursor: pointer;
     font-family: inherit;
     font-size: 14px;
-    transition: color var(--phy-motion-fast) var(--phy-motion-ease-out),
+    transition:
+      color var(--phy-motion-fast) var(--phy-motion-ease-out),
       background-color var(--phy-motion-fast) var(--phy-motion-ease-out);
 
     &:hover {

@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import PhyErrorState from "@/components/state/PhyErrorState.vue";
+
+const ERROR_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/state/PhyErrorState.vue"),
+  "utf8"
+);
 
 describe("PhyErrorState", () => {
   it("renders the supplied copy as an actionable alert", () => {
-    const wrapper = mount(PhyErrorState, {
+    expect(ERROR_SOURCE).toContain("overflow-wrap: anywhere;");
+    const wrapper = mountWithApp(PhyErrorState, {
       props: {
         title: "Could not load",
         description: "Please try again.",
@@ -20,7 +28,7 @@ describe("PhyErrorState", () => {
   });
 
   it("emits retry from the native keyboard-accessible button", async () => {
-    const wrapper = mount(PhyErrorState, {
+    const wrapper = mountWithApp(PhyErrorState, {
       props: { retryLabel: "Try again" },
     });
     const button = wrapper.get("button");
@@ -31,7 +39,7 @@ describe("PhyErrorState", () => {
   });
 
   it("does not render an action when no retry copy or slot is supplied", () => {
-    const wrapper = mount(PhyErrorState, {
+    const wrapper = mountWithApp(PhyErrorState, {
       props: { title: "Unavailable" },
     });
 
@@ -39,7 +47,7 @@ describe("PhyErrorState", () => {
   });
 
   it("supports a slotted retry control while keeping the component action boundary", async () => {
-    const wrapper = mount(PhyErrorState, {
+    const wrapper = mountWithApp(PhyErrorState, {
       slots: { retry: '<span data-test="retry-copy">Retry now</span>' },
     });
     const button = wrapper.get("button");

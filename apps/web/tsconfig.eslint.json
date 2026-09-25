@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "tests/**/*.ts",
+    "tests/**/*.vue",
+    "vite/**/*.ts",
+    "vite.config.mts",
+    "vitest.config.mts"
+  ]
+}

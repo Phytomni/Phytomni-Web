@@ -1,61 +1,244 @@
 import type { ArtifactKind, ChatMessage } from "../types";
-import type { RemoteAgentTool } from "@/constants/agents";
+import {
+  completedStreamMarkdownToText,
+  streamMarkdownToText,
+} from "../messageTypes";
+import {
+  isApprovedReportText,
+  isDeepGenomeLedgerPlaceholder,
+} from "./valid-report-ledger";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "./report-presentation";
 
-/** Remote product artifacts stay explicit until each surface has a renderer. */
-export const REMOTE_AGENT_ARTIFACT_POLICIES: Record<
-  RemoteAgentTool,
-  { kind: ArtifactKind; autoOpen: boolean }
-> = {
-  InSilicoResearchAgent: { kind: "research", autoOpen: true },
-  DigitalDesignAgent: { kind: null, autoOpen: false },
-  GeneNetworkAgent: { kind: null, autoOpen: false },
+export type ReportSource = "final" | "intermediate" | "message";
+
+export type ArtifactPreviewLifecycle = {
+  phase: string;
+  terminal: boolean;
 };
 
-/**
- * Chat artifact behavior is intentionally independent from product-route
- * liveness: existing InSilicoResearch chat rows retain their tested
- * research-artifact behavior while dark product routes remain unavailable.
- */
-const ARTIFACT_POLICY_BY_TOOL: Readonly<
-  Record<string, { kind: ArtifactKind; autoOpen: boolean }>
-> = {
-  DeepGenomeAgent: { kind: "deep-genome", autoOpen: true },
-  KnowledgeAgent: { kind: "cited-report", autoOpen: false },
-  ReviewAgent: { kind: "cited-report", autoOpen: false },
-  BriefGeneAgent: { kind: "cited-report", autoOpen: false },
-  ...REMOTE_AGENT_ARTIFACT_POLICIES,
-};
+const NON_TERMINAL_RUN_STATUSES = new Set([
+  "PENDING",
+  "QUEUED",
+  "ACCEPTED",
+  "SUBMITTING",
+  "PREPARING",
+  "RESOLVING_INPUTS",
+  "PLANNING",
+  "RUNNING",
+  "INPUT_REQUIRED",
+  "FINALIZING",
+]);
 
-type ArtifactPolicyMessage = Pick<
+function normalizedRunStatus(message: ArtifactPolicyMessage): string {
+  if (message.botProjection) return reportLifecycleForMessage(message).status;
+  return String(message.botLifecycle?.status ?? message.status ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+export function researchRowLifecycleStatus(
+  status: string
+):
+  | "RUNNING"
+  | "INPUT_REQUIRED"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED"
+  | "TIMED_OUT" {
+  const normalized = status.trim().toUpperCase();
+  if (normalized === "FAILED") return "FAILED";
+  if (normalized === "CANCELLED" || normalized === "CANCELED") {
+    return "CANCELLED";
+  }
+  if (normalized === "TIMED_OUT" || normalized === "TIMEOUT") {
+    return "TIMED_OUT";
+  }
+  if (normalized === "INPUT_REQUIRED") return "INPUT_REQUIRED";
+  if (normalized === "SUCCEEDED") return "SUCCEEDED";
+  return "RUNNING";
+}
+
+function lifecycleTitleKey(phase: string): string {
+  const normalized = phase.trim().toLowerCase();
+  if (normalized === "input_required") return "chat.botReport.inputRequired";
+  return `chat.lifecycle.${normalized}`;
+}
+
+/** Preview card title for a report-backed row; never Finished while still running. */
+export function artifactPreviewTitleKey(
+  message: ArtifactPolicyMessage,
+  lifecycle?: ArtifactPreviewLifecycle | null
+): string | null {
+  const selected = artifactPresentationForMessage(message);
+  if (selected === null) return null;
+  const status = normalizedRunStatus(message);
+  if (NON_TERMINAL_RUN_STATUSES.has(status)) {
+    if (lifecycle && !lifecycle.terminal) {
+      return lifecycleTitleKey(lifecycle.phase);
+    }
+    return lifecycleTitleKey(status);
+  }
+  return reportPresentationFor(
+    reportLifecycleForMessage(message),
+    selected,
+    message.tool_name
+  ).labelKey;
+}
+
+export interface ArtifactPresentation {
+  kind: Exclude<ArtifactKind, null>;
+  report: string;
+  source: ReportSource;
+  identity: string;
+}
+
+export type ArtifactPolicyMessage = Pick<
   ChatMessage,
-  "role" | "content" | "id" | "streaming" | "tool_name"
+  | "role"
+  | "content"
+  | "id"
+  | "streaming"
+  | "tool_name"
+  | "status"
+  | "artifacts"
+  | "delivery"
+  | "streamPresentationKey"
+  | "casePresentationKey"
+  | "streamTerminalFailure"
+  | "botLifecycle"
+  | "botProjection"
+  | "blocks"
 >;
 
+/** The only tools whose report text is promoted to the Chat View surface. */
+export const REPORT_AGENT_POLICIES = Object.freeze({
+  KnowledgeAgent: "cited-report",
+  BriefGeneAgent: "cited-report",
+  ReviewAgent: "cited-report",
+  AnalystAgent: "research",
+  DeepGenomeAgent: "deep-genome",
+  InSilicoResearchAgent: "research",
+  DigitalDesignAgent: "research",
+  GeneNetworkAgent: "research",
+} as const satisfies Record<string, Exclude<ArtifactKind, null>>);
+
+function normalizeIdentity(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const normalized = String(value).trim();
+  return normalized === "" ? null : normalized;
+}
+
+export function artifactIdentityForMessage(
+  message: ArtifactPolicyMessage
+): string | null {
+  const caseKey = normalizeIdentity(message.casePresentationKey);
+  if (caseKey) return `case:${caseKey}`;
+  const stream = normalizeIdentity(message.streamPresentationKey);
+  if (stream) return `stream:${stream}`;
+
+  const row = normalizeIdentity(message.id);
+  if (row) return `message:${row}`;
+
+  const run = normalizeIdentity(
+    message.botLifecycle?.runId ?? message.botProjection?.runId
+  );
+  return run ? `run:${run}` : null;
+}
+
+export function isDeepGenomeTransportPlaceholder(
+  content: ChatMessage["content"]
+): boolean {
+  return isDeepGenomeLedgerPlaceholder(content);
+}
+
+function isReportTextValid(toolName: string, value: unknown): value is string {
+  return isApprovedReportText(toolName, value);
+}
+
+function reportCandidates(
+  message: ArtifactPolicyMessage
+): readonly [ReportSource, unknown][] {
+  const lifecycle = reportLifecycleForMessage(message);
+  const candidates: [ReportSource, unknown][] = [
+    ["final", lifecycle.finalReport],
+    ["intermediate", lifecycle.intermediateReport],
+  ];
+  if (message.streaming === true) return candidates;
+
+  if (!message.streamTerminalFailure) {
+    candidates.push([
+      "message",
+      typeof message.content === "string" ? message.content : "",
+    ]);
+  }
+  candidates.push([
+    "message",
+    message.streamTerminalFailure
+      ? completedStreamMarkdownToText(message.blocks)
+      : streamMarkdownToText(message.blocks),
+  ]);
+  return candidates;
+}
+
+/** Select one stable, report-backed View presentation for a Chat row. */
+export function artifactPresentationForMessage(
+  message: ArtifactPolicyMessage
+): ArtifactPresentation | null {
+  if (message.role !== "assistant") return null;
+
+  const toolName = message.tool_name ?? "";
+  if (!Object.prototype.hasOwnProperty.call(REPORT_AGENT_POLICIES, toolName)) {
+    return null;
+  }
+  const kind =
+    REPORT_AGENT_POLICIES[toolName as keyof typeof REPORT_AGENT_POLICIES];
+  if (!kind) return null;
+
+  const identity = artifactIdentityForMessage(message);
+  if (!identity) return null;
+
+  for (const [source, candidate] of reportCandidates(message)) {
+    if (isReportTextValid(toolName, candidate)) {
+      // Cached DeepGenome files can already be complete while the run is
+      // still non-terminal. Do not open View until the run finishes.
+      if (
+        kind === "deep-genome" &&
+        NON_TERMINAL_RUN_STATUSES.has(normalizedRunStatus(message))
+      ) {
+        return null;
+      }
+      return { kind, report: candidate, source, identity };
+    }
+  }
+  return null;
+}
+
+export function isMeaningfulDeepGenomeReport(
+  content: ChatMessage["content"]
+): boolean {
+  return isReportTextValid("DeepGenomeAgent", content);
+}
+
+/** Report-backed artifact kind; generic file artifacts are handled by the panel. */
 export function artifactKindForMessage(
   message: ArtifactPolicyMessage
 ): ArtifactKind {
-  if (
-    message.role !== "assistant" ||
-    message.streaming === true ||
-    message.id == null ||
-    String(message.id).trim() === "" ||
-    typeof message.content !== "string" ||
-    message.content.trim() === ""
-  ) {
-    return null;
-  }
-
-  return message.tool_name
-    ? ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.kind ?? null
-    : null;
+  return artifactPresentationForMessage(message)?.kind ?? null;
 }
 
-export function shouldAutoOpenArtifact(
+/** Retained as a report-backed predicate for existing lifecycle call sites. */
+export function isCompletedResearchMessage(
   message: ArtifactPolicyMessage
 ): boolean {
-  return (
-    artifactKindForMessage(message) !== null &&
-    !!message.tool_name &&
-    ARTIFACT_POLICY_BY_TOOL[message.tool_name]?.autoOpen === true
-  );
+  return artifactPresentationForMessage(message)?.kind === "research";
+}
+
+/** Retained as a report-backed predicate for existing DeepGenome call sites. */
+export function isCompletedDeepGenomeMessage(
+  message: ArtifactPolicyMessage
+): boolean {
+  return artifactPresentationForMessage(message)?.kind === "deep-genome";
 }

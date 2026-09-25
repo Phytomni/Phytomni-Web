@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
-  push: vi.fn(),
+  push: vi.fn(() => Promise.resolve()),
   go: vi.fn(),
   route: { query: {} as Record<string, unknown> },
 }));
@@ -17,16 +16,21 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push: mocks.push, go: mocks.go }),
 }));
 
-import Unauthorized from "@/views/error/401.vue";
-import NotFound from "@/views/error/404.vue";
-
-// Each mount installs a locale with the requested language. Remove the empty
-// global i18n plugin from tests/setup.ts so this focused suite does not stack
-// two vue-i18n instances on the same app.
-config.global.plugins = [];
+import Unauthorized from "@/views/error/UnauthorizedView.vue";
+import NotFound from "@/views/error/NotFoundView.vue";
 
 const APP_SOURCE = readFileSync(
   resolve(__dirname, "../../src/App.vue"),
+  "utf8"
+);
+
+const UNAUTHORIZED_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/error/UnauthorizedView.vue"),
+  "utf8"
+);
+
+const NOT_FOUND_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/error/NotFoundView.vue"),
   "utf8"
 );
 
@@ -35,26 +39,16 @@ const routerLinkStub = {
   template: "<a :href=\"typeof to === 'string' ? to : to.path\"><slot /></a>",
 };
 
-const makeI18n = (locale: "en-US" | "zh-CN") =>
-  createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-
 const mountUnauthorized = (locale: "en-US" | "zh-CN" = "en-US") =>
-  mount(Unauthorized, {
+  createTestAppContext({ locale }).mount(Unauthorized, {
     global: {
-      plugins: [makeI18n(locale)],
       stubs: { RouterLink: routerLinkStub },
     },
   });
 
 const mountNotFound = (locale: "en-US" | "zh-CN" = "en-US") =>
-  mount(NotFound, {
+  createTestAppContext({ locale }).mount(NotFound, {
     global: {
-      plugins: [makeI18n(locale)],
       stubs: { RouterLink: routerLinkStub },
     },
   });
@@ -62,6 +56,7 @@ const mountNotFound = (locale: "en-US" | "zh-CN" = "en-US") =>
 describe("standalone recovery pages", () => {
   beforeEach(() => {
     mocks.push.mockReset();
+    mocks.push.mockResolvedValue(undefined);
     mocks.go.mockReset();
     mocks.route.query = {};
   });
@@ -78,6 +73,17 @@ describe("standalone recovery pages", () => {
     expect(mocks.go).not.toHaveBeenCalled();
   });
 
+  it("absorbs a rejected 401 root navigation", async () => {
+    mocks.route.query = { noGoBack: "1" };
+    mocks.push.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountUnauthorized();
+
+    await wrapper.get("button[data-action='back']").trigger("click");
+    await Promise.resolve();
+
+    expect(mocks.push).toHaveBeenCalledWith("/");
+  });
+
   it("uses browser history for 401 Back when noGoBack is absent", async () => {
     const wrapper = mountUnauthorized();
 
@@ -89,7 +95,7 @@ describe("standalone recovery pages", () => {
 
   it("keeps a separate Home action after Back on 401", () => {
     const wrapper = mountUnauthorized();
-    const actions = wrapper.findAll("button, a");
+    const actions = wrapper.find(".phy-recovery-actions").findAll("button, a");
 
     expect(actions).toHaveLength(2);
     expect(actions[0].attributes("data-action")).toBe("back");
@@ -112,7 +118,10 @@ describe("standalone recovery pages", () => {
     const zhNotFound = mountNotFound("zh-CN");
 
     expect(
-      enUnauthorized.findAll("button, a").map((node) => node.element.tagName)
+      enUnauthorized
+        .find(".phy-recovery-actions")
+        .findAll("button, a")
+        .map((node) => node.element.tagName)
     ).toEqual(["BUTTON", "A"]);
     expect(zhUnauthorized.text()).toContain(zhCN.errorPage.e401Title);
     expect(enNotFound.text()).toContain(enUS.errorPage.e404Title);
@@ -125,11 +134,18 @@ describe("standalone recovery pages", () => {
   it("keeps recovery surfaces free of global fixed-footer ownership", () => {
     expect(APP_SOURCE).not.toContain("app-footer");
     expect(APP_SOURCE).not.toContain("showFooter");
-    expect(
-      readFileSync(resolve(__dirname, "../../src/views/error/401.vue"), "utf8")
-    ).not.toMatch(/<img\b|401_images/);
-    expect(
-      readFileSync(resolve(__dirname, "../../src/views/error/404.vue"), "utf8")
-    ).not.toMatch(/<img\b|404_images/);
+    expect(UNAUTHORIZED_SOURCE).not.toMatch(/<img\b|401_images/);
+    expect(NOT_FOUND_SOURCE).not.toMatch(/<img\b|404_images/);
+  });
+
+  it("gives each recovery route a local scroll root and in-flow footer", () => {
+    expect(UNAUTHORIZED_SOURCE).toContain('data-scroll-root="recovery"');
+    expect(NOT_FOUND_SOURCE).toContain('data-scroll-root="recovery"');
+    expect(UNAUTHORIZED_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(NOT_FOUND_SOURCE).toContain("overflow-wrap: anywhere;");
+    expect(UNAUTHORIZED_SOURCE).toContain("margin-inline: auto;");
+    expect(NOT_FOUND_SOURCE).toContain("margin-inline: auto;");
+    expect(mountUnauthorized().find(".recovery-footer").exists()).toBe(true);
+    expect(mountNotFound().find(".recovery-footer").exists()).toBe(true);
   });
 });

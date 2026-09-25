@@ -1,9 +1,24 @@
 /** Typed closed registry for the Chat visual fixture harness (test-only). */
 
 export const CHAT_VISUAL_FIXTURE_KEYS = [
+  "report-integrity",
+  "instant-empty",
+  "expert-auto-empty",
+  "expert-selected-empty",
+  "expert-selected-populated",
   "empty",
+  "empty-cases",
   "populated",
   "attachment",
+  "upload-queued",
+  "upload-uploading",
+  "upload-paused",
+  "upload-failed",
+  "upload-completed",
+  "uploading-detail-open",
+  "mixed-ready-failed-expired",
+  "ten-files-overflow",
+  "incompatible-agent-blocked",
   "sending",
   "picker-open",
   "picker-search",
@@ -12,6 +27,12 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "sidebar-compact",
   "sidebar-mobile-closed",
   "sidebar-mobile-open",
+  "agent-preview",
+  "sidebar-compact-explore-open",
+  "history-title-only",
+  "history-loading",
+  "history-empty",
+  "history-error",
   // Phase 3B message-content states (shared fixtures → ChatMessageContent path)
   "short-generic",
   "long-generic",
@@ -38,17 +59,108 @@ export const CHAT_VISUAL_FIXTURE_KEYS = [
   "send-stop",
   "parallel-a",
   "parallel-b",
+  "wait-cot-chat-start",
+  "wait-cot-chat-mid",
+  "wait-cot-chat-flush",
+  "wait-cot-knowledge-mid",
+  "wait-cot-design",
+  "wait-cot-genome",
+  "wait-cot-research",
+  "wait-cot-network-partial",
 ] as const;
 
-export type ChatVisualFixtureKey = typeof CHAT_VISUAL_FIXTURE_KEYS[number];
+export const AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS = [
+  "agent-preparing",
+  "agent-running-partial",
+  "agent-succeeded-artifacts",
+  "agent-succeeded-empty",
+  "agent-failed",
+  "agent-delivery-pending",
+  "agent-delivery-ready",
+  "agent-delivery-retryable",
+  "agent-delivery-nonretryable",
+  "review-confirm-fallback",
+  "analyst-log-pending",
+  "analyst-log-available",
+  "deep-genome-preparing",
+  "deep-genome-running-partial",
+  "deep-genome-succeeded",
+] as const;
+
+export type AgentLifecycleVisualFixtureKey =
+  (typeof AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS)[number];
+export type ChatVisualFixtureKey =
+  (typeof CHAT_VISUAL_FIXTURE_KEYS)[number] | AgentLifecycleVisualFixtureKey;
 
 export const CHAT_VISUAL_LOCALES = ["en-US", "zh-CN"] as const;
-export type ChatVisualLocale = typeof CHAT_VISUAL_LOCALES[number];
+export type ChatVisualLocale = (typeof CHAT_VISUAL_LOCALES)[number];
 
 export const CHAT_VISUAL_THEMES = ["light", "dark"] as const;
-export type ChatVisualTheme = typeof CHAT_VISUAL_THEMES[number];
+export type ChatVisualTheme = (typeof CHAT_VISUAL_THEMES)[number];
 
 export type ChatVisualChatState = "empty" | "populated";
+
+export type ChatVisualHistoryState =
+  "title-only" | "loading" | "empty" | "error";
+
+export type ChatRoutingFixtureMode = "instant" | "expert";
+
+export interface ChatRoutingFixture {
+  id: string;
+  mode: ChatRoutingFixtureMode;
+  selectedAgent: string;
+  populated: boolean;
+  permissionsLoading: boolean;
+  allowedTools: readonly string[];
+}
+
+/**
+ * Deterministic routing snapshots for the test-only Chat visual harness.
+ * They model authorization already resolved by the gateway; they do not enable
+ * a production capability or change the authenticated Chat defaults.
+ */
+export const routingFixtures: readonly ChatRoutingFixture[] = [
+  {
+    id: "instant-empty",
+    mode: "instant",
+    selectedAgent: "",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-auto-empty",
+    mode: "expert",
+    selectedAgent: "",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-selected-empty",
+    mode: "expert",
+    selectedAgent: "DataAgent",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "expert-selected-populated",
+    mode: "expert",
+    selectedAgent: "AnalystAgent",
+    populated: true,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+  },
+  {
+    id: "incompatible-agent-blocked",
+    mode: "expert",
+    selectedAgent: "DeepGenomeAgent",
+    populated: false,
+    permissionsLoading: false,
+    allowedTools: ["ChatAgent", "DeepGenomeAgent"],
+  },
+];
 
 export type ChatVisualFixtureDefinition = {
   key: ChatVisualFixtureKey;
@@ -62,16 +174,175 @@ export type ChatVisualFixtureDefinition = {
   offCanvas: boolean;
   isSending: boolean;
   hasAttachment: boolean;
+  /** Optional resumable-upload lifecycle state rendered by AttachmentChipStrip. */
+  uploadStatus?: import("@/views/chat/upload/types").UploadStatus;
+  /** Open the production chip detail surface after the fixture is mounted. */
+  attachmentDetailOpen?: boolean;
+  /** Sanitized capability snapshot for the attachment target. */
+  attachmentTargetAvailable?: boolean;
+  attachmentTargetBlocked?: boolean;
   selectedAgent: string;
   pickerOpen: boolean;
   pickerSearchQuery: string;
   /** Real rendered `chat-message-row` count (empty ⇒ 0, no hidden fakes). */
   messageCount: number;
+  /** Test-only Agent capability preview state. */
+  agentPreview?: boolean;
+  /** Test-only compact Explore Agents disclosure state. */
+  compactExploreOpen?: boolean;
+  /** Explicit persisted-history recovery state, when applicable. */
+  historyState?: ChatVisualHistoryState;
 };
 
+const uploadFixture = (
+  key: ChatVisualFixtureKey,
+  uploadStatus: import("@/views/chat/upload/types").UploadStatus,
+  options: Pick<ChatVisualFixtureDefinition, "attachmentDetailOpen"> = {}
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "empty",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: true,
+  uploadStatus,
+  ...options,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 0,
+});
+
+const multiAttachmentFixture = (
+  key: ChatVisualFixtureKey,
+  options: Partial<
+    Pick<
+      ChatVisualFixtureDefinition,
+      "selectedAgent" | "attachmentTargetAvailable" | "attachmentTargetBlocked"
+    >
+  > = {}
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "empty",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: true,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 0,
+  ...options,
+});
+
+const agentLifecycleFixture = (
+  key: AgentLifecycleVisualFixtureKey
+): ChatVisualFixtureDefinition => ({
+  key,
+  chatState: "populated",
+  sidebarCollapsed: false,
+  drawerOpen: false,
+  showSidebarTrigger: false,
+  offCanvas: false,
+  isSending: false,
+  hasAttachment: false,
+  selectedAgent: "",
+  pickerOpen: false,
+  pickerSearchQuery: "",
+  messageCount: 1,
+});
+
 const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
+  "report-integrity": {
+    key: "report-integrity",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 1,
+  },
+  "instant-empty": {
+    key: "instant-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-auto-empty": {
+    key: "expert-auto-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-selected-empty": {
+    key: "expert-selected-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "DataAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "expert-selected-populated": {
+    key: "expert-selected-populated",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "AnalystAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
   empty: {
     key: "empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+  },
+  "empty-cases": {
+    key: "empty-cases",
     chatState: "empty",
     sidebarCollapsed: false,
     drawerOpen: false,
@@ -112,6 +383,26 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerSearchQuery: "",
     messageCount: 0,
   },
+  "upload-queued": uploadFixture("upload-queued", "queued"),
+  "upload-uploading": uploadFixture("upload-uploading", "uploading"),
+  "upload-paused": uploadFixture("upload-paused", "paused"),
+  "upload-failed": uploadFixture("upload-failed", "failed"),
+  "upload-completed": uploadFixture("upload-completed", "completed"),
+  "uploading-detail-open": uploadFixture("uploading-detail-open", "uploading", {
+    attachmentDetailOpen: true,
+  }),
+  "mixed-ready-failed-expired": multiAttachmentFixture(
+    "mixed-ready-failed-expired"
+  ),
+  "ten-files-overflow": multiAttachmentFixture("ten-files-overflow"),
+  "incompatible-agent-blocked": multiAttachmentFixture(
+    "incompatible-agent-blocked",
+    {
+      selectedAgent: "DeepGenomeAgent",
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: true,
+    }
+  ),
   sending: {
     key: "sending",
     chatState: "populated",
@@ -223,6 +514,96 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerOpen: false,
     pickerSearchQuery: "",
     messageCount: 0,
+  },
+  "agent-preview": {
+    key: "agent-preview",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    agentPreview: true,
+  },
+  "sidebar-compact-explore-open": {
+    key: "sidebar-compact-explore-open",
+    chatState: "empty",
+    sidebarCollapsed: true,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    compactExploreOpen: true,
+  },
+  "history-title-only": {
+    key: "history-title-only",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 1,
+    historyState: "title-only",
+  },
+  "history-loading": {
+    key: "history-loading",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "loading",
+  },
+  "history-empty": {
+    key: "history-empty",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "empty",
+  },
+  "history-error": {
+    key: "history-error",
+    chatState: "empty",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 0,
+    historyState: "error",
   },
   "short-generic": {
     key: "short-generic",
@@ -560,6 +941,139 @@ const DEFINITIONS: Record<ChatVisualFixtureKey, ChatVisualFixtureDefinition> = {
     pickerSearchQuery: "",
     messageCount: 2,
   },
+  "agent-preparing": agentLifecycleFixture("agent-preparing"),
+  "agent-running-partial": agentLifecycleFixture("agent-running-partial"),
+  "agent-succeeded-artifacts": agentLifecycleFixture(
+    "agent-succeeded-artifacts"
+  ),
+  "agent-succeeded-empty": agentLifecycleFixture("agent-succeeded-empty"),
+  "agent-failed": agentLifecycleFixture("agent-failed"),
+  "agent-delivery-pending": agentLifecycleFixture("agent-delivery-pending"),
+  "agent-delivery-ready": agentLifecycleFixture("agent-delivery-ready"),
+  "agent-delivery-retryable": agentLifecycleFixture("agent-delivery-retryable"),
+  "agent-delivery-nonretryable": agentLifecycleFixture(
+    "agent-delivery-nonretryable"
+  ),
+  "review-confirm-fallback": agentLifecycleFixture("review-confirm-fallback"),
+  "analyst-log-pending": agentLifecycleFixture("analyst-log-pending"),
+  "analyst-log-available": agentLifecycleFixture("analyst-log-available"),
+  "deep-genome-preparing": agentLifecycleFixture("deep-genome-preparing"),
+  "deep-genome-running-partial": agentLifecycleFixture(
+    "deep-genome-running-partial"
+  ),
+  "deep-genome-succeeded": agentLifecycleFixture("deep-genome-succeeded"),
+  "wait-cot-chat-start": {
+    key: "wait-cot-chat-start",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: true,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-chat-mid": {
+    key: "wait-cot-chat-mid",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: true,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-chat-flush": {
+    key: "wait-cot-chat-flush",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: true,
+    hasAttachment: false,
+    selectedAgent: "",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-knowledge-mid": {
+    key: "wait-cot-knowledge-mid",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: true,
+    hasAttachment: false,
+    selectedAgent: "KnowledgeAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-design": {
+    key: "wait-cot-design",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "DigitalDesignAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-genome": {
+    key: "wait-cot-genome",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "DeepGenomeAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-research": {
+    key: "wait-cot-research",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "InSilicoResearchAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
+  "wait-cot-network-partial": {
+    key: "wait-cot-network-partial",
+    chatState: "populated",
+    sidebarCollapsed: false,
+    drawerOpen: false,
+    showSidebarTrigger: false,
+    offCanvas: false,
+    isSending: false,
+    hasAttachment: false,
+    selectedAgent: "GeneNetworkAgent",
+    pickerOpen: false,
+    pickerSearchQuery: "",
+    messageCount: 2,
+  },
 };
 
 export type ResolveChatVisualFixtureOk = {
@@ -576,15 +1090,28 @@ export type ResolveChatVisualFixtureErr = {
 };
 
 export type ResolveChatVisualFixtureResult =
-  | ResolveChatVisualFixtureOk
-  | ResolveChatVisualFixtureErr;
+  ResolveChatVisualFixtureOk | ResolveChatVisualFixtureErr;
 
 export function isChatVisualFixtureKey(
   value: string | null | undefined
 ): value is ChatVisualFixtureKey {
   return (
     typeof value === "string" &&
-    (CHAT_VISUAL_FIXTURE_KEYS as readonly string[]).includes(value)
+    (
+      [
+        ...CHAT_VISUAL_FIXTURE_KEYS,
+        ...AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS,
+      ] as readonly string[]
+    ).includes(value)
+  );
+}
+
+export function isAgentLifecycleVisualFixtureKey(
+  value: string | null | undefined
+): value is AgentLifecycleVisualFixtureKey {
+  return (
+    typeof value === "string" &&
+    (AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS as readonly string[]).includes(value)
   );
 }
 
@@ -624,9 +1151,10 @@ export function resolveChatVisualFixture(
   if (!isChatVisualFixtureKey(state)) {
     return {
       ok: false,
-      error: `Unknown fixture state "${String(
-        state
-      )}". Expected one of: ${CHAT_VISUAL_FIXTURE_KEYS.join(", ")}.`,
+      error: `Unknown fixture state "${String(state)}". Expected one of: ${[
+        ...CHAT_VISUAL_FIXTURE_KEYS,
+        ...AGENT_LIFECYCLE_VISUAL_FIXTURE_KEYS,
+      ].join(", ")}.`,
     };
   }
   if (!isChatVisualLocale(locale)) {
@@ -654,4 +1182,10 @@ export function getChatVisualFixture(
   key: ChatVisualFixtureKey
 ): ChatVisualFixtureDefinition {
   return DEFINITIONS[key];
+}
+
+export function getChatRoutingFixture(
+  id: string | null | undefined
+): ChatRoutingFixture | undefined {
+  return routingFixtures.find((fixture) => fixture.id === id);
 }

@@ -1,6 +1,11 @@
 package bot
 
-import "testing"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestParseAGUIFrame_TextContent(t *testing.T) {
 	frame := []byte("event: TextMessageContent\ndata: {\"type\":\"TextMessageContent\",\"message_id\":\"m1\",\"delta\":\"photosynthesis\"}")
@@ -46,6 +51,88 @@ func TestAccumulator_AnswerRunIDFollowUp(t *testing.T) {
 	}
 	if a.Err() != nil {
 		t.Fatalf("Err = %v, want nil", a.Err())
+	}
+}
+
+func TestAccumulator_PhytoReferencesShapeCitedAnswer(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	content, refs, canonical := reviewedBotCitationFixture(t)
+	text, _ := json.Marshal(content)
+	referencePayload, err := json.Marshal(map[string]any{"doc_list": refs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed := []string{
+		`event: RunStarted` + "\n" + `data: {"type":"RunStarted","run_id":"run_refs"}`,
+		`event: TextMessageContent` + "\n" + `data: {"type":"TextMessageContent","delta":` + string(text) + `}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":` + string(referencePayload) + `}`,
+		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run_refs"}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	got, err := ShapeAnswer("knowledge", a.AnswerText(), a.CitedFormatted())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Content string          `json:"content"`
+		DocList json.RawMessage `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
+	}
+	if parsed.Content != content || string(parsed.DocList) != string(canonical) || a.RunID() != "run_refs" {
+		t.Fatal("accumulated source/references/run identity drift")
+	}
+}
+
+func TestAccumulator_PhytoReferencesMalformedSkipped(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	feed := []string{
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":"not-an-object"}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":"oops"}}`,
+		`event: RunFinished` + "\n" + `data: {"type":"RunFinished","run_id":"run_bad"}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	if a.Err() != nil {
+		t.Fatalf("malformed phyto.references must not fail the stream: %v", a.Err())
+	}
+	if a.CitedFormatted() != nil {
+		t.Fatalf("CitedFormatted = %#v, want nil for unusable frames", a.CitedFormatted())
+	}
+}
+
+func TestAccumulator_PhytoReferencesBlankDoesNotClobber(t *testing.T) {
+	a := NewAGUIAccumulator("")
+	feed := []string{
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A"}]}}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[]}}`,
+		`event: Custom` + "\n" + `data: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"Doc A"},"x",null]}}`,
+	}
+	for _, f := range feed {
+		if ev, ok := ParseAGUIFrame([]byte(f)); ok {
+			a.Observe(ev)
+		}
+	}
+	got, err := ShapeAnswer("knowledge", "body", a.CitedFormatted())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		DocList []map[string]interface{} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("shaped answer is not JSON: %v (%s)", err, got)
+	}
+	if len(parsed.DocList) != 3 || parsed.DocList[0]["title"] != "Doc A" || parsed.DocList[1]["citation"] == nil || parsed.DocList[2]["citation"] == nil {
+		t.Fatalf("doc_list = %#v, want Doc A and both unavailable slots retained", parsed.DocList)
 	}
 }
 
@@ -130,6 +217,128 @@ func TestAccumulator_EmptyDeltaIsNoOp(t *testing.T) {
 	a.Observe(ev)
 	if a.AnswerText() != "" {
 		t.Fatalf("empty delta appended %q, want empty", a.AnswerText())
+	}
+}
+
+func validAGUIContextStage(turnID string) ContextStageMetadata {
+	return ContextStageMetadata{
+		SchemaVersion:                  1,
+		TurnID:                         turnID,
+		SelectedAgentID:                "ChatAgent",
+		RouteSource:                    "instant_lock",
+		RouteReasonCode:                "INSTANT_LOCK",
+		BaseBusinessContextVersion:     0,
+		ProposedBusinessContextVersion: 1,
+		LastAppliedLedgerCursor:        1,
+	}
+}
+
+func contextStageFrame(t *testing.T, stage ContextStageMetadata) AGUIEvent {
+	t.Helper()
+	raw, err := json.Marshal(stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := []byte(
+		"event: Custom\n" +
+			`data: {"type":"Custom","name":"phyto.context_staged","value":` +
+			string(raw) + "}",
+	)
+	event, ok := ParseAGUIFrame(frame)
+	if !ok {
+		t.Fatal("context stage frame did not parse")
+	}
+	return event
+}
+
+func TestAGUIAccumulatorContextAcceptsOneValidEventAndIdenticalDuplicate(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	stage := validAGUIContextStage("17")
+
+	acc.Observe(contextStageFrame(t, stage))
+	acc.Observe(contextStageFrame(t, stage))
+
+	if err := acc.ProtocolErr(); err != nil {
+		t.Fatalf("identical context stage duplicate failed: %v", err)
+	}
+	if got := acc.ContextStage(); got == nil || *got != stage {
+		t.Fatalf("context stage = %#v, want %#v", got, stage)
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsConflictingDuplicate(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	first := validAGUIContextStage("17")
+	conflict := first
+	conflict.ContextDegraded = true
+
+	acc.Observe(contextStageFrame(t, first))
+	acc.Observe(contextStageFrame(t, conflict))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageConflict) {
+		t.Fatalf("protocol error = %v, want context stage conflict", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsEventAfterRunFinished(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	finished, ok := ParseAGUIFrame([]byte(
+		`event: RunFinished` + "\n" +
+			`data: {"type":"RunFinished","run_id":"run-17"}`,
+	))
+	if !ok {
+		t.Fatal("RunFinished frame did not parse")
+	}
+	acc.Observe(finished)
+	acc.Observe(contextStageFrame(t, validAGUIContextStage("17")))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageAfterFinished) {
+		t.Fatalf("protocol error = %v, want context stage after finish", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsMalformedValue(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	event, ok := ParseAGUIFrame([]byte(
+		`event: Custom` + "\n" +
+			`data: {"type":"Custom","name":"phyto.context_staged","value":{"turn_id":"17","secret":"raw-payload-marker"}}`,
+	))
+	if !ok {
+		t.Fatal("malformed context frame must still parse as an AG-UI event")
+	}
+	acc.Observe(event)
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageMalformed) {
+		t.Fatalf("protocol error = %v, want malformed context stage", acc.ProtocolErr())
+	}
+	if strings.Contains(acc.ProtocolErr().Error(), "raw-payload-marker") {
+		t.Fatalf("protocol error exposed raw payload: %v", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextRejectsMismatchedTurn(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	acc.Observe(contextStageFrame(t, validAGUIContextStage("18")))
+
+	if !errors.Is(acc.ProtocolErr(), ErrAGUIContextStageTurnMismatch) {
+		t.Fatalf("protocol error = %v, want turn mismatch", acc.ProtocolErr())
+	}
+}
+
+func TestAGUIAccumulatorContextIgnoresUnknownCustomEvent(t *testing.T) {
+	acc := NewAGUIAccumulator("17")
+	event, ok := ParseAGUIFrame([]byte(
+		`event: Custom` + "\n" +
+			`data: {"type":"Custom","name":"future.context","value":{"secret":"must-not-be-read"}}`,
+	))
+	if !ok {
+		t.Fatal("unknown custom frame did not parse")
+	}
+	acc.Observe(event)
+
+	if acc.ContextStage() != nil || acc.ProtocolErr() != nil {
+		t.Fatalf("unknown custom event changed context state: stage=%#v err=%v",
+			acc.ContextStage(), acc.ProtocolErr())
 	}
 }
 

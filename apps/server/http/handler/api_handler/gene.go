@@ -1,20 +1,18 @@
 package api_handler
 
 import (
+	"errors"
 	"mime"
 	"net/http"
-	"os"
 	"path"
-	"path/filepath"
 	"phytomni-server/common"
 	"phytomni-server/common/i18n"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/middleware"
-	"phytomni-server/utils"
+	"phytomni-server/service/api_service"
 	"phytomni-server/utils/errs"
 
 	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
 
 	"strconv"
 	"strings"
@@ -61,8 +59,12 @@ func (ph *Handler) GeneDetails(ctx *gin.Context) {
 		return
 	}
 
-	list, err := ph.service.GeneDetails(ctx, fileName)
+	list, err := ph.service.GeneDetails(ctx.Request.Context(), fileName)
 	if err != nil {
+		if errors.Is(err, api_service.ErrGeneManifestConflict) || errors.Is(err, api_service.ErrGeneMaterialContent) || errors.Is(err, api_service.ErrGeneResourceTooLarge) {
+			geneResourceFailure(ctx, err)
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}
@@ -131,11 +133,10 @@ func (ph *Handler) GetDownloadObsFile(ctx *gin.Context) {
 }
 
 // RelayFileDownload streams an OBS object through the Bot relay. Auth is via
-// a short-lived query token (middleware.ParseDownloadToken): window.open,
-// <img src>, and email links cannot carry an Authorization header, so this
-// is the unified browser-direct download entry point.
+// a short-lived query token (middleware.ParseDownloadToken), allowing browser
+// downloads without placing the OBS key in the URL.
 func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
-	key, err := middleware.ParseDownloadToken(ctx.Query("t"))
+	key, err := middleware.ParseDownloadToken(ctx.Query("token"))
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.TMaybe(ctx, err.Error())})
 		return
@@ -168,69 +169,75 @@ func (ph *Handler) RelayFileDownload(ctx *gin.Context) {
 	ctx.DataFromReader(http.StatusOK, length, contentType, rc, nil)
 }
 
-// GeneImage serves a public gene-example image from the obsfs mount. The URL is
-// /api/v1/gene-images/:gene/:file (emitted into the md by the data pipeline).
-// Both path segments are validated (CleanUploadFilename) and the join is
-// containment-checked (SafeJoinUploadPath), so no request can read outside
-// <mount>/img/<gene>/. Gene data is public, so there is no per-user auth.
+// GeneImage serves public raster examples; the service confines mounted reads
+// and permits only the existing curated PNG grammar through the Bot relay.
 func (ph *Handler) GeneImage(ctx *gin.Context) {
-	gene, err := utils.CleanUploadFilename(ctx.Param("gene"))
+	file := ctx.Param("file")
+	data, contentType, err := ph.service.GeneImage(ctx.Request.Context(), ctx.Param("gene"), file)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
+		geneResourceFailure(ctx, err)
 		return
 	}
-	file, err := utils.CleanUploadFilename(ctx.Param("file"))
+	writeGeneImage(ctx, data, contentType, file)
+}
+
+// GeneResource is mounted exclusively in the authenticated gene route group.
+func (ph *Handler) GeneResource(ctx *gin.Context) {
+	file, err := ph.service.GeneResource(ctx.Request.Context(), ctx.Param("id"), ctx.Param("resource_id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
+		geneResourceFailure(ctx, err)
 		return
 	}
+	writeGeneImage(ctx, file.Data, file.MediaType, file.Name)
+}
 
-	mount := viper.GetString("gene_obsfs_path")
-	if mount == "" {
-		// Relay image fallback is a Bot-handoff follow-up; the obsfs mount is the
-		// production path for images.
-		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "gene.fetch_failed")})
-		return
-	}
-
-	base := filepath.Join(mount, "img", gene)
-	fullPath, err := utils.SafeJoinUploadPath(base, file)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.file_name_required")})
-		return
-	}
-
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "gene.fetch_failed")})
-		return
-	}
-
-	contentType := mime.TypeByExtension(path.Ext(file))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	disposition := "attachment"
-	if inlineSafeImageTypes[contentType] {
-		disposition = "inline"
-	}
+func writeGeneImage(ctx *gin.Context, data []byte, contentType, file string) {
 	ctx.Header("X-Content-Type-Options", "nosniff")
 	ctx.Header("Content-Security-Policy", "default-src 'none'; sandbox")
-	ctx.Header("Content-Disposition", disposition+`; filename="`+sanitizeFilename(file)+`"`)
+	ctx.Header("Content-Disposition", `inline; filename="`+sanitizeFilename(file)+`"`)
 	ctx.Data(http.StatusOK, contentType, data)
 }
 
+func geneResourceFailure(ctx *gin.Context, err error) {
+	status := http.StatusBadGateway
+	switch {
+	case errors.Is(err, api_service.ErrGeneResourceInvalid):
+		status = http.StatusBadRequest
+	case errors.Is(err, api_service.ErrGeneResourceNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, api_service.ErrGeneResourceTooLarge):
+		status = http.StatusRequestEntityTooLarge
+	case errors.Is(err, api_service.ErrGeneResourceContent):
+		status = http.StatusUnsupportedMediaType
+	case errors.Is(err, api_service.ErrGeneManifestConflict):
+		status = http.StatusConflict
+	case errors.Is(err, api_service.ErrGeneMaterialContent):
+		status = http.StatusUnprocessableEntity
+	}
+	ctx.JSON(status, gin.H{"code": status, "message": i18n.T(ctx, "gene.fetch_failed")})
+}
+
 func (ph *Handler) DownloadObsRenderingFile(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.PostForm("id"))
+	usernameValue, _ := ctx.Get("username")
+	username, ok := usernameValue.(string)
+	if !ok || strings.TrimSpace(username) == "" {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": i18n.T(ctx, "conversation_artifact.unauthorized")})
+		return
+	}
+	id, err := strconv.Atoi(ctx.PostForm("id"))
 	format := ctx.PostForm("document_format")
 
-	if id == 0 || format == "" {
+	if err != nil || id <= 0 || format == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": i18n.T(ctx, "gene.missing_parameter")})
 		return
 	}
-	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, id, format)
+	content, filename, err := ph.service.DownloadObsRenderingFile(ctx, username, id, format)
+	if errors.Is(err, api_service.ErrRenderingDownloadNotFound) {
+		ctx.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": i18n.T(ctx, "conversation_artifact.not_found")})
+		return
+	}
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.TMaybe(ctx, err.Error())})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "conversation_artifact.unavailable")})
 		return
 	}
 

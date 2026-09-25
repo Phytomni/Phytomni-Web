@@ -71,8 +71,10 @@ func TestPerIPRateLimit_OverLimit429(t *testing.T) {
 		r.ServeHTTP(w, req)
 		return w
 	}
-	if hit().Code != http.StatusOK || hit().Code != http.StatusOK {
-		t.Fatal("first 2 within limit must be 200")
+	first := hit()
+	second := hit()
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("first 2 within limit must be 200, got %d and %d", first.Code, second.Code)
 	}
 	beforeBlocked := rxCache.RateLimitBlockedCount()
 	w := hit()

@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ref } from "vue";
+import { ref, type Component, type Ref } from "vue";
 
 const mockQuery = vi.hoisted(() => vi.fn());
+const mockChatQuery = vi.hoisted(() => vi.fn());
+const mockGetAnswerCheck = vi.hoisted(() => vi.fn());
+const mockGetChatdownloadURL = vi.hoisted(() => vi.fn());
 const mockAbortRequest = vi.hoisted(() => vi.fn(() => true));
-const mockTrackerUpdate = vi.hoisted(() => vi.fn());
-const mockTrackerReset = vi.hoisted(() => vi.fn());
+const mockCancelTask = vi.hoisted(() => vi.fn());
 const mockUseBotCapabilities = vi.hoisted(() => vi.fn());
 const mockLoadCapabilities = vi.hoisted(() => vi.fn());
 
 vi.mock("@/api/chat", () => ({
-  getQueryAbortable: mockQuery,
+  getQueryAbortable: mockChatQuery,
+  getAnswerCheck: mockGetAnswerCheck,
+  getChatdownloadURL: mockGetChatdownloadURL,
+  runAgentProductAbortable: mockQuery,
 }));
 
 vi.mock("@/utils/request", () => ({
@@ -17,28 +22,39 @@ vi.mock("@/utils/request", () => ({
   abortRequest: mockAbortRequest,
 }));
 
-vi.mock("@/utils/transfer-progress", () => ({
-  createTransferTracker: vi.fn(() => ({
-    update: mockTrackerUpdate,
-    reset: mockTrackerReset,
-  })),
-}));
-
-// Keep the route contract test focused on the lazy boundary. Loading the real
-// Research SFC would pull Element Plus CSS into the Node runner.
-vi.mock("@/views/research-agent/index.vue", () => ({
-  default: { __file: "/src/views/research-agent/index.vue" },
+vi.mock("@/api/task", () => ({
+  cancelTask: mockCancelTask,
+  getTaskLifecycle: vi.fn(),
+  normalizePositiveTaskRowId: (value: string | number) => String(value),
 }));
 
 vi.mock("@/views/chat/composables/useBotCapabilities", () => ({
   useBotCapabilities: mockUseBotCapabilities,
 }));
 
+vi.mock("@/components/research/ResearchArtifactShell.vue", () => ({
+  default: { template: "<section><slot /></section>" },
+}));
+
+vi.mock("@/components/research/BotReportState.vue", () => ({
+  default: { template: "<div />" },
+}));
+
+vi.mock("@/components/research/BotArtifactList.vue", () => ({
+  default: { template: "<div />" },
+}));
+
 import {
   useBotRemoteAgentRun,
   type RemoteAgentChatState,
-  type RemoteAgentCapabilitySource,
+  type RemoteAgentSubmitInput,
 } from "@/views/chat/composables/useBotRemoteAgentRun";
+import type {
+  BotCapability,
+  BotCapabilityExecution,
+  BotResearchInputCapability,
+} from "@/views/chat/composables/useBotCapabilities";
+import type { BotRunProjection } from "@/views/chat/botProjection";
 import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import router, {
   REMOTE_AGENT_ROUTE_CONTRACTS,
@@ -46,6 +62,12 @@ import router, {
   canActivateRemoteAgentRoute,
   remoteAgentRouteGuard,
 } from "@/router";
+import ResearchAgentView from "@/views/research-agent/ResearchAgentView.vue";
+import DigitalDesignAgentView from "@/views/digital-design-agent/DigitalDesignAgentView.vue";
+import GeneNetworkAgentView from "@/views/gene-network-agent/GeneNetworkAgentView.vue";
+import { REMOTE_AGENT_PRODUCT_REGISTRY } from "@/constants/agents";
+import { mustGet } from "../../../helpers/mockFactories";
+import { createTestAppContext } from "../../../helpers/test-app-context";
 
 function makeState(): RemoteAgentChatState {
   return {
@@ -56,17 +78,72 @@ function makeState(): RemoteAgentChatState {
   };
 }
 
+function runProjection(
+  status: BotRunProjection["status"],
+  reportRevision = 1
+): BotRunProjection {
+  return {
+    runId: "run-timeout",
+    agent: "InSilicoResearchAgent",
+    status,
+    workStage: null,
+    reportStage: "intermediate",
+    reportCompleteness: "partial",
+    reportRevision,
+    reportUpdatedAt: null,
+    reportPresentation: true,
+    intermediateReport: "",
+    finalReport: "",
+    progress: {
+      completed: 0,
+      total: 1,
+      failed: 0,
+      pending: 1,
+      briefGeneStatus: "",
+    },
+    degraded: false,
+    degradedReason: null,
+    failures: [],
+    artifacts: [],
+    requestId: null,
+    trackingDegraded: false,
+  };
+}
+
+type CapabilityMap = Record<string, Partial<BotCapability> | undefined>;
+const remoteTools = [
+  "InSilicoResearchAgent",
+  "DigitalDesignAgent",
+  "GeneNetworkAgent",
+] as const;
+type TestCapabilitySource = {
+  byTool: Ref<CapabilityMap>;
+  researchInput?: Ref<unknown>;
+  load?: (force?: boolean) => Promise<unknown>;
+};
+
+function enabledResearchInputCapability(): BotResearchInputCapability {
+  return {
+    enabled: true,
+    protocol: "research_input_resolution_v1",
+    max_user_query_chars: 131072,
+    max_attachments_per_request: 64,
+    max_research_dataset_paths: 64,
+    max_research_input_references: 128,
+  };
+}
+
 function makeCapabilities(
   tool: string,
   enabled = true,
   attachments: boolean | undefined = true,
-  execution = "agent_run",
+  execution: BotCapabilityExecution = "agent_run",
   resolver = false,
   load?: () => Promise<unknown>,
   artifacts: boolean | undefined = true
-): RemoteAgentCapabilitySource {
+): TestCapabilitySource {
   return {
-    byTool: ref({
+    byTool: ref<CapabilityMap>({
       [tool]: {
         enabled,
         attachments,
@@ -75,6 +152,9 @@ function makeCapabilities(
         artifacts,
       },
     }),
+    ...(tool === "InSilicoResearchAgent"
+      ? { researchInput: ref(enabledResearchInputCapability()) }
+      : {}),
     load,
   };
 }
@@ -82,9 +162,11 @@ function makeCapabilities(
 describe("useBotRemoteAgentRun", () => {
   beforeEach(() => {
     mockQuery.mockReset();
+    mockChatQuery.mockReset();
+    mockGetAnswerCheck.mockReset();
+    mockGetChatdownloadURL.mockReset();
     mockAbortRequest.mockClear();
-    mockTrackerUpdate.mockReset();
-    mockTrackerReset.mockReset();
+    mockCancelTask.mockReset();
     mockUseBotCapabilities.mockReset();
     mockLoadCapabilities.mockReset();
   });
@@ -93,7 +175,10 @@ describe("useBotRemoteAgentRun", () => {
     const states = new Map<string, RemoteAgentChatState>();
     const getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) states.set(dialogueId, makeState());
-      return states.get(dialogueId)!;
+      return mustGet(
+        states.get(dialogueId),
+        `remote agent state ${dialogueId}`
+      );
     };
     const run = useBotRemoteAgentRun({
       tool: "GeneNetworkAgent",
@@ -145,11 +230,11 @@ describe("useBotRemoteAgentRun", () => {
     const states = new Map<string, RemoteAgentChatState>();
     const getChatState = (dialogueId: string) => {
       if (!states.has(dialogueId)) states.set(dialogueId, makeState());
-      return states.get(dialogueId)!;
+      return mustGet(
+        states.get(dialogueId),
+        `remote agent state ${dialogueId}`
+      );
     };
-    const paperFile = new File(["paper"], "paper.pdf", {
-      type: "application/pdf",
-    });
     mockQuery.mockResolvedValueOnce({
       data: {
         bot_run_id: "run-research-1",
@@ -169,40 +254,372 @@ describe("useBotRemoteAgentRun", () => {
         true,
         true,
         "agent_run",
-        true
+        false
       ),
     });
 
-    await run.submit({
-      query: "paper",
-      files: [paperFile],
+    const submitInput: RemoteAgentSubmitInput & {
+      datasetDescription: string;
+    } = {
+      query: "  paper\n",
+      attachments: [{ asset_id: "file_paper" }],
+      datasetDescription: "Legacy dataset context",
       resolver: { geneId: "AT1G01010", speciesCode: "ath" },
-      dataList: { "/obs/dataset.csv": "traits" },
       interopMode: "auto",
       interopTargets: ["mcp-peer"],
-    });
+    };
+
+    await run.submit(submitInput);
 
     expect(getChatState("d1").botProjection?.runId).toBe("run-research-1");
     expect(getChatState("d1").botLifecycle?.runId).toBe("run-research-1");
     expect(run.state.value.dialogueId).toBe("42");
     expect(run.state.value.messageId).toBe("17");
 
-    const formData = mockQuery.mock.calls[0][0] as FormData;
-    expect(formData.get("query")).toBe("paper");
-    expect(formData.get("tool")).toBe("InSilicoResearchAgent");
-    expect(formData.get("mode")).toBe("instant");
+    const formData = mockQuery.mock.calls[0][1] as FormData;
+    expect(formData.get("query")).toBe("  paper\n");
+    expect(formData.get("tool")).toBeNull();
+    expect(formData.get("mode")).toBeNull();
     expect(formData.get("id")).toBe("d1");
-    expect(formData.get("files")).toBeInstanceOf(File);
-    expect(formData.get("gene_id")).toBe("AT1G01010");
-    expect(formData.get("species_code")).toBe("ath");
-    expect(formData.get("data_list")).toBe(
-      JSON.stringify({ "/obs/dataset.csv": "traits" })
+    expect(formData.get("attachments")).toBe(
+      JSON.stringify([{ asset_id: "file_paper" }])
     );
+    expect(formData.has("dataset_description")).toBe(false);
+    expect(formData.getAll("files")).toEqual([]);
+    expect(
+      Array.from(formData.values()).some((value) => value instanceof Blob)
+    ).toBe(false);
+    expect(formData.has("gene_id")).toBe(false);
+    expect(formData.has("to_id")).toBe(false);
+    expect(formData.has("species_code")).toBe(false);
+    expect(formData.has("data_list")).toBe(false);
     expect(formData.get("interop_mode")).toBe("auto");
     expect(formData.get("interop_targets")).toBe(JSON.stringify(["mcp-peer"]));
     expect(formData.get("query")).not.toContain("AT1G01010");
     expect(getChatState("d1").activeRequestId).toBe("");
   });
+
+  it("accepts exactly 64 Research attachment references from the negotiated limit", async () => {
+    const attachments = Array.from({ length: 64 }, (_, index) => ({
+      asset_id: `file_research_${String(index + 1).padStart(3, "0")}`,
+    }));
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-research-64",
+        tool_name: "InSilicoResearchAgent",
+        status: "RUNNING",
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-64",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "Compare all synthetic inputs", attachments });
+
+    expect(mockQuery).toHaveBeenCalledOnce();
+    const formData = mockQuery.mock.calls[0][1] as FormData;
+    expect([...formData.keys()].sort()).toEqual(
+      ["attachments", "client_turn_id", "id", "query"].sort()
+    );
+    expect(formData.get("query")).toBe("Compare all synthetic inputs");
+    const submittedAttachments = JSON.parse(
+      String(formData.get("attachments"))
+    ) as Array<Record<string, unknown>>;
+    expect(submittedAttachments).toHaveLength(64);
+    expect(submittedAttachments[0]).toEqual({
+      asset_id: "file_research_001",
+    });
+    expect(submittedAttachments[63]).toEqual({
+      asset_id: "file_research_064",
+    });
+    expect(formData.has("data_list")).toBe(false);
+    expect(formData.has("obs_file_list")).toBe(false);
+    expect(formData.has("dataset_description")).toBe(false);
+  });
+
+  it("reuses one Research client turn after an ambiguous failure and rotates it after success", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-retry-dialogue",
+          bot_run_id: "run-research-retry",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 18,
+          dialogue_id: "research-new-dialogue",
+          bot_run_id: "run-research-new",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-retry",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = {
+      query: "Reproduce the submitted paper",
+      attachments: [{ asset_id: "file_research_retry" }],
+    } as const;
+
+    await expect(run.submit(input)).rejects.toThrow(
+      "connection reset after dispatch"
+    );
+    await run.submit(input);
+    await run.submit(input);
+
+    const clientTurnIds = mockQuery.mock.calls.map((call) =>
+      String((call[1] as FormData).get("client_turn_id"))
+    );
+    expect(clientTurnIds[0]).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(clientTurnIds[1]).toBe(clientTurnIds[0]);
+    expect(clientTurnIds[2]).not.toBe(clientTurnIds[1]);
+    for (const call of mockQuery.mock.calls) {
+      const formData = call[1] as FormData;
+      expect([...formData.keys()].sort()).toEqual(
+        ["attachments", "client_turn_id", "id", "query"].sort()
+      );
+      expect(formData.has("data_list")).toBe(false);
+      expect(formData.has("obs_file_list")).toBe(false);
+      expect(formData.has("dataset_description")).toBe(false);
+    }
+  });
+
+  it("retains the Research client turn after a rejected response", async () => {
+    mockQuery
+      .mockRejectedValueOnce({
+        response: { status: 400, data: { code: "invalid_query" } },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-valid-dialogue",
+          bot_run_id: "run-research-valid",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-pre-dispatch",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = { query: "Reproduce the submitted paper" } as const;
+
+    await expect(run.submit(input)).rejects.toBeTruthy();
+    await run.submit(input);
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(first).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(second).toMatch(/^turn-[A-Za-z0-9-]{16,64}$/);
+    expect(second).toBe(first);
+  });
+
+  it("rotates the Research client turn when normalized interop controls change", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-interop-dialogue",
+          bot_run_id: "run-research-interop-change",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-interop-change",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(
+      run.submit({
+        query: "Reproduce with delegated evidence",
+        interopMode: "auto",
+        interopTargets: ["mcp-peer"],
+      })
+    ).rejects.toThrow("connection reset after dispatch");
+    await run.submit({
+      query: "Reproduce with delegated evidence",
+      interopMode: "auto",
+      interopTargets: ["mcp-other"],
+    });
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(second).not.toBe(first);
+  });
+
+  it("rotates the Research client turn after reset", async () => {
+    mockQuery
+      .mockRejectedValueOnce(new Error("connection reset after dispatch"))
+      .mockResolvedValueOnce({
+        data: {
+          id: 17,
+          dialogue_id: "research-reset-dialogue",
+          bot_run_id: "run-research-after-reset",
+          tool_name: "InSilicoResearchAgent",
+          status: "RUNNING",
+        },
+      });
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-reset",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    const input = { query: "Reproduce after explicit reset" } as const;
+
+    await expect(run.submit(input)).rejects.toThrow(
+      "connection reset after dispatch"
+    );
+    run.reset();
+    await run.submit(input);
+
+    const first = String(
+      (mockQuery.mock.calls[0][1] as FormData).get("client_turn_id")
+    );
+    const second = String(
+      (mockQuery.mock.calls[1][1] as FormData).get("client_turn_id")
+    );
+    expect(second).not.toBe(first);
+  });
+
+  it("rejects 65 Research attachment references before transport", async () => {
+    const attachments = Array.from({ length: 65 }, (_, index) => ({
+      asset_id: `file_research_${String(index + 1).padStart(3, "0")}`,
+    }));
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-65",
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(
+      run.submit({ query: "Compare all synthetic inputs", attachments })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", undefined],
+    [
+      "disabled",
+      {
+        ...enabledResearchInputCapability(),
+        enabled: false,
+      },
+    ],
+    [
+      "over hard maximum",
+      {
+        ...enabledResearchInputCapability(),
+        max_attachments_per_request: 257,
+      },
+    ],
+    [
+      "fractional",
+      {
+        ...enabledResearchInputCapability(),
+        max_attachments_per_request: 63.5,
+      },
+    ],
+    [
+      "unknown protocol",
+      {
+        ...enabledResearchInputCapability(),
+        protocol: "research_input_resolution_v2",
+      },
+    ],
+  ])("fails Research closed for a %s input capability", async (_, value) => {
+    const capabilities = makeCapabilities("InSilicoResearchAgent");
+    capabilities.researchInput = value === undefined ? undefined : ref(value);
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "research-invalid-capability",
+      capabilities,
+    });
+
+    await expect(
+      run.submit({ query: "Research safely" })
+    ).rejects.toMatchObject({ code: "capability_disabled" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("preserves the legacy ten-reference ceiling for non-Research products", async () => {
+    const attachments = Array.from({ length: 11 }, (_, index) => ({
+      asset_id: `file_design_${String(index + 1).padStart(2, "0")}`,
+    }));
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "design-11",
+      capabilities: makeCapabilities("DigitalDesignAgent"),
+    });
+
+    await expect(
+      run.submit({ query: "Design with references", attachments })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it.each(remoteTools)(
+    "submits %s through the product route without legacy form fields",
+    async (tool) => {
+      let capturedTool: string | undefined;
+      let capturedFormData: FormData | undefined;
+      mockQuery.mockImplementationOnce(
+        (submittedTool: string, formData: FormData) => {
+          capturedTool = submittedTool;
+          capturedFormData = formData;
+          return Promise.resolve({
+            data: {
+              bot_run_id: `run-${tool}`,
+              tool_name: tool,
+              status: "RUNNING",
+            },
+          });
+        }
+      );
+      const run = useBotRemoteAgentRun({
+        tool,
+        dialogueId: `product-${tool}`,
+        capabilities: makeCapabilities(tool, true, true, "agent_run", true),
+      });
+
+      await run.submit({ query: "Investigate drought tolerance" });
+
+      const entries = Array.from((capturedFormData as FormData).entries()).map(
+        ([key, value]) => [key, typeof value === "string" ? value : value.name]
+      );
+      expect(capturedTool).toBe(tool);
+      expect(entries.some(([key]) => key === "tool")).toBe(false);
+      expect(entries.some(([key]) => key === "mode")).toBe(false);
+      expect(entries).toContainEqual([
+        "query",
+        "Investigate drought tolerance",
+      ]);
+      expect(entries.some(([key]) => key === "client_turn_id")).toBe(
+        tool === "InSilicoResearchAgent"
+      );
+    }
+  );
 
   it("retains only safe interop provenance in owner lifecycle state", async () => {
     const state = makeState();
@@ -244,6 +661,32 @@ describe("useBotRemoteAgentRun", () => {
     expect(JSON.stringify(state)).not.toContain("private.invalid");
   });
 
+  it("does not parse an explicit failure envelope that also carries data", async () => {
+    mockQuery.mockResolvedValueOnce({
+      code: 500,
+      data: {
+        bot_run_id: "run-error-data",
+        tool_name: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        final_report: "This must not enter lifecycle state",
+      },
+    });
+    const state = makeState();
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-error-envelope",
+      getChatState: () => state,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await expect(run.submit({ query: "paper" })).rejects.toThrow(
+      "invalid response envelope"
+    );
+    expect(run.state.value.phase).toBe("failed");
+    expect(run.state.value.error).toBe("request_failed");
+    expect(state.botProjection).toBeUndefined();
+  });
+
   it("sanitizes pre-existing lifecycle interop before entering reactive state", () => {
     const rawInterop = {
       mode: "auto",
@@ -281,6 +724,37 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.interop).not.toBe(rawInterop);
     expect(run.state.value.interop).not.toHaveProperty("endpoint");
     expect(run.state.value.interop).not.toHaveProperty("credentials");
+  });
+
+  it("reconciles cached report metadata on restore and carries explicit warning clears into owned state", () => {
+    const owned: RemoteAgentChatState = {
+      ...makeState(),
+      botLifecycle: initBotLifecycleState(),
+      botProjection: {
+        ...runProjection("FAILED", 4),
+        intermediateReport: "# Retained scientific report",
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      },
+    };
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "report-restore",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    expect(run.state.value.reportWarningCodes).toEqual([
+      "report_synthesis_failed",
+    ]);
+    expect(run.state.value.visibleReport).toBe("# Retained scientific report");
+    run.hydrate({
+      ...runProjection("FAILED", 5),
+      finalReport: "# Valid scientific revision",
+      report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+      reportWarningCodes: [],
+    });
+    expect(owned.botLifecycle?.reportWarningCodes).toEqual([]);
+    expect(owned.botLifecycle?.report?.state).toBe("final");
   });
 
   it("hydrates a validated terminal projection and clears its identity on reset", async () => {
@@ -322,6 +796,17 @@ describe("useBotRemoteAgentRun", () => {
         degradedReason: null,
         failures: [],
         artifacts: [{ outputDir: "/obs/bucket/report", paths: [] }],
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "ready",
+          revision: 1,
+          name: "research-results.zip",
+          size_bytes: 1024,
+          error_code: null,
+          retryable: false,
+        },
         requestId: null,
         trackingDegraded: false,
         interop: {
@@ -340,6 +825,9 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.finalReport).toBe("Terminal report");
     expect(run.state.value.dialogueId).toBe("43");
     expect(run.state.value.messageId).toBe("18");
+    expect(run.state.value.delivery?.name).toBe("research-results.zip");
+    expect(run.state.value.artifactLinks).toEqual([]);
+    expect(JSON.stringify(run.state.value)).not.toContain("/obs/bucket/report");
     expect(run.state.value.interop).toEqual({
       mode: "required",
       status: "delegated",
@@ -353,6 +841,147 @@ describe("useBotRemoteAgentRun", () => {
     expect(run.state.value.messageId).toBeNull();
     expect(run.state.value.interop).toBeNull();
     expect(run.state.value.degradedInterop).toBe(false);
+  });
+
+  it("restores and hydrates a timed-out run without reopening its phase", () => {
+    const owned: RemoteAgentChatState = {
+      ...makeState(),
+      botProjection: runProjection("TIMED_OUT", 2),
+      botLifecycle: {
+        ...initBotLifecycleState(),
+        status: "TIMED_OUT",
+        reportRevision: 2,
+      },
+    };
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-timeout",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+
+    run.hydrate(runProjection("RUNNING", 3));
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+  });
+
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])(
+    "hydrates cancellation %s without changing its lifecycle",
+    (_name, report) => {
+      const owned = makeState();
+      const run = useBotRemoteAgentRun({
+        tool: "InSilicoResearchAgent",
+        dialogueId: "d-cancelled-hydration",
+        getChatState: () => owned,
+        capabilities: makeCapabilities("InSilicoResearchAgent"),
+      });
+
+      run.hydrate({
+        ...runProjection("CANCELLED", 2),
+        reportStage: report ? "final" : "intermediate",
+        finalReport: report,
+      });
+
+      expect(run.state.value.status).toBe("CANCELLED");
+      expect(run.state.value.phase).toBe("cancelled");
+      expect(run.state.value.visibleReport).toBe(report);
+      expect(owned.botLifecycle?.status).toBe("CANCELLED");
+    }
+  );
+
+  it("canonicalizes a raw TIMEOUT response before it enters owned state", async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-timeout-alias",
+        tool_name: "InSilicoResearchAgent",
+        status: "TIMEOUT",
+      },
+    });
+    const owned = makeState();
+    const run = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-timeout-alias",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    await run.submit({ query: "Reproduce this paper" });
+
+    expect(run.state.value.projection?.status).toBe("TIMED_OUT");
+    expect(run.state.value.status).toBe("TIMED_OUT");
+    expect(run.state.value.phase).toBe("timed_out");
+    expect(owned.botProjection?.status).toBe("TIMED_OUT");
+  });
+
+  it("restores pending archive delivery from dialogue-owned run state", () => {
+    const owned = makeState();
+    const first = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-pending-archive",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+    first.hydrate(
+      {
+        runId: "run-pending-archive",
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        reportPresentation: true,
+        reportStage: "final",
+        reportCompleteness: "complete",
+        reportRevision: 1,
+        reportUpdatedAt: null,
+        intermediateReport: "",
+        finalReport: "Scientific report",
+        progress: {
+          completed: 1,
+          total: 1,
+          failed: 0,
+          pending: 0,
+          briefGeneStatus: "",
+        },
+        degraded: false,
+        degradedReason: null,
+        failures: [],
+        artifacts: [],
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "pending",
+          revision: 1,
+          name: null,
+          size_bytes: null,
+          error_code: null,
+          retryable: false,
+        },
+        requestId: null,
+        trackingDegraded: false,
+        degradedInterop: false,
+        interop: null,
+      },
+      { dialogueId: "42", messageId: "19" }
+    );
+
+    expect(owned.botLifecycle?.delivery?.status).toBe("pending");
+    expect(owned.botProjection?.delivery?.status).toBe("pending");
+
+    const restored = useBotRemoteAgentRun({
+      tool: "InSilicoResearchAgent",
+      dialogueId: "d-pending-archive",
+      getChatState: () => owned,
+      capabilities: makeCapabilities("InSilicoResearchAgent"),
+    });
+
+    expect(restored.state.value.phase).toBe("succeeded");
+    expect(restored.state.value.delivery?.status).toBe("pending");
+    expect(restored.state.value.messageId).toBe("19");
   });
 
   it("loads the default capability source before submitting", async () => {
@@ -387,8 +1016,8 @@ describe("useBotRemoteAgentRun", () => {
     const cases: Array<
       [
         string,
-        RemoteAgentCapabilitySource,
-        { files?: File[]; resolver?: { geneId: string; speciesCode: string } }
+        TestCapabilitySource,
+        { files?: File[]; resolver?: { geneId: string; speciesCode: string } },
       ]
     > = [
       [
@@ -404,7 +1033,7 @@ describe("useBotRemoteAgentRun", () => {
           null as unknown as boolean,
           "agent_run"
         ),
-        { files: [new File(["x"], "x.txt")] },
+        { attachments: [{ asset_id: "file_x" }] },
       ],
       [
         "missing resolver authorization",
@@ -440,29 +1069,58 @@ describe("useBotRemoteAgentRun", () => {
           name === "missing resolver authorization"
             ? "resolver_disabled"
             : name === "missing attachment authorization"
-            ? "attachments_disabled"
-            : name === "missing artifact authorization"
-            ? "artifacts_disabled"
-            : "capability_disabled",
+              ? "attachments_disabled"
+              : name === "missing artifact authorization"
+                ? "artifacts_disabled"
+                : "capability_disabled",
       });
     }
     expect(load).toHaveBeenCalledTimes(cases.length);
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("aborts the active request and clears dialogue upload progress", async () => {
-    let resolveRequest: (value: unknown) => void = () => undefined;
-    mockTrackerUpdate.mockReturnValue({
-      loaded: 1,
-      total: 2,
-      percent: 50,
-      etaSec: null,
-      indeterminate: false,
-      phase: "upload",
-      requestId: "pending",
+  it.each([
+    { asset_id: "file_queued", status: "queued" },
+    { asset_id: "file_failed", status: "failed" },
+  ])("rejects non-reference attachment metadata: %o", async (attachment) => {
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: `invalid-${attachment.status}`,
+      capabilities: makeCapabilities("DigitalDesignAgent"),
     });
-    mockQuery.mockImplementationOnce((_formData, _requestId, config) => {
-      config?.onUploadProgress?.({ loaded: 1, total: 2 });
+
+    await expect(
+      run.submit({
+        query: "design",
+        attachments: [attachment] as never,
+      })
+    ).rejects.toMatchObject({ code: "invalid_query" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("allows a file-free run when the Agent attachment capability is disabled", async () => {
+    mockQuery.mockResolvedValueOnce({
+      data: {
+        bot_run_id: "run-no-attachments",
+        tool_name: "DigitalDesignAgent",
+        status: "RUNNING",
+      },
+    });
+    const run = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "no-attachments",
+      capabilities: makeCapabilities("DigitalDesignAgent", true, false),
+    });
+
+    await run.submit({ query: "design without a file" });
+
+    const formData = mockQuery.mock.calls[0][1] as FormData;
+    expect(formData.get("attachments")).toBe("[]");
+  });
+
+  it("aborts the active request without relaying file bytes", async () => {
+    let resolveRequest: (value: unknown) => void = () => undefined;
+    mockQuery.mockImplementationOnce(() => {
       return new Promise((resolve) => {
         resolveRequest = resolve;
       });
@@ -477,11 +1135,11 @@ describe("useBotRemoteAgentRun", () => {
 
     const pending = run.submit({
       query: "design",
-      files: [new File(["design"], "design.txt", { type: "text/plain" })],
+      attachments: [{ asset_id: "file_design" }],
     });
     await Promise.resolve();
     expect(state.activeRequestId).not.toBe("");
-    expect(state.uploadTransfer?.percent).toBe(50);
+    expect(state.uploadTransfer).toBeNull();
     const requestId = state.activeRequestId;
     expect(run.cancel()).toBe(true);
     expect(mockAbortRequest).toHaveBeenCalledWith(requestId);
@@ -499,10 +1157,58 @@ describe("useBotRemoteAgentRun", () => {
     expect(state.uploadTransfer).toBeNull();
     expect(state.activeRequestId).toBe("");
     expect(state.activeAgentName).toBe("");
-    expect(state.botLifecycle?.status).toBe("FAILED");
+    expect(state.botLifecycle?.status).toBe("CANCELLED");
     expect(state.botLifecycle?.failures).toContain("analysis task cancelled");
     expect(run.state.value.phase).toBe("cancelled");
+
+    const restored = useBotRemoteAgentRun({
+      tool: "DigitalDesignAgent",
+      dialogueId: "d2",
+      getChatState: () => state,
+      capabilities: makeCapabilities("DigitalDesignAgent"),
+    });
+    expect(restored.state.value.status).toBe("CANCELLED");
+    expect(restored.state.value.phase).toBe("cancelled");
   });
+
+  it.each(remoteTools)(
+    "aborts the %s product-route request without Chat transport",
+    async (tool) => {
+      let resolveRequest: (value: unknown) => void = () => undefined;
+      mockQuery.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRequest = resolve;
+          })
+      );
+      const state = makeState();
+      const run = useBotRemoteAgentRun({
+        tool,
+        dialogueId: `abort-${tool}`,
+        getChatState: () => state,
+        capabilities: makeCapabilities(tool),
+      });
+
+      const pending = run.submit({ query: "cancel this product run" });
+      await Promise.resolve();
+      const requestId = state.activeRequestId;
+      expect(mockQuery.mock.calls[0]?.[0]).toBe(tool);
+      expect(mockChatQuery).not.toHaveBeenCalled();
+      expect(run.cancel()).toBe(true);
+      expect(mockAbortRequest).toHaveBeenCalledWith(requestId);
+
+      resolveRequest({
+        data: {
+          bot_run_id: `run-${tool}`,
+          tool_name: tool,
+          status: "CANCELLED",
+        },
+      });
+      await pending;
+      expect(run.state.value.phase).toBe("cancelled");
+      expect(state.activeRequestId).toBe("");
+    }
+  );
 
   it("does not let a reset old response overwrite a later run", async () => {
     let resolveA: (value: unknown) => void = () => undefined;
@@ -618,6 +1324,135 @@ describe("useBotRemoteAgentRun", () => {
       default?: { __file?: string };
     }>;
     const loaded = await component();
-    expect(loaded.default?.__file).toContain("views/research-agent/index.vue");
+    expect(loaded.default?.__file).toContain(
+      "views/research-agent/ResearchAgentView.vue"
+    );
+  });
+
+  it("submits each product view through the route-owned transport only", async () => {
+    const chatRequestSpy = mockChatQuery;
+    const productRequestSpy = mockQuery;
+    const originalLive = {
+      InSilicoResearchAgent:
+        REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live,
+      DigitalDesignAgent: REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live,
+      GeneNetworkAgent: REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live,
+    };
+    REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live = true;
+    REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live = true;
+
+    const capabilities = ref<CapabilityMap>({
+      InSilicoResearchAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: false,
+      },
+      DigitalDesignAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: true,
+      },
+      GeneNetworkAgent: {
+        enabled: true,
+        attachments: true,
+        artifacts: true,
+        execution: "agent_run",
+        resolver: true,
+      },
+    });
+    mockUseBotCapabilities.mockImplementation(() => ({
+      loaded: ref(true),
+      loading: ref(false),
+      byTool: capabilities,
+      upload: ref({
+        enabled: true,
+        protocol: "obs-multipart-v2",
+        upload_origin: "https://uploads.example.test",
+        max_file_bytes: 10 * 1024 * 1024 * 1024,
+        max_attachments: 10,
+      }),
+      researchInput: ref({
+        enabled: true,
+        protocol: "research_input_resolution_v1",
+        max_user_query_chars: 1_048_576,
+        max_attachments_per_request: 10,
+        max_research_dataset_paths: 10,
+        max_research_input_references: 10,
+      }),
+      load: mockLoadCapabilities.mockResolvedValue([]),
+    }));
+    mockGetAnswerCheck.mockResolvedValue({ code: 200, data: [] });
+    productRequestSpy.mockImplementation((tool: string) =>
+      Promise.resolve({
+        data: {
+          bot_run_id: `run-${tool}`,
+          tool_name: tool,
+          status: "SUCCEEDED",
+        },
+      })
+    );
+
+    const mountProductView = (component: Component) =>
+      createTestAppContext({ router }).mount(component, {
+        global: {
+          stubs: {
+            ResearchArtifactShell: { template: "<section><slot /></section>" },
+            BotReportState: { template: "<div />" },
+            BotArtifactList: { template: "<div />" },
+          },
+        },
+      });
+
+    try {
+      const research = mountProductView(ResearchAgentView);
+      await research
+        .get('[data-test="research-question"]')
+        .setValue("Summarize a drought study");
+      await research.get("form.research-agent-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe(
+        "InSilicoResearchAgent"
+      );
+      research.unmount();
+
+      productRequestSpy.mockClear();
+      const design = mountProductView(DigitalDesignAgentView);
+      await design
+        .get('[data-test="design-question"]')
+        .setValue("Design a stable protein");
+      await design.get('[data-test="design-gene-id"]').setValue("AT1G01010");
+      await design.get('[data-test="design-species-code"]').setValue("ath");
+      await design.get("form.digital-design-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe("DigitalDesignAgent");
+      design.unmount();
+
+      productRequestSpy.mockClear();
+      const network = mountProductView(GeneNetworkAgentView);
+      await network
+        .get('[data-test="network-question"]')
+        .setValue("Analyze a trait network");
+      await network.get('[data-test="network-trait"]').setValue("TO:0000011");
+      await network.get('[data-test="network-species"]').setValue("ath");
+      await network.get("form.gene-network-form").trigger("submit");
+      expect(chatRequestSpy).not.toHaveBeenCalled();
+      expect(productRequestSpy).toHaveBeenCalledTimes(1);
+      expect(productRequestSpy.mock.calls[0]?.[0]).toBe("GeneNetworkAgent");
+      network.unmount();
+    } finally {
+      REMOTE_AGENT_PRODUCT_REGISTRY.InSilicoResearchAgent.live =
+        originalLive.InSilicoResearchAgent;
+      REMOTE_AGENT_PRODUCT_REGISTRY.DigitalDesignAgent.live =
+        originalLive.DigitalDesignAgent;
+      REMOTE_AGENT_PRODUCT_REGISTRY.GeneNetworkAgent.live =
+        originalLive.GeneNetworkAgent;
+    }
   });
 });

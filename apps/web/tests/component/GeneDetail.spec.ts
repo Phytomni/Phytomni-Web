@@ -1,18 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  config,
-  enableAutoUnmount,
-  flushPromises,
-  mount,
-} from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { enableAutoUnmount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive } from "vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getGeneDetails: vi.fn(),
-  buildDisplayContent: vi.fn((content: string) => content),
   messageError: vi.fn(),
   messageWarning: vi.fn(),
   routerPush: vi.fn(),
@@ -31,20 +25,24 @@ vi.mock("@/api/gene-display", () => ({
   getGeneDetails: mocks.getGeneDetails,
 }));
 
-// Keep the route parsing boundary observable: the real helper also strips the
-// trailer, which would otherwise mask detail.vue ignoring parseDocTitles.mainContent.
-vi.mock("@/views/gene-display/gene-markdown", () => ({
-  buildDisplayContent: mocks.buildDisplayContent,
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: {
+      error: mocks.messageError,
+      warning: mocks.messageWarning,
+    },
+  };
+});
 
-vi.mock("element-plus", () => ({
-  ElMessage: {
-    error: mocks.messageError,
-    warning: mocks.messageWarning,
-  },
-}));
+import GeneDetail from "@/views/gene-display/GeneDetailView.vue";
 
-import GeneDetail from "@/views/gene-display/detail.vue";
+const GENE_DETAIL_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/gene-display/GeneDetailView.vue"),
+  "utf8"
+);
 
 const DeepGenomeArtifactStub = defineComponent({
   name: "DeepGenomeArtifact",
@@ -55,11 +53,13 @@ const DeepGenomeArtifactStub = defineComponent({
     title: { type: String, default: "" },
     metadata: { type: [String, Array], default: undefined },
     tabLabels: { type: Object, default: () => ({}) },
+    tabs: { type: Array, default: () => [] },
     tablistLabel: { type: String, default: "" },
     artifactId: { type: String, default: "" },
     backLabel: { type: String, default: "" },
     closeLabel: { type: String, default: "" },
     actionLabel: { type: String, default: "" },
+    menuItems: { type: Array, default: () => [] },
   },
   setup(props, { emit }) {
     return () =>
@@ -78,6 +78,9 @@ const DeepGenomeArtifactStub = defineComponent({
           "data-back-label": props.backLabel,
           "data-close-label": props.closeLabel,
           "data-action-label": props.actionLabel,
+          "data-menu-ids": (props.menuItems as { id?: string }[])
+            .map((item) => item.id)
+            .join(","),
         }),
         h(
           "button",
@@ -93,14 +96,6 @@ const DeepGenomeArtifactStub = defineComponent({
   },
 });
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n];
 enableAutoUnmount(afterEach);
 
 const successResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -109,12 +104,15 @@ const successResponse = (overrides: Record<string, unknown> = {}) => ({
   data: {
     content: "# Os01g0107900\n\nEvidence [1]",
     references: [],
+    resources: [],
+    reference_materials: [],
+    report_revision: "a".repeat(64),
     ...overrides,
   },
 });
 
 const mountView = () =>
-  mount(GeneDetail, {
+  createTestAppContext().mount(GeneDetail, {
     global: {
       stubs: {
         DeepGenomeArtifact: DeepGenomeArtifactStub,
@@ -127,8 +125,24 @@ describe("Gene Detail research artifact", () => {
     vi.clearAllMocks();
     Object.keys(mockRoute.query).forEach((key) => delete mockRoute.query[key]);
     mocks.getGeneDetails.mockResolvedValue(successResponse());
-    mocks.buildDisplayContent.mockImplementation((content: string) => content);
     mocks.routerPush.mockReset();
+  });
+
+  it("keeps the artifact column bounded without clipping the report surface", () => {
+    const artifactStyleStart = GENE_DETAIL_SOURCE.indexOf(
+      ".gene-detail-artifact {"
+    );
+    const artifactStyleEnd = GENE_DETAIL_SOURCE.indexOf(
+      "}",
+      artifactStyleStart
+    );
+    const artifactStyle = GENE_DETAIL_SOURCE.slice(
+      artifactStyleStart,
+      artifactStyleEnd + 1
+    );
+
+    expect(artifactStyle).toContain("max-width: 100%;");
+    expect(GENE_DETAIL_SOURCE).toContain('data-scroll-root="gene-detail"');
   });
 
   it("mounts the completed report in the shared DeepGenome artifact shell", async () => {
@@ -144,6 +158,7 @@ describe("Gene Detail research artifact", () => {
     expect(artifact.attributes("data-back-label")).toBe("Back");
     expect(artifact.attributes("data-close-label")).toBe("Close");
     expect(artifact.attributes("data-action-label")).toBe("Operation");
+    expect(artifact.attributes("data-menu-ids")).toBe("copy,download,close");
     expect(artifact.attributes("data-tablist-label")).toBe("Operation");
     expect(artifact.attributes("data-artifact-id")).toBe(
       "gene-detail-artifact"
@@ -152,7 +167,7 @@ describe("Gene Detail research artifact", () => {
       content: "View",
       evidence: "References",
       activity: "Execution log",
-      downloads: "Download attachments",
+      downloads: "Attachments",
     });
     expect(wrapper.find('[data-scroll-root="gene-detail"]').exists()).toBe(
       true
@@ -198,12 +213,22 @@ describe("Gene Detail research artifact", () => {
     await flushPromises();
   });
 
-  it("uses parsed main content, DOC TITLES fallback references, and a safe viewer namespace", async () => {
+  it("passes the canonical API body and ordered references without a second parser", async () => {
     mockRoute.query.file_name = "Os01g0107900.md";
     mocks.getGeneDetails.mockResolvedValue(
       successResponse({
-        content:
-          "# Os01g0107900\n\nEvidence [1]\n\n--- DOC TITLES ---\n1. Fallback paper\n2. Second paper",
+        content: "# Os01g0107900\n\nEvidence [document:1]",
+        references: [
+          {
+            title: "First paper",
+            citation: { runs: [{ text: "First paper" }], links: [] },
+          },
+          { citation: null },
+          {
+            title: "Second paper",
+            citation: { runs: [{ text: "Second paper" }], links: [] },
+          },
+        ],
       })
     );
 
@@ -217,31 +242,44 @@ describe("Gene Detail research artifact", () => {
     expect(wrapper.findComponent(DeepGenomeArtifactStub).props("title")).toBe(
       "Os01g0107900.md"
     );
-    expect(mocks.buildDisplayContent).toHaveBeenLastCalledWith(
-      "# Os01g0107900\n\nEvidence [1]"
-    );
-
     const artifact = wrapper.findComponent(DeepGenomeArtifactStub);
-    expect(artifact.props("markdown")).toBe("# Os01g0107900\n\nEvidence [1]");
+    expect(artifact.props("markdown")).toBe(
+      "# Os01g0107900\n\nEvidence [document:1]"
+    );
     expect(artifact.props("references")).toEqual([
-      { title: "Fallback paper" },
-      { title: "Second paper" },
+      {
+        title: "First paper",
+        citation: { runs: [{ text: "First paper" }], links: [] },
+      },
+      { citation: null },
+      {
+        title: "Second paper",
+        citation: { runs: [{ text: "Second paper" }], links: [] },
+      },
     ]);
     expect(artifact.props("ns")).toBe("gene-detail");
     expect(artifact.props("markdown")).not.toContain("DOC TITLES");
-    expect(artifact.props("markdown")).not.toContain("Fallback paper");
+    expect(artifact.props("markdown")).not.toContain("First paper");
   });
 
-  it("prefers API references over the DOC TITLES fallback", async () => {
+  it("preserves canonical styles and links supplied by the API", async () => {
     mockRoute.query.file_name = "Os01g0107900.md";
     const apiReferences = [
-      { title: "API paper", pm: "12345" },
-      { title: "API dataset", dl: "https://example.test/data" },
+      {
+        title: "API paper",
+        citation: { runs: [{ text: "API paper", italic: true }], links: [] },
+      },
+      {
+        title: "API dataset",
+        citation: {
+          runs: [{ text: "API dataset", bold: true }],
+          links: [{ label: "Article", href: "https://example.test/data" }],
+        },
+      },
     ];
     mocks.getGeneDetails.mockResolvedValue(
       successResponse({
-        content:
-          "# Os01g0107900\n\nEvidence [1]\n\n--- DOC TITLES ---\n1. Fallback paper",
+        content: "# Os01g0107900\n\nEvidence [1]",
         references: apiReferences,
       })
     );

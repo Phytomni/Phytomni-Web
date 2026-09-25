@@ -41,21 +41,23 @@ func (ph *Handler) UnlockUser(ctx *gin.Context) {
 func (ph *Handler) PermissionUserTool(ctx *gin.Context) {
 	name, _ := ctx.Get("username")
 
-	ToolList, permissionList, permission := ph.service.GetUserToolPermission(ctx, name.(string))
-	if len(ToolList) == 0 && len(permissionList) == 0 {
+	resolution, err := ph.service.ResolveAgentPermissions(ctx, name.(string))
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": i18n.T(ctx, "permission.tool_list_failed"), "token": ""})
 		return
 	}
 
-	if ToolList == nil {
-		ToolList = []string{} // ensure non-nil for JSON encoding
-	}
-
 	LoginRes := &common.LoginResponse{
-		ToolList:       ToolList,
-		PermissionList: permissionList,
-		Permission:     permission,
+		ToolList:       append([]string(nil), resolution.AllowedTools...),
+		PermissionList: append([]string(nil), resolution.PermissionKeys...),
+		Permission:     resolution.Role,
 		ExpertEnabled:  ph.service.ExpertModeEnabled(),
+	}
+	if LoginRes.ToolList == nil {
+		LoginRes.ToolList = []string{}
+	}
+	if LoginRes.PermissionList == nil {
+		LoginRes.PermissionList = []string{}
 	}
 
 	ctx.JSON(errs.SucResp(LoginRes))

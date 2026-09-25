@@ -1,21 +1,88 @@
-import { watch, nextTick } from "vue";
+import { nextTick, watch } from "vue";
 import type { Ref, WritableComputedRef } from "vue";
-import type { ChatComposerHandle, UploadFile } from "../types";
+import type { UploadFile as ElementUploadFile } from "element-plus";
+import type { BotUploadCapability } from "@/api/types";
+import type { ChatComposerHandle, ChatUIState } from "../types";
+import type { ResumableUploadItem } from "../upload/types";
+import {
+  validateUploadFile,
+  type UploadValidationErrorCode,
+  type UploadValidationLimits,
+} from "../upload/validation";
+
+export type ChatAttachmentValidationError = {
+  code: UploadValidationErrorCode | "upload_disabled" | "upload_unavailable";
+  fileName?: string;
+};
+
+const isElementUploadFile = (value: unknown): value is ElementUploadFile => {
+  if (typeof value !== "object" || value === null) return false;
+  const file = value as Partial<ElementUploadFile>;
+  return (
+    typeof file.name === "string" &&
+    typeof File !== "undefined" &&
+    file.raw instanceof File
+  );
+};
+
+function fallbackItem(file: File, index: number): ResumableUploadItem {
+  return {
+    localId: `legacy-upload-${Date.now()}-${index}`,
+    file,
+    assetId: null,
+    name: file.name.normalize("NFC"),
+    size: file.size,
+    type: file.type,
+    lastModified: file.lastModified,
+    status: "queued",
+    partSize: 0,
+    partCount: 0,
+    receivedParts: [],
+    loadedBytes: 0,
+    speedBytesPerSecond: 0,
+    etaSeconds: null,
+    retryCount: 0,
+    errorCode: null,
+  };
+}
+function reportValidation(
+  file: File,
+  existingCount: number,
+  limits: Readonly<UploadValidationLimits>,
+  onValidationError?: (error: ChatAttachmentValidationError) => void
+): boolean {
+  const result = validateUploadFile(file, existingCount, limits);
+  if (result.ok) return true;
+  onValidationError?.({ code: result.code, fileName: file.name });
+  return false;
+}
 
 export function useFileUpload(opts: {
-  fileList: WritableComputedRef<UploadFile[]>;
+  fileList: WritableComputedRef<ResumableUploadItem[]>;
   currentChatId: Ref<string>;
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   composerRef: Ref<ChatComposerHandle | null>;
-  scrollToBottom: () => void;
+  uploadCapability: Ref<BotUploadCapability>;
+  scrollToBottom: () => Promise<void>;
+  queueFiles?: (files: readonly File[]) => void | Promise<void>;
+  removeUpload?: (item: ResumableUploadItem) => void | Promise<void>;
+  onValidationError?: (error: ChatAttachmentValidationError) => void;
 }) {
-  const { fileList, currentChatId, getChatState, composerRef, scrollToBottom } =
-    opts;
+  const {
+    fileList,
+    currentChatId,
+    getChatState,
+    composerRef,
+    uploadCapability,
+    scrollToBottom,
+    queueFiles,
+    removeUpload,
+    onValidationError,
+  } = opts;
 
-  // watch the file list to control list visibility
   watch(
     () => fileList.value,
-    (newVal, oldVal) => {
+    (newVal) => {
       if (newVal?.length > 0 && composerRef.value) {
         composerRef.value.openHeader();
       } else if (composerRef.value) {
@@ -24,59 +91,83 @@ export function useFileUpload(opts: {
     }
   );
 
-  // file-handling functions
-  const handleFileChange = (file: any) => {
-    if (!currentChatId.value) {
-      return;
-    }
-
+  const appendBrowserFiles = (files: readonly File[]) => {
+    if (!currentChatId.value) return;
     const chatState = getChatState(currentChatId.value);
-    if (!chatState) {
+    if (!chatState) return;
+    const capability = uploadCapability.value;
+    const limits: Readonly<UploadValidationLimits> = Object.freeze({
+      maxFileBytes: capability.max_file_bytes,
+      maxAttachments: capability.max_attachments,
+    });
+
+    if (queueFiles) {
+      if (files.length === 0) return;
+      Promise.resolve(queueFiles(files)).catch(() => undefined);
+      nextTick(() => {
+        scrollToBottom().catch(() => undefined);
+      }).catch(() => undefined);
       return;
     }
 
-    const newFile: UploadFile = {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      file: file.raw,
-    };
+    const accepted: File[] = [];
+    for (const file of files) {
+      if (
+        reportValidation(
+          file,
+          chatState.fileList.length + accepted.length,
+          limits,
+          onValidationError
+        )
+      ) {
+        accepted.push(file);
+      }
+    }
+    if (accepted.length === 0) return;
 
-    // update reactively
-    chatState.fileList = [...chatState.fileList, newFile];
+    chatState.fileList = [
+      ...chatState.fileList,
+      ...accepted.map((file, index) => fallbackItem(file, index)),
+    ];
 
-    // show the list immediately after it updates
     nextTick(() => {
       if (composerRef.value && chatState.fileList.length > 0) {
         composerRef.value.openHeader();
       }
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
+  };
 
-      // ensure it scrolls to the bottom
-      scrollToBottom();
-    });
+  const handleFileChange = (file: unknown) => {
+    if (!isElementUploadFile(file) || !file.raw) return;
+    appendBrowserFiles([file.raw]);
+  };
+
+  const handlePastedFiles = (files: readonly File[]) => {
+    appendBrowserFiles(files);
   };
 
   const removeFile = (index: number) => {
     if (!currentChatId.value) return;
-
     const chatState = getChatState(currentChatId.value);
     if (!chatState) return;
+    const item = chatState.fileList[index];
+    if (!item) return;
+    if (removeUpload) {
+      Promise.resolve(removeUpload(item)).catch(() => undefined);
+    } else {
+      const nextFiles = [...chatState.fileList];
+      nextFiles.splice(index, 1);
+      chatState.fileList = nextFiles;
+    }
 
-    // update reactively
-    const newFileList = [...chatState.fileList];
-    newFileList.splice(index, 1);
-    chatState.fileList = newFileList;
-
-    // close the header if the file list is empty
     nextTick(() => {
       if (composerRef.value && chatState.fileList.length === 0) {
         composerRef.value.closeHeader();
       }
-
-      // ensure it scrolls to the bottom
-      scrollToBottom();
-    });
+      scrollToBottom().catch(() => undefined);
+    }).catch(() => undefined);
   };
 
-  return { handleFileChange, removeFile };
+  return { handleFileChange, handlePastedFiles, removeFile };
 }

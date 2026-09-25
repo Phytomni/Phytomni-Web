@@ -2,30 +2,40 @@
   <div class="chat-mode-selector">
     <el-radio-group
       :model-value="modelValue"
-      @update:model-value="(v) => $emit('update:modelValue', v as 'instant' | 'expert')"
+      @update:model-value="onModeUpdate"
     >
-      <el-radio-button value="instant">{{
-        $t("chat.mode.instant")
-      }}</el-radio-button>
-      <el-tooltip
-        v-if="!expertEnabled"
-        :content="$t('chat.mode.comingSoon')"
-        placement="top"
+      <el-radio-button
+        value="instant"
+        :disabled="!instantEnabled"
+        data-test="chat-mode-instant"
+        >{{ $t("chat.mode.instant") }}</el-radio-button
       >
-        <el-radio-button value="expert" disabled>{{
-          $t("chat.mode.expert")
-        }}</el-radio-button>
-      </el-tooltip>
-      <el-radio-button v-else value="expert">{{
-        $t("chat.mode.expert")
-      }}</el-radio-button>
+      <el-radio-button
+        value="expert"
+        :disabled="!expertEnabled"
+        data-test="chat-mode-expert"
+        >{{ $t("chat.mode.expert") }}</el-radio-button
+      >
     </el-radio-group>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{ modelValue: "instant" | "expert"; expertEnabled: boolean }>();
-defineEmits<{ (e: "update:modelValue", value: "instant" | "expert"): void }>();
+const props = defineProps<{
+  modelValue: "instant" | "expert";
+  instantEnabled: boolean;
+  expertEnabled: boolean;
+}>();
+const emit = defineEmits<{
+  (e: "update:modelValue", value: "instant" | "expert"): void;
+}>();
+
+const onModeUpdate = (value: unknown) => {
+  if (value !== "instant" && value !== "expert") return;
+  if (value === "instant" && !props.instantEnabled) return;
+  if (value === "expert" && !props.expertEnabled) return;
+  emit("update:modelValue", value);
+};
 </script>
 
 <style scoped>
@@ -54,9 +64,16 @@ defineEmits<{ (e: "update:modelValue", value: "instant" | "expert"): void }>();
   line-height: 1.4;
 }
 
-.chat-mode-selector
-  :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: var(--phy-color-primary-soft);
+.chat-mode-selector :deep(.el-radio-button) {
+  --el-radio-button-checked-bg-color: var(--phy-color-primary-soft);
+  --el-radio-button-checked-text-color: var(--phy-color-action-text);
+  --el-radio-button-checked-border-color: transparent;
+}
+
+.chat-mode-selector :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  border-color: transparent;
+  background-color: var(--phy-color-primary-soft);
+  box-shadow: none;
   color: var(--phy-color-action-text);
   font-weight: 600;
 }

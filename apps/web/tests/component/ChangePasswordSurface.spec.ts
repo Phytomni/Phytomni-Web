@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { computed, defineComponent, h, reactive, ref, inject, provide } from "vue";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
+import {
+  computed,
+  defineComponent,
+  h,
+  reactive,
+  ref,
+  inject,
+  provide,
+} from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import ElementPlus from "element-plus";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   changePassword: vi.fn(),
@@ -15,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   warning: vi.fn(),
+  validationRejects: false,
   store: undefined as
     | {
         name: string;
@@ -31,9 +40,8 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ back: mocks.back, replace: mocks.replace }),
 }));
 vi.mock("element-plus", async () => {
-  const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus",
-  );
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
   return {
     ...actual,
     ElMessage: {
@@ -44,7 +52,12 @@ vi.mock("element-plus", async () => {
   };
 });
 
-import ChangePassword from "@/views/change-password/index.vue";
+import ChangePassword from "@/views/change-password/ChangePasswordView.vue";
+
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/change-password/ChangePasswordView.vue"),
+  "utf8"
+);
 
 type Rule = {
   required?: boolean;
@@ -53,7 +66,7 @@ type Rule = {
   validator?: (
     rule: unknown,
     value: string,
-    callback: (error?: Error) => void,
+    callback: (error?: Error) => void
   ) => void;
 };
 
@@ -64,15 +77,26 @@ const ElFormStub = defineComponent({
   props: {
     model: { type: Object, required: true },
     rules: { type: Object, default: () => ({}) },
+    labelPosition: String,
   },
   setup(props, { expose, slots }) {
+    const model = props.model as Record<string, unknown>;
+    const initialValues = Object.fromEntries(
+      Object.entries(model).map(([field, value]) => [field, value])
+    );
     const errors = ref<Record<string, string>>({});
     provide(formErrorsKey, errors);
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (mocks.validationRejects) {
+        mocks.validationRejects = false;
+        errors.value = { oldPassword: "Validation failed" };
+        throw new Error("validation failed");
+      }
+
       const nextErrors: Record<string, string> = {};
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
-          (props.model as Record<string, unknown>)[field] ?? "",
+          (props.model as Record<string, unknown>)[field] ?? ""
         );
         for (const rule of rawRules as Rule[]) {
           if (rule.required && !value) {
@@ -102,7 +126,7 @@ const ElFormStub = defineComponent({
     const validateField = async (field: string) => {
       const rawRules = (props.rules as Record<string, Rule[]>)[field] ?? [];
       const value = String(
-        (props.model as Record<string, unknown>)[field] ?? "",
+        (props.model as Record<string, unknown>)[field] ?? ""
       );
       for (const rule of rawRules) {
         if (rule.validator) {
@@ -112,7 +136,25 @@ const ElFormStub = defineComponent({
         }
       }
     };
-    expose({ validate, validateField, resetFields: vi.fn() });
+    const resetFields = (fields?: string | string[]) => {
+      const targets =
+        fields === undefined
+          ? Object.keys(initialValues)
+          : Array.isArray(fields)
+            ? fields
+            : [fields];
+
+      for (const field of targets) {
+        model[field] = initialValues[field];
+      }
+
+      errors.value = Object.fromEntries(
+        Object.entries(errors.value).filter(
+          ([field]) => !targets.includes(field)
+        )
+      );
+    };
+    expose({ validate, validateField, resetFields });
     return () => h("form", { class: "el-form" }, slots.default?.());
   },
 });
@@ -123,7 +165,7 @@ const ElFormItemStub = defineComponent({
   setup(props, { slots }) {
     const errors = inject(
       formErrorsKey,
-      computed(() => ({} as Record<string, string>)),
+      computed(() => ({}) as Record<string, string>)
     );
     return () =>
       h("section", { class: "el-form-item", "data-prop": props.prop }, [
@@ -176,7 +218,7 @@ const ElButtonStub = defineComponent({
           "aria-busy": props.loading ? "true" : "false",
           onClick: (event: MouseEvent) => emit("click", event),
         },
-        slots.default?.(),
+        slots.default?.()
       );
   },
 });
@@ -202,22 +244,14 @@ const makeStore = (loginStatus = "0") => {
 const mountView = (loginStatus = "0") => {
   const store = makeStore(loginStatus);
   mocks.store = store;
-  const i18n = createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-  });
-  return mount(ChangePassword, {
-    global: { plugins: [i18n, ElementPlus], stubs },
-  });
+  return createTestAppContext().mount(ChangePassword, { global: { stubs } });
 };
 
 const fillForm = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   oldPassword = "Current1!",
   newPassword = "Secure1!",
-  confirmPassword = newPassword,
+  confirmPassword = newPassword
 ) => {
   const inputs = wrapper.findAll("input");
   await inputs[1].setValue(oldPassword);
@@ -230,18 +264,63 @@ describe("Change Password surface", () => {
     vi.clearAllMocks();
     mocks.changePassword.mockResolvedValue({ code: 200 });
     mocks.store = undefined;
+    mocks.validationRejects = false;
     sessionStorage.clear();
   });
 
   it("uses the auth shell with one bounded form and hides Back for first login", () => {
     const wrapper = mountView("0");
-    expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: "PhyAuthLayout" }).exists()).toBe(
+      true
+    );
     expect(wrapper.find('img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.findAll('img[src="/logo.png"]')).toHaveLength(1);
     expect(wrapper.find(".phy-auth-brand").text()).toContain("Phytomni");
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get(".change-password-title").text()).toBe(
+      "Change Password"
+    );
     expect(wrapper.find(".change-password-page").exists()).toBe(false);
     expect(wrapper.find(".change-password-back").exists()).toBe(false);
     expect(wrapper.find(".change-password-form").exists()).toBe(true);
     expect(wrapper.findAll("input")).toHaveLength(4);
+    expect(wrapper.getComponent(ElFormStub).props("labelPosition")).toBe("top");
+  });
+
+  it("resets only password fields and preserves the store-derived username", async () => {
+    const wrapper = mountView("1");
+    await fillForm(wrapper, "", "Short1!", "Another1!");
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".el-form-item__error").length).toBeGreaterThan(0);
+    expect(
+      (wrapper.findAll("input")[0].element as HTMLInputElement).value
+    ).toBe("researcher@example.test");
+
+    await wrapper.get(".change-password-reset").trigger("click");
+    await flushPromises();
+
+    const inputs = wrapper.findAll("input");
+    expect(
+      inputs.map((input) => (input.element as HTMLInputElement).value)
+    ).toEqual(["researcher@example.test", "", "", ""]);
+    expect(wrapper.findAll(".el-form-item__error")).toHaveLength(0);
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+  });
+
+  it("handles rejected form validation without invoking the password API", async () => {
+    mocks.validationRejects = true;
+    const wrapper = mountView("1");
+    await fillForm(wrapper);
+
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(mocks.warning).toHaveBeenCalledTimes(1);
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+    expect(mocks.store?.FedLogOut).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("shows Back for returning users and uses router.back", async () => {
@@ -255,21 +334,60 @@ describe("Change Password surface", () => {
   it.each([
     ["old password is required", "", "Secure1!", "Please enter old password"],
     ["new password is required", "Current1!", "", "Please enter new password"],
-    ["new password needs eight characters", "Current1!", "Short1!", "Password must be at least 8 characters"],
-    ["new password needs an uppercase letter", "Current1!", "secure1!", "Password must contain uppercase letters"],
-    ["new password needs a lowercase letter", "Current1!", "SECURE1!", "Password must contain lowercase letters"],
-    ["new password needs a number", "Current1!", "Secure!!", "Password must contain numbers"],
-    ["new password needs a special character", "Current1!", "Secure12", "Password must contain special characters"],
-    ["new password cannot equal old password", "Current1!", "Current1!", "New password cannot be the same as old password"],
-    ["confirmation must match", "Current1!", "Secure1!", "Passwords do not match", "Another1!"],
-  ])("rejects %s", async (_name, oldPassword, newPassword, message, confirmation) => {
-    const wrapper = mountView("1");
-    await fillForm(wrapper, oldPassword, newPassword, confirmation);
-    await wrapper.get(".change-password-submit").trigger("click");
-    await flushPromises();
-    expect(wrapper.text()).toContain(message);
-    expect(mocks.changePassword).not.toHaveBeenCalled();
-  });
+    [
+      "new password needs eight characters",
+      "Current1!",
+      "Short1!",
+      "Password must be at least 8 characters",
+    ],
+    [
+      "new password needs an uppercase letter",
+      "Current1!",
+      "secure1!",
+      "Password must contain uppercase letters",
+    ],
+    [
+      "new password needs a lowercase letter",
+      "Current1!",
+      "SECURE1!",
+      "Password must contain lowercase letters",
+    ],
+    [
+      "new password needs a number",
+      "Current1!",
+      "Secure!!",
+      "Password must contain numbers",
+    ],
+    [
+      "new password needs a special character",
+      "Current1!",
+      "Secure12",
+      "Password must contain special characters",
+    ],
+    [
+      "new password cannot equal old password",
+      "Current1!",
+      "Current1!",
+      "New password cannot be the same as old password",
+    ],
+    [
+      "confirmation must match",
+      "Current1!",
+      "Secure1!",
+      "Passwords do not match",
+      "Another1!",
+    ],
+  ])(
+    "rejects %s",
+    async (_name, oldPassword, newPassword, message, confirmation) => {
+      const wrapper = mountView("1");
+      await fillForm(wrapper, oldPassword, newPassword, confirmation);
+      await wrapper.get(".change-password-submit").trigger("click");
+      await flushPromises();
+      expect(wrapper.text()).toContain(message);
+      expect(mocks.changePassword).not.toHaveBeenCalled();
+    }
+  );
 
   it("preserves the FormData payload and writes tutorial state before /login when logout resolves", async () => {
     const store = makeStore("0");
@@ -305,6 +423,23 @@ describe("Change Password surface", () => {
     expect(mocks.replace).toHaveBeenCalledWith("/login");
   });
 
+  it("keeps the tutorial hand-off when the /login navigation rejects", async () => {
+    const store = makeStore("0");
+    const logout = vi.fn().mockResolvedValue(undefined);
+    store.FedLogOut = logout;
+    mocks.store = store;
+    mocks.replace.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView("0");
+    (mocks.store as typeof store).FedLogOut = logout;
+    await fillForm(wrapper);
+
+    await wrapper.get(".change-password-submit").trigger("click");
+    await flushPromises();
+
+    expect(sessionStorage.getItem("tutorial_pending")).toBe("1");
+    expect(mocks.replace).toHaveBeenCalledWith("/login");
+  });
+
   it("reports server failures without logout or navigation", async () => {
     mocks.changePassword.mockResolvedValueOnce({
       code: 400,
@@ -322,23 +457,17 @@ describe("Change Password surface", () => {
     await wrapper.get(".change-password-submit").trigger("click");
     await flushPromises();
     expect(mocks.warning).toHaveBeenCalledWith(
-      "Failed to change password, please try again later",
+      "Failed to change password, please try again later"
     );
   });
 
   it("has no sensitive logging or status writer and keeps 48px shell controls", () => {
-    const source = readFileSync(
-      resolve(__dirname, "../../src/views/change-password/index.vue"),
-      "utf8",
-    );
-    expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
-    expect(source).not.toContain("SET_LOGIN_STATUS");
-    expect(source).toContain("PhyAuthLayout");
-    expect(source).toContain("--phy-control-height-primary");
-    expect(source).toContain("@media (max-width: 599px)");
-    expect(source).toMatch(
-      /@media \(max-width: 599px\)[\s\S]*?\.change-password-field\s*\{[\s\S]*?display:\s*block;/,
-    );
-    expect(source).not.toContain("height: 100vh");
+    expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
+    expect(SOURCE.match(/<h1/g)).toHaveLength(1);
+    expect(SOURCE).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
+    expect(SOURCE).not.toContain("SET_LOGIN_STATUS");
+    expect(SOURCE).toContain("PhyAuthLayout");
+    expect(SOURCE).toContain("--phy-control-height-primary");
+    expect(SOURCE).not.toContain("height: 100vh");
   });
 });

@@ -1,0 +1,24 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "web-prettier-temporary-001"
+tool = "prettier"
+rule = "format"
+classification = "temporary"
+mechanism = "marker"
+target_kind = "span"
+path = "apps/web/src/components/LegacyPanel.vue"
+target = "template:legacy-panel"
+fingerprint = "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-26
+expires_on = 2026-08-31
+remediation = "Remove the directive after the replacement lands."
+rationale = "The legacy panel is being replaced by the shared shell."
+counterfactual = "Formatting the generated fragment now would make the migration diff harder to review."
+risk = "The temporary scope is one named template span and expires before release close."
+tests = ["scripts/tests/static_analysis/test_model.py"]

@@ -1,20 +1,21 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createI18n } from "vue-i18n";
-import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import BotReportState from "@/components/research/BotReportState.vue";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../../../helpers/test-app-context";
 
-vi.mock("@/components/MarkdownViewer.vue", () => ({
+vi.mock("@/components/ScientificMarkdown.vue", () => ({
   default: {
-    props: ["content"],
-    template: '<article data-test="report-markdown">{{ content }}</article>',
+    props: ["source"],
+    template: '<article data-test="report-markdown">{{ source }}</article>',
   },
 }));
 
@@ -27,8 +28,18 @@ const REQUIRED_BOT_LIFECYCLE_KEYS = [
   "chat.botReport.emptyArtifacts",
 ] as const;
 
+const REQUIRED_RESEARCH_LIFECYCLE_LABELS = [
+  ["chat.lifecycle.resolving_inputs", "Resolving inputs"],
+  ["chat.lifecycle.planning", "Planning tasks"],
+  ["chat.lifecycle.finalizing", "Finalizing"],
+] as const;
+const RESEARCH_TIMEOUT_LIFECYCLE_LABEL = [
+  "chat.lifecycle.timed_out",
+  "Timed out",
+] as const;
+
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 
@@ -59,16 +70,6 @@ function localePack(locale: SupportedLocale): LocalePack {
   return locale === "zh-CN" ? zhCN : enUS;
 }
 
-function makeI18n(locale: SupportedLocale) {
-  return createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-}
-
 function lifecycle(
   overrides: Partial<LifecycleWithMetadata> = {}
 ): LifecycleWithMetadata {
@@ -90,24 +91,29 @@ function reportLabels(pack: LocalePack, state: ReturnType<typeof lifecycle>) {
   const botReport = pack.chat.botReport;
   const stage = state.reportStage;
   const lifecycleLabel =
-    state.status === "FAILED"
-      ? botReport.failed
-      : state.status === "INPUT_REQUIRED"
-      ? botReport.inputRequired
-      : stage === "waiting_for_brief_gene"
-      ? botReport.waiting
-      : state.degraded
-      ? botReport.degraded
-      : stage === "intermediate"
-      ? botReport.partial
-      : state.status === "RUNNING"
-      ? botReport.waiting
-      : botReport.complete;
+    state.status === "TIMED_OUT"
+      ? pack.chat.lifecycle.timed_out
+      : state.status === "FAILED"
+        ? botReport.failed
+        : state.status === "INPUT_REQUIRED"
+          ? botReport.inputRequired
+          : stage === "waiting_for_brief_gene"
+            ? botReport.waiting
+            : state.degraded
+              ? botReport.degraded
+              : stage === "intermediate"
+                ? botReport.partial
+                : state.status === "RUNNING"
+                  ? botReport.waiting
+                  : botReport.complete;
 
   return {
     loading: lifecycleLabel,
     degraded: lifecycleLabel,
-    failed: botReport.failed,
+    failed:
+      state.status === "TIMED_OUT"
+        ? pack.chat.lifecycle.timed_out
+        : botReport.failed,
     complete: botReport.complete,
   };
 }
@@ -117,19 +123,19 @@ function mountReport(
   state: ReturnType<typeof lifecycle>
 ) {
   const pack = localePack(locale);
-  return mount(BotReportState, {
+  return createTestAppContext({ locale }).mount(BotReportState, {
     props: {
       state,
+      ns: `bot-report-${locale}`,
       labels: reportLabels(pack, state),
       emptyReportLabel: reportLabels(pack, state).loading,
     },
     global: {
-      plugins: [makeI18n(locale)],
       stubs: {
-        MarkdownViewer: {
-          props: ["content"],
+        ScientificMarkdown: {
+          props: ["source"],
           template:
-            '<article data-test="report-markdown">{{ content }}</article>',
+            '<article data-test="report-markdown">{{ source }}</article>',
         },
       },
     },
@@ -167,9 +173,44 @@ describe("Bot lifecycle locale contract", () => {
     }
   });
 
+  it.each(REQUIRED_RESEARCH_LIFECYCLE_LABELS)(
+    "defines exact English and translated Research lifecycle copy for %s",
+    (key, english) => {
+      expect(valueAt(enUS, key)).toBe(english);
+
+      const translated = valueAt(zhCN, key);
+      expect(translated).toEqual(expect.any(String));
+      const normalized = String(translated).trim();
+      expect(normalized).not.toBe("");
+      expect(normalized).not.toBe(english);
+      expect(normalized).not.toBe(key);
+      expect(normalized).not.toMatch(/[{}]/u);
+    }
+  );
+
+  it("defines exact English and translated Research timeout copy", () => {
+    const [key, english] = RESEARCH_TIMEOUT_LIFECYCLE_LABEL;
+    expect(valueAt(enUS, key)).toBe(english);
+
+    const translated = valueAt(zhCN, key);
+    expect(translated).toEqual(expect.any(String));
+    const normalized = String(translated).trim();
+    expect(normalized).not.toBe("");
+    expect(normalized).not.toBe(english);
+    expect(normalized).not.toBe(key);
+    expect(normalized).not.toMatch(/[{}]/u);
+  });
+
   it("wires Bot-owned artifact states to the stable render-time keys", () => {
+    const policySource = readFileSync(
+      resolve(
+        __dirname,
+        "../../../../src/views/chat/utils/report-presentation.ts"
+      ),
+      "utf8"
+    );
     for (const key of REQUIRED_BOT_LIFECYCLE_KEYS) {
-      expect(CHAT_SOURCE).toContain(key);
+      expect(CHAT_SOURCE + policySource).toContain(key);
     }
     expect(CHAT_SOURCE).toContain(':labels="currentArtifactBotReportLabels"');
     expect(CHAT_SOURCE).toContain(
@@ -182,15 +223,28 @@ describe("Bot lifecycle locale contract", () => {
     ["partial", "RUNNING", "intermediate", false, "partial"],
     ["degraded", "RUNNING", "intermediate", true, "degraded"],
     ["failed", "FAILED", "final", false, "failed"],
+    ["timed-out", "TIMED_OUT", "final", false, "timed_out"],
+    ["cancelled", "CANCELLED", "final", false, "cancelled"],
     ["input-required", "INPUT_REQUIRED", null, false, "inputRequired"],
     ["complete", "SUCCEEDED", "final", false, "complete"],
   ] as const)(
     "renders %s copy in both locales without raw lifecycle values",
     (_name, status, reportStage, degraded, key) => {
       for (const locale of ["en-US", "zh-CN"] as const) {
-        const state = lifecycle({ status, reportStage, degraded });
+        const state = lifecycle({
+          status,
+          reportStage,
+          degraded,
+          finalReport:
+            status === "SUCCEEDED" ? "# Valid scientific report" : "",
+        });
         const wrapper = mountReport(locale, state);
-        const expected = valueAt(localePack(locale), `chat.botReport.${key}`);
+        const expected = valueAt(
+          localePack(locale),
+          key === "timed_out" || key === "cancelled"
+            ? `chat.lifecycle.${key}`
+            : `chat.botReport.${key}`
+        );
 
         expect(wrapper.get('[data-test="bot-report-status"]').text()).toContain(
           expected as string
@@ -205,25 +259,23 @@ describe("Bot lifecycle locale contract", () => {
   it("localizes empty artifacts and keeps the retry control keyboard reachable", () => {
     const locale: SupportedLocale = "en-US";
     const pack = localePack(locale);
-    const artifacts = mount(BotArtifactList, {
+    const artifacts = mountWithApp(BotArtifactList, {
       props: {
         artifacts: [],
         emptyLabel: pack.chat.botReport.emptyArtifacts,
       },
-      global: { plugins: [makeI18n(locale)] },
     });
     expect(artifacts.get('[data-test="bot-artifact-warning"]').text()).toBe(
       pack.chat.botReport.emptyArtifacts
     );
 
-    const actions = mount(ChatMessageActions, {
+    const actions = mountWithApp(ChatMessageActions, {
       props: {
         role: "assistant",
         canRefresh: true,
         canReact: false,
       },
       global: {
-        plugins: [makeI18n(locale)],
         stubs: ACTION_STUBS,
       },
     });

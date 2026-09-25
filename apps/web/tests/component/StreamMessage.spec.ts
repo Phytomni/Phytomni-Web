@@ -1,34 +1,36 @@
-import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { describe, it, expect, vi } from "vitest";
 import { nextTick } from "vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
 import type { ContentBlock } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 describe("StreamMessage", () => {
-  it("renders a markdown block's text through v-html", () => {
+  it("renders a markdown block through ScientificMarkdown", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     expect(w.html()).toContain("<strong>hi</strong>");
   });
 
-  it("skins the streaming markdown wrapper with chat classes without MarkdownViewer", () => {
+  it("skins the streaming markdown wrapper with chat classes without a legacy renderer", async () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "**hi**" },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
+    await vi.dynamicImportSettled();
     const md = w.find(".md-block.phy-markdown.phy-markdown--chat");
     expect(md.exists()).toBe(true);
     expect(md.html()).toContain("<strong>hi</strong>");
-    // Streaming stays on MarkdownBlock — no MarkdownViewer handoff.
+    // Streaming stays on MarkdownBlock and the shared ScientificMarkdown engine.
     expect(w.find(".markdown-viewer").exists()).toBe(false);
+    expect(w.findComponent({ name: "ScientificMarkdown" }).exists()).toBe(true);
   });
 
   it("skips an unregistered block type without throwing", () => {
     const blocks: ContentBlock[] = [{ type: "mol3d", authority: "web" }];
-    const w = mount(StreamMessage, { props: { blocks } });
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
     expect(w.html()).not.toContain("mol3d");
   });
 
@@ -49,10 +51,12 @@ describe("StreamMessage", () => {
         },
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: { blocks },
     });
-    await w.find(".a2ui-confirm button[type='button']:last-child").trigger("click");
+    await w
+      .find(".a2ui-confirm button[type='button']:last-child")
+      .trigger("click");
     await nextTick();
     expect(w.emitted("a2ui-action")).toEqual([
       [
@@ -69,7 +73,7 @@ describe("StreamMessage", () => {
     expect(w.vm.$.provides).not.toHaveProperty("a2uiTransport");
   });
 
-  it("leaves [N] literal when ns is absent (reference-free streaming)", () => {
+  it("shows compact inactive citation text when ns is absent", () => {
     const blocks: ContentBlock[] = [
       {
         type: "markdown",
@@ -77,14 +81,13 @@ describe("StreamMessage", () => {
         text: "See [1] for the claim.",
       },
     ];
-    const w = mount(StreamMessage, { props: { blocks } });
-    // Scope gate: without ns / references, renderStreamingMarkdown keeps [N] literal.
-    expect(w.html()).toContain("[1]");
+    const w = mountWithApp(StreamMessage, { props: { blocks } });
+    expect(w.get(".scientific-citation").text()).toBe("1");
     expect(w.html()).not.toContain('href="#');
     expect(w.find(".doc-list").exists()).toBe(false);
   });
 
-  it("keeps [N] literal when ns is set but references are empty or absent", () => {
+  it("keeps compact citations inactive when references are empty or absent", () => {
     const blocks: ContentBlock[] = [
       {
         type: "markdown",
@@ -93,11 +96,11 @@ describe("StreamMessage", () => {
       },
     ];
     for (const references of [undefined, [] as unknown[]]) {
-      const w = mount(StreamMessage, {
+      const w = mountWithApp(StreamMessage, {
         props: { blocks, ns: "m0", references },
         global: { mocks: { $t: (k: string) => k } },
       });
-      expect(w.html()).toContain("[1]");
+      expect(w.get(".scientific-citation").text()).toBe("1");
       expect(w.html()).not.toContain("#m0-ref-");
       expect(w.html()).not.toContain('href="#');
       expect(w.find(".doc-list").exists()).toBe(false);
@@ -112,7 +115,7 @@ describe("StreamMessage", () => {
         text: "See [1] for the claim.",
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         ns: "",
@@ -120,21 +123,23 @@ describe("StreamMessage", () => {
       },
       global: { mocks: { $t: (k: string) => k } },
     });
-    // Before references: empty ns → literal marker, no rows.
-    expect(w.html()).toContain("[1]");
+    // Before references: empty ns -> compact inactive marker, no rows.
+    expect(w.get(".scientific-citation").text()).toBe("1");
     expect(w.html()).not.toContain('class="citation-ref"');
     expect(w.find(".doc-list").exists()).toBe(false);
 
     // Reactive arrival of real references + page ns (same StreamMessage instance).
     await w.setProps({
       ns: "m2",
-      references: [{ title: "Paper One" }],
+      references: [{ citation: { runs: [{ text: "Paper One" }], links: [] } }],
     });
     await nextTick();
 
-    // Streaming path: processInlineMarkdown emits #ns-ref-N anchors (not citation-ref).
+    // Streaming path: ScientificMarkdown emits #ns-ref-N anchors (not citation-ref).
     expect(w.html()).toContain('href="#m2-ref-1"');
-    expect(w.html()).toMatch(/<a href="#m2-ref-1"[^>]*>\[1\]<\/a>/);
+    expect(w.get(".scientific-citation__link").attributes("href")).toBe(
+      "#m2-ref-1"
+    );
     const row = w.find(".doc-list-item");
     expect(row.exists()).toBe(true);
     expect(row.attributes("id")).toBe("m2-ref-1");
@@ -145,19 +150,69 @@ describe("StreamMessage", () => {
     expect(md.html()).toContain('href="#m2-ref-1"');
   });
 
+  it("activates its grouped reference rows before relaying the citation", async () => {
+    const w = mountWithApp(StreamMessage, {
+      props: {
+        blocks: [
+          { type: "markdown", authority: "web", text: "Evidence [1-2]." },
+        ],
+        ns: "m-citation",
+        references: [
+          { citation: { runs: [{ text: "Reference one" }], links: [] } },
+          { citation: { runs: [{ text: "Reference two" }], links: [] } },
+        ],
+      },
+    });
+    await vi.dynamicImportSettled();
+
+    const rows = w.findAll(".doc-list-item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    expect(rows.map((row) => row.attributes("id"))).toEqual([
+      "m-citation-ref-1",
+      "m-citation-ref-2",
+    ]);
+    await w.get(".scientific-citation__link").trigger("click");
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true]);
+    expect(rows.map((row) => row.attributes("aria-current"))).toEqual([
+      "true",
+      undefined,
+    ]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(w.emitted("citation-activate")).toEqual([
+      [{ namespace: "m-citation", indices: [1, 2] }],
+    ]);
+  });
+
   it("keeps two streams' citation targets disjoint; empty references stay a no-op", () => {
     const blocks: ContentBlock[] = [
       { type: "markdown", authority: "web", text: "Claim [1]." },
     ];
-    const a = mount(StreamMessage, {
-      props: { blocks, ns: "m0", references: [{ title: "A" }] },
+    const a = mountWithApp(StreamMessage, {
+      props: {
+        blocks,
+        ns: "m0",
+        references: [{ citation: { runs: [{ text: "A" }], links: [] } }],
+      },
       global: { mocks: { $t: (k: string) => k } },
     });
-    const b = mount(StreamMessage, {
-      props: { blocks, ns: "m1", references: [{ title: "B" }] },
+    const b = mountWithApp(StreamMessage, {
+      props: {
+        blocks,
+        ns: "m1",
+        references: [{ citation: { runs: [{ text: "B" }], links: [] } }],
+      },
       global: { mocks: { $t: (k: string) => k } },
     });
-    const none = mount(StreamMessage, {
+    const none = mountWithApp(StreamMessage, {
       props: { blocks, ns: undefined, references: [] },
       global: { mocks: { $t: (k: string) => k } },
     });
@@ -169,7 +224,7 @@ describe("StreamMessage", () => {
     expect(a.html()).not.toContain('href="#m1-ref-1"');
     expect(b.html()).not.toContain('href="#m0-ref-1"');
 
-    expect(none.html()).toContain("[1]");
+    expect(none.get(".scientific-citation").text()).toBe("1");
     expect(none.html()).not.toContain('href="#');
     expect(none.find(".doc-list").exists()).toBe(false);
   });
@@ -192,7 +247,7 @@ describe("StreamMessage", () => {
       },
       { type: "markdown", authority: "web", text: "See [1]." },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         ns: "",
@@ -220,6 +275,10 @@ describe("StreamMessage", () => {
         },
       ],
     ]);
+    expect(
+      w.find(".a2ui-confirm").attributes("reference-count")
+    ).toBeUndefined();
+    expect(w.find(".a2ui-confirm").attributes("ns")).toBeUndefined();
   });
 
   it("groups consecutive activity blocks and keeps markdown/A2UI outside ChatActivity", () => {
@@ -244,7 +303,7 @@ describe("StreamMessage", () => {
       { type: "tool", authority: "web", toolName: "after" },
       { type: "markdown", authority: "web", text: "outro" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-act",
@@ -271,7 +330,7 @@ describe("StreamMessage", () => {
       { type: "tool", authority: "web", toolName: "knowledge_search" },
       { type: "reasoning", authority: "web", text: "plan" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: { blocks },
       global: { mocks: { $t: (k: string) => k } },
     });
@@ -294,13 +353,17 @@ describe("StreamMessage", () => {
             catalog_version: "v1.0",
             surface_id: "surf-beside",
             widget: "confirm",
-            props: { title: "Confirm?", confirm_label: "Yes", cancel_label: "No" },
+            props: {
+              title: "Confirm?",
+              confirm_label: "Yes",
+              cancel_label: "No",
+            },
           },
           state: { status: "ready", round: 1 },
         },
       },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-a2ui",
@@ -328,7 +391,7 @@ describe("StreamMessage", () => {
     const blocks: ContentBlock[] = [
       { type: "tool", authority: "web", toolName: "knowledge_search" },
     ];
-    const w = mount(StreamMessage, {
+    const w = mountWithApp(StreamMessage, {
       props: {
         blocks,
         streamPresentationKey: "req-toggle",

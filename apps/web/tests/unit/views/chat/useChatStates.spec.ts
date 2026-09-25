@@ -1,10 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { useChatStates } from "@/views/chat/composables/useChatStates";
-import type { UploadFile } from "@/views/chat/types";
-import {
-  clearPendingChat,
-  isLocalStorageChat,
-} from "@/utils/pending-chat";
+import type { ResumableUploadItem } from "@/views/chat/types";
+import { clearPendingChat, isLocalStorageChat } from "@/utils/pending-chat";
 import type { RekeyChatStateOutcome } from "@/views/chat/types";
 
 // This is a characterization test of the just-extracted (behavior-unchanged) parallel
@@ -12,14 +9,79 @@ import type { RekeyChatStateOutcome } from "@/views/chat/types";
 // never bleeds across them" runtime invariant.
 
 describe("useChatStates parallel chat state", () => {
+  it("removes a deleted dialogue state without retaining its foreground owner", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("deleted-dialogue");
+    const stateB = s.getChatState("retained-dialogue");
+    stateA.renderedChat = { messages: [{ role: "assistant", content: "A" }] };
+    stateA.attachmentAnnouncement = "Rejected first.bam";
+    stateA.attachmentAnnouncementNonce = 4;
+    stateB.renderedChat = { messages: [{ role: "assistant", content: "B" }] };
+    s.currentChatId.value = "deleted-dialogue";
+
+    (
+      s as unknown as {
+        removeChatState: (dialogueId: string) => void;
+      }
+    ).removeChatState("deleted-dialogue");
+
+    expect(s.chatStates.value["deleted-dialogue"]).toBeUndefined();
+    expect(s.currentChatId.value).toBe("");
+    expect(s.chatStates.value["retained-dialogue"]).toBe(stateB);
+
+    s.currentChatId.value = "deleted-dialogue";
+    const recreated = s.getChatState("deleted-dialogue");
+    expect(recreated.attachmentAnnouncement).toBeUndefined();
+    expect(recreated.attachmentAnnouncementNonce).toBe(0);
+  });
+
+  it("keeps lifecycle snapshots isolated and moves them with a dialogue rekey", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("A") as unknown as {
+      agentRunLifecycles: Record<string, { phase: string }>;
+    };
+    const stateB = s.getChatState("B") as unknown as {
+      agentRunLifecycles: Record<string, { phase: string }>;
+    };
+
+    expect(stateA.agentRunLifecycles).toEqual({});
+    expect(stateB.agentRunLifecycles).toEqual({});
+
+    stateA.agentRunLifecycles["41"] = { phase: "PREPARING" };
+    stateB.agentRunLifecycles["41"] = { phase: "RUNNING" };
+
+    expect(stateA.agentRunLifecycles["41"]).toEqual({ phase: "PREPARING" });
+    expect(stateB.agentRunLifecycles["41"]).toEqual({ phase: "RUNNING" });
+    expect(s.rekeyChatState("A", "A-server")).toEqual({ outcome: "moved" });
+    expect(
+      (
+        s.getChatState("A-server") as unknown as {
+          agentRunLifecycles: Record<string, { phase: string }>;
+        }
+      ).agentRunLifecycles
+    ).toEqual({ "41": { phase: "PREPARING" } });
+  });
+
   it("isolates per-dialogue state via proxies — switching currentChatId flips state without bleed", () => {
     const s = useChatStates();
-    const fileA: UploadFile[] = [
+    const fileA: ResumableUploadItem[] = [
       {
+        localId: "upload-a",
+        assetId: null,
         name: "a.txt",
         size: 1,
         type: "text/plain",
         file: {} as File,
+        lastModified: 0,
+        status: "queued",
+        partSize: 0,
+        partCount: 0,
+        receivedParts: [],
+        loadedBytes: 0,
+        speedBytesPerSecond: 0,
+        etaSeconds: null,
+        retryCount: 0,
+        errorCode: null,
       },
     ];
 
@@ -57,19 +119,23 @@ describe("useChatStates parallel chat state", () => {
       isSending: false,
       messageInput: "",
       fileList: [],
+      attachmentAnnouncementNonce: 0,
       historyQuestion: null,
+      historyHydration: "new",
+      historyErrorKind: null,
       copyVisible: 0,
       copyTimeRef: undefined,
       logData: {},
       loadingLog: {},
       refreshingMessages: {},
+      agentRunLifecycles: {},
       reactions: {},
       updatingLog: {},
       logErrorKinds: {},
       sendStartedAt: null,
       activeAgentName: "",
       completing: false,
-      mode: "instant",
+      mode: "expert",
       isStreaming: false,
       streamingMessageId: null,
       uploadTransfer: null,
@@ -77,14 +143,33 @@ describe("useChatStates parallel chat state", () => {
       renderedChat: null,
       activeRequestId: "",
       generationStopped: false,
+      pendingTurnId: null,
+      pendingTurnFingerprint: null,
+      refreshTurnIds: {},
       activityExpandedByMessage: {},
       artifactOpen: false,
-      activeArtifactMessageId: null,
+      activeArtifactIdentity: null,
       artifactTab: "content",
-      autoOpenedArtifactMessageIds: [],
+      handledArtifactIdentities: [],
+      archiveRetryingByMessageId: {},
+      materialDetailsByArtifact: {},
     });
+    expect(state).not.toHaveProperty("uploadPurpose");
+    expect(s).not.toHaveProperty("uploadPurpose");
+    expect(state).not.toHaveProperty("datasetDescription");
+    expect(s).not.toHaveProperty("datasetDescription");
     // Already written into the chatStates map
     expect(s.chatStates.value["fresh-id"]).toBe(state);
+  });
+
+  it("owns material selection separately for every dialogue and artifact", () => {
+    const state = useChatStates();
+    const first = state.getChatState("A");
+    const second = state.getChatState("B");
+    expect(first.materialDetailsByArtifact).toEqual({});
+    expect(first.materialDetailsByArtifact).not.toBe(
+      second.materialDetailsByArtifact
+    );
   });
 
   it("isolates logErrorKinds and log activity keys per dialogue", () => {
@@ -92,7 +177,15 @@ describe("useChatStates parallel chat state", () => {
     s.currentChatId.value = "A";
     const stateA = s.getChatState("A");
     stateA.logErrorKinds["12"] = "fetch";
-    stateA.logData["12"] = "A-log";
+    stateA.logData["12"] = {
+      state: "AVAILABLE",
+      source: "BOT_RUN",
+      text: "A-log",
+      revision: 1,
+      truncated: false,
+      can_request_legacy_refresh: false,
+      error_code: null,
+    };
     stateA.activityExpandedByMessage["log:12"] = true;
 
     s.currentChatId.value = "B";
@@ -103,8 +196,55 @@ describe("useChatStates parallel chat state", () => {
 
     s.currentChatId.value = "A";
     expect(s.getChatState("A").logErrorKinds["12"]).toBe("fetch");
-    expect(s.getChatState("A").logData["12"]).toBe("A-log");
+    expect(s.getChatState("A").logData["12"]?.text).toBe("A-log");
     expect(s.getChatState("A").activityExpandedByMessage["log:12"]).toBe(true);
+  });
+
+  it("starts each dialogue with independent history hydration state", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("A");
+    stateA.historyHydration = "loading";
+    stateA.historyErrorKind = "request";
+
+    const stateB = s.getChatState("B");
+    expect(stateB.historyHydration).toBe("new");
+    expect(stateB.historyErrorKind).toBeNull();
+    expect(stateA.historyHydration).toBe("loading");
+    expect(stateA.historyErrorKind).toBe("request");
+  });
+
+  it("keeps typed history messages and structured log payloads scoped to one dialogue", () => {
+    const s = useChatStates();
+    const history = [
+      { role: "user", content: "question A" },
+      {
+        role: "assistant",
+        content: { final_answer: "answer A" },
+        doc_list: [{ title: "Reference A" }],
+      },
+    ];
+
+    s.currentChatId.value = "A";
+    s.historyQuestion.value = history;
+    s.logData.value = {
+      "12": {
+        state: "AVAILABLE",
+        source: "BOT_RUN",
+        text: "done",
+        revision: 2,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    };
+
+    s.currentChatId.value = "B";
+    expect(s.historyQuestion.value).toBeNull();
+    expect(s.logData.value).toEqual({});
+
+    s.currentChatId.value = "A";
+    expect(s.historyQuestion.value).toEqual(history);
+    expect(s.logData.value["12"]?.text).toBe("done");
   });
 
   it("isolates activityExpandedByMessage per dialogue (A→B→A restoration)", () => {
@@ -176,23 +316,113 @@ describe("useChatStates parallel chat state", () => {
     // No chat state should be created when there is no currentChatId
     expect(Object.keys(s.chatStates.value)).toHaveLength(0);
   });
+
+  it("isolates pending turn identities and preserves them through dialogue rekey", () => {
+    const s = useChatStates();
+    const stateA = s.getChatState("temp-a");
+    stateA.pendingTurnId = "turn-a";
+    stateA.pendingTurnFingerprint = "fingerprint-a";
+    stateA.refreshTurnIds["message-a"] = "turn-refresh-a";
+
+    const stateB = s.getChatState("dialogue-b");
+    expect(stateB.pendingTurnId).toBeNull();
+    expect(stateB.pendingTurnFingerprint).toBeNull();
+    expect(stateB.refreshTurnIds).toEqual({});
+
+    expect(s.rekeyChatState("temp-a", "dialogue-a")).toEqual({
+      outcome: "moved",
+    });
+    expect(s.getChatState("dialogue-a")).toBe(stateA);
+    expect(s.getChatState("dialogue-a").pendingTurnId).toBe("turn-a");
+    expect(s.getChatState("dialogue-a").pendingTurnFingerprint).toBe(
+      "fingerprint-a"
+    );
+    expect(s.getChatState("dialogue-a").refreshTurnIds).toEqual({
+      "message-a": "turn-refresh-a",
+    });
+  });
 });
 
 describe("useChatStates mode", () => {
-  it("defaults mode to instant and proxies chatMode to the current conversation", () => {
+  it("reports Expert before a dialogue exists and defaults a new dialogue to Expert", () => {
     const s = useChatStates();
+
+    expect(s.chatMode.value).toBe("expert");
+
     s.currentChatId.value = "c1";
-    expect(s.chatMode.value).toBe("instant");
-    s.chatMode.value = "expert";
-    expect(s.getChatState("c1").mode).toBe("expert");
+    expect(s.chatMode.value).toBe("expert");
+
+    s.chatMode.value = "instant";
+    expect(s.getChatState("c1").mode).toBe("instant");
   });
 
-  it("keeps mode independent per conversation", () => {
+  it("keeps mode independent and defaults every new dialogue to Expert", () => {
     const s = useChatStates();
+
     s.currentChatId.value = "a";
-    s.chatMode.value = "expert";
+    s.chatMode.value = "instant";
+
     s.currentChatId.value = "b";
+    expect(s.chatMode.value).toBe("expert");
+
+    s.currentChatId.value = "a";
     expect(s.chatMode.value).toBe("instant");
+  });
+
+  it("clears only Expert selection when switching to Instant", () => {
+    const s = useChatStates();
+    s.currentChatId.value = "c1";
+    s.chatMode.value = "expert";
+    s.selectedAgent.value = "DataAgent";
+    s.messageInput.value = "compare these genes";
+    const file = {
+      localId: "upload-gene",
+      assetId: null,
+      name: "genes.csv",
+      size: 12,
+      type: "text/csv",
+      file: {} as File,
+      lastModified: 0,
+      status: "queued" as const,
+      partSize: 0,
+      partCount: 0,
+      receivedParts: [],
+      loadedBytes: 0,
+      speedBytesPerSecond: 0,
+      etaSeconds: null,
+      retryCount: 0,
+      errorCode: null,
+    };
+    s.fileList.value = [file];
+
+    s.chatMode.value = "instant";
+
+    expect(s.selectedAgent.value).toBe("");
+    expect(s.messageInput.value).toBe("compare these genes");
+    expect(s.fileList.value).toEqual([file]);
+  });
+
+  it("keeps mode, selection, and draft independent across dialogues", () => {
+    const s = useChatStates();
+
+    s.currentChatId.value = "A";
+    s.chatMode.value = "expert";
+    s.selectedAgent.value = "KnowledgeAgent";
+    s.messageInput.value = "question A";
+
+    s.currentChatId.value = "B";
+    s.chatMode.value = "instant";
+    s.messageInput.value = "question B";
+
+    s.currentChatId.value = "A";
+    expect(s.chatMode.value).toBe("expert");
+    expect(s.selectedAgent.value).toBe("KnowledgeAgent");
+    expect(s.messageInput.value).toBe("question A");
+
+    s.currentChatId.value = "B";
+    expect(s.chatMode.value).toBe("instant");
+    expect(s.selectedAgent.value).toBe("");
+    expect(s.messageInput.value).toBe("question B");
   });
 });
 
@@ -266,10 +496,7 @@ describe("useChatStates renderedChat ownership", () => {
       blocks: [a2uiBlock],
       id: "stream-a",
     };
-    const messagesA = [
-      { role: "user", content: "q-A" },
-      streamingPlaceholder,
-    ];
+    const messagesA = [{ role: "user", content: "q-A" }, streamingPlaceholder];
     const messagesB = [
       { role: "user", content: "q-B" },
       { role: "assistant", content: "a-B", id: "msg-b" },
@@ -278,22 +505,33 @@ describe("useChatStates renderedChat ownership", () => {
     s.currentChatId.value = "A";
     s.currentChat.value = { dialogue_id: "A", messages: messagesA };
     // Capture identities after reactive ownership (Vue may proxy nested objects)
-    const ownedA = s.getChatState("A").renderedChat!;
+    const ownedA = s.getChatState("A").renderedChat;
+    expect(ownedA).not.toBeNull();
+    if (!ownedA) throw new Error("expected rendered chat for A");
     const ownedMessagesA = ownedA.messages;
     const ownedPlaceholder = ownedMessagesA[1];
-    const ownedBlock = ownedPlaceholder.blocks![0];
+    expect(ownedPlaceholder).toBeDefined();
+    if (!ownedPlaceholder) throw new Error("expected streaming placeholder");
+    const ownedBlock = ownedPlaceholder.blocks?.[0];
+    expect(ownedBlock).toBeDefined();
+    if (!ownedBlock) throw new Error("expected A2UI block");
 
     s.currentChatId.value = "B";
     s.currentChat.value = { dialogue_id: "B", messages: messagesB };
-    const ownedB = s.getChatState("B").renderedChat!;
+    const ownedB = s.getChatState("B").renderedChat;
+    expect(ownedB).not.toBeNull();
+    if (!ownedB) throw new Error("expected rendered chat for B");
     expect(s.currentChat.value).toBe(ownedB);
     expect(s.currentChat.value).not.toBe(ownedA);
 
     s.currentChatId.value = "A";
-    expect(s.currentChat.value).toBe(ownedA);
-    expect(s.currentChat.value!.messages).toBe(ownedMessagesA);
-    expect(s.currentChat.value!.messages[1]).toBe(ownedPlaceholder);
-    expect(s.currentChat.value!.messages[1].blocks![0]).toBe(ownedBlock);
+    const currentA = s.currentChat.value;
+    expect(currentA).toBe(ownedA);
+    if (!currentA) throw new Error("expected current rendered chat for A");
+    expect(currentA.messages).toBe(ownedMessagesA);
+    expect(currentA.messages[1]).toBe(ownedPlaceholder);
+    const currentBlock = currentA.messages[1]?.blocks?.[0];
+    expect(currentBlock).toBe(ownedBlock);
     expect(s.getChatState("B").renderedChat).toBe(ownedB);
   });
 
@@ -313,7 +551,9 @@ describe("useChatStates renderedChat ownership", () => {
         },
       ],
     };
-    const ownedRendered = state.renderedChat!;
+    const ownedRendered = state.renderedChat;
+    expect(ownedRendered).not.toBeNull();
+    if (!ownedRendered) throw new Error("expected rendered chat for rekey");
     const ownedMessages = ownedRendered.messages;
 
     const result = s.rekeyChatState(tempId, serverId);
@@ -321,9 +561,10 @@ describe("useChatStates renderedChat ownership", () => {
     expect(result).toEqual({ outcome: "moved" });
     expect(s.chatStates.value[serverId]).toBe(state);
     expect(s.chatStates.value[serverId].renderedChat).toBe(ownedRendered);
-    expect(s.chatStates.value[serverId].renderedChat!.messages).toBe(
-      ownedMessages
-    );
+    const rekeyedRendered = s.chatStates.value[serverId].renderedChat;
+    expect(rekeyedRendered).not.toBeNull();
+    if (!rekeyedRendered) throw new Error("expected rekeyed rendered chat");
+    expect(rekeyedRendered.messages).toBe(ownedMessages);
   });
 
   it("empty currentChatId yields null currentChat and setter is a no-op", () => {
@@ -444,20 +685,23 @@ describe("useChatStates rekeyChatState", () => {
   });
 });
 
-/** Mirrors index.vue reconcileMatchedDialogue for behavioral contract tests. */
+/** Mirrors ChatView.vue reconcileMatchedDialogue for behavioral contract tests. */
 function reconcileMatchedDialogueHarness(opts: {
-  rekeyChatState: (
-    from: string,
-    to: string
-  ) => RekeyChatStateOutcome;
+  rekeyChatState: (from: string, to: string) => RekeyChatStateOutcome;
   currentChatId: { value: string };
   updateUrlWithChatId: (id: string) => void;
   tempId: string;
   serverId: string;
   pendingKey?: string;
 }) {
-  const { rekeyChatState, currentChatId, updateUrlWithChatId, tempId, serverId, pendingKey } =
-    opts;
+  const {
+    rekeyChatState,
+    currentChatId,
+    updateUrlWithChatId,
+    tempId,
+    serverId,
+    pendingKey,
+  } = opts;
   const wasCurrent = currentChatId.value === tempId;
   const rekey = rekeyChatState(tempId, serverId);
   const benign =
@@ -473,7 +717,11 @@ function reconcileMatchedDialogueHarness(opts: {
       clearPendingChat(tempId);
     }
   } else if (rekey.outcome === "target-collision") {
-    return { status: "retained" as const, tempId, reason: "collision" as const };
+    return {
+      status: "retained" as const,
+      tempId,
+      reason: "collision" as const,
+    };
   }
 
   if (reconciled && wasCurrent && currentChatId.value === tempId) {

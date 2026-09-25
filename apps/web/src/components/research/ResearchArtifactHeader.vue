@@ -29,7 +29,8 @@
           :key="item"
           class="research-artifact-header__metadata-item"
         >
-          {{ item }}
+          <AgentDisplayName v-if="formatScientificAgentName" :label="item" />
+          <template v-else>{{ item }}</template>
         </span>
         <span v-if="status" class="research-artifact-header__status">
           {{ status }}
@@ -42,15 +43,62 @@
       data-horizontal-scroll="actions"
     >
       <slot name="actions" />
-      <button
-        type="button"
-        class="research-artifact-header__control research-artifact-header__action"
-        :aria-label="actionLabel"
-        data-test="artifact-action"
-        @click="emit('action')"
+      <el-dropdown
+        v-if="menuItems.length > 0"
+        trigger="click"
+        class="research-artifact-header__overflow"
+        @command="onOverflowCommand"
       >
-        <span aria-hidden="true">⋯</span>
-      </button>
+        <button
+          type="button"
+          class="research-artifact-header__control research-artifact-header__action"
+          :aria-label="actionLabel"
+          data-test="artifact-action"
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <template v-for="item in menuItems" :key="item.id">
+              <el-dropdown-item
+                v-if="item.children?.length"
+                :divided="item.divided === true"
+                :data-test="`artifact-action-${item.id}`"
+              >
+                <el-dropdown
+                  trigger="hover"
+                  placement="right-start"
+                  @command="onOverflowCommand"
+                >
+                  <span class="research-artifact-header__submenu">{{
+                    item.label
+                  }}</span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-for="child in item.children"
+                        :key="child.id"
+                        :command="child.id"
+                        :data-test="`artifact-action-${child.id}`"
+                      >
+                        {{ child.label }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-else
+                :command="item.id"
+                :divided="item.divided === true"
+                :data-test="`artifact-action-${item.id}`"
+              >
+                {{ item.label }}
+              </el-dropdown-item>
+            </template>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <button
         type="button"
         class="research-artifact-header__control research-artifact-header__close research-artifact-header__close--desktop-only"
@@ -66,21 +114,35 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
+import type { ArtifactOverflowItem } from "./artifact-overflow";
 
-const props = defineProps<{
-  title: string;
-  metadata?: string | string[];
-  status?: string;
-  backLabel: string;
-  closeLabel: string;
-  actionLabel: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    metadata?: string | string[];
+    status?: string;
+    formatScientificAgentName?: boolean;
+    backLabel: string;
+    closeLabel: string;
+    actionLabel: string;
+    menuItems?: readonly ArtifactOverflowItem[];
+  }>(),
+  {
+    formatScientificAgentName: false,
+    menuItems: () => [],
+  }
+);
 
 const emit = defineEmits<{
   (event: "back"): void;
   (event: "close"): void;
-  (event: "action"): void;
+  (event: "action", command: string): void;
 }>();
+
+function onOverflowCommand(command: string | number): void {
+  emit("action", String(command));
+}
 
 const metadataItems = computed(() => {
   if (!props.metadata) return [];
@@ -163,6 +225,22 @@ const metadataItems = computed(() => {
   overflow-x: visible;
   overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.research-artifact-header__overflow {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.research-artifact-header__submenu {
+  display: inline-flex;
+  width: 100%;
+  cursor: pointer;
+}
+
+.research-artifact-header__overflow :deep(.el-tooltip__trigger),
+.research-artifact-header__overflow :deep(.el-dropdown) {
+  display: inline-flex;
 }
 
 .research-artifact-header__control,

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { nextTick } from "vue";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -18,7 +18,7 @@ describe("PhyAdaptiveShell", () => {
   };
 
   it("renders the normal state with sidebar and conversation slots", () => {
-    const wrapper = mount(PhyAdaptiveShell, { slots });
+    const wrapper = mountWithApp(PhyAdaptiveShell, { slots });
 
     expect(wrapper.classes()).toContain("phy-adaptive-shell--normal");
     expect(wrapper.find("[data-test=sidebar]").exists()).toBe(true);
@@ -26,8 +26,65 @@ describe("PhyAdaptiveShell", () => {
     expect(wrapper.find("[data-test=artifact]").exists()).toBe(false);
   });
 
+  it("lets nested modal Tab reach document without moving focus into the parent", async () => {
+    const onDocumentKey = vi.fn();
+    document.addEventListener("keydown", onDocumentKey);
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      attachTo: document.body,
+      props: { artifactFullscreen: true },
+      slots: {
+        artifact:
+          '<button>Parent control</button><div role="dialog" aria-modal="true"><button data-test="child">Child control</button></div>',
+      },
+    });
+    try {
+      await nextTick();
+      const child = wrapper.get('[data-test="child"]').element as HTMLElement;
+      child.focus();
+      const event = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      child.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(child);
+      expect(onDocumentKey).toHaveBeenCalledOnce();
+    } finally {
+      document.removeEventListener("keydown", onDocumentKey);
+      wrapper.unmount();
+    }
+  });
+
+  it("respects an already handled Tab in the artifact", async () => {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
+      attachTo: document.body,
+      props: { artifactFullscreen: true },
+      slots: {
+        artifact:
+          '<button data-test="first">First</button><button>Last</button>',
+      },
+    });
+    try {
+      await nextTick();
+      const first = wrapper.get('[data-test="first"]').element as HTMLElement;
+      first.focus();
+      const event = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      event.preventDefault();
+      first.dispatchEvent(event);
+      expect(document.activeElement).toBe(first);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it("renders the artifact split modifier and artifact slot", () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { sidebarCollapsed: true, artifactOpen: true },
       slots,
     });
@@ -40,7 +97,7 @@ describe("PhyAdaptiveShell", () => {
   });
 
   it("renders the artifact fullscreen modifier without remounting the slots", () => {
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       props: { artifactFullscreen: true },
       slots,
     });
@@ -57,7 +114,7 @@ describe("PhyAdaptiveShell", () => {
     document.body.appendChild(opener);
     opener.focus();
 
-    const wrapper = mount(PhyAdaptiveShell, {
+    const wrapper = mountWithApp(PhyAdaptiveShell, {
       attachTo: document.body,
       props: { artifactFullscreen: true },
       slots: {
@@ -124,8 +181,12 @@ describe("PhyAdaptiveShell", () => {
     );
   });
 
+  it("declares a container-safe adaptive shell root", () => {
+    expect(SHELL_SOURCE).toContain("container-type: inline-size;");
+  });
+
   it("owns the only viewport overflow root", () => {
-    const wrapper = mount(PhyAdaptiveShell, { slots });
+    const wrapper = mountWithApp(PhyAdaptiveShell, { slots });
 
     expect(wrapper.attributes("data-scroll-root")).toBe("adaptive");
     expect(wrapper.findAll("[data-scroll-root]")).toHaveLength(1);
@@ -141,5 +202,9 @@ describe("PhyAdaptiveShell", () => {
         "artifactFullscreen",
       ])
     );
+  });
+
+  it("contains rejected fullscreen focus scheduling", () => {
+    expect(SHELL_SOURCE).toContain("focusArtifact().catch(() => undefined);");
   });
 });

@@ -1,28 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createPinia, setActivePinia, type Pinia } from "pinia";
-import { createI18n } from "vue-i18n";
 import { nextTick } from "vue";
 import ThemeSwitch from "@/components/ThemeSwitch.vue";
 import { useThemeStore } from "@/stores";
 import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../helpers/test-app-context";
 
-let pinia: Pinia;
+let context: ReturnType<typeof createTestAppContext>;
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-const mountSwitch = () =>
-  mount(ThemeSwitch, { global: { plugins: [pinia, i18n] } });
+const mountSwitch = () => context.mount(ThemeSwitch);
 
 describe("ThemeSwitch", () => {
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
+    context = createTestAppContext();
   });
 
   it("localizes every active theme label", async () => {

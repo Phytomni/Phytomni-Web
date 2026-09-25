@@ -102,7 +102,18 @@ func buildChatGateEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 		dialogue_id TEXT,
 		f_id INTEGER DEFAULT 0,
 		bot_run_id TEXT,
+		bot_projection_json TEXT,
+		bot_report_revision INTEGER DEFAULT -1,
 		user_name TEXT,
+		query TEXT,
+		answer TEXT,
+		follow_up_questions TEXT,
+		tool_name TEXT,
+		status TEXT,
+		download_path TEXT,
+		image_paths TEXT,
+		created_at DATETIME,
+		updated_at DATETIME,
 		delete_at DATETIME
 	)`).Error; err != nil {
 		t.Fatalf("create question_agent_logs: %v", err)
@@ -202,7 +213,7 @@ func assertNoOperationLog(t *testing.T, gdb *gorm.DB, path string) {
 func configureA2uiFlagOff(t *testing.T) {
 	t.Helper()
 	prev := rxBot.BotConfig
-	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, A2uiActionsEnabled: false, TimeoutSeconds: 1}
+	rxBot.BotConfig = &rxBot.Config{ProxyEnabled: true, TimeoutSeconds: 1}
 	t.Cleanup(func() { rxBot.BotConfig = prev })
 }
 
@@ -248,10 +259,9 @@ func TestA2uiActionRouteAuditRedactsPayload(t *testing.T) {
 	body := []byte(`{"surface_id":"sfc-1","widget":"form","action_id":"act-1","run_id":"run-1","payload":{"fields":{"email":"researcher@example.com","biological_input":"BRCA1","token":"secret-token"}}}`)
 
 	response := sendA2uiActionRequest(engine, tok, body, "application/json")
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("A2UI audit request: got %d, want gateway-disabled response 503", response.Code)
+	if response.Code == http.StatusUnauthorized || response.Code == http.StatusForbidden {
+		t.Fatalf("A2UI audit request: got %d, want a post-auth response", response.Code)
 	}
-	assertA2uiGatewayError(t, response, "a2ui_gateway_disabled", false, true)
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 
 	var bodyParams string

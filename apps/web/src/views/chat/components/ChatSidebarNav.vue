@@ -34,7 +34,7 @@
         <el-button
           v-if="!collapsed"
           data-test="sidebar-nav-collapse"
-          type="text"
+          link
           class="collapse-btn"
           :aria-label="$t('chat.collapseNavigation')"
           @click="emit('toggle-collapse')"
@@ -53,6 +53,7 @@
           class="sidebar-nav-row sidebar-primary-action"
           :class="{ 'is-active': activeItem === 'new-chat' }"
           :aria-label="collapsed ? $t('chat.newChat') : undefined"
+          :aria-current="activeItem === 'new-chat' ? 'page' : undefined"
           @click="emit('new-chat')"
         >
           <el-icon>
@@ -73,6 +74,8 @@
           :class="{ 'is-active': activeItem === 'explore-agent' }"
           :aria-label="collapsed ? $t('chat.exploreAgent') : undefined"
           :aria-current="activeItem === 'explore-agent' ? 'page' : undefined"
+          :aria-expanded="showAgentsList"
+          aria-controls="chat-explore-agents-list"
           @click="emit('explore-agent')"
         >
           <el-icon>
@@ -82,7 +85,12 @@
             $t("chat.exploreAgent")
           }}</span>
         </button>
-        <div v-if="showAgentsList" class="agents-dropdown">
+        <div
+          v-if="showAgentsList"
+          id="chat-explore-agents-list"
+          data-testid="chat-explore-agents-list"
+          class="agents-dropdown"
+        >
           <slot name="explore-agents" />
         </div>
 
@@ -519,7 +527,7 @@ const handleHelpCommand = (command: string | number | object) => {
   min-height: var(--phy-control-height-default);
   padding: var(--phy-space-8) var(--phy-space-12);
   border: 0;
-  border-radius: var(--phy-radius-md);
+  border-radius: var(--phy-radius-pill);
   background: transparent;
   color: var(--phy-color-text-secondary);
   font: inherit;
@@ -527,7 +535,8 @@ const handleHelpCommand = (command: string | number | object) => {
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--phy-motion-fast) ease,
+  transition:
+    background-color var(--phy-motion-fast) ease,
     color var(--phy-motion-fast) ease;
 
   .el-icon {
@@ -545,37 +554,16 @@ const handleHelpCommand = (command: string | number | object) => {
     outline-offset: 2px;
   }
 
-  &.is-active:not(.sidebar-primary-action) {
+  &.is-active,
+  &.is-active:hover {
     background-color: var(--phy-color-primary-soft);
     color: var(--phy-color-action-text);
-
-    &::before {
-      position: absolute;
-      inset-block: var(--phy-space-8);
-      inset-inline-start: 0;
-      width: 2px;
-      border-radius: var(--phy-radius-pill);
-      background: var(--phy-color-action-fill);
-      content: "";
-    }
   }
 }
 
 .sidebar-primary-action {
-  min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
-  border-radius: var(--phy-radius-md);
-  background-color: var(--phy-color-action-fill);
-  color: var(--phy-color-on-action);
-
-  &:hover {
-    background-color: var(--phy-color-action-fill-hover);
-    color: var(--phy-color-on-action);
-  }
-
-  &.is-active {
-    background-color: var(--phy-color-action-fill-hover);
-    color: var(--phy-color-on-action);
-  }
+  min-height: var(--phy-control-height-default);
+  font-weight: 600;
 }
 
 .sidebar-utility-row {
@@ -599,17 +587,18 @@ const handleHelpCommand = (command: string | number | object) => {
     min-height: var(--phy-control-height-default);
     padding: 0;
     margin: 0 auto;
-    border-radius: var(--phy-radius-md);
-
-    &.is-active:not(.sidebar-primary-action)::before {
-      inset-block: var(--phy-space-8);
-    }
+    border-radius: var(--phy-radius-pill);
   }
 
   .sidebar-primary-action {
     width: var(--phy-control-height-default);
     height: var(--phy-control-height-default);
     min-height: var(--phy-control-height-default);
+  }
+
+  .agents-dropdown {
+    width: min(248px, calc(100vw - var(--phy-space-32)));
+    align-self: flex-start;
   }
 
   .username {
@@ -626,10 +615,12 @@ const handleHelpCommand = (command: string | number | object) => {
 }
 
 .agents-dropdown {
-  max-height: 400px;
+  width: min(100%, 248px);
+  max-height: min(400px, 52vh);
   margin-left: var(--phy-space-8);
   padding: var(--phy-space-4) 0 var(--phy-space-4) var(--phy-space-12);
-  overflow-y: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
   border: 1px solid var(--phy-color-border-subtle);
   border-radius: var(--phy-radius-md);
   background: var(--phy-color-bg-elevated);

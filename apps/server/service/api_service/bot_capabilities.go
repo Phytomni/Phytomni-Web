@@ -2,6 +2,8 @@ package api_service
 
 import (
 	"context"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -119,23 +121,64 @@ func HistoryReadModeFromConfig() HistoryReadMode {
 // browser. It intentionally contains no Bot descriptor, URL, credential, or
 // upstream diagnostic field.
 type BotCapability struct {
-	Tool        string `json:"tool"`
-	Slug        string `json:"slug"`
-	Execution   string `json:"execution"`
-	Stream      bool   `json:"stream"`
-	A2UI        bool   `json:"a2ui"`
-	Resolver    bool   `json:"resolver"`
-	Attachments bool   `json:"attachments"`
-	Artifacts   bool   `json:"artifacts"`
-	Enabled     bool   `json:"enabled"`
+	Tool               string   `json:"tool"`
+	Slug               string   `json:"slug"`
+	Execution          string   `json:"execution"`
+	Stream             bool     `json:"stream"`
+	A2UI               bool     `json:"a2ui"`
+	Resolver           bool     `json:"resolver"`
+	Attachments        bool     `json:"attachments"`
+	AttachmentPurposes []string `json:"attachment_purposes"`
+	Artifacts          bool     `json:"artifacts"`
+	Enabled            bool     `json:"enabled"`
 }
 
-// BotCapabilities returns the Web capability manifest. Bot /v1/agents is only
-// an advisory presence check: local gates and the Web-owned release table
-// remain authoritative. Any Bot/config/listing failure returns the same
-// bounded all-disabled shape so callers never receive private upstream data.
-func (ps *Service) BotCapabilities(ctx context.Context, _ string) ([]BotCapability, error) {
-	manifest := disabledBotCapabilities()
+const (
+	resumableUploadMaxFileBytes   int64 = 10 << 30
+	resumableUploadMaxAttachments       = 10
+)
+
+// BotResearchInputCapability is the finite browser-facing projection of the
+// validated Research input contract. Dataset formats remain server-owned and
+// are not exposed because the browser does not make admission decisions.
+type BotResearchInputCapability struct {
+	Enabled         bool   `json:"enabled"`
+	Protocol        string `json:"protocol"`
+	MaxQueryChars   int    `json:"max_user_query_chars"`
+	MaxAttachments  int    `json:"max_attachments_per_request"`
+	MaxDatasetPaths int    `json:"max_research_dataset_paths"`
+	MaxReferences   int    `json:"max_research_input_references"`
+}
+
+// BotUploadCapability is the bounded browser-facing upload contract. The
+// origin is copied only from the explicitly configured public origin; it is
+// never derived from the internal Bot BaseURL.
+type BotUploadCapability struct {
+	Enabled        bool   `json:"enabled"`
+	Protocol       string `json:"protocol"`
+	UploadOrigin   string `json:"upload_origin"`
+	MaxFileBytes   int64  `json:"max_file_bytes"`
+	MaxAttachments int    `json:"max_attachments"`
+}
+
+// BotCapabilityManifest keeps the existing agent capability list and the
+// negotiated upload contract under one bounded response object.
+type BotCapabilityManifest struct {
+	Agents        []BotCapability            `json:"agents"`
+	Upload        BotUploadCapability        `json:"upload"`
+	ResearchInput BotResearchInputCapability `json:"research_input"`
+}
+
+// BotCapabilities returns the Web capability manifest. Bot /v1/agents supplies
+// the finite remote capabilities while local gates and the Web-owned release
+// table remain independent requirements. Any Bot/config/listing failure returns
+// the same bounded all-disabled shape so callers never receive private data.
+func (ps *Service) BotCapabilities(ctx context.Context, _ string) (BotCapabilityManifest, error) {
+	manifest := BotCapabilityManifest{
+		Agents:        disabledBotCapabilities(),
+		Upload:        disabledBotUploadCapability(),
+		ResearchInput: disabledBotResearchInputCapability(),
+	}
 	cfg := rxBot.BotConfig
 	if cfg == nil || !cfg.ProxyEnabled || strings.TrimSpace(cfg.BaseURL) == "" {
 		return manifest, nil
@@ -144,48 +187,167 @@ func (ps *Service) BotCapabilities(ctx context.Context, _ string) ([]BotCapabili
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	response, err := rxBot.NewClient().GetAgents(ctx)
+	response, err := ps.agentCatalogReader().GetAgents(ctx)
 	if err != nil {
 		return manifest, nil
 	}
+	rxBot.NoteConversationContextV1(response)
 	presence, err := rxBot.ValidateWebAgentDescriptors(response)
 	if err != nil {
 		return manifest, nil
 	}
+	researchContract, researchErr := ps.validatedResearchInputContract(ctx, response)
+	researchCompatible := researchErr == nil
+	if researchCompatible {
+		manifest.ResearchInput = BotResearchInputCapability{
+			Enabled:         true,
+			Protocol:        rxBot.ResearchInputProtocol,
+			MaxQueryChars:   effectiveResearchQueryLimit(researchContract.MaxUserQueryChars),
+			MaxAttachments:  researchContract.MaxAttachments,
+			MaxDatasetPaths: researchContract.MaxDatasetPaths,
+			MaxReferences:   researchContract.MaxReferences,
+		}
+	}
+	uploadOrigin, validOrigin := validUploadPublicOrigin(cfg.UploadPublicOrigin)
+	uploadEnabled := validOrigin && rxBot.SupportsProtocol(
+		response,
+		rxBot.ResumableUploadProtocol,
+		rxBot.ResumableUploadProtocolVersion,
+	)
+	if uploadEnabled {
+		maxAttachments := resumableUploadMaxAttachments
+		if researchCompatible {
+			maxAttachments = researchContract.MaxAttachments
+			if maxAttachments > rxBot.HardMaxAssetAttachmentRefs {
+				maxAttachments = rxBot.HardMaxAssetAttachmentRefs
+			}
+		}
+		manifest.Upload = BotUploadCapability{
+			Enabled:        true,
+			Protocol:       rxBot.ResumableUploadProtocol,
+			UploadOrigin:   uploadOrigin,
+			MaxFileBytes:   resumableUploadMaxFileBytes,
+			MaxAttachments: maxAttachments,
+		}
+	}
 
 	for index, definition := range rxBot.WebAgentDefinitions {
-		if _, ok := presence[definition.Slug]; !ok {
+		agentPresence, ok := presence[definition.Slug]
+		if !ok || !agentPresence.Present {
 			continue
 		}
-		if !stableWebAgent(definition.Slug) {
-			// New remote product surfaces stay dark until their separate
-			// capability and acceptance gates land.
+		if !localCapabilityEnabled(definition.Slug, cfg) {
+			continue
+		}
+		if definition.Slug == "research" && !researchCompatible {
+			continue
+		}
+		attachmentPurposes := attachmentPurposesFor(agentPresence)
+		if productAttachmentCapability(definition.Slug) && len(attachmentPurposes) == 0 {
+			// Analyst and Research are attachment-enabled product surfaces. Their
+			// browser records remain dark until Bot channel evidence is present.
 			continue
 		}
 
-		manifest[index].Enabled = true
-		manifest[index].Attachments = attachmentsFor(definition.Slug)
-		manifest[index].Artifacts = artifactsFor(definition.Slug)
-		if cfg.StreamEnabled && streamEligible(definition.Slug) {
-			manifest[index].Stream = true
+		manifest.Agents[index].Enabled = true
+		manifest.Agents[index].AttachmentPurposes = attachmentPurposes
+		manifest.Agents[index].Attachments = len(attachmentPurposes) > 0
+		manifest.Agents[index].Artifacts = artifactsFor(response, definition.Slug)
+		if streamEnabledForAgent(response, definition.Slug) {
+			manifest.Agents[index].Stream = true
 		}
-		if cfg.A2uiActionsEnabled && definition.Slug == "review" {
-			manifest[index].A2UI = true
+		if definition.Slug == "review" {
+			manifest.Agents[index].A2UI = true
 		}
-		if cfg.ExpertEnabled && definition.Slug == "chat" {
-			manifest[index].Resolver = true
+		if definition.Slug == "chat" {
+			manifest.Agents[index].Resolver = true
 		}
 	}
 	return manifest, nil
+}
+
+func effectiveResearchQueryLimit(advertised int) int {
+	configured := rxBot.ConfiguredMaxUserQueryChars()
+	if configured < 1 {
+		configured = rxBot.DefaultMaxUserQueryChars
+	}
+	return min(configured, advertised)
+}
+
+// validatedResearchInputContract reuses an already-fetched catalog for public
+// projection and fetches through the injectable server-side reader for direct
+// admission. It returns only the validated finite contract, never diagnostics.
+func (ps *Service) validatedResearchInputContract(
+	ctx context.Context,
+	response *rxBot.AgentsListResponse,
+) (rxBot.ResearchInputContract, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if response == nil {
+		var err error
+		response, err = ps.agentCatalogReader().GetAgents(ctx)
+		if err != nil {
+			return rxBot.ResearchInputContract{}, err
+		}
+	}
+	contract, err := rxBot.ValidateResearchInputContract(response)
+	if err != nil {
+		return rxBot.ResearchInputContract{}, err
+	}
+	if !rxBot.ResearchFormatsCompatible(RequiredResearchDatasetFormats(), contract.DatasetFormats) {
+		return rxBot.ResearchInputContract{}, ErrResearchInputIncompatible
+	}
+	return contract, nil
+}
+
+func disabledBotResearchInputCapability() BotResearchInputCapability {
+	return BotResearchInputCapability{Protocol: rxBot.ResearchInputProtocol}
+}
+
+func disabledBotUploadCapability() BotUploadCapability {
+	return BotUploadCapability{
+		Protocol:       rxBot.ResumableUploadProtocol,
+		MaxFileBytes:   resumableUploadMaxFileBytes,
+		MaxAttachments: resumableUploadMaxAttachments,
+	}
+}
+
+func validUploadPublicOrigin(raw string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", false
+	}
+	u, err := url.ParseRequestURI(trimmed)
+	if err != nil || u == nil || u.Opaque != "" || u.Host == "" || u.Hostname() == "" {
+		return "", false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", false
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery || u.RawPath != "" {
+		return "", false
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", false
+	}
+	if port := u.Port(); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return "", false
+		}
+	}
+	return strings.ToLower(u.Scheme) + "://" + u.Host, true
 }
 
 func disabledBotCapabilities() []BotCapability {
 	manifest := make([]BotCapability, len(rxBot.WebAgentDefinitions))
 	for index, definition := range rxBot.WebAgentDefinitions {
 		manifest[index] = BotCapability{
-			Tool:      definition.Tool,
-			Slug:      definition.Slug,
-			Execution: definition.Execution,
+			Tool:               definition.Tool,
+			Slug:               definition.Slug,
+			Execution:          definition.Execution,
+			AttachmentPurposes: []string{},
 		}
 	}
 	return manifest
@@ -193,14 +355,27 @@ func disabledBotCapabilities() []BotCapability {
 
 func stableWebAgent(slug string) bool {
 	switch slug {
-	case "chat", "knowledge", "data", "review", "brief_gene":
+	case "chat", "knowledge", "data", "review", "brief_gene", "research",
+		"analyst", "design", "network":
 		return true
 	default:
 		return false
 	}
 }
 
-func streamEligible(slug string) bool {
+func localCapabilityEnabled(slug string, _ *rxBot.Config) bool {
+	return stableWebAgent(slug)
+}
+
+func productAttachmentCapability(slug string) bool {
+	return slug == "analyst" || slug == "research"
+}
+
+func streamEnabledForAgent(resp *rxBot.AgentsListResponse, slug string) bool {
+	capability, ok := rxBot.FindAgentCapability(resp, slug)
+	if !ok || !capability.Streaming {
+		return false
+	}
 	switch slug {
 	case "chat", "knowledge", "brief_gene":
 		return true
@@ -209,20 +384,40 @@ func streamEligible(slug string) bool {
 	}
 }
 
-func attachmentsFor(slug string) bool {
+func attachmentPurposesFor(presence rxBot.WebAgentPresence) []string {
+	purposes := make([]string, 0, 2)
+	if presence.Documents {
+		purposes = append(purposes, "document")
+	}
+	if presence.Datasets {
+		purposes = append(purposes, "dataset")
+	}
+	return purposes
+}
+
+func resultArchiveAgent(slug string) bool {
 	switch slug {
-	case "chat", "knowledge", "data", "review", "brief_gene":
+	case "analyst", "research", "network", "design":
 		return true
 	default:
 		return false
 	}
 }
 
-func artifactsFor(slug string) bool {
-	switch slug {
-	case "data", "brief_gene":
-		return true
-	default:
+func resultArchiveV1Effective(resp *rxBot.AgentsListResponse, slug string) bool {
+	if !resultArchiveAgent(slug) {
 		return false
 	}
+	descriptor, ok := rxBot.FindAgentCapability(resp, slug)
+	if !ok || !descriptor.Artifacts {
+		return false
+	}
+	return rxBot.SupportsProtocol(resp, rxBot.ResultArchiveProtocol, rxBot.ResultArchiveProtocolVersion)
+}
+
+func artifactsFor(resp *rxBot.AgentsListResponse, slug string) bool {
+	if resultArchiveAgent(slug) {
+		return resultArchiveV1Effective(resp, slug)
+	}
+	return slug == "data" || slug == "brief_gene"
 }

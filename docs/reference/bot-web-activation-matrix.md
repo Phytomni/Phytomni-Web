@@ -11,6 +11,7 @@ fixture identifiers and checksums identify evidence without embedding fixture
 payloads, user data, queries, answers, URLs, request ids, or upstream errors.
 
 <!-- BOT_WEB_ACTIVATION_MATRIX_JSON_START -->
+
 ```json
 {
   "schema_version": 1,
@@ -72,11 +73,7 @@ payloads, user data, queries, answers, URLs, request ids, or upstream errors.
   ],
   "local_readiness": {
     "rc_web_004": {
-      "fixture_ids": [
-        "rc-web-004-research-terminal",
-        "rc-web-004-design-terminal",
-        "rc-web-004-network-terminal"
-      ],
+      "fixture_ids": ["analyst", "research", "network", "design"],
       "shared_report_surface_test": "apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts"
     }
   },
@@ -87,20 +84,21 @@ payloads, user data, queries, answers, URLs, request ids, or upstream errors.
   ]
 }
 ```
+
 <!-- BOT_WEB_ACTIVATION_MATRIX_JSON_END -->
 
 ## Acceptance rows
 
-| Row | Scope | Status |
-| --- | --- | --- |
-| RC-WEB-001 | Umbrella submission and run identity | External Pending |
-| RC-WEB-002 | Monotonic intermediate/final report revisions | External Pending |
-| RC-WEB-003 | DeepGenome partial, degraded, and failure behavior | External Pending |
-| RC-WEB-004 | Analyst, Design, and Network reports and artifacts | External Pending |
-| RC-WEB-005 | Timeout and request-id behavior | External Pending |
-| RC-WEB-006 | A2UI and AG-UI pass-through | External Pending |
-| RC-WEB-007 | Expert/history dual-read and rollback | External Pending |
-| RC-LIVE-001 | Authorized live end-to-end run | External Pending |
+| Row         | Scope                                              | Status           |
+| ----------- | -------------------------------------------------- | ---------------- |
+| RC-WEB-001  | Umbrella submission and run identity               | External Pending |
+| RC-WEB-002  | Monotonic intermediate/final report revisions      | External Pending |
+| RC-WEB-003  | DeepGenome partial, degraded, and failure behavior | External Pending |
+| RC-WEB-004  | Analysis-agent reports and result archives         | External Pending |
+| RC-WEB-005  | Timeout and request-id behavior                    | External Pending |
+| RC-WEB-006  | A2UI and AG-UI pass-through                        | External Pending |
+| RC-WEB-007  | Expert/history dual-read and rollback              | External Pending |
+| RC-LIVE-001 | Authorized live end-to-end run                     | External Pending |
 
 All four capability switches are dark by default. `expert` maps to the Web
 Expert permission and `expert_enabled`; `stream` maps to the AG-UI stream
@@ -137,13 +135,8 @@ above passed from local evidence alone.
   `web-task27-expert-research`, and `web-task27-history`. Fixtures contain only
   bounded synthetic identities; no query, answer, report, error payload, URL,
   credential, or user data is recorded here.
-- Focused Go command: `GOCACHE=/tmp/phytomni-go-cache
-  GOTMPDIR=/tmp/phytomni-go-tmp go test ./external/bot ./service/api_service
-  -run 'Test(AGUICompatibilityFixture|QueryStream_Combined|CompatibilityFixture_)'
-  -count=1` — PASS (`external/bot`, `service/api_service`).
-- Focused Web command: `npx --no-install vitest run
-  tests/unit/views/chat/streaming/aguiEvents.spec.ts
-  tests/unit/views/chat/streaming/useStreamMessage.spec.ts` — PASS (2 files,
+- Focused Go command: `GOCACHE=/tmp/phytomni-go-cache GOTMPDIR=/tmp/phytomni-go-tmp go test ./external/bot ./service/api_service -run 'Test(AGUICompatibilityFixture|QueryStream_Combined|CompatibilityFixture_)' -count=1` — PASS (`external/bot`, `service/api_service`).
+- Focused Web command: `npx --no-install vitest run tests/unit/views/chat/streaming/aguiEvents.spec.ts tests/unit/views/chat/streaming/useStreamMessage.spec.ts` — PASS (2 files,
   33 tests).
 - Repository gate: `./scripts/validate_web_local.sh` — G1/G2/G3/G4/G5/G6 PASS;
   G7.5 is blocked by the pre-existing
@@ -159,32 +152,42 @@ above passed from local evidence alone.
   not performed. `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` remain
   `External Pending`.
 
-## Local RC-WEB-004 product fixture record (2026-07-18)
+## Local RC-WEB-004 product fixture record (2026-08-06)
 
-- Product fixture ids: `rc-web-004-research-terminal`,
-  `rc-web-004-design-terminal`, and `rc-web-004-network-terminal`. Each fixture
-  is sanitized, uses a canonical agent slug, and carries an explicit artifact
-  list; the Design fixture is empty and the Network fixture has an empty path
-  list to exercise warning behavior.
+- Product fixture ids: `analyst`, `research`, `network`, and `design`. Each
+  fixture is copied byte-for-byte from Bot's canonical `result_archive_v1`
+  contract and contains one ready archive under `result.execution.delivery`.
 - Shared report-surface test: `apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts`.
-  The offline checker requires all three distinct fixture ids and this shared
+  The offline checker requires all four distinct fixture ids and this shared
   test before local RC-WEB-004 readiness is accepted.
 - This is Web-owned synthetic evidence only. The RC-WEB-004 acceptance row
   remains `External Pending` until an authorized Bot/operations acceptance
   packet is reviewed.
 
-## Current Web closure record (2026-07-18)
+## Historical Web closure record (2026-07-18)
 
 - Commit under test: `b6975f9` (`release/0.1.3`), including the final
   compatibility gate repairs.
 - Full repository gate:
-  `GOCACHE=/tmp/phytomni-web-task38-gocache
-  GOTMPDIR=/tmp/phytomni-web-task38-gotmp ./scripts/validate_web_local.sh` —
+  `GOCACHE=/tmp/phytomni-web-task38-gocache GOTMPDIR=/tmp/phytomni-web-task38-gotmp ./scripts/validate_web_local.sh` —
   PASS; 184 frontend test files / 2329 tests; G13, G14, G15, G16, and G17
   PASS.
 - Fresh uncached Go verification:
-  `GOCACHE=/tmp/phytomni-web-task38-gocache
-  GOTMPDIR=/tmp/phytomni-web-task38-gotmp go test ./... -count=1` — PASS.
+  `GOCACHE=/tmp/phytomni-web-task38-gocache GOTMPDIR=/tmp/phytomni-web-task38-gotmp go test ./... -count=1` — PASS.
 - The local closure supersedes the historical Task 27 gate snapshot above;
   it does not change the matrix JSON, external acceptance rows, or
   dark-launch defaults.
+
+## Current Web closure record (2026-07-26)
+
+- Commit under test: `1e210119` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 207 frontend test files / 2724
+  tests passed with the configured coverage thresholds, Go module/build/vet/
+  test checks passed, and G13, G14, G15, G16, and G17 passed.
+- The closure includes server-derived Expert permissions, dedicated product
+  runs, constrained Chat routing, turn-scoped selection recovery, and the
+  reviewed Chat routing fixture matrix. It also includes the final Vite 8 /
+  Vitest 4 quality-contract reconciliation; no Go, Bot, or operations code is
+  included in this Web release.
+- This is Web-owned local evidence only. It does not alter the machine-readable
+  matrix, external acceptance rows, or dark-launch defaults.

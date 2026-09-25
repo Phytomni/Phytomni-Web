@@ -1,43 +1,241 @@
 import { nextTick } from "vue";
 import type { Ref } from "vue";
-import type { ChatComposerHandle, ChatMessage, Chat, DialogueReconciliationResult } from "../types";
+import type {
+  ChatComposerHandle,
+  ChatMessage,
+  Chat,
+  DialogueReconciliationResult,
+  ChatUIState,
+  ChatView,
+} from "../types";
+import { normalizeChatContextNotice } from "../types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import i18n from "@/locales";
 import {
-  extractAtValues,
-  formatFileSize,
-  isValidJSON,
+  decodeCitationDocuments,
+  decodeTableDataInput,
   convertToTableData,
+  optionalStringValue,
+  parseAgentAnswer,
 } from "../utils/format";
 import { readServerFile } from "../utils/agent-log";
 import {
   writePendingChat,
   isLocalStorageChat,
+  upsertPendingChatListEntry,
+  clearPendingChat,
+  removePendingChatListEntry,
 } from "@/utils/pending-chat";
 import { isNetworkError } from "@/utils/network-error";
-import {
-  getQueryAbortable,
-  getAnswerCheck,
-  type QueryData,
-} from "@/api/chat";
-import { createTransferTracker } from "@/utils/transfer-progress";
+import { getQueryAbortable, getAnswerCheck, type QueryData } from "@/api/chat";
+import { isDemoDialogueId } from "@/views/chat/demos/catalog";
+import { normalizePositiveTaskRowId } from "@/api/task";
 import { shouldStream } from "../streaming/sendBranch";
 import { useStreamMessage } from "./useStreamMessage";
 import { createChatRequestKey } from "../utils/chat-request-key";
+import {
+  clientTurnDraftFingerprint,
+  clientTurnDraftFingerprintMatches,
+  createClientTurnId,
+  isDefinitePreDispatch4xx,
+} from "../utils/client-turn-id";
 import { parentRowIdForDialogue } from "../utils/chat-parent-row";
 import { parseBotProjection } from "../botProjection";
 import { decodeA2uiOpenSurface } from "../streaming/a2uiParse";
 import { createFetchA2uiTransport } from "../streaming/a2uiAction";
 import { getToken } from "@/utils/auth";
 import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+import {
+  progressConfigFor,
+  remainingCotFlushMs,
+  rememberProgressStartedAt,
+} from "../utils/agentProgress";
+import { isRecord, isSuccessfulDataEnvelope } from "@/api/contracts";
+import {
+  chatContentToText,
+  decodeAgentSteps,
+  decodeFollowUpQuestions,
+  messagePlainText,
+} from "../messageTypes";
+import {
+  completedUploadDisplays,
+  toAssetAttachmentRefs,
+} from "../utils/asset-attachments";
+import { queryWithinLimit } from "../utils/research-input-policy";
+import {
+  MAX_CONVERSATION_HISTORY_MESSAGES,
+  projectHistoryForTransport,
+} from "../utils/chat-history-normalization";
+import type {
+  BotCapabilityByTool,
+  BotResearchInputCapability,
+} from "./useBotCapabilities";
 
 const CANONICAL_TOOL_SET = new Set<string>(CANONICAL_AGENT_TOOLS);
+const ACCEPTED_EMPTY_BACKGROUND_TOOLS = new Set([
+  "GeneNetworkAgent",
+  "DigitalDesignAgent",
+  "InSilicoResearchAgent",
+]);
+const SAFE_WEB_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const MAX_SURFACEABLE_CLIENT_MESSAGE = 512;
+
+type ChatUserStore = {
+  FedLogOut: () => Promise<unknown>;
+};
 
 function isCanonicalToolName(value: unknown): value is string {
   return typeof value === "string" && CANONICAL_TOOL_SET.has(value);
 }
 
+function safeWebRequestID(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return SAFE_WEB_REQUEST_ID_PATTERN.test(normalized) ? normalized : undefined;
+}
+
+function surfaceableClientMessage(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (
+    trimmed === "" ||
+    trimmed.length > MAX_SURFACEABLE_CLIENT_MESSAGE ||
+    trimmed.includes("\0")
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function hasDurableRowId(value: unknown): boolean {
+  if (typeof value === "string") return value.trim() !== "";
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isDurableSelectingWait(data: QueryData): boolean {
+  const toolName =
+    typeof data.tool_name === "string" ? data.tool_name.trim() : "";
+  if (toolName !== "") return false;
+  const status =
+    typeof data.status === "string" ? data.status.trim().toUpperCase() : "";
+  if (status !== "RUNNING" && status !== "SUBMITTING") return false;
+  try {
+    normalizePositiveTaskRowId(data.id ?? "");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearPendingTurnIdentity(
+  chatState: ChatUIState,
+  clientTurnId: string,
+  draftFingerprint: string
+): void {
+  if (
+    chatState.pendingTurnId === clientTurnId &&
+    chatState.pendingTurnFingerprint !== null &&
+    clientTurnDraftFingerprintMatches(
+      chatState.pendingTurnFingerprint,
+      draftFingerprint
+    )
+  ) {
+    chatState.pendingTurnId = null;
+    chatState.pendingTurnFingerprint = null;
+  }
+}
+
+function settlePendingTurnIdentity(
+  chatState: ChatUIState,
+  clientTurnId: string,
+  draftFingerprint: string,
+  durableRowId: unknown
+): void {
+  if (!hasDurableRowId(durableRowId)) return;
+  clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
+}
+
+function isAcceptedExpertResponse(
+  expertSucceeded: boolean,
+  projection: ReturnType<typeof parseBotProjection> | undefined
+): boolean {
+  if (expertSucceeded) return true;
+  return projection?.runId !== null && projection?.status === "RUNNING";
+}
+
+function persistedMessageIds(messages: readonly ChatMessage[]): Set<string> {
+  return new Set(
+    messages.flatMap((message) =>
+      typeof message.id === "string" && message.id.trim() !== ""
+        ? [message.id]
+        : []
+    )
+  );
+}
+
+function isHistoryMessage(value: unknown): value is ChatMessage {
+  return (
+    isRecord(value) &&
+    (value.role === "user" || value.role === "assistant") &&
+    Object.prototype.hasOwnProperty.call(value, "content")
+  );
+}
+
+function historyText(message: ChatMessage): string {
+  return messagePlainText(message);
+}
+
+function historyAttachments(message: ChatMessage) {
+  const attachments = message.attachments
+    ?.map((attachment) => ({ ...attachment }))
+    .filter(({ asset_id }) => asset_id !== "");
+  return attachments && attachments.length > 0 ? attachments : undefined;
+}
+
+function commitSuccessfulTurn(
+  chatState: ChatUIState,
+  userMessage: ChatMessage,
+  assistantMessage: ChatMessage
+): void {
+  const status = (assistantMessage.status ?? "").trim().toUpperCase();
+  if (status !== "" && status !== "SUCCEEDED") return;
+
+  const userContent = historyText(userMessage);
+  const assistantContent = historyText(assistantMessage);
+  if (!userContent || !assistantContent) return;
+
+  const prior = (
+    Array.isArray(chatState.historyQuestion)
+      ? chatState.historyQuestion.filter(isHistoryMessage)
+      : []
+  ).flatMap((message) => {
+    const content = historyText(message);
+    const attachments = historyAttachments(message);
+    return content
+      ? [
+          {
+            role: message.role,
+            content,
+            ...(attachments ? { attachments } : {}),
+          },
+        ]
+      : [];
+  });
+  chatState.historyQuestion = [
+    ...prior,
+    {
+      role: "user",
+      content: userContent,
+      ...(historyAttachments(userMessage)
+        ? { attachments: historyAttachments(userMessage) }
+        : {}),
+    },
+    { role: "assistant", content: assistantContent },
+  ].slice(-MAX_CONVERSATION_HISTORY_MESSAGES);
+}
+
 function parseBlockingProjection(data: QueryData) {
+  if (data.projection) return data.projection;
   const payload =
     data.answer === undefined && data.final_answer !== undefined
       ? { ...data, answer: data.final_answer }
@@ -49,6 +247,31 @@ function parseBlockingProjection(data: QueryData) {
     // not copy an unvalidated envelope into the reactive message state.
     return undefined;
   }
+}
+
+function reviewAnswerText(data: QueryData): string {
+  const answer = data.answer ?? data.final_answer;
+  if (typeof answer !== "string") return "";
+
+  const parsed = parseAgentAnswer(answer);
+  const content = optionalStringValue(parsed, "content");
+  if (content !== undefined) return content;
+  return Object.keys(parsed).length === 0 ? answer : "";
+}
+
+function normalizeCompletedReviewBlockingProjection(
+  data: QueryData,
+  projection: ReturnType<typeof parseBotProjection> | undefined
+) {
+  if (!projection || projection.status !== "INPUT_REQUIRED") return projection;
+  const agent = projection.agent.trim().toLowerCase();
+  if (
+    (agent !== "review" && agent !== "reviewagent") ||
+    reviewAnswerText(data).trim() === ""
+  ) {
+    return projection;
+  }
+  return { ...projection, status: "SUCCEEDED" as const };
 }
 
 const EXPERT_RUN_ID_KEYS = ["bot_run_id", "run_id", "runId"] as const;
@@ -100,23 +323,40 @@ const SAFE_DIALOGUE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
 
 function attachBlockingLegacyFields(
   message: ChatMessage,
-  data: QueryData
+  data: QueryData,
+  resultArchiveV1: boolean
 ): void {
   if (typeof data.task_id === "string" && data.task_id.trim() !== "") {
     message.task_id = data.task_id;
   }
   if (
+    !resultArchiveV1 &&
     typeof data.download_path === "string" &&
     data.download_path.trim() !== ""
   ) {
     message.download_path = data.download_path;
   }
+  if (data.delivery) message.delivery = { ...data.delivery };
+  if (Array.isArray(data.artifacts)) {
+    message.artifacts = data.artifacts.map((artifact) => ({ ...artifact }));
+  }
+}
+
+function stripActiveArchiveLegacyFields(
+  message: ChatMessage,
+  resultArchiveV1: boolean
+): void {
+  if (!resultArchiveV1) return;
+  delete message.download_path;
+  delete message.upload_path;
+  delete message.server_file_path;
+  delete message.original;
 }
 
 function attachBlockingA2ui(
   message: ChatMessage,
   data: QueryData,
-  projection: ReturnType<typeof parseBotProjection> | undefined,
+  projection: ReturnType<typeof parseBotProjection> | undefined
 ): void {
   if (
     !projection ||
@@ -167,20 +407,30 @@ function attachBlockingA2ui(
 }
 
 export function useSendMessage(opts: {
-  getChatState: (dialogueId: string) => any;
+  getChatState: (dialogueId: string) => ChatUIState;
   currentChatId: Ref<string>;
-  currentChat: Ref<any>;
+  currentChat: Ref<ChatView | null>;
   composerRef: Ref<ChatComposerHandle | null>;
   t: (key: string) => string;
-  userStore: () => any;
+  userStore: () => ChatUserStore;
   getHistoryQuestionData: (
     sendingDialogueId?: string,
     options?: { blockingDialogueId?: string }
-  ) => Promise<DialogueReconciliationResult | undefined> | DialogueReconciliationResult | undefined;
+  ) =>
+    | Promise<DialogueReconciliationResult | undefined>
+    | DialogueReconciliationResult
+    | undefined;
+  reconcileDialogueIdentity: (
+    tempId: string,
+    serverId: string
+  ) => DialogueReconciliationResult;
   chatList: Ref<Chat[]>;
   timestamp: Ref<number>;
   selectChat: (dialogueId: string) => Promise<void> | void;
-  scrollToBottom: () => void;
+  scrollToBottom: () => Promise<void>;
+  attachmentTargetBlocked?: Readonly<Ref<boolean>>;
+  researchInputCapability: Readonly<Ref<BotResearchInputCapability>>;
+  botCapabilitiesByTool: Readonly<Ref<BotCapabilityByTool>>;
 }) {
   const {
     getChatState,
@@ -190,17 +440,22 @@ export function useSendMessage(opts: {
     t,
     userStore,
     getHistoryQuestionData,
+    reconcileDialogueIdentity,
     chatList,
     timestamp,
     selectChat,
     scrollToBottom,
+    attachmentTargetBlocked,
+    researchInputCapability,
+    botCapabilitiesByTool,
   } = opts;
 
   const isForeground = (sendingDialogueId: string) =>
     currentChatId.value === sendingDialogueId;
 
   const sendMessage = async () => {
-    if (!currentChatId.value) return;
+    if (isDemoDialogueId(currentChatId.value)) return;
+    if (!currentChatId.value || attachmentTargetBlocked?.value) return;
 
     const sendingDialogueId = currentChatId.value;
     const chatState = getChatState(sendingDialogueId);
@@ -212,28 +467,46 @@ export function useSendMessage(opts: {
     )
       return;
 
-    const newMessageValue = extractAtValues(chatState.messageInput);
-    const currentMessage = newMessageValue.cleanedText;
+    const capturedMode = chatState.mode;
+    const capturedSelectedAgent =
+      capturedMode === "expert" ? chatState.selectedAgent : "";
+    const capturedActiveAgentName =
+      capturedMode === "instant" ? "ChatAgent" : capturedSelectedAgent;
+    const currentMessage = chatState.messageInput;
     if (!currentMessage.trim()) return;
+    if (
+      capturedMode === "expert" &&
+      capturedSelectedAgent === "InSilicoResearchAgent"
+    ) {
+      const limit = researchInputCapability.value.max_user_query_chars;
+      if (limit > 0 && !queryWithinLimit(currentMessage, limit)) {
+        ElMessage.warning(t("agents.research.questionTooLong"));
+        return;
+      }
+    }
 
-    // Capture parent row, files, mode, history, and request key before any await
-    // so an A→B switch during scrollToBottom cannot retarget the payload.
+    // Capture parent row, completed asset references, mode, history, and request
+    // key before any await so an A→B switch during scrollToBottom cannot
+    // retarget the payload.
     const parentRowId = parentRowIdForDialogue(
       sendingDialogueId,
       chatList.value
     );
-    const capturedFiles = [...chatState.fileList];
-    const capturedMode = chatState.mode;
+    const capturedUploads = [...chatState.fileList];
+    const capturedAttachments = completedUploadDisplays(capturedUploads);
+    if (capturedAttachments === null) {
+      return;
+    }
+    const attachmentRefs = toAssetAttachmentRefs(capturedUploads);
     const capturedHistory = chatState.historyQuestion;
-    const capturedMatches = [...newMessageValue.matches];
     const requestKey = createChatRequestKey();
 
     chatState.isSending = true;
     chatState.generationStopped = false;
     chatState.activeRequestId = requestKey;
     chatState.sendStartedAt = Date.now();
-    chatState.activeAgentName =
-      capturedMatches.length > 0 ? capturedMatches[0] : "ChatAgent";
+    rememberProgressStartedAt(sendingDialogueId, chatState.sendStartedAt);
+    chatState.activeAgentName = capturedActiveAgentName;
     chatState.completing = false;
     chatState.messageInput = "";
 
@@ -256,34 +529,26 @@ export function useSendMessage(opts: {
     if (currentChatId.value === sendingDialogueId) {
       currentChat.value = chatState.renderedChat;
     }
+    const preRequestHistoryIds = persistedMessageIds(
+      chatState.renderedChat.messages
+    );
 
-    // build the user message, including attached file info
+    // Keep the user-visible/persisted query exactly as authored. Attachment
+    // metadata is carried separately as bounded asset references.
     const userMessage = {
       role: "user",
       content: currentMessage,
-      attachedFiles: capturedFiles.length > 0 ? [...capturedFiles] : undefined,
+      attachments:
+        capturedAttachments.length > 0 ? [...capturedAttachments] : undefined,
     };
-
-    // append file info to the message content so it persists in history
-    let messageContent = currentMessage;
-    if (capturedFiles.length > 0) {
-      const fileInfo = capturedFiles
-        .map(
-          (file: any) =>
-            `[Attachment: ${file.name} (${formatFileSize(file.size)})]`
-        )
-        .join("\n");
-      messageContent = `${currentMessage}\n\n${fileInfo}`;
-    }
-
-    // update the user message content to include file info
-    userMessage.content = messageContent;
 
     const sendingMessages = chatState.renderedChat.messages;
     sendingMessages.push(userMessage);
 
-    const sendingTitle = messageContent;
+    const sendingTitle = currentMessage;
     let blockingDialogueId: string | undefined;
+    let acceptedTurn = false;
+    let identityReconciliation: DialogueReconciliationResult | undefined;
 
     if (parentRowId === null) {
       // Hard no-send: missing/ambiguous existing parent mapping.
@@ -314,8 +579,56 @@ export function useSendMessage(opts: {
       return;
     }
 
+    const draftFingerprint = clientTurnDraftFingerprint({
+      parentRowId,
+      operation: "append",
+      mode: capturedMode,
+      selectedAgent: capturedSelectedAgent,
+      query: currentMessage,
+      attachments: attachmentRefs.map(({ asset_id }) => asset_id),
+    });
+    const clientTurnId =
+      chatState.pendingTurnFingerprint !== null &&
+      clientTurnDraftFingerprintMatches(
+        chatState.pendingTurnFingerprint,
+        draftFingerprint
+      ) &&
+      chatState.pendingTurnId
+        ? chatState.pendingTurnId
+        : createClientTurnId();
+    chatState.pendingTurnId = clientTurnId;
+    chatState.pendingTurnFingerprint = draftFingerprint;
+
+    const discardRejectedLocalDraft = (): void => {
+      clearPendingTurnIdentity(chatState, clientTurnId, draftFingerprint);
+      if (isLocalStorageChat(sendingDialogueId)) {
+        clearPendingChat(sendingDialogueId);
+        removePendingChatListEntry(chatList.value, sendingDialogueId);
+      }
+    };
+
+    const settleAcceptedTurn = (
+      assistantMessage: ChatMessage,
+      acceptedExpertResponse: boolean
+    ): void => {
+      if (capturedMode === "expert" && !acceptedExpertResponse) return;
+      const durableRowId = assistantMessage.id;
+      if (!hasDurableRowId(durableRowId)) return;
+      settlePendingTurnIdentity(
+        chatState,
+        clientTurnId,
+        draftFingerprint,
+        durableRowId
+      );
+    };
+
     if (isNewChat && isLocalStorageChat(sendingDialogueId)) {
-      writePendingChat(sendingDialogueId, sendingMessages, {
+      const pendingMessages = sendingMessages as unknown as Array<{
+        role: string;
+        content: string;
+        [key: string]: unknown;
+      }>;
+      writePendingChat(sendingDialogueId, pendingMessages, {
         title: sendingTitle,
         mode: capturedMode,
         onError: () => {
@@ -324,6 +637,11 @@ export function useSendMessage(opts: {
           }
         },
       });
+      upsertPendingChatListEntry(
+        chatList.value,
+        sendingDialogueId,
+        sendingTitle
+      );
     }
 
     if (isForeground(sendingDialogueId)) {
@@ -332,40 +650,41 @@ export function useSendMessage(opts: {
 
     try {
       const queryData = new FormData();
-      queryData.append("query", messageContent); // use the message content that includes file info
+      queryData.append("query", currentMessage);
       queryData.append("id", parentRowId.toString());
       queryData.append(
         "tool",
-        capturedMode === "expert"
-          ? ""
-          : capturedMatches.length > 0
-            ? capturedMatches.join(",")
-            : ""
+        capturedMode === "expert" ? capturedSelectedAgent : ""
       );
       queryData.append("mode", capturedMode);
+      queryData.append("client_turn_id", clientTurnId);
       if (capturedHistory) {
-        queryData.append("history", JSON.stringify(capturedHistory));
+        queryData.append(
+          "history",
+          JSON.stringify(projectHistoryForTransport(capturedHistory))
+        );
       }
-      if (capturedFiles.length > 0) {
-        capturedFiles.forEach((fileItem: any) => {
-          queryData.append("files", fileItem.file);
-        });
-      }
+      queryData.append("attachments", JSON.stringify(attachmentRefs));
 
-      // Stream branch: chat-family + instant mode + dark-launch flag. The
-      // insertion point is inside the existing try, so returning here still
-      // runs the enclosing finally (request-id cleanup, history refresh via
-      // coordinator, title update, fileList clear) exactly once — no duplicate
-      // cleanup needed, and none is done here.
-      const streamFlag = import.meta.env.VITE_STREAM_ENABLED === "true";
-      if (shouldStream(chatState.activeAgentName, capturedMode, streamFlag)) {
+      // Stream branch: chat-family + the mode that can route that agent.
+      // Insertion is inside the existing try, so returning here still runs
+      // the enclosing finally exactly once.
+      const streamAgents = Object.values(botCapabilitiesByTool.value).flatMap(
+        (capability) =>
+          capability?.enabled && capability.stream ? [capability.tool] : []
+      );
+      if (
+        shouldStream(capturedActiveAgentName, capturedMode, {
+          agents: streamAgents,
+        })
+      ) {
         const placeholder: ChatMessage = {
           role: "assistant",
           content: "",
           streaming: true,
           blocks: [],
           instantMessage: false,
-          tool_name: "ChatAgent",
+          tool_name: capturedActiveAgentName,
           followUpQuestions: [],
           showFollowUpQuestions: false,
           showLog: false,
@@ -373,6 +692,8 @@ export function useSendMessage(opts: {
           streamPresentationKey: requestKey,
         };
         sendingMessages.push(placeholder);
+        const streamPlaceholder =
+          sendingMessages[sendingMessages.length - 1] ?? placeholder;
         // Bind stream lookups to the captured state object so a post-rekey
         // getChatState(oldTempId) cannot resurrect an empty temp record.
         const getStreamChatState = (id: string) =>
@@ -385,7 +706,20 @@ export function useSendMessage(opts: {
           dialogueId: sendingDialogueId,
           formData: queryData,
           requestId: requestKey,
-          placeholder,
+          placeholder: streamPlaceholder,
+          clientTurnId,
+          onIdentity: ({ dialogueId }) => {
+            if (chatState.activeRequestId !== requestKey) return;
+            blockingDialogueId = dialogueId;
+            if (identityReconciliation) return;
+            identityReconciliation = reconcileDialogueIdentity(
+              sendingDialogueId,
+              dialogueId
+            );
+            void Promise.resolve()
+              .then(() => getHistoryQuestionData())
+              .catch(() => undefined);
+          },
         });
         if (
           chatState.activeRequestId === requestKey &&
@@ -393,56 +727,82 @@ export function useSendMessage(opts: {
         ) {
           blockingDialogueId = streamResult.dialogueId;
         }
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.contextNotice?.context_degraded === true
+        ) {
+          ElMessage.warning(t("chat.contextDegraded"));
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          !chatState.generationStopped &&
+          streamResult.completed === true
+        ) {
+          acceptedTurn = true;
+          commitSuccessfulTurn(chatState, userMessage, streamPlaceholder);
+          if (streamResult.messageId) {
+            settlePendingTurnIdentity(
+              chatState,
+              clientTurnId,
+              draftFingerprint,
+              streamResult.messageId
+            );
+          }
+        }
+        if (
+          chatState.activeRequestId === requestKey &&
+          streamResult.preDispatch4xx
+        ) {
+          discardRejectedLocalDraft();
+        }
         return;
       }
 
-      const hasFiles = capturedFiles.length > 0;
-      const tracker = hasFiles
-        ? createTransferTracker({
-            phase: "upload",
-            requestId: requestKey,
-          })
-        : null;
-
-      const response = await getQueryAbortable(
-        queryData as any,
-        requestKey,
-        tracker
-          ? {
-              onUploadProgress: (e) => {
-                const snap = tracker.update({
-                  loaded: e.loaded,
-                  total: e.total ?? 0,
-                });
-                chatState.uploadTransfer = snap;
-                if (
-                  !snap.indeterminate &&
-                  snap.loaded >= snap.total &&
-                  snap.total > 0
-                ) {
-                  chatState.uploadTransfer = null;
-                }
-              },
-            }
-          : undefined
-      );
+      const response = await getQueryAbortable(queryData, requestKey);
 
       // On response: first fast-animate the progress bar to 100% (CSS 300ms), then swap in the answer.
       if (!chatState.generationStopped) {
         chatState.completing = true;
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        const elapsed =
+          chatState.sendStartedAt == null
+            ? 0
+            : Math.max(0, Date.now() - chatState.sendStartedAt);
+        const flushMs = remainingCotFlushMs(
+          elapsed,
+          progressConfigFor(chatState.activeAgentName)
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(300, flushMs))
+        );
       }
 
-      if (response.data) {
-        const responseData = response.data as QueryData;
-        const botProjection = parseBlockingProjection(responseData);
+      // The runtime interceptor returns code 200 for decoded success envelopes;
+      // the shared guard preserves only the established `{ data }` shape
+      // without `code` and rejects explicit non-success envelopes.
+      if (isSuccessfulDataEnvelope<QueryData>(response)) {
+        const responseData = response.data;
+        const parsedBotProjection = parseBlockingProjection(responseData);
+        const botProjection = normalizeCompletedReviewBlockingProjection(
+          responseData,
+          parsedBotProjection
+        );
+        const completedReviewAnswer =
+          parsedBotProjection?.status === "INPUT_REQUIRED" &&
+          botProjection?.status === "SUCCEEDED";
+        const resultArchiveV1 =
+          botProjection?.resultArchiveV1 === true ||
+          responseData.result_archive_v1 === true;
         const expertSucceeded =
           botProjection?.status === "SUCCEEDED" ||
           (botProjection === undefined &&
             typeof responseData.status === "string" &&
             responseData.status.trim().toUpperCase() === "SUCCEEDED");
+        const acceptedExpertResponse =
+          isDurableSelectingWait(responseData) ||
+          isAcceptedExpertResponse(expertSucceeded, botProjection);
         if (
           capturedMode === "expert" &&
+          !isDurableSelectingWait(responseData) &&
           (!isCanonicalToolName(responseData.tool_name) ||
             (botProjection && botProjection.agent !== responseData.tool_name) ||
             hasMalformedExpertRunIdentity(responseData) ||
@@ -464,17 +824,17 @@ export function useSendMessage(opts: {
         if (response.data.final_answer) {
           assistantMessage = {
             role: "assistant",
-            content: response.data.final_answer || "Sorry, I cannot answer this question.",
-            steps: response.data.steps || [],
+            content:
+              response.data.final_answer ||
+              "Sorry, I cannot answer this question.",
+            steps: decodeAgentSteps(response.data.steps),
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             instantMessage: true,
             id: response.data.id,
-            followUpQuestions: response.data.follow_up_questions
-              ? typeof response.data.follow_up_questions === "string"
-                ? JSON.parse(response.data.follow_up_questions)
-                : response.data.follow_up_questions
-              : [],
+            followUpQuestions: decodeFollowUpQuestions(
+              response.data.follow_up_questions
+            ),
             showFollowUpQuestions: false,
             showLog: false,
           };
@@ -496,11 +856,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -512,23 +870,21 @@ export function useSendMessage(opts: {
                 );
               }
             } else if (response.data.tool_name === "DeepGenomeAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               assistantMessage = {
                 role: "assistant",
-                content: contentData?.content || response.data.answer,
-                doc_list: contentData?.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 server_file_path: response.data.server_file_path, // add the server file path
@@ -546,28 +902,33 @@ export function useSendMessage(opts: {
                     if (fileContent && fileContent.trim() && assistantMessage) {
                       assistantMessage.content = fileContent;
                     } else if (assistantMessage) {
-                      assistantMessage.content = "File content is empty or failed to load";
+                      assistantMessage.content =
+                        "File content is empty or failed to load";
                     }
                     // force a view update (foreground only — do not bump shared
                     // timestamp / scroll while the user is on another dialogue)
                     nextTick(() => {
                       if (isForeground(sendingDialogueId)) {
                         timestamp.value = Date.now();
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   })
                   .catch((error) => {
-                    console.error("Failed to read DeepGenomeAgent file:", error);
+                    console.error(
+                      "Failed to read DeepGenomeAgent file:",
+                      error
+                    );
                     if (assistantMessage) {
-                      assistantMessage.content = "Failed to load file, please try again later";
+                      assistantMessage.content =
+                        "Failed to load file, please try again later";
                     }
                     nextTick(() => {
                       if (isForeground(sendingDialogueId)) {
                         timestamp.value = Date.now();
-                        scrollToBottom();
+                        scrollToBottom().catch(() => undefined);
                       }
-                    });
+                    }).catch(() => undefined);
                   });
               }
 
@@ -582,24 +943,22 @@ export function useSendMessage(opts: {
               response.data.tool_name === "ReviewAgent" ||
               response.data.tool_name === "BriefGeneAgent"
             ) {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
+              const contentData = parseAgentAnswer(response.data.answer);
               // log the new message's doc_list data
               assistantMessage = {
                 role: "assistant",
-                content: contentData.content,
-                doc_list: contentData.doc_list,
+                content:
+                  optionalStringValue(contentData, "content") ||
+                  response.data.answer,
+                doc_list: decodeCitationDocuments(contentData.doc_list),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -611,28 +970,26 @@ export function useSendMessage(opts: {
                 );
               }
             } else if (response.data.tool_name === "DataAgent") {
-              const contentData = isValidJSON(response.data.answer)
-                ? JSON.parse(response.data.answer)
-                : response.data.answer;
-              const tableData = convertToTableData(contentData);
+              const contentData = parseAgentAnswer(response.data.answer);
+              const tableInput = decodeTableDataInput(contentData);
+              const tableData = convertToTableData(tableInput);
               assistantMessage = {
                 role: "assistant",
                 content: tableData,
-                tableHeaders: contentData.headers.map((header: string) => ({
+                tableHeaders: tableInput.headers.map((header: string) => ({
                   prop: header.replace(/\s+/g, "_").toLowerCase(),
                   label: header,
                 })),
+                tableCaption: tableInput.title,
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 instantMessage: true,
                 original: response.data.answer,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -652,11 +1009,9 @@ export function useSendMessage(opts: {
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
                 compute_resource: response.data?.compute_resource || "",
@@ -670,20 +1025,25 @@ export function useSendMessage(opts: {
               }
             } else {
               // handle other unknown tool types with the default format
+              const acceptedSpecializedBackground =
+                acceptedExpertResponse &&
+                ACCEPTED_EMPTY_BACKGROUND_TOOLS.has(response.data.tool_name);
               assistantMessage = {
                 role: "assistant",
-                content: response.data?.answer || "Sorry, I cannot answer this question.",
+                content:
+                  response.data?.answer ||
+                  (acceptedSpecializedBackground
+                    ? ""
+                    : "Sorry, I cannot answer this question."),
                 status: response.data?.status || "",
                 upload_path: response.data?.upload_path || "",
                 download_path: response.data?.download_path || "",
                 instantMessage: true,
                 tool_name: response.data.tool_name,
                 id: response.data.id,
-                followUpQuestions: response.data.follow_up_questions
-                  ? typeof response.data.follow_up_questions === "string"
-                    ? JSON.parse(response.data.follow_up_questions)
-                    : response.data.follow_up_questions
-                  : [],
+                followUpQuestions: decodeFollowUpQuestions(
+                  response.data.follow_up_questions
+                ),
                 showFollowUpQuestions: false,
                 showLog: false,
               };
@@ -705,19 +1065,29 @@ export function useSendMessage(opts: {
               instantMessage: true,
               tool_name: response.data?.tool_name || "",
               id: response.data.id,
-              followUpQuestions: response.data.follow_up_questions
-                ? typeof response.data.follow_up_questions === "string"
-                  ? JSON.parse(response.data.follow_up_questions)
-                  : response.data.follow_up_questions
-                : [],
+              followUpQuestions: decodeFollowUpQuestions(
+                response.data.follow_up_questions
+              ),
               showFollowUpQuestions: false,
               showLog: false,
             };
           }
         }
 
+        const contextNotice = normalizeChatContextNotice(response.data);
         if (assistantMessage) {
-          attachBlockingLegacyFields(assistantMessage, responseData);
+          if (completedReviewAnswer) assistantMessage.status = "SUCCEEDED";
+          if (contextNotice) assistantMessage.contextNotice = contextNotice;
+          if (response.data.route_reason_code) {
+            assistantMessage.route_reason_code =
+              response.data.route_reason_code;
+          }
+          attachBlockingLegacyFields(
+            assistantMessage,
+            responseData,
+            resultArchiveV1
+          );
+          stripActiveArchiveLegacyFields(assistantMessage, resultArchiveV1);
           // Keep the Web row id and Bot umbrella identity in distinct fields;
           // only the parser output crosses into reactive message state.
           if (botProjection) {
@@ -737,12 +1107,21 @@ export function useSendMessage(opts: {
           // stale / stopped — finally still clears when this key owns
         } else if (assistantMessage) {
           sendingMessages.push(assistantMessage);
+          commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          acceptedTurn = capturedMode !== "expert" || acceptedExpertResponse;
+          if (responseData.context_degraded === true) {
+            ElMessage.warning(t("chat.contextDegraded"));
+          }
+          settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         } else {
           // if assistantMessage was not created, create a default message
-          console.warn("assistantMessage was not created; using a default message");
+          console.warn(
+            "assistantMessage was not created; using a default message"
+          );
           assistantMessage = {
             role: "assistant",
-            content: response.data?.answer || "Sorry, I cannot answer this question.",
+            content:
+              response.data?.answer || "Sorry, I cannot answer this question.",
             status: response.data?.status || "",
             upload_path: response.data?.upload_path || "",
             download_path: response.data?.download_path || "",
@@ -753,38 +1132,48 @@ export function useSendMessage(opts: {
             showFollowUpQuestions: false,
             showLog: false,
           };
-          attachBlockingLegacyFields(assistantMessage, responseData);
+          if (contextNotice) assistantMessage.contextNotice = contextNotice;
+          if (response.data?.route_reason_code) {
+            assistantMessage.route_reason_code =
+              response.data.route_reason_code;
+          }
+          attachBlockingLegacyFields(
+            assistantMessage,
+            responseData,
+            resultArchiveV1
+          );
+          stripActiveArchiveLegacyFields(assistantMessage, resultArchiveV1);
           if (botProjection) {
             assistantMessage.botProjection = botProjection;
             attachBlockingA2ui(assistantMessage, responseData, botProjection);
           }
           sendingMessages.push(assistantMessage);
+          commitSuccessfulTurn(chatState, userMessage, assistantMessage);
+          acceptedTurn = capturedMode !== "expert" || acceptedExpertResponse;
+          settleAcceptedTurn(assistantMessage, acceptedExpertResponse);
         }
-      } else if (
-        chatState.activeRequestId === requestKey &&
-        !chatState.generationStopped
-      ) {
-        sendingMessages.push({
-          role: "assistant",
-          content: "Sorry, I cannot answer this question.",
-          steps: [],
-          status: "",
-          upload_path: "",
-          download_path: "",
-          instantMessage: true,
-          tool_name: response.data?.tool_name || "",
-          followUpQuestions: [],
-          showFollowUpQuestions: false,
-          showLog: false,
-        });
+      } else {
+        throw new Error("invalid response envelope");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(t("chat.logs.sendMessageFailed"), error);
+
+      const errorRecord = isRecord(error) ? error : undefined;
+      const response =
+        errorRecord && isRecord(errorRecord.response)
+          ? errorRecord.response
+          : undefined;
+      const responseData =
+        response && isRecord(response.data) ? response.data : undefined;
+      const detail =
+        responseData && isRecord(responseData.detail)
+          ? responseData.detail
+          : undefined;
 
       // check whether the request was aborted
       if (
-        error.name === "AbortError" ||
-        error.code === "ERR_CANCELED" ||
+        errorRecord?.name === "AbortError" ||
+        errorRecord?.code === "ERR_CANCELED" ||
         chatState.generationStopped
       ) {
         return; // don't show an error message when the request is aborted
@@ -796,13 +1185,12 @@ export function useSendMessage(opts: {
         return;
       }
 
+      if (isDefinitePreDispatch4xx(error)) {
+        discardRejectedLocalDraft();
+      }
+
       // check whether it's a token-expired error
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.detail &&
-        error.response.data.detail.code === 403
-      ) {
+      if (detail?.code === 403) {
         // Modal only when foreground — background must not steal focus on B.
         if (isForeground(sendingDialogueId)) {
           ElMessageBox.alert(
@@ -811,24 +1199,29 @@ export function useSendMessage(opts: {
             {
               confirmButtonText: i18n.global.t("request.confirmButtonText"),
               type: "warning",
-            callback: () => {
-              const UserStore = userStore();
-              UserStore.FedLogOut().finally(() => {
-                // clear all caches and cookies
-                localStorage.clear();
-                sessionStorage.clear();
-                document.cookie.split(";").forEach(function (c) {
-                  document.cookie = c
-                    .replace(/^ +/, "")
-                    .replace(
-                      /=.*/,
-                      "=;expires=" + new Date().toUTCString() + ";path=/"
-                    );
-                });
-                location.href = "/login";
-              });
-            },
-          });
+              callback: () => {
+                const UserStore = userStore();
+                UserStore.FedLogOut()
+                  .finally(() => {
+                    // clear all caches and cookies
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    document.cookie.split(";").forEach(function (c) {
+                      document.cookie = c
+                        .replace(/^ +/, "")
+                        .replace(
+                          /=.*/,
+                          "=;expires=" + new Date().toUTCString() + ";path=/"
+                        );
+                    });
+                    location.href = "/login";
+                  })
+                  .catch(() => {
+                    // The redirect in finally is the authoritative logout fallback.
+                  });
+              },
+            }
+          ).catch(() => undefined);
         }
         return;
       }
@@ -839,44 +1232,43 @@ export function useSendMessage(opts: {
           // wait a short while to give the server time to process the request
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          // for a new chat, check by refreshing the history — foreground only so
-          // background recovery cannot refresh chatList while the user is on B.
-          if (isNewChat) {
-            if (isForeground(sendingDialogueId)) {
-              await getHistoryQuestionData(sendingDialogueId);
-              // if the history has a new chat, the message was sent successfully
-              if (chatList.value.length > 0) {
-                const newChat = chatList.value[0];
-                const checkRes = await getAnswerCheck({
-                  dialogue_id: newChat.dialogue_id,
-                });
-                if (
-                  checkRes.code === 200 &&
-                  checkRes.data &&
-                  checkRes.data.length > 0
-                ) {
-                  return;
-                }
-              }
-            }
-          } else {
-            // for an existing chat, check the captured sending dialogue directly
+          const ownsActiveRequest = () =>
+            chatState.activeRequestId === requestKey &&
+            !chatState.generationStopped;
+          if (!ownsActiveRequest()) return;
+
+          // A new temporary chat, or an existing chat without a persisted
+          // pre-request message identity, cannot prove which server turn
+          // accepted a transport-uncertain send. Retain the selection instead
+          // of guessing from duplicate query text.
+          if (!isNewChat && preRequestHistoryIds.size > 0) {
+            // Check the captured dialogue directly and accept only a matching
+            // row whose persisted identity did not exist before this request.
             const checkRes = await getAnswerCheck({
               dialogue_id: sendingDialogueId,
             });
+            if (!ownsActiveRequest()) return;
             if (
               checkRes.code === 200 &&
               checkRes.data &&
-              checkRes.data.length > 0
+              checkRes.data.some(
+                (historyRow) =>
+                  historyRow.query === currentMessage &&
+                  typeof historyRow.id === "string" &&
+                  historyRow.id.trim() !== "" &&
+                  !preRequestHistoryIds.has(historyRow.id)
+              )
             ) {
-              // check whether the last message contains the one we just sent
-              const lastItem = checkRes.data[checkRes.data.length - 1];
-              if (lastItem && lastItem.query === messageContent) {
-                if (isForeground(sendingDialogueId)) {
-                  await selectChat(sendingDialogueId);
-                }
-                return;
+              // A new history id with the same query is useful to refresh this
+              // dialogue, but is not request-specific evidence: another
+              // client/session can create the same row while this transport is
+              // uncertain. The local request key only owns an abort controller
+              // and history rows expose no comparable correlation token, so it
+              // must never clear the captured Expert selection here.
+              if (isForeground(sendingDialogueId)) {
+                await selectChat(sendingDialogueId);
               }
+              return;
             }
           }
         } catch (verifyError) {
@@ -890,10 +1282,22 @@ export function useSendMessage(opts: {
         chatState.activeRequestId === requestKey &&
         !chatState.generationStopped
       ) {
-        const isTimeout = error.response?.status === 504;
+        const status =
+          typeof response?.status === "number" ? response.status : 0;
+        const isTimeout = status === 504;
+        const surfaced =
+          status >= 400 && status < 500 && status !== 401 && status !== 403
+            ? surfaceableClientMessage(responseData?.message)
+            : undefined;
+        const baseMessage = isTimeout
+          ? t("chat.timeoutFailed")
+          : (surfaced ?? t("chat.sendFailed"));
+        const requestID = safeWebRequestID(responseData?.request_id);
         sendingMessages.push({
           role: "assistant",
-          content: isTimeout ? t("chat.timeoutFailed") : t("chat.sendFailed"),
+          content: requestID
+            ? `${baseMessage}\n\n${t("chat.requestId")}: ${requestID}`
+            : baseMessage,
           steps: [],
           status: "",
           upload_path: "",
@@ -911,17 +1315,46 @@ export function useSendMessage(opts: {
       // release lifecycle fields. A stale request must be entirely read-only.
       const ownsLifecycle = chatState.activeRequestId === requestKey;
       if (ownsLifecycle) {
+        const wasStopped = chatState.generationStopped;
+        const identityResult = identityReconciliation;
+        const identityAlreadyReconciled =
+          identityResult?.status === "reconciled" &&
+          identityResult.serverId === blockingDialogueId;
+        // Snapshot the accepted turn so a later refresh can reopen this
+        // still-local `new_*` row. Reconciliation may still replace the
+        // record with the server dialogue id below.
+        if (
+          acceptedTurn &&
+          isNewChat &&
+          isLocalStorageChat(sendingDialogueId) &&
+          !identityAlreadyReconciled
+        ) {
+          writePendingChat(
+            sendingDialogueId,
+            sendingMessages as unknown as Array<{
+              role: string;
+              content: string;
+              [key: string]: unknown;
+            }>,
+            {
+              title: sendingTitle,
+              mode: capturedMode,
+            }
+          );
+        }
         const historyOpts =
-          blockingDialogueId !== undefined
-            ? { blockingDialogueId }
-            : undefined;
-        await getHistoryQuestionData(sendingDialogueId, historyOpts);
+          blockingDialogueId !== undefined ? { blockingDialogueId } : undefined;
+        const reconciliation =
+          identityResult ??
+          (await getHistoryQuestionData(sendingDialogueId, historyOpts));
+        if (reconciliation?.status === "reconciled") {
+          chatState.historyHydration = "ready";
+        }
 
         if (!isNewChat) {
           // for an existing chat, update the sending conversation's title (if it changed)
           if (sendingMessages.length > 0) {
-            const userMessage =
-              sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
+            const userMessage = sendingMessages[sendingMessages.length - 2]; // the second-to-last is the user message
             if (userMessage && userMessage.role === "user") {
               // find the sending conversation in the list and update its title
               const currentChatIndex = chatList.value.findIndex(
@@ -929,10 +1362,11 @@ export function useSendMessage(opts: {
               );
               if (currentChatIndex !== -1) {
                 // take the user message content as the title (length-limited)
+                const titleContent = chatContentToText(userMessage.content);
                 const newTitle =
-                  userMessage.content.length > 50
-                    ? userMessage.content.substring(0, 50) + "..."
-                    : userMessage.content;
+                  titleContent.length > 50
+                    ? titleContent.substring(0, 50) + "..."
+                    : titleContent;
                 chatList.value[currentChatIndex].title = newTitle;
               }
             }
@@ -945,8 +1379,10 @@ export function useSendMessage(opts: {
         chatState.uploadTransfer = null;
         chatState.generationStopped = false;
 
-        // clear the file list
-        if (chatState.fileList.length > 0) {
+        // Clear completed attachments only after the request was accepted. A
+        // rejected or transport-uncertain turn keeps the retained files so the
+        // user can retry without reselecting them.
+        if ((acceptedTurn || wasStopped) && chatState.fileList.length > 0) {
           chatState.fileList = [];
           // close the header after clearing the file list (foreground only)
           if (isForeground(sendingDialogueId)) {
@@ -954,7 +1390,7 @@ export function useSendMessage(opts: {
               if (composerRef.value) {
                 composerRef.value.closeHeader();
               }
-            });
+            }).catch(() => undefined);
           }
         }
 

@@ -1,0 +1,1117 @@
+<template>
+  <main
+    ref="workspaceRoot"
+    class="analysis-agent-page"
+    :data-focused-upload-id="focusedUploadLocalId || undefined"
+    :data-scroll-root="`${agentKey}-agent`"
+    :aria-labelledby="`${agentKey}-agent-title`"
+  >
+    <section
+      v-if="!capabilityLoaded"
+      class="analysis-agent-state"
+      :data-test="`${agentKey}-capability-loading`"
+      role="status"
+      aria-live="polite"
+    >
+      <h1 :id="`${agentKey}-agent-title`">
+        <AgentDisplayName :label="t(`${localePrefix}.title`)" />
+      </h1>
+      <p>{{ t(`${localePrefix}.capabilityLoading`) }}</p>
+      <button
+        type="button"
+        class="analysis-agent-back"
+        :data-test="`${agentKey}-back`"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
+    </section>
+
+    <section
+      v-else-if="!capabilityAllowed"
+      class="analysis-agent-state"
+      :data-test="`${agentKey}-unavailable`"
+      role="status"
+      aria-live="polite"
+    >
+      <h1 :id="`${agentKey}-agent-title`">
+        {{ t(`${localePrefix}.unavailableTitle`) }}
+      </h1>
+      <p>{{ t(`${localePrefix}.unavailableMessage`) }}</p>
+      <button
+        type="button"
+        class="analysis-agent-back"
+        :data-test="`${agentKey}-back`"
+        @click="goBack"
+      >
+        {{ t("common.back") }}
+      </button>
+    </section>
+
+    <template v-else>
+      <header class="analysis-agent-header">
+        <div>
+          <p class="analysis-agent-eyebrow">
+            {{ t(`${localePrefix}.agentLabel`) }}
+          </p>
+          <h1 :id="`${agentKey}-agent-title`">
+            <AgentDisplayName :label="t(`${localePrefix}.title`)" />
+          </h1>
+          <p class="analysis-agent-subtitle">
+            {{ t(`${localePrefix}.subtitle`) }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="analysis-agent-back"
+          :data-test="`${agentKey}-back`"
+          @click="goBack"
+        >
+          {{ t("common.back") }}
+        </button>
+      </header>
+
+      <form
+        class="analysis-agent-form"
+        :class="`${agentKey}-agent-form`"
+        novalidate
+        @submit.prevent="submit"
+      >
+        <div class="analysis-agent-field">
+          <label :for="`${agentKey}-question`">
+            {{ t(`${localePrefix}.questionLabel`) }}
+          </label>
+          <textarea
+            :id="`${agentKey}-question`"
+            v-model="question"
+            :data-test="`${agentKey}-question`"
+            :data-testid="`${agentKey}-query`"
+            :placeholder="t(`${localePrefix}.questionPlaceholder`)"
+            rows="5"
+            aria-required="true"
+          />
+        </div>
+
+        <div class="analysis-agent-field">
+          <label :for="`${agentKey}-files`">
+            {{ t(`${localePrefix}.contextFilesLabel`) }}
+          </label>
+          <input
+            :id="`${agentKey}-files`"
+            :data-test="`${agentKey}-files`"
+            type="file"
+            multiple
+            :disabled="!canPickAttachments || isSubmitting || isRunActive"
+            @change="handleFiles"
+          />
+          <p class="analysis-agent-hint">
+            {{ contextFilesHint }}
+          </p>
+          <div class="analysis-agent-attachments">
+            <AttachmentChipStrip
+              :items="uploadItems"
+              :announcement="attachmentAnnouncement"
+              :announcement-nonce="attachmentAnnouncementNonce"
+              @pause="pauseUpload"
+              @resume="resumeUpload"
+              @retry="retryUpload"
+              @reselect="reselectUpload"
+              @cancel="cancelUpload"
+              @remove="removeUpload"
+            />
+          </div>
+          <p
+            v-if="attachmentTargetBlocked"
+            class="analysis-agent-hint"
+            :data-test="`${agentKey}-attachment-target-status`"
+            role="status"
+          >
+            {{ t("chat.attachmentTargetUnavailable") }}
+          </p>
+        </div>
+
+        <p
+          v-if="fileError"
+          class="analysis-agent-error"
+          :data-test="`${agentKey}-file-error`"
+          role="alert"
+        >
+          {{ fileError }}
+        </p>
+        <p
+          v-if="formError"
+          class="analysis-agent-error"
+          :data-test="`${agentKey}-form-error`"
+          role="alert"
+        >
+          {{ formError }}
+        </p>
+
+        <div class="analysis-agent-actions">
+          <button
+            type="submit"
+            class="analysis-agent-submit"
+            :data-test="`${agentKey}-submit`"
+            :data-testid="`${agentKey}-submit`"
+            :disabled="
+              isSubmitting ||
+              isRunActive ||
+              hasBlockingUploads ||
+              attachmentTargetBlocked
+            "
+            @click="submit"
+          >
+            {{
+              isSubmitting
+                ? t(`${localePrefix}.submitting`)
+                : t(`${localePrefix}.submit`)
+            }}
+          </button>
+          <button
+            v-if="canCancelRun"
+            type="button"
+            class="analysis-agent-cancel"
+            :data-test="`${agentKey}-cancel`"
+            @click="cancelRun"
+          >
+            {{ t("common.cancel") }}
+          </button>
+        </div>
+      </form>
+
+      <p
+        v-if="
+          displayedState.degraded &&
+          (tool !== 'InSilicoResearchAgent' || !researchTerminalPhase)
+        "
+        class="analysis-agent-degraded"
+        :data-test="`${agentKey}-degraded`"
+        role="status"
+        aria-live="polite"
+      >
+        {{ t(`${localePrefix}.degraded`) }}
+      </p>
+
+      <section
+        v-if="hasRun"
+        class="analysis-agent-artifact"
+        :data-test="`${agentKey}-artifact`"
+      >
+        <ResearchArtifactShell
+          :title="t(`${localePrefix}.reportTitle`)"
+          :metadata="t(`${localePrefix}.agentLabel`)"
+          :status="workspaceStatusLabel"
+          :report-status="reportStatus"
+          :tab="artifactTab"
+          :tabs="artifactTabs"
+          :tab-labels="tabLabels"
+          :artifact-id="`${agentKey}-agent-artifact`"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t(`${localePrefix}.reset`)"
+          :menu-items="resetArtifactMenuItems(t(`${localePrefix}.reset`))"
+          :tablist-label="t(`${localePrefix}.sectionsLabel`)"
+          @back="goBack"
+          @close="resetRun"
+          @action="onArtifactMenu"
+        >
+          <template #content>
+            <BotReportState
+              :state="reportComponentState"
+              :progress="reportProgress"
+              :updated-at="reportUpdatedAt"
+              :agent-name="tool"
+              :ns="`${agentKey}-agent`"
+              :labels="reportLabels"
+              :failure-label="reportFailureLabel"
+              :empty-report-label="t(`${localePrefix}.emptyReport`)"
+              :hide-active-report="tool === 'InSilicoResearchAgent'"
+            />
+          </template>
+
+          <template #evidence>
+            <p
+              class="analysis-agent-empty"
+              :data-test="`${agentKey}-evidence-empty`"
+              role="status"
+            >
+              {{ t(`${localePrefix}.noEvidence`) }}
+            </p>
+          </template>
+
+          <template #activity>
+            <BotReportState
+              v-if="isActiveResearch"
+              :state="reportComponentState"
+              :progress="reportProgress"
+              :updated-at="reportUpdatedAt"
+              :agent-name="tool"
+              :ns="`${agentKey}-agent-activity`"
+              :labels="reportLabels"
+              :failure-label="reportFailureLabel"
+              :empty-report-label="t(`${localePrefix}.emptyReport`)"
+              :data-test="`${agentKey}-progress`"
+              hide-active-report
+            />
+            <div
+              v-else
+              class="analysis-agent-activity"
+              :data-test="`${agentKey}-progress`"
+              role="status"
+              aria-live="polite"
+            >
+              <p>{{ workspaceStatusLabel }}</p>
+              <p
+                v-if="
+                  displayedState.failures.length &&
+                  (tool !== 'InSilicoResearchAgent' || !researchTerminalPhase)
+                "
+              >
+                {{ t(`${localePrefix}.degraded`) }}
+              </p>
+            </div>
+          </template>
+
+          <template #downloads>
+            <template v-if="showReportArtifacts">
+              <ResultArchiveDelivery
+                v-if="isResultArchiveV1"
+                :delivery="displayedState.delivery"
+                :artifacts="displayedState.artifactLinks"
+                :retrying="archiveRetrying"
+                @download="downloadResultArchive"
+                @retry="retryResultArchive"
+              />
+              <template v-else>
+                <BotArtifactList
+                  :artifacts="reportArtifacts"
+                  :download="downloadArtifact"
+                  :title-label="t(`${localePrefix}.downloads`)"
+                  :download-text="t(`${localePrefix}.download`)"
+                  :empty-label="t(`${localePrefix}.noDownloads`)"
+                />
+                <p
+                  v-if="downloadError"
+                  class="analysis-agent-error"
+                  :data-test="`${agentKey}-download-error`"
+                  role="alert"
+                >
+                  {{ downloadError }}
+                </p>
+              </template>
+            </template>
+          </template>
+        </ResearchArtifactShell>
+      </section>
+    </template>
+  </main>
+</template>
+
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import { getChatdownloadURL } from "@/api/chat";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
+import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
+import ResearchArtifactShell from "@/components/research/ResearchArtifactShell.vue";
+import { resetArtifactMenuItems } from "@/components/research/artifact-overflow";
+import {
+  artifactChrome,
+  artifactHasDownloadableFiles,
+} from "@/views/chat/utils/artifact-chrome";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
+import {
+  REMOTE_AGENT_PRODUCT_REGISTRY,
+  type RemoteAgentTool,
+} from "@/constants/agents";
+import { userStore } from "@/stores";
+import AttachmentChipStrip from "@/views/chat/components/AttachmentChipStrip.vue";
+import {
+  useBotCapabilities,
+  type AttachmentChannel,
+} from "@/views/chat/composables/useBotCapabilities";
+import type { ChatAttachmentValidationError } from "@/views/chat/composables/useFileUpload";
+import { formatBytes } from "@/utils/transfer-progress";
+import {
+  useBotRemoteAgentRun,
+  type BotRemoteAgentRunState,
+} from "@/views/chat/composables/useBotRemoteAgentRun";
+import { useChatStates } from "@/views/chat/composables/useChatStates";
+import { useResultArchiveDelivery } from "@/views/chat/composables/useResultArchiveDelivery";
+import { useRemoteAgentLifecycle } from "@/views/chat/composables/useRemoteAgentLifecycle";
+import { useResumableUploads } from "@/views/chat/composables/useResumableUploads";
+import { isSafeBotObsPath, type BotProgress } from "@/views/chat/botProjection";
+import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { reportPresentationFor } from "@/views/chat/utils/report-presentation";
+import { queryWithinLimit } from "@/views/chat/utils/research-input-policy";
+import type {
+  AgentRunPhase,
+  AgentResultDelivery,
+  ConversationArtifactLink,
+} from "@/api/types";
+
+export type AnalysisRemoteAgentTool = Extract<
+  RemoteAgentTool,
+  "AnalystAgent" | "InSilicoResearchAgent"
+>;
+
+type LocalePrefix = "agents.analyst" | "agents.research";
+
+type ResearchTerminalPhase = Extract<
+  AgentRunPhase,
+  "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "CANCELLED"
+>;
+
+type Props = {
+  tool: AnalysisRemoteAgentTool;
+  localePrefix: LocalePrefix;
+  state?: BotLifecycleState;
+};
+
+const LEGACY_MAX_QUERY_LENGTH = 4000;
+const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
+const SAFE_DIALOGUE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+
+const props = defineProps<Props>();
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const { getChatState } = useChatStates();
+const agentKey = computed(() =>
+  props.tool === "AnalystAgent" ? "analyst" : "research"
+);
+const capabilities = useBotCapabilities(`${agentKey.value}-agent-view`);
+const uploadCapability = capabilities.upload;
+const contextFilesHint = computed(() =>
+  t(`${props.localePrefix}.contextFilesHint`, {
+    maxFiles: uploadCapability.value.max_attachments,
+    maxFileSize: formatBytes(uploadCapability.value.max_file_bytes),
+  })
+);
+const routeDialogueId =
+  typeof route.query.dialogue_id === "string" ? route.query.dialogue_id : "";
+const dialogueId = SAFE_DIALOGUE_ID.test(routeDialogueId)
+  ? routeDialogueId
+  : `${agentKey.value}-agent`;
+const uploadDialogueId = ref(dialogueId);
+const currentUser = userStore();
+const uploadUsername = computed(() => currentUser.name ?? "");
+const run = useBotRemoteAgentRun({
+  tool: props.tool,
+  dialogueId,
+  getChatState,
+  capabilities,
+});
+const remoteLifecycle = useRemoteAgentLifecycle({
+  tool: props.tool,
+  run,
+  dialogueId,
+});
+
+const question = ref("");
+const fileError = ref("");
+const attachmentAnnouncement = ref("");
+const attachmentAnnouncementNonce = ref(0);
+const focusedUploadLocalId = ref("");
+const workspaceRoot = ref<HTMLElement | null>(null);
+const formError = ref("");
+const downloadError = ref("");
+const isSubmitting = ref(false);
+
+const capabilityLoaded = computed(() => capabilities.loaded.value === true);
+const product = computed(() => REMOTE_AGENT_PRODUCT_REGISTRY[props.tool]);
+const agentCapability = computed(() => capabilities.byTool.value[props.tool]);
+const attachmentChannels = computed<AttachmentChannel[]>(
+  () => agentCapability.value?.attachmentChannels ?? []
+);
+const capabilityAllowed = computed(() => {
+  const capability = agentCapability.value;
+  return (
+    capabilityLoaded.value &&
+    product.value.live === true &&
+    capability?.enabled === true &&
+    capability.execution === "agent_run" &&
+    capability.artifacts === true &&
+    (props.tool !== "InSilicoResearchAgent" ||
+      capabilities.researchInput.value.enabled === true)
+  );
+});
+const canPickAttachments = computed(
+  () =>
+    agentCapability.value?.attachments === true &&
+    attachmentChannels.value.length > 0 &&
+    uploadCapability.value.enabled === true
+);
+const uploadQueue = useResumableUploads({
+  currentChatId: uploadDialogueId,
+  getChatState,
+  uploadCapability,
+  username: uploadUsername,
+  targetTool: () => props.tool,
+  onValidationError: (error) => {
+    const message = attachmentErrorMessage(error);
+    fileError.value = message;
+    announceAttachment(message);
+  },
+  onDuplicate: (localId, fileName) => {
+    onAttachmentDuplicate(localId, fileName).catch(() => undefined);
+  },
+});
+const uploadItems = computed(() => getChatState(dialogueId).fileList ?? []);
+const hasBlockingUploads = uploadQueue.hasBlockingUploads;
+const attachmentTargetBlocked = computed(
+  () => uploadItems.value.length > 0 && !canPickAttachments.value
+);
+
+function attachmentErrorMessage(error: ChatAttachmentValidationError): string {
+  return t(`chat.attachmentErrors.${error.code}`, {
+    file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
+    maxFiles: uploadCapability.value.max_attachments,
+    maxFileMb: Math.ceil(uploadCapability.value.max_file_bytes / 1024 / 1024),
+    maxTotalMb: Math.ceil(uploadCapability.value.max_file_bytes / 1024 / 1024),
+  });
+}
+
+function boundedAttachmentAnnouncementFileName(fileName: string): string {
+  const normalized = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return t("chat.upload.fileSuffixFallback");
+  const codePoints = Array.from(normalized);
+  if (codePoints.length <= MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH) {
+    return normalized;
+  }
+  return `${codePoints
+    .slice(0, MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH - 1)
+    .join("")}…`;
+}
+
+function announceAttachment(message: string): void {
+  attachmentAnnouncementNonce.value += 1;
+  attachmentAnnouncement.value = "";
+  void nextTick(() => {
+    attachmentAnnouncement.value = message;
+  });
+}
+
+async function onAttachmentDuplicate(
+  localId: string,
+  fileName: string
+): Promise<void> {
+  focusedUploadLocalId.value = localId;
+  announceAttachment(
+    t("chat.upload.alreadyAttached", {
+      file: boundedAttachmentAnnouncementFileName(fileName),
+    })
+  );
+  await focusAttachmentChip(localId);
+}
+
+async function focusAttachmentChip(localId: string): Promise<void> {
+  await nextTick();
+  const index = uploadItems.value.findIndex((item) => item.localId === localId);
+  if (index < 0) return;
+
+  const directChips = workspaceRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  if (index < 3) {
+    directChips?.[index]?.focus();
+    return;
+  }
+
+  const overflowChip = workspaceRoot.value?.querySelector<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow"]'
+  );
+  if (!overflowChip) return;
+  overflowChip.focus();
+  overflowChip.click();
+  await nextTick();
+  const hiddenChip = workspaceRoot.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow-item"]'
+  )[index - 3];
+  hiddenChip?.focus();
+}
+
+const displayedState = computed(
+  () => (props.state ?? run.state.value) as BotRemoteAgentRunState
+);
+const archiveDelivery = useResultArchiveDelivery({ getChatState });
+const isResultArchiveV1 = computed(
+  () => displayedState.value.projection?.resultArchiveV1 === true
+);
+const archiveRetrying = computed(() => {
+  const messageId = displayedState.value.messageId;
+  const ownerDialogueId = displayedState.value.dialogueId ?? dialogueId;
+  return Boolean(
+    messageId &&
+    getChatState(ownerDialogueId).archiveRetryingByMessageId[messageId]
+  );
+});
+const reportProjection = computed(() => displayedState.value.projection);
+const reportProgress = computed<BotProgress | null>(
+  () => reportProjection.value?.progress ?? null
+);
+const reportUpdatedAt = computed(
+  () => reportProjection.value?.reportUpdatedAt ?? null
+);
+const isRunActive = computed(() =>
+  ["submitting", "running", "input_required"].includes(
+    displayedState.value.phase
+  )
+);
+const canCancelRun = computed(() => isSubmitting.value || isRunActive.value);
+const hasRun = computed(
+  () =>
+    props.state !== undefined ||
+    displayedState.value.phase !== "idle" ||
+    displayedState.value.projection !== null ||
+    displayedState.value.degraded
+);
+const researchTerminalPhase = computed<ResearchTerminalPhase | null>(() => {
+  if (props.tool !== "InSilicoResearchAgent") return null;
+  const state = displayedState.value;
+
+  switch (state.phase) {
+    case "succeeded":
+      return "SUCCEEDED";
+    case "failed":
+      return "FAILED";
+    case "timed_out":
+      return "TIMED_OUT";
+    case "cancelled":
+      return "CANCELLED";
+  }
+
+  if (state.status === "SUCCEEDED") return "SUCCEEDED";
+  if (state.status === "TIMED_OUT") return "TIMED_OUT";
+  if (state.status === "FAILED") {
+    return state.projection?.status === "CANCELLED" ? "CANCELLED" : "FAILED";
+  }
+
+  const projectionPhase = state.projection?.status;
+  if (
+    projectionPhase === "SUCCEEDED" ||
+    projectionPhase === "FAILED" ||
+    projectionPhase === "TIMED_OUT" ||
+    projectionPhase === "CANCELLED"
+  ) {
+    return projectionPhase;
+  }
+
+  const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
+  return snapshotPhase === "SUCCEEDED" ||
+    snapshotPhase === "FAILED" ||
+    snapshotPhase === "TIMED_OUT" ||
+    snapshotPhase === "CANCELLED"
+    ? snapshotPhase
+    : null;
+});
+const isResearchCancellation = computed(
+  () => researchTerminalPhase.value === "CANCELLED"
+);
+const isResearchTimeout = computed(
+  () => researchTerminalPhase.value === "TIMED_OUT"
+);
+const isActiveResearch = computed(
+  () =>
+    props.tool === "InSilicoResearchAgent" &&
+    researchTerminalPhase.value === null
+);
+const artifactTab = computed(() =>
+  isActiveResearch.value ? "activity" : "content"
+);
+const artifactTabs = computed(
+  () =>
+    artifactChrome({
+      tool: props.tool,
+      referenceCount: 0,
+      hasAttachments: artifactHasDownloadableFiles({
+        conversationArtifacts: displayedState.value.artifactLinks,
+        botArtifacts: reportArtifacts.value,
+        resultArchiveV1: isResultArchiveV1.value,
+        delivery: displayedState.value.delivery ?? null,
+      }),
+      runComplete: researchTerminalPhase.value != null,
+      activityOnly: isActiveResearch.value,
+      surface: "standalone",
+    }).tabs
+);
+const reportComponentState = computed<BotRemoteAgentRunState>(() => {
+  const state = displayedState.value;
+  const terminalPhase = researchTerminalPhase.value;
+  if (!terminalPhase) return state;
+  if (terminalPhase === "SUCCEEDED") {
+    return state.status === "SUCCEEDED"
+      ? state
+      : { ...state, status: "SUCCEEDED" };
+  }
+  return {
+    ...state,
+    status: terminalPhase,
+  };
+});
+const reportPresentation = computed(() =>
+  reportPresentationFor(reportComponentState.value, undefined, props.tool)
+);
+const reportStatus = computed(() => reportPresentation.value.state);
+const showReportArtifacts = computed(
+  () =>
+    props.tool !== "InSilicoResearchAgent" ||
+    researchTerminalPhase.value !== null
+);
+const reportArtifacts = computed(() =>
+  props.tool === "InSilicoResearchAgent" && researchTerminalPhase.value === null
+    ? []
+    : displayedState.value.artifacts
+);
+const reportStatusLabel = computed(() => {
+  return reportPresentation.value.active
+    ? t(`${props.localePrefix}.progress`)
+    : t(reportPresentation.value.labelKey);
+});
+const researchLifecyclePhase = computed<AgentRunPhase | null>(() => {
+  if (props.tool !== "InSilicoResearchAgent") return null;
+  if (researchTerminalPhase.value) return researchTerminalPhase.value;
+
+  const snapshotPhase = remoteLifecycle.snapshot.value?.phase;
+  if (snapshotPhase) return snapshotPhase;
+
+  const state = displayedState.value;
+  const projection = state.projection;
+  if (
+    state.phase === "submitting" ||
+    projection?.status === "PENDING" ||
+    projection?.status === "QUEUED"
+  ) {
+    return "PREPARING";
+  }
+
+  switch (projection?.workStage ?? state.workStage) {
+    case "input_resolution":
+      return "RESOLVING_INPUTS";
+    case "planning":
+      return "PLANNING";
+    case "execution":
+      return "RUNNING";
+    case "report_assembly":
+      return "FINALIZING";
+  }
+
+  if (projection?.status === "RUNNING" || state.phase === "running") {
+    return "RUNNING";
+  }
+  return null;
+});
+const workspaceStatusLabel = computed(() => {
+  if (isResearchCancellation.value && !reportPresentation.value.reportText) {
+    return t("chat.lifecycle.cancelled");
+  }
+  if (isResearchTimeout.value && !reportPresentation.value.reportText) {
+    return t("chat.lifecycle.timed_out");
+  }
+  if (
+    props.tool !== "InSilicoResearchAgent" ||
+    reportStatus.value !== "loading" ||
+    !researchLifecyclePhase.value
+  ) {
+    return reportStatusLabel.value;
+  }
+  return t(`chat.lifecycle.${researchLifecyclePhase.value.toLowerCase()}`);
+});
+const reportLabels = computed(() => ({
+  loading: workspaceStatusLabel.value,
+  degraded: t(`${props.localePrefix}.degraded`),
+  complete: t(`${props.localePrefix}.complete`),
+  failed: isResearchCancellation.value
+    ? t("chat.lifecycle.cancelled")
+    : isResearchTimeout.value
+      ? t("chat.lifecycle.timed_out")
+      : t("common.failed"),
+}));
+const reportFailureLabel = computed(() =>
+  isResearchCancellation.value
+    ? t("chat.lifecycle.cancelled")
+    : isResearchTimeout.value
+      ? t("chat.lifecycle.timed_out")
+      : displayedState.value.failures.includes("unsupported_asset_format")
+        ? t(`${props.localePrefix}.unsupportedAssetFormat`)
+        : t("common.failed")
+);
+const tabLabels = computed(() => ({
+  content: t(`${props.localePrefix}.report`),
+  evidence: t(`${props.localePrefix}.evidence`),
+  activity: t(`${props.localePrefix}.activity`),
+  downloads: t(`${props.localePrefix}.downloads`),
+}));
+
+function handleFiles(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  const incoming = Array.from(input.files ?? []);
+  fileError.value = "";
+  attachmentAnnouncement.value = "";
+  if (canPickAttachments.value) {
+    void uploadQueue.queueFiles(incoming).catch(() => undefined);
+  }
+  input.value = "";
+}
+
+function handleUploadAction(action: Promise<void>): void {
+  void action.catch(() => undefined);
+}
+
+const pauseUpload = (localId: string): void =>
+  handleUploadAction(uploadQueue.pauseUpload(localId));
+const resumeUpload = (localId: string): void =>
+  handleUploadAction(uploadQueue.resumeUpload(localId));
+const retryUpload = (localId: string): void =>
+  handleUploadAction(uploadQueue.retryUpload(localId));
+const reselectUpload = (localId: string, file: File): void =>
+  uploadQueue.reselectUpload(localId, file);
+const cancelUpload = (localId: string): void =>
+  handleUploadAction(uploadQueue.cancelUpload(localId));
+const removeUpload = (localId: string): void =>
+  handleUploadAction(uploadQueue.removeUploadById(localId));
+
+async function clearUploads(): Promise<void> {
+  await Promise.all(
+    [...uploadItems.value].map((item) => uploadQueue.removeUpload(item))
+  );
+}
+
+async function submit(): Promise<void> {
+  if (
+    !capabilityAllowed.value ||
+    isSubmitting.value ||
+    isRunActive.value ||
+    hasBlockingUploads.value ||
+    attachmentTargetBlocked.value
+  )
+    return;
+
+  const rawQuery = question.value;
+  const isResearch = props.tool === "InSilicoResearchAgent";
+  const query = isResearch ? rawQuery : rawQuery.trim();
+  if (rawQuery.trim() === "") {
+    formError.value = t(`${props.localePrefix}.questionRequired`);
+    return;
+  }
+  const queryAllowed = isResearch
+    ? queryWithinLimit(
+        rawQuery,
+        capabilities.researchInput.value.max_user_query_chars
+      )
+    : Array.from(query).length <= LEGACY_MAX_QUERY_LENGTH;
+  if (!queryAllowed) {
+    formError.value = t(`${props.localePrefix}.questionTooLong`);
+    return;
+  }
+
+  formError.value = "";
+  isSubmitting.value = true;
+  try {
+    await run.submit({
+      query,
+      attachments: [...uploadQueue.completedAssetIds.value],
+    });
+    await clearUploads().catch(() => {
+      const cleanupMessage = t("chat.upload.status.failed");
+      fileError.value = cleanupMessage;
+      announceAttachment(cleanupMessage);
+    });
+  } catch {
+    formError.value = t(`${props.localePrefix}.submitFailed`);
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+function cancelRun(): void {
+  run.cancel();
+}
+
+function resetRun(): void {
+  remoteLifecycle.reset();
+  run.reset();
+  question.value = "";
+  void clearUploads().catch(() => undefined);
+  fileError.value = "";
+  formError.value = "";
+  downloadError.value = "";
+}
+
+function onArtifactMenu(command: string): void {
+  if (command === "reset") resetRun();
+}
+
+function goBack(): void {
+  remoteLifecycle.dispose();
+  router.back();
+}
+
+function applyPendingArchiveDelivery(delivery: AgentResultDelivery): void {
+  if (props.state !== undefined) return;
+  const current = run.state.value;
+  if (!current.projection || !current.messageId) return;
+  run.hydrate(
+    { ...current.projection, delivery: { ...delivery } },
+    {
+      dialogueId: current.dialogueId ?? dialogueId,
+      messageId: current.messageId,
+      artifactLinks: [],
+    }
+  );
+}
+
+async function retryResultArchive(): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.retryResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    onPending: applyPendingArchiveDelivery,
+  });
+}
+
+async function downloadResultArchive(
+  artifact: ConversationArtifactLink
+): Promise<void> {
+  const current = displayedState.value;
+  if (!current.messageId) return;
+  await archiveDelivery.downloadResultArchive({
+    dialogueId: current.dialogueId ?? dialogueId,
+    messageId: current.messageId,
+    artifact,
+  });
+}
+
+function isSafeDownloadUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim() === "") return false;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+async function downloadArtifact(outputDir: string): Promise<void> {
+  downloadError.value = "";
+  if (!isSafeBotObsPath(outputDir)) {
+    downloadError.value = t(`${props.localePrefix}.downloadFailed`);
+    return;
+  }
+  try {
+    const response = await getChatdownloadURL({ obs_path: outputDir });
+    const data = response as { code?: unknown; data?: unknown };
+    if (data.code !== 200 || !isSafeDownloadUrl(data.data)) {
+      downloadError.value = t(`${props.localePrefix}.downloadFailed`);
+      return;
+    }
+    window.open(data.data, "_blank", "noopener,noreferrer");
+  } catch {
+    downloadError.value = t(`${props.localePrefix}.downloadFailed`);
+  }
+}
+
+onMounted(() => {
+  Promise.resolve(capabilities.load()).catch(() => undefined);
+});
+
+onBeforeUnmount(() => {
+  remoteLifecycle.dispose();
+  run.abortTransport();
+});
+</script>
+
+<style scoped>
+.analysis-agent-page {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--phy-space-24);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--phy-space-32) var(--phy-space-40) var(--phy-space-48);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  font-family: var(--phy-font-shell);
+}
+
+.analysis-agent-header,
+.analysis-agent-form,
+.analysis-agent-state,
+.analysis-agent-artifact {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+.analysis-agent-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--phy-space-24);
+}
+
+.analysis-agent-eyebrow {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-agent-header h1,
+.analysis-agent-state h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.2;
+}
+
+.analysis-agent-subtitle,
+.analysis-agent-state p,
+.analysis-agent-hint,
+.analysis-agent-empty {
+  margin: var(--phy-space-8) 0 0;
+  color: var(--phy-color-text-secondary);
+  line-height: 1.6;
+}
+
+.analysis-agent-back,
+.analysis-agent-submit,
+.analysis-agent-cancel {
+  min-height: var(--phy-control-height-default);
+  padding: 0 var(--phy-space-16);
+  border-radius: var(--phy-radius-sm);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.analysis-agent-back,
+.analysis-agent-cancel {
+  border: 1px solid var(--phy-color-border-control);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+}
+
+.analysis-agent-form {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--phy-space-20);
+  padding: var(--phy-space-24);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-lg);
+  background: var(--phy-color-bg-elevated);
+}
+
+.analysis-agent-field {
+  display: grid;
+  gap: var(--phy-space-8);
+}
+
+.analysis-agent-field label {
+  font-weight: 650;
+}
+
+.analysis-agent-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-control);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-bg-page);
+  color: var(--phy-color-text);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.analysis-agent-field input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+  padding: var(--phy-space-8) 0;
+  color: var(--phy-color-text-secondary);
+  font: inherit;
+}
+
+.analysis-agent-attachments {
+  min-width: 0;
+  margin-top: var(--phy-space-4);
+}
+
+.analysis-agent-attachments :deep(.attachment-chip-strip) {
+  min-width: 0;
+}
+
+.analysis-agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--phy-space-12);
+}
+
+.analysis-agent-submit {
+  border: 1px solid var(--phy-color-action);
+  background: var(--phy-color-action);
+  color: var(--phy-color-action-contrast);
+}
+
+.analysis-agent-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.analysis-agent-state,
+.analysis-agent-degraded,
+.analysis-agent-error,
+.analysis-agent-empty {
+  padding: var(--phy-space-16);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-sm);
+  background: var(--phy-color-bg-elevated);
+}
+
+.analysis-agent-state {
+  margin-block: auto;
+  text-align: center;
+}
+
+.analysis-agent-degraded,
+.analysis-agent-error {
+  margin: 0 auto;
+  color: var(--phy-color-danger-text, var(--phy-color-text-secondary));
+}
+
+.analysis-agent-artifact {
+  min-height: 520px;
+}
+
+.analysis-agent-activity {
+  display: grid;
+  gap: var(--phy-space-8);
+}
+
+.analysis-agent-activity p {
+  margin: 0;
+  color: var(--phy-color-text-secondary);
+}
+
+@media (max-width: 720px) {
+  .analysis-agent-page {
+    padding: var(--phy-space-24) var(--phy-space-16) var(--phy-space-32);
+  }
+
+  .analysis-agent-header {
+    flex-direction: column;
+  }
+}
+</style>

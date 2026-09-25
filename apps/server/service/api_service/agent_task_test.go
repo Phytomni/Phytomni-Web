@@ -3,11 +3,13 @@ package api_service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/spf13/viper"
@@ -121,6 +123,44 @@ func TestApiAnswerCheck_NoHistory(t *testing.T) {
 	}
 }
 
+func TestQueryList_EmptyResultIsJSONArray(t *testing.T) {
+	setupTestDB(t)
+
+	got, err := NewService().QueryList(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("QueryList returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("QueryList returned nil slice")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal QueryList result: %v", err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("QueryList JSON = %s, want []", encoded)
+	}
+}
+
+func TestQueryCollectList_EmptyResultIsJSONArray(t *testing.T) {
+	setupTestDB(t)
+
+	got, err := NewService().QueryCollectList(context.Background(), "alice")
+	if err != nil {
+		t.Fatalf("QueryCollectList returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("QueryCollectList returned nil slice")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal QueryCollectList result: %v", err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("QueryCollectList JSON = %s, want []", encoded)
+	}
+}
+
 // TestApiAnswerCheck_HappyPath verifies the normal path: 1 parent + 2 children
 // returns 3 rows with the parent at index 0.
 func TestApiAnswerCheck_HappyPath(t *testing.T) {
@@ -206,6 +246,47 @@ func TestApiAnswerCheck_ScopesChildrenToOwner(t *testing.T) {
 		if r.UserName == "bob" || r.Id == 72 {
 			t.Errorf("cross-owner child leaked into history: id=%d user=%q", r.Id, r.UserName)
 		}
+	}
+}
+
+func TestAnswerCheckReturnsOwnerScopedAttachmentReferences(t *testing.T) {
+	gdb := setupTestDB(t)
+	refs := []rxBot.AssetAttachmentRef{{AssetID: "file_alice_reads"}, {AssetID: "file_alice_variants"}}
+	private := persistedConversationContext{InputAttachments: refs}
+	raw, err := marshalPersistedProjectionWithContext(BotRunProjection{}, &private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Create(&model.QuestionAgentLog{
+		Id: 73, DialogueId: "dlg-attachments", UserName: "alice",
+		Query: "alice query", Status: statusSucceeded, BotProjectionJSON: raw,
+		BotReportRevision: -1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || len(rows[0].Attachments) != len(refs) ||
+		rows[0].Attachments[0].AssetID != refs[0].AssetID ||
+		rows[0].Attachments[1].AssetID != refs[1].AssetID {
+		t.Fatalf("alice history attachments=%#v, want %#v", rows, refs)
+	}
+
+	foreign, err := NewService().AnswerCheck(context.Background(), "bob", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(foreign) != 0 {
+		t.Fatalf("bob history enumerated Alice's attachment row: %#v", foreign)
+	}
+	missing, err := NewService().AnswerCheck(context.Background(), "mallory", "dlg-attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("foreign history enumerated attachment rows: %#v", missing)
 	}
 }
 
@@ -301,6 +382,145 @@ func TestAnswerCheckPrefersProjectionAndFallsBackToLegacy(t *testing.T) {
 	}
 }
 
+func useOfflineLegacyHistoryMode(t *testing.T) {
+	t.Helper()
+	previousBotConfig := rxBot.BotConfig
+	previousDualRead := viper.Get("bot.history_dual_read")
+	rxBot.BotConfig = nil
+	viper.Set("bot.history_dual_read", false)
+	t.Cleanup(func() {
+		rxBot.BotConfig = previousBotConfig
+		viper.Set("bot.history_dual_read", previousDualRead)
+	})
+}
+
+func TestAnswerCheckPreservesReviewReferencesWhenProjectionContentMatches(t *testing.T) {
+	gdb := setupTestDB(t)
+	useOfflineLegacyHistoryMode(t)
+
+	const report = "# Durable Review\n\nCitation-backed synthesis."
+	durableAnswer, err := json.Marshal(map[string]interface{}{
+		"content": report,
+		"doc_list": []map[string]interface{}{
+			{
+				"title": "Reference One",
+				"di":    "10.1000/review.1",
+				"dl":    "https://example.test/review-1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal durable answer: %v", err)
+	}
+	projection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:          "run-review-durable",
+		Agent:          "review",
+		Status:         "SUCCEEDED",
+		ReportRevision: 3,
+		FinalReport:    report,
+	})
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(103, 'dlg-review-durable', 0, 'alice', 'review-q', ?, 'ChatAgent', 'run-review-durable', ?, 3, 'RUNNING', '2026-01-01 00:00:00')`, string(durableAnswer), projection).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-review-durable")
+	if err != nil {
+		t.Fatalf("AnswerCheck: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("rows=%d, want 1", len(got))
+	}
+	var answer struct {
+		Content string `json:"content"`
+		DocList []struct {
+			Title string `json:"title"`
+			DI    string `json:"di"`
+			DL    string `json:"dl"`
+		} `json:"doc_list"`
+	}
+	if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	if answer.Content != report {
+		t.Fatalf("content=%q, want %q", answer.Content, report)
+	}
+	if len(answer.DocList) != 1 || answer.DocList[0].Title != "Reference One" ||
+		answer.DocList[0].DI != "10.1000/review.1" || answer.DocList[0].DL != "https://example.test/review-1" {
+		t.Fatalf("doc_list=%#v, want durable reference", answer.DocList)
+	}
+	if got[0].Status != "SUCCEEDED" || got[0].ToolName != "ReviewAgent" {
+		t.Fatalf("projection status/tool not authoritative: status=%q tool=%q", got[0].Status, got[0].ToolName)
+	}
+}
+
+func TestAnswerCheckReviewProjectionReplacesStaleOrMalformedAnswer(t *testing.T) {
+	staleAnswer, err := json.Marshal(map[string]interface{}{
+		"content": "# Stale Review",
+		"doc_list": []map[string]interface{}{
+			{"title": "Stale Reference"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal stale answer: %v", err)
+	}
+	projection, err := marshalPersistedProjection(BotRunProjection{
+		RunID:          "run-review-fresh",
+		Agent:          "review",
+		Status:         "SUCCEEDED",
+		ReportRevision: 4,
+		FinalReport:    "# Fresh Review",
+	})
+	if err != nil {
+		t.Fatalf("marshal projection: %v", err)
+	}
+	emptyReferencesAnswer := `{"content":"# Fresh Review","doc_list":[],"marker":"must-be-replaced"}`
+
+	for _, tc := range []struct {
+		name   string
+		answer string
+	}{
+		{name: "stale shaped answer", answer: string(staleAnswer)},
+		{name: "malformed answer", answer: "{not-json"},
+		{name: "matching content with empty references", answer: emptyReferencesAnswer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gdb := setupTestDB(t)
+			useOfflineLegacyHistoryMode(t)
+			if err := gdb.Exec(`INSERT INTO question_agent_logs
+				(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+				(104, 'dlg-review-fresh', 0, 'alice', 'review-q', ?, 'ChatAgent', 'run-review-fresh', ?, 4, 'RUNNING', '2026-01-01 00:00:00')`, tc.answer, projection).Error; err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+
+			got, err := NewService().AnswerCheck(context.Background(), "alice", "dlg-review-fresh")
+			if err != nil {
+				t.Fatalf("AnswerCheck: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("rows=%d, want 1", len(got))
+			}
+			var answer struct {
+				Content string            `json:"content"`
+				DocList []json.RawMessage `json:"doc_list"`
+			}
+			if err := json.Unmarshal([]byte(got[0].Answer), &answer); err != nil {
+				t.Fatalf("decode answer: %v", err)
+			}
+			if answer.Content != "# Fresh Review" || len(answer.DocList) != 0 {
+				t.Fatalf("answer=%#v, want fresh projection content without legacy references", answer)
+			}
+			if strings.Contains(got[0].Answer, "must-be-replaced") {
+				t.Fatalf("answer retained durable marker without references: %s", got[0].Answer)
+			}
+		})
+	}
+}
+
 func historyObservationCount(t *testing.T, source string) uint64 {
 	t.Helper()
 	for _, observation := range HistoryReadObservations() {
@@ -373,6 +593,32 @@ func TestAnswerCheckDualReadRecordsSanitizedOutcome(t *testing.T) {
 		if strings.Contains(string(encodedObservations), forbidden) {
 			t.Fatalf("observation contains forbidden content %q: %s", forbidden, encodedObservations)
 		}
+	}
+}
+
+func TestAnswerCheckProjectionNormalizesPersistedCompletedReviewPause(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, tool_name, bot_run_id, bot_projection_json, bot_report_revision, status, created_at) VALUES
+		(112, 'dlg-review-persisted', 0, 'alice', 'review-q', 'legacy-a', 'ReviewAgent', 'run-review-persisted', ?, 2, 'INPUT_REQUIRED', '2026-01-01 00:00:00')`, `{
+			"run_id":"run-review-persisted",
+			"agent":"review",
+			"status":"INPUT_REQUIRED",
+			"report_revision":2,
+			"final_report":"# Persisted complete review"
+		}`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	result, err := NewService().AnswerCheckWithMode(context.Background(), "alice", "dlg-review-persisted", HistoryReadModeProjection)
+	if err != nil {
+		t.Fatalf("projection read: %v", err)
+	}
+	if result.Source != historySourceProjection || len(result.Rows) != 1 {
+		t.Fatalf("unexpected projection read result: %#v", result)
+	}
+	if row := result.Rows[0]; row.Status != "SUCCEEDED" || row.ToolName != "ReviewAgent" || !strings.Contains(row.Answer, "Persisted complete review") {
+		t.Fatalf("completed Review history row=%#v", row)
 	}
 }
 
@@ -738,13 +984,45 @@ func TestSyncBotRuns_AnalystWritesAnswerAndGallery(t *testing.T) {
 	}
 }
 
-// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope closes the remote
-// DeepGenome compatibility path in one fixture: the Web submits one umbrella
+// TestSyncBotRuns_UnversionedDesignSuccessClosesZeroRevisionLedger pins the
+// Design wait-card incident: a RUNNING row whose stored revision is 0 must
+// still take a succeeded GET that omits report_revision.
+func TestSyncBotRuns_UnversionedDesignSuccessClosesZeroRevisionLedger(t *testing.T) {
+	gdb := setupTestDB(t)
+	digest := testProjectionDigestA
+	projection := `{"run_id":"run-design-unversioned","agent":"design","status":"RUNNING","report_revision":0,"result_archive_v1":true,"delivery":{"schema_version":1,"required":true,"status":"pending","revision":1,"retryable":false}}`
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, user_name, query, answer, tool_name, bot_run_id, status, bot_projection_json, bot_report_revision, created_at) VALUES
+		(55, 'dlg-design-unversioned', 'alice', 'AT1G66350 ath', '', 'DigitalDesignAgent', 'run-design-unversioned', 'RUNNING', ?, 0, '2026-01-01 00:00:00')`, projection).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	runRecordServer(t, `{"run_id":"run-design-unversioned","agent":"design","status":"succeeded","result":{"formatted":{"answer":"...terminal outcome..."},"execution":{"output_dirs":["/obs/bucket/owner/run/children/part-001"],"delivery":{"schema_version":1,"required":true,"status":"ready","revision":1,"inventory_digest":"`+digest+`","archive":{"role":"result_archive","name":"design-results.zip","media_type":"application/zip","size_bytes":20619922,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:`+digest+`"},"error_code":null,"retryable":false}}}}`)
+
+	SyncBotRuns([]model.QuestionAgentLog{{Id: 55, BotRunId: "run-design-unversioned", Status: "RUNNING", ToolName: "DigitalDesignAgent"}})
+
+	status, answer := readStatusAnswer(t, gdb, 55)
+	if status != "SUCCEEDED" {
+		t.Errorf("status = %q, want SUCCEEDED", status)
+	}
+	if answer != "" {
+		t.Errorf("answer = %q, unversioned report must not replace numbered science", answer)
+	}
+	var revision int64
+	if err := gdb.Raw(`SELECT bot_report_revision FROM question_agent_logs WHERE id = 55`).Scan(&revision).Error; err != nil {
+		t.Fatalf("revision: %v", err)
+	}
+	if revision != 0 {
+		t.Errorf("bot_report_revision = %d, want stored 0", revision)
+	}
+}
+
+// TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope follows the supported
+// Expert route for a Bot-resolved DeepGenome run: the Web submits one umbrella
 // run, reconciles two intermediate revisions and a final report, then reads
 // history through AnswerCheck. A foreign row carrying the same run id must not
 // appear in the owner's history response.
 func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
-	gdb := setupTestDB(t)
+	gdb := setupExpertTestDB(t)
 	const runID = "run-deep-genome-e2e"
 	var submittedDialogue string
 	var poll atomic.Int64
@@ -760,7 +1038,8 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 				t.Error("submit dialogue_id must be non-empty")
 			}
 			submittedDialogue = req.DialogueID
-			_, _ = w.Write([]byte(`{"id":"completion-deep-genome-e2e","run_id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"run-deep-genome-e2e","object":"agent.run","agent":"deep_genome","status":"running","task_ids":["child-deep-genome-e2e"],"result":{}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/"+runID:
 			var body string
 			switch poll.Add(1) {
@@ -782,11 +1061,13 @@ func TestDeepGenomeProjectionE2E_SubmitPollHistoryOwnerScope(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	rxBot.BotConfig = &rxBot.Config{BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5}
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
 	t.Cleanup(func() { rxBot.BotConfig = nil })
 
 	out, err := NewService().Query(context.Background(), "alice", QueryInput{
-		Query: "inspect the gene", Tool: "DeepGenomeAgent", Id: 0,
+		Query: "inspect the gene", Tool: "DeepGenomeAgent", Mode: "expert", Id: 0,
 	})
 	if err != nil {
 		t.Fatalf("submit DeepGenome query: %v", err)
@@ -884,5 +1165,191 @@ func TestAsyncTaskList_ZeroPageSizeNoPanic(t *testing.T) {
 	}
 	if len(list) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(list))
+	}
+}
+
+func TestAnalystAgentGetLog_ReturnsDatabaseErrorBeforeRowAccess(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec("DROP TABLE question_agent_logs").Error; err != nil {
+		t.Fatalf("drop test table: %v", err)
+	}
+
+	_, err := NewService().AnalystAgentGetLog(context.Background(), 70, "alice")
+	if err == nil || !strings.Contains(err.Error(), "no such table") {
+		t.Fatalf("expected database error, got %v", err)
+	}
+}
+
+func TestAnalystAgentGetLogReturnsSharedNotFoundForMissingIdentity(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, task_id, bot_run_id, task_log) VALUES (71, 'alice', '', '', 'ignored')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := NewService().AnalystAgentGetLog(context.Background(), 71, "alice")
+	if err == nil || err.Error() != "agent task log not found" {
+		t.Fatalf("error = %v, want shared owner-scoped not found", err)
+	}
+}
+
+func TestAnalystAgentGetLogUsesOwnerScopedLookupBeforeIdentityChecks(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, user_name, task_id, bot_run_id, task_log) VALUES (72, 'bob', 'task-72', 'run-72', 'private log')`).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var querySQL []string
+	if err := gdb.Callback().Query().After("gorm:query").Register("test:agent-log-owner-scope", func(tx *gorm.DB) {
+		querySQL = append(querySQL, tx.Statement.SQL.String())
+	}); err != nil {
+		t.Fatalf("register query observer: %v", err)
+	}
+
+	fake := &agentTaskLogFakeReader{}
+	_, err := (&Service{runReader: fake}).AnalystAgentGetLog(context.Background(), 72, "alice")
+	if err == nil || err.Error() != "agent task log not found" {
+		t.Fatalf("error = %v, want shared owner-scoped not found", err)
+	}
+	if len(querySQL) != 1 || !strings.Contains(querySQL[0], "WHERE id = ? AND user_name = ?") {
+		t.Fatalf("query = %v, want owner-scoped id lookup before identities", querySQL)
+	}
+	if fake.logCalls != 0 {
+		t.Fatalf("Bot calls = %d, want zero", fake.logCalls)
+	}
+}
+
+func TestQueryListDelete_HidesOwnerConversationBeforeBotTombstone(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dialogueID = "11111111-1111-4111-8111-111111111111"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, log_status, status, created_at) VALUES
+		(100, ?, 0, 'alice', 'root', 'answer', '', 'SUCCEEDED', CURRENT_TIMESTAMP),
+		(101, ?, 100, 'alice', 'child', 'answer', '', 'SUCCEEDED', CURRENT_TIMESTAMP)`,
+		dialogueID, dialogueID).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var deleteAt *string
+		var logStatus string
+		if err := gdb.Raw(
+			`SELECT delete_at, COALESCE(log_status, '') FROM question_agent_logs WHERE id = 100`,
+		).Row().Scan(&deleteAt, &logStatus); err != nil {
+			t.Fatalf("read committed delete state: %v", err)
+		}
+		if deleteAt == nil || logStatus != conversationDeletePending {
+			t.Fatalf("Bot called before durable delete: delete_at=%v log_status=%q", deleteAt, logStatus)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"schema_version":1,"state":"tombstoned","context_version":0}`))
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 5,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	gotID, err := NewService().QueryListDelete(context.Background(), "alice", 100)
+	if err != nil || gotID != 100 {
+		t.Fatalf("QueryListDelete = %d, %v; want 100, nil", gotID, err)
+	}
+	history, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil || len(history) != 0 {
+		t.Fatalf("deleted history = %+v, %v; want empty", history, err)
+	}
+	var logStatus string
+	if err := gdb.Raw(`SELECT COALESCE(log_status, '') FROM question_agent_logs WHERE id = 100`).
+		Scan(&logStatus).Error; err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if logStatus != conversationDeleteAcked {
+		t.Fatalf("log_status=%q, want %q", logStatus, conversationDeleteAcked)
+	}
+	var firstDeleteAt time.Time
+	if err := gdb.Raw(`SELECT delete_at FROM question_agent_logs WHERE id = 100`).
+		Scan(&firstDeleteAt).Error; err != nil {
+		t.Fatalf("read first delete time: %v", err)
+	}
+
+	if _, err := NewService().QueryListDelete(context.Background(), "alice", 100); err != nil {
+		t.Fatalf("repeat delete: %v", err)
+	}
+	var repeatedDeleteAt time.Time
+	if err := gdb.Raw(`SELECT delete_at FROM question_agent_logs WHERE id = 100`).
+		Scan(&repeatedDeleteAt).Error; err != nil {
+		t.Fatalf("read repeated delete time: %v", err)
+	}
+	if !repeatedDeleteAt.Equal(firstDeleteAt) {
+		t.Fatalf("repeat delete changed delete_at: first=%v repeat=%v", firstDeleteAt, repeatedDeleteAt)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("tombstone calls=%d, want one idempotent call", calls.Load())
+	}
+}
+
+func TestQueryListDelete_BotFailureLeavesPendingAndReturnsSuccess(t *testing.T) {
+	gdb := setupTestDB(t)
+	const dialogueID = "22222222-2222-4222-8222-222222222222"
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, query, answer, status, created_at) VALUES
+		(110, ?, 0, 'alice', 'root', 'answer', 'SUCCEEDED', CURRENT_TIMESTAMP),
+		(111, ?, 110, 'alice', 'child', 'answer', 'SUCCEEDED', CURRENT_TIMESTAMP)`,
+		dialogueID, dialogueID).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	previous := rxBot.BotConfig
+	rxBot.BotConfig = &rxBot.Config{
+		BaseURL: srv.URL, ProxyEnabled: true, TimeoutSeconds: 1,
+	}
+	t.Cleanup(func() { rxBot.BotConfig = previous })
+
+	if got, err := NewService().QueryListDelete(context.Background(), "alice", 110); err != nil || got != 110 {
+		t.Fatalf("delete during Bot outage = %d, %v; want success", got, err)
+	}
+	var logStatus string
+	var deleteAt *time.Time
+	if err := gdb.Raw(
+		`SELECT COALESCE(log_status, ''), delete_at FROM question_agent_logs WHERE id = 110`,
+	).Row().Scan(&logStatus, &deleteAt); err != nil {
+		t.Fatalf("read deleted row: %v", err)
+	}
+	if deleteAt == nil || logStatus != conversationDeletePending {
+		t.Fatalf("delete state: delete_at=%v log_status=%q", deleteAt, logStatus)
+	}
+	history, err := NewService().AnswerCheck(context.Background(), "alice", dialogueID)
+	if err != nil || len(history) != 0 {
+		t.Fatalf("history after failed tombstone = %+v, %v; want empty", history, err)
+	}
+}
+
+func TestQueryListDelete_CrossOwnerIsSafeNotFound(t *testing.T) {
+	gdb := setupTestDB(t)
+	if err := gdb.Exec(`INSERT INTO question_agent_logs
+		(id, dialogue_id, f_id, user_name, status, created_at) VALUES
+		(120, '33333333-3333-4333-8333-333333333333', 0, 'alice', 'SUCCEEDED', CURRENT_TIMESTAMP)`).
+		Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := NewService().QueryListDelete(context.Background(), "bob", 120)
+	if !errors.Is(err, ErrConversationDeleteNotFound) {
+		t.Fatalf("cross-owner error=%v, want safe not found", err)
+	}
+	var count int64
+	if err := gdb.Model(&model.QuestionAgentLog{}).
+		Where("id = ? AND delete_at IS NULL", 120).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count owner row: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("owner row changed after cross-owner delete, count=%d", count)
 	}
 }

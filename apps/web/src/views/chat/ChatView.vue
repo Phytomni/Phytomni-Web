@@ -1,0 +1,3232 @@
+<script lang="ts">
+import type { Chat as ChatRecord } from "./types";
+
+export function removeDeletedChat(options: {
+  chatList: ChatRecord[];
+  deletedChat: ChatRecord;
+  disposeDialogue: (dialogueId: string) => void;
+  removeChatState: (dialogueId: string) => void;
+}): ChatRecord[] {
+  const dialogueId = options.deletedChat.dialogue_id;
+  options.disposeDialogue(dialogueId);
+  options.removeChatState(dialogueId);
+  return options.chatList.filter((chat) => chat.dialogue_id !== dialogueId);
+}
+
+export function releaseDialogueUploads(
+  dialogueId: string | undefined,
+  cancelDialogue: (dialogueId: string) => void | Promise<void>
+): void {
+  if (typeof dialogueId !== "string" || dialogueId.length === 0) return;
+  void cancelDialogue(dialogueId);
+}
+</script>
+<template>
+  <div
+    ref="chatRootRef"
+    class="chat-page-root"
+    data-testid="chat-root"
+    :data-chat-state="chatStateAttr"
+    :data-sidebar-drawer-state="sidebarDrawerStateAttr"
+    :data-focused-upload-id="focusedUploadLocalId || undefined"
+  >
+    <PhyAdaptiveShell
+      :sidebar-collapsed="effectiveSidebarCollapsed"
+      :artifact-open="artifactOpen"
+      :artifact-fullscreen="artifactOpen && isMobileViewport"
+      :main-inert="isMobileViewport && leftSidebarDrawerOpen"
+    >
+      <template #sidebar>
+        <!-- Left sidebar -->
+        <div class="tour-sidebar-wrap">
+          <Sidebar
+            :chatList="chatList"
+            :currentChatId="currentChatId"
+            :collapsed="leftSidebarCollapsed"
+            :effective-collapsed="effectiveSidebarCollapsed"
+            :drawer-open="leftSidebarDrawerOpen"
+            @selectChat="selectChat"
+            @startNewChat="startNewChat"
+            @handleSidebarCollapse="handleSidebarCollapse"
+            @drawerOpenChange="leftSidebarDrawerOpen = $event"
+            @startTutorial="startTutorial"
+            @showArchitecture="showAgentsView"
+            @chatRenamed="handleChatRenamed"
+            @chatDeleted="handleChatDeleted"
+            @chatFavorited="handleChatFavorited"
+          />
+        </div>
+      </template>
+
+      <template #main>
+        <el-tour
+          v-model="showTutorial"
+          :mask="true"
+          :content-style="tutorialContentStyle"
+          :close-on-press-escape="true"
+          @change="handleTutorialStepChange"
+          @finish="completeTutorial"
+          @close="completeTutorial"
+        >
+          <el-tour-step
+            :target="tourSidebarTarget"
+            :placement="tutorialSidebarPlacement"
+            :title="t('tutorial.step1.title')"
+            :description="t('tutorial.step1.content')"
+          />
+          <el-tour-step
+            :target="tourCasesTarget"
+            :title="t('tutorial.step2.title')"
+            :description="t('tutorial.step2.content')"
+          />
+          <el-tour-step
+            :target="tourInputTarget"
+            :title="t('tutorial.step3.title')"
+            :description="t('tutorial.step3.content')"
+          />
+        </el-tour>
+
+        <div class="chat-main-layout">
+          <!-- Center chat area -->
+          <div class="chat-main">
+            <header class="chat-header">
+              <div class="chat-header-inner">
+                <div class="header-leading">
+                  <el-button
+                    ref="sidebarTriggerRef"
+                    class="mobile-sidebar-toggle"
+                    data-testid="chat-sidebar-trigger"
+                    :class="{ 'is-visible': leftSidebarCollapsed }"
+                    text
+                    circle
+                    :aria-label="$t('chat.openNavigation')"
+                    @click="toggleSidebarFromHeader"
+                  >
+                    <el-icon><Menu /></el-icon>
+                  </el-button>
+                  <h2 class="chat-header-title" :title="chatHeaderTitle">
+                    {{ chatHeaderTitle }}
+                  </h2>
+                  <span
+                    v-if="chatMode === 'expert'"
+                    class="chat-expert-indicator"
+                    data-test="chat-expert-indicator"
+                  >
+                    {{ $t("chat.mode.expert") }}
+                  </span>
+                </div>
+                <div
+                  class="header-controls"
+                  data-testid="chat-header-preferences"
+                >
+                  <LangSwitch />
+                  <ThemeSwitch />
+                </div>
+              </div>
+            </header>
+
+            <div
+              class="chat-content-stack"
+              data-testid="chat-content-stack"
+              :class="{
+                'is-empty': chatStateAttr === 'empty',
+                'is-populated': chatStateAttr === 'populated',
+              }"
+            >
+              <!-- Message area -->
+              <div
+                class="message-container"
+                data-testid="chat-transcript"
+                data-test="chat-transcript-scroll-root"
+                ref="messageContainer"
+                :key="timestamp"
+              >
+                <div
+                  v-if="currentHistoryHydration === 'loading'"
+                  class="chat-history-state"
+                  role="status"
+                >
+                  <PhySkeleton shape="line" :count="4" />
+                  <span class="sr-only">{{ $t("chat.history.loading") }}</span>
+                </div>
+                <PhyErrorState
+                  v-else-if="currentHistoryHydration === 'error'"
+                  data-testid="chat-history-error"
+                  class="chat-history-state"
+                  :title="$t('chat.history.errorTitle')"
+                  :description="$t('chat.history.errorSubtitle')"
+                  :retry-label="$t('chat.history.retry')"
+                  @retry="retrySelectedChat"
+                />
+                <PhyEmptyState
+                  v-else-if="currentHistoryHydration === 'history-empty'"
+                  data-testid="chat-history-empty"
+                  class="chat-history-state"
+                  :title="$t('chat.history.emptyTitle')"
+                  :subtitle="$t('chat.history.emptySubtitle')"
+                />
+                <div
+                  v-else-if="
+                    currentHistoryHydration === 'new' &&
+                    !currentChat?.messages?.length &&
+                    !demoKey
+                  "
+                  class="empty-chat"
+                >
+                  <PhyEmptyState
+                    :title="$t('chat.welcomeTitle')"
+                    :subtitle="$t('chat.welcomeSubtitle')"
+                    class="empty-chat-welcome"
+                  >
+                    <template #mark>
+                      <img
+                        src="../../assets/images/chat/logo.png"
+                        class="empty-chat-mark"
+                        alt=""
+                      />
+                    </template>
+                  </PhyEmptyState>
+                </div>
+                <div
+                  v-else-if="demoKey && demoError"
+                  class="empty-chat"
+                  data-testid="chat-demo-load-error"
+                >
+                  <PhyErrorState
+                    :title="$t(demoError.titleKey)"
+                    :description="$t(demoError.bodyKey)"
+                  />
+                </div>
+                <div
+                  v-else-if="
+                    demoKey &&
+                    demoEmpty &&
+                    !currentChat?.messages?.length &&
+                    !demoError
+                  "
+                  class="empty-chat"
+                  data-testid="chat-demo-empty"
+                >
+                  <PhyEmptyState
+                    :title="$t(demoEmpty.titleKey)"
+                    :subtitle="$t(demoEmpty.bodyKey)"
+                  />
+                </div>
+                <div class="transcript-content">
+                  <template v-if="currentChat?.messages?.length">
+                    <ChatMessageRow
+                      v-for="(message, index) in currentChat.messages"
+                      :key="index"
+                      :role="message.role === 'user' ? 'user' : 'assistant'"
+                      :message-id="message.id || undefined"
+                      :streaming="!!message.streaming"
+                      :wide="
+                        message.role === 'assistant' &&
+                        (message.tool_name === 'DeepGenomeAgent' ||
+                          !!artifactPreviewForMessage(message))
+                      "
+                    >
+                      <template #avatar>
+                        <el-avatar :size="36" :src="botAvatar" />
+                      </template>
+                      <ChatMessageContent
+                        :message="message"
+                        :index="index"
+                        :is-last-message="
+                          currentChat.messages.length - 1 == index
+                        "
+                        :artifact-preview="artifactPreviewForMessage(message)"
+                        :activity-expanded-by-message="
+                          getChatState(currentChatId).activityExpandedByMessage
+                        "
+                        :gene-network-images="geneNetworkImages"
+                        :gene-network-images-loading="geneNetworkImagesLoading"
+                        :digital-design-images="digitalDesignImages"
+                        :digital-design-images-loading="
+                          digitalDesignImagesLoading
+                        "
+                        :lifecycle="agentRunLifecycleForMessage(message)"
+                        :progress-started-at="progressHintForMessage(message)"
+                        :archive-retrying="
+                          Boolean(
+                            getChatState(currentChatId)
+                              .archiveRetryingByMessageId[message.id || '']
+                          )
+                        "
+                        @download-result-archive="
+                          downloadMessageArchive(message, $event)
+                        "
+                        @retry-result-archive="retryMessageArchive(message)"
+                        @finish="() => handleMarkdownFinish(index)"
+                        @open-artifact="openArtifactForMessage(message)"
+                        @update:activity-expanded="
+                          (key, open) =>
+                            (getChatState(
+                              currentChatId
+                            ).activityExpandedByMessage[key] = open)
+                        "
+                        @a2ui-action="(event) => submitAction(message, event)"
+                        @a2ui-retry="
+                          (surfaceId) => retryAction(message, surfaceId)
+                        "
+                      />
+
+                      <template #activity>
+                        <!-- Only mount when rowId is a valid positive-decimal id;
+                   missing/invalid ids never GET/PATCH and hide the log disclosure. -->
+                        <ChatActivity
+                          v-if="
+                            message.role === 'assistant' &&
+                            message.tool_name === 'AnalystAgent' &&
+                            !!deriveAnalystLogRowId(message)
+                          "
+                          :state-key="analystLogStateKey(message)"
+                          :expanded="isAnalystLogExpanded(message)"
+                          :label="$t('chat.log.activityLabel')"
+                          :hide-count="true"
+                          :lifecycle="agentRunLifecycleForMessage(message)"
+                          @update:expanded="
+                            (open) => setLogExpanded(message, open)
+                          "
+                        >
+                          <ChatAnalystLog
+                            :row-id="deriveAnalystLogRowId(message)"
+                            :task-id="deriveAnalystLogTaskId(message)"
+                            :log-data="analystLogData(message)"
+                            :loading="analystLogLoading(message)"
+                            :updating="analystLogUpdating(message)"
+                            :error-kind="analystLogErrorKind(message)"
+                            @update="updateLog(message)"
+                            @retry="retryLog(message)"
+                          />
+                        </ChatActivity>
+                      </template>
+
+                      <!-- Shared message chrome: files, follow-ups, actions -->
+                      <div
+                        v-if="
+                          message.role === 'user' &&
+                          messageAttachments(message).length > 0
+                        "
+                        class="message-files"
+                      >
+                        <div class="files-list">
+                          <div
+                            v-for="(file, fileIndex) in messageAttachments(
+                              message
+                            )"
+                            :key="fileIndex"
+                            class="file-item-display"
+                            :data-asset-id="file.asset_id"
+                          >
+                            <FilesCard
+                              :uid="fileIndex"
+                              :name="file.name"
+                              :file-size="file.size"
+                              :show-del-icon="false"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <template #follow-up>
+                        <FollowUpQuestions
+                          v-if="
+                            message.role === 'assistant' &&
+                            message.followUpQuestions &&
+                            message.followUpQuestions.length > 0 &&
+                            message.showFollowUpQuestions &&
+                            index == currentChat.messages.length - 1
+                          "
+                          :questions="message.followUpQuestions"
+                          @question-click="handleFollowUpQuestionClick"
+                        />
+                      </template>
+
+                      <template #actions>
+                        <ChatMessageActions
+                          :role="message.role === 'user' ? 'user' : 'assistant'"
+                          :copied="copyVisible === index + 1"
+                          :can-refresh="
+                            messageActionCapabilities(message).canRefresh
+                          "
+                          :refresh-busy="
+                            !!refreshingMessages[
+                              `${index}_${message.id || ''}`
+                            ] ||
+                            (!message.steps && isSending)
+                          "
+                          :can-react="
+                            messageActionCapabilities(message).canReact
+                          "
+                          :reaction-active="
+                            message.id ? getReactionState(message.id) : 0
+                          "
+                          :direct-downloads="getDirectDownloads(message)"
+                          :generated-formats="
+                            messageActionCapabilities(message).generatedFormats
+                          "
+                          @copy="handleMessageCopy(message, index)"
+                          @refresh="() => refreshMessage(index)"
+                          @reaction="
+                            (type) => {
+                              if (message.id) handleReaction(message.id, type);
+                            }
+                          "
+                          @direct-download="(path) => downloadChatFile(path)"
+                          @download-format="
+                            (format) => {
+                              if (message.id)
+                                getFileDownUrl(message.id, format);
+                            }
+                          "
+                        />
+                        <div
+                          v-if="
+                            message.role === 'assistant' &&
+                            !message.steps &&
+                            !message.tableHeaders
+                          "
+                          class="tip-text"
+                        >
+                          {{ $t("common.Tip") }}
+                        </div>
+                      </template>
+                    </ChatMessageRow>
+                  </template>
+
+                  <!-- Loading message: real TransferProgress XOR simulated SendProgress,
+           suppressed while an AG-UI stream is in flight — the placeholder shows
+           StreamMessage, or SendProgress for long-wait Knowledge/BriefGene
+           until the first answer body arrives. -->
+                  <ChatMessageRow
+                    v-if="
+                      isSending &&
+                      !getChatState(currentChatId).isStreaming &&
+                      !hasActivePollableAssistantWait
+                    "
+                    role="assistant"
+                    loading
+                  >
+                    <template #avatar>
+                      <el-avatar :size="36" :src="botAvatar" />
+                    </template>
+                    <div
+                      v-if="waitAgentLabel"
+                      class="wait-agent-label"
+                      data-testid="wait-agent-label"
+                    >
+                      {{ waitAgentLabel }}
+                    </div>
+                    <div
+                      class="message-text loading-message phy-bubble-assistant"
+                    >
+                      <span class="sr-only">{{ $t("chat.ladingInner") }}</span>
+                      <TransferProgress
+                        v-if="uploadTransfer"
+                        :snapshot="uploadTransfer"
+                        @cancel="(id) => abortTransfer(id)"
+                      />
+                      <SendProgress
+                        v-else
+                        :started-at="getChatState(currentChatId).sendStartedAt"
+                        :agent-name="
+                          getChatState(currentChatId).activeAgentName
+                        "
+                        :completing="getChatState(currentChatId).completing"
+                        :stage-label="
+                          progressLabelKey === 'chat.progress.selectingAgent'
+                            ? t(progressLabelKey)
+                            : undefined
+                        "
+                      />
+                    </div>
+                  </ChatMessageRow>
+                </div>
+              </div>
+              <el-backtop
+                v-if="currentChat?.messages?.length"
+                target=".message-container"
+                :right="40"
+                :bottom="80"
+              />
+
+              <!-- Input area -->
+              <div class="input-container">
+                <ChatComposer
+                  v-if="!demoKey"
+                  ref="composerRef"
+                  v-model="displayMessageInput"
+                  :is-sending="isSending || hasActivePollableAssistantWait"
+                  v-model:chat-mode="chatMode"
+                  :instant-mode-enabled="instantModeEnabled"
+                  :expert-mode-enabled="expertModeEnabled"
+                  :mode-usable="activeModeEnabled"
+                  :show-mode-selector="!currentChat?.messages?.length"
+                  :max-attachments="uploadValidationLimits.maxAttachments"
+                  :file-list="fileList"
+                  :attachment-announcement="attachmentAnnouncement"
+                  :attachment-announcement-nonce="attachmentAnnouncementNonce"
+                  :has-blocking-uploads="hasBlockingUploads"
+                  :upload-capability-enabled="
+                    botCapabilities.upload.value.enabled
+                  "
+                  :attachment-target-available="attachmentTargetAvailable"
+                  :attachment-target-blocked="attachmentTargetBlocked"
+                  :roles-loading="rolesLoading"
+                  :has-messages="!!currentChat?.messages?.length"
+                  :selected-agent="selectedAgent"
+                  :picker-options="pickerOptions"
+                  :set-tour-input-target="setTourInputTarget"
+                  @submit="sendMessage"
+                  @stop="abortCurrentRequest"
+                  @select="handleSelect"
+                  @search="handleSearch"
+                  @command="handleCommand"
+                  @file-change="handleFileChange"
+                  @paste-files="handlePastedFiles"
+                  @remove-file="removeFile"
+                  @pause-upload="uploadQueue.pauseUpload"
+                  @resume-upload="uploadQueue.resumeUpload"
+                  @retry-upload="uploadQueue.retryUpload"
+                  @reselect-upload="uploadQueue.reselectUpload"
+                  @cancel-upload="uploadQueue.cancelUpload"
+                  @remove-upload="uploadQueue.removeUploadById"
+                  @clear-agent="clearSelectedAgent"
+                  @toggle-agent="handleButtonClick"
+                />
+                <ChatDemoAskCta v-if="demoKey" @ask="onAskThisAgent" />
+              </div>
+              <div
+                v-if="!demoKey && !currentChat?.messages?.length"
+                ref="tourCasesTarget"
+                class="chat-cases-region"
+              >
+                <ChatCases />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agents architecture diagram dialog -->
+        <el-dialog
+          v-model="agentsViewVisible"
+          :title="t('chat.agentsArchitectureTitle')"
+          :close-on-click-modal="true"
+          :close-on-press-escape="true"
+          width="min(800px, calc(100vw - 32px))"
+          center
+        >
+          <div
+            class="agents-view-container"
+            @wheel="handleWheel"
+            @mousedown="handleMouseDown"
+            @mousemove="handleMouseMove"
+            @mouseup="handleMouseUp"
+            @mouseleave="handleMouseUp"
+            ref="containerRef"
+            style="overflow: hidden; cursor: grab"
+          >
+            <img
+              ref="imageRef"
+              :src="AgentsViewImg"
+              :alt="t('chat.agentsArchitectureAlt')"
+              class="agents-view-image"
+              :style="imageStyle"
+            />
+          </div>
+        </el-dialog>
+      </template>
+
+      <template #artifact>
+        <DeepGenomeArtifact
+          ref="deepGenomeArtifactRef"
+          v-if="
+            currentArtifactMessage &&
+            currentArtifactMessage.tool_name === 'DeepGenomeAgent'
+          "
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="currentArtifactStatusLabel"
+          :report-state="currentArtifactLifecycle ?? undefined"
+          :markdown="
+            currentArtifactPresentation?.kind === 'deep-genome'
+              ? currentArtifactPresentation.report
+              : ''
+          "
+          :references="currentArtifactMessage.doc_list"
+          :resources="currentArtifactResources"
+          :reference-materials="currentArtifactMessage.referenceMaterials"
+          :detail-state="currentArtifactMaterialState"
+          :report-key="currentArtifactMaterialReportKey"
+          :read-resource="
+            demoKey === 'deep-genome' ? readDeepGenomeCaseResource : undefined
+          "
+          :rendering-file-id="currentArtifactMessage.id"
+          :ns="artifactNamespace"
+          :tab="artifactTab"
+          :tabs="artifactTabs"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          :menu-items="artifactMenuItems"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @action="onArtifactMenu"
+          @tab="selectArtifactTab"
+          @resource-activate="activateArtifactResource"
+        />
+        <ResearchArtifactShell
+          v-else-if="currentArtifactMessage"
+          :title="chatHeaderTitle"
+          :metadata="artifactAgentLabel(currentArtifactMessage)"
+          :status="currentArtifactStatusLabel"
+          :format-scientific-agent-name="
+            currentArtifactMessage.tool_name === 'InSilicoResearchAgent'
+          "
+          :report-status="currentArtifactReportStatus || undefined"
+          :tab="artifactTab"
+          :tabs="artifactTabs"
+          :tab-labels="artifactTabLabels"
+          :tablist-label="t('common.operation')"
+          :artifact-id="artifactId"
+          :back-label="t('common.back')"
+          :close-label="t('common.close')"
+          :action-label="t('common.operation')"
+          :menu-items="artifactMenuItems"
+          @back="closeArtifact"
+          @close="closeArtifact"
+          @action="onArtifactMenu"
+          @tab="selectArtifactPanelTab"
+        >
+          <template #content>
+            <BotReportState
+              v-if="currentArtifactLifecycle"
+              :state="currentArtifactLifecycle"
+              :agent-name="currentArtifactMessage?.tool_name || ''"
+              :report="
+                currentArtifactPresentation?.kind === 'research'
+                  ? currentArtifactPresentation.report
+                  : null
+              "
+              :report-source="currentArtifactPresentation?.source"
+              :progress="currentArtifactProjection?.progress"
+              :updated-at="currentArtifactProjection?.reportUpdatedAt"
+              :labels="currentArtifactBotReportLabels"
+              :empty-report-label="currentArtifactEmptyReportLabel"
+              :ns="artifactNamespace"
+              :reference-count="currentArtifactMessage.doc_list?.length ?? 0"
+              :resources="currentArtifactResources"
+              @citation-activate="activateEvidence"
+              @resource-activate="activateArtifactResource"
+            />
+            <CitedAnswer
+              v-else
+              :content="
+                currentArtifactPresentation?.report ??
+                String(currentArtifactMessage.content)
+              "
+              :references="currentArtifactMessage.doc_list"
+              :resources="currentArtifactResources"
+              :ns="artifactNamespace"
+              surface="artifact"
+              reference-presentation="external"
+              @citation-activate="activateEvidence"
+              @resource-activate="activateArtifactResource"
+            />
+          </template>
+          <template #evidence>
+            <ResearchEvidencePanel
+              ref="evidencePanelRef"
+              :references="currentArtifactMessage.doc_list"
+              :ns="artifactNamespace"
+            />
+          </template>
+          <template #activity>
+            <ChatAnalystLog
+              v-if="
+                currentArtifactMessage.tool_name === 'InSilicoResearchAgent' &&
+                !!deriveAnalystLogRowId(currentArtifactMessage)
+              "
+              :row-id="deriveAnalystLogRowId(currentArtifactMessage)"
+              :task-id="deriveAnalystLogTaskId(currentArtifactMessage)"
+              :log-data="analystLogData(currentArtifactMessage)"
+              :loading="analystLogLoading(currentArtifactMessage)"
+              :updating="analystLogUpdating(currentArtifactMessage)"
+              :error-kind="analystLogErrorKind(currentArtifactMessage)"
+              @update="updateLog(currentArtifactMessage)"
+              @retry="retryLog(currentArtifactMessage)"
+            />
+            <span v-else>{{ t("chat.log.noData") }}</span>
+          </template>
+          <template #downloads>
+            <ResultArchiveDelivery
+              v-if="
+                currentArtifactProjection?.resultArchiveV1 === true ||
+                currentArtifactDelivery != null
+              "
+              :delivery="currentArtifactDelivery"
+              :artifacts="currentArtifactLinks"
+              :retrying="currentArtifactRetrying"
+              @download="downloadResultArchive"
+              @retry="retryCurrentResultArchive"
+            />
+            <template v-else>
+              <ul
+                v-if="currentArtifactLinks.length"
+                class="authorized-artifact-list"
+              >
+                <li
+                  v-for="artifact in currentArtifactLinks"
+                  :key="artifact.id"
+                  class="authorized-artifact-list__item"
+                >
+                  <span class="authorized-artifact-list__name">
+                    {{ artifact.name }}
+                  </span>
+                  <el-tooltip
+                    :content="`${t('chat.downloadFile')}: ${artifact.name}`"
+                    placement="top"
+                  >
+                    <el-button
+                      text
+                      circle
+                      :aria-label="`${t('chat.downloadFile')}: ${artifact.name}`"
+                      data-test="authorized-artifact-download"
+                      @click="downloadArtifact(artifact)"
+                    >
+                      <el-icon><Download /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </li>
+              </ul>
+              <BotArtifactList
+                v-else-if="currentArtifactLifecycle"
+                :artifacts="currentArtifactLifecycle.artifacts"
+                :empty-label="t('chat.botReport.emptyArtifacts')"
+                :download="downloadFile"
+              />
+              <span v-else>{{ t("common.noData") }}</span>
+            </template>
+          </template>
+        </ResearchArtifactShell>
+      </template>
+    </PhyAdaptiveShell>
+  </div>
+</template>
+<script setup lang="ts">
+import {
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  nextTick,
+  watch,
+  computed,
+} from "vue";
+import Sidebar from "./ChatSidebar.vue";
+import { createDeepGenomeMaterialDetailState } from "@/components/research/deep-genome-report";
+import type { DeepGenomeViewerHandle } from "@/components/research/deep-genome-types";
+import { CHAT_SIDEBAR_DRAWER_OPEN_KEY } from "./components/ChatSidebarNav.vue";
+import { SIDEBAR_MOBILE_BREAKPOINT } from "./composables/useSidebarResponsive";
+import TransferProgress from "@/components/TransferProgress.vue";
+import SendProgress from "./components/SendProgress.vue";
+import ChatComposer from "./components/ChatComposer.vue";
+import ChatCases from "./components/ChatCases.vue";
+import ChatDemoAskCta from "./components/ChatDemoAskCta.vue";
+import ChatMessageRow from "./components/ChatMessageRow.vue";
+import ChatMessageContent from "./components/ChatMessageContent.vue";
+import ChatMessageActions from "./components/ChatMessageActions.vue";
+import ChatActivity from "./components/ChatActivity.vue";
+import ChatAnalystLog from "./components/ChatAnalystLog.vue";
+import type { DirectDownloadItem } from "./components/ChatMessageActions.vue";
+import { PhyAdaptiveShell, PhyEmptyState } from "@/components/shell";
+import { PhyErrorState, PhySkeleton } from "@/components/state";
+import {
+  DeepGenomeArtifact,
+  ResearchArtifactShell,
+  ResearchEvidencePanel,
+  copyDownloadCloseArtifactMenuItems,
+} from "@/components/research";
+import BotArtifactList from "@/components/research/BotArtifactList.vue";
+import BotReportState from "@/components/research/BotReportState.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
+import CitedAnswer from "@/components/CitedAnswer.vue";
+import { Download, Menu } from "@element-plus/icons-vue";
+import { getAnswerCheck, getHistoryQuestionList } from "@/api/chat";
+import { userStore } from "@/stores";
+import LangSwitch from "@/components/LangSwitch.vue";
+import ThemeSwitch from "@/components/ThemeSwitch.vue";
+import { useTutorial } from "./composables/useTutorial";
+import { useImageZoomPan } from "./composables/useImageZoomPan";
+import { useChatStates } from "./composables/useChatStates";
+import { useBotCapabilities } from "./composables/useBotCapabilities";
+import { useResumableUploads } from "./composables/useResumableUploads";
+import { useArtifactPanel } from "./composables/useArtifactPanel";
+import { useAgentImages } from "./composables/useAgentImages";
+import { useReactions } from "./composables/useReactions";
+import { useCopyDownload } from "./composables/useCopyDownload";
+import {
+  useFileUpload,
+  type ChatAttachmentValidationError,
+} from "./composables/useFileUpload";
+import type { UploadValidationLimits } from "./upload/validation";
+import {
+  hasAttachmentChannel,
+  resolveAttachmentTarget,
+  resolveUploadTargetTool,
+} from "./utils/attachment-target";
+import { useComposer } from "./composables/useComposer";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_ZH_NAMES,
+  derivePickerOptions,
+} from "@/constants/agents";
+import type { CanonicalAgentTool } from "@/constants/agents";
+import { useSelectChat } from "./composables/useSelectChat";
+import { useChatAgentRunLifecycle } from "./composables/useChatAgentRunLifecycle";
+import { isActivePollableAssistantWait } from "./utils/async-agent-policy";
+import { progressHintForWait } from "./utils/agentProgress";
+import { useSendMessage } from "./composables/useSendMessage";
+import { useA2uiInteraction } from "./composables/useA2uiInteraction";
+import { useRefreshMessage } from "./composables/useRefreshMessage";
+import {
+  useLogView,
+  deriveAnalystLogRowId,
+  deriveAnalystLogTaskId,
+  analystLogActivityKey,
+} from "./composables/useLogView";
+import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import {
+  applyAgentCaseDemo,
+  askThisAgentFromDemo,
+  routeDemoKey,
+} from "./composables/useChatDemoCase";
+import {
+  isDemoDialogueId,
+  type AgentCaseDemoEmptyCopy,
+  type AgentCaseDemoKey,
+} from "./demos/catalog";
+import {
+  NETWORK_SAMPLE_DOWNLOAD_SENTINEL,
+  startNetworkSampleDownloads,
+} from "./demos/networkStaticDownload";
+import { ElMessage } from "element-plus";
+import { abortRequest } from "@/utils/request";
+import { cancelTask, normalizePositiveTaskRowId } from "@/api/task";
+import {
+  applyCancelledTaskDraft,
+  resolveCancellableTaskRowId,
+} from "./composables/applyCancelledTaskDraft";
+import FollowUpQuestions from "./FollowUpQuestions.vue";
+import { FilesCard } from "vue-element-plus-x";
+import AgentsViewImg from "@/assets/images/chat/AgentsView.png";
+import chatLogo from "@/assets/images/chat/logo.png";
+import {
+  clearPendingChat,
+  isLocalStorageChat,
+  isValidPendingRecord,
+  matchesChat,
+  safeParse,
+  upsertPendingChatListEntry,
+} from "@/utils/pending-chat";
+import { referenceListPlainText } from "@/utils/citation-presentation";
+import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { messagePlainText } from "./messageTypes";
+import { parentRowIdForDialogue } from "./utils/chat-parent-row";
+import { messageActionCapabilities } from "./utils/message-action-capabilities";
+import {
+  artifactIdentityForMessage,
+  artifactPresentationForMessage,
+  artifactPreviewTitleKey,
+} from "./utils/artifact-policy";
+import { useResultArchiveDelivery } from "./composables/useResultArchiveDelivery";
+import type { ConversationArtifactLink } from "@/api/types";
+import {
+  artifactChromeFromMessage,
+  artifactDownloadFormat,
+  type ArtifactChrome,
+} from "./utils/artifact-chrome";
+import type {
+  ArtifactTab,
+  Chat,
+  ChatMessage,
+  ChatComposerHandle as ComposerHandle,
+  ChatUIState,
+  DialogueReconciliationResult,
+} from "./types";
+import type {
+  ScientificCitationActivation,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
+import type { BotRunProjection } from "./botProjection";
+import { type BotLifecycleState } from "./streaming/botLifecycleReducer";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "./utils/report-presentation";
+
+function messageAttachments(
+  message: ChatMessage
+): Array<{ name: string; size: number; asset_id?: string }> {
+  return (message.attachments ?? message.attachedFiles ?? []).map((file) => ({
+    name: file.name,
+    size: file.size,
+    asset_id: "asset_id" in file ? file.asset_id : undefined,
+  }));
+}
+
+const composerRef = ref<ComposerHandle | null>(null);
+const chatRootRef = ref<HTMLElement | null>(null);
+
+const timestamp = ref(Date.now());
+const { locale, t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const demoKey = computed(() => routeDemoKey(route));
+const demoEmpty = ref<AgentCaseDemoEmptyCopy | null>(null);
+const demoError = ref<{ titleKey: string; bodyKey: string } | null>(null);
+
+// Left sidebar state
+const leftSidebarCollapsed = ref(false);
+const leftSidebarDrawerOpen = ref(false);
+const sidebarTriggerRef = ref<{ $el?: HTMLElement } | null>(null);
+provide(CHAT_SIDEBAR_DRAWER_OPEN_KEY, leftSidebarDrawerOpen);
+
+const isMobileViewport = ref(
+  typeof window !== "undefined"
+    ? window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT
+    : false
+);
+const updateMobileViewport = () => {
+  isMobileViewport.value = window.innerWidth < SIDEBAR_MOBILE_BREAKPOINT;
+};
+
+const chatStateAttr = computed(() =>
+  currentChat.value?.messages?.length ? "populated" : "empty"
+);
+const sidebarDrawerStateAttr = computed(() => {
+  if (!isMobileViewport.value) return "not-mobile";
+  return leftSidebarDrawerOpen.value ? "open" : "closed";
+});
+
+watch(leftSidebarDrawerOpen, async (isOpen, wasOpen) => {
+  if (isOpen || !wasOpen || !isMobileViewport.value) return;
+  await nextTick();
+  sidebarTriggerRef.value?.$el?.focus();
+});
+
+// Agents architecture diagram dialog
+const agentsViewVisible = ref(false);
+const {
+  containerRef,
+  imageRef,
+  imageStyle,
+  handleWheel,
+  handleMouseDown,
+  handleMouseMove,
+  handleMouseUp,
+} = useImageZoomPan(agentsViewVisible);
+
+const botAvatar = chatLogo;
+
+const MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH = 96;
+
+function boundedAttachmentAnnouncementFileName(fileName: string): string {
+  const normalized = fileName
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return t("chat.upload.fileSuffixFallback");
+  const codePoints = Array.from(normalized);
+  if (codePoints.length <= MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH) {
+    return normalized;
+  }
+  return `${codePoints
+    .slice(0, MAX_ATTACHMENT_ANNOUNCEMENT_FILENAME_LENGTH - 1)
+    .join("")}…`;
+}
+
+const onAttachmentValidationError = (error: ChatAttachmentValidationError) => {
+  const messageKey = `chat.attachmentErrors.${error.code}`;
+  const message = t(messageKey, {
+    file: boundedAttachmentAnnouncementFileName(error.fileName ?? ""),
+    maxFiles: uploadValidationLimits.value.maxAttachments,
+    maxFileMb: uploadValidationLimits.value.maxFileBytes / 1024 / 1024,
+    maxTotalMb: uploadValidationLimits.value.maxFileBytes / 1024 / 1024,
+  });
+  ElMessage.warning(message);
+  announceAttachment(message);
+};
+
+// Show the Agents architecture diagram dialog
+const showAgentsView = () => {
+  agentsViewVisible.value = true;
+};
+
+// Chat list
+const chatList = ref<Chat[]>([]);
+
+const allowedAgentOptions = computed(() =>
+  derivePickerOptions(userStore().roles).map((option) => ({
+    tool: option.tool,
+    labelKey: option.labelKey,
+    label: t(option.labelKey) || option.displayName,
+  }))
+);
+const authorizedAgentTools = computed(() =>
+  allowedAgentOptions.value.map((option) => option.tool)
+);
+const pickerOptions = allowedAgentOptions;
+const instantModeEnabled = computed(() =>
+  authorizedAgentTools.value.includes("ChatAgent")
+);
+const expertModeEnabled = computed(() => authorizedAgentTools.value.length > 0);
+const activeModeEnabled = computed(() =>
+  chatMode.value === "instant"
+    ? instantModeEnabled.value
+    : expertModeEnabled.value
+);
+
+const rolesLoading = computed(() => userStore().rolesLoading);
+const progressLabelKey = computed(() =>
+  chatMode.value === "expert" &&
+  getChatState(currentChatId.value).activeAgentName === ""
+    ? "chat.progress.selectingAgent"
+    : "chat.progress.processing"
+);
+
+const waitAgentLabel = computed(() => {
+  if (progressLabelKey.value === "chat.progress.selectingAgent") return "";
+  const tool = canonicalAgentTool(
+    getChatState(currentChatId.value).activeAgentName
+  );
+  if (!tool) return "";
+  const agent =
+    locale.value === "zh-CN"
+      ? CANONICAL_AGENT_ZH_NAMES[tool]
+      : CANONICAL_AGENT_DISPLAY_NAMES[tool];
+  return t("chat.routingSelectedAgent", { agent });
+});
+
+const hasActivePollableAssistantWait = computed(() => {
+  const messages = currentChat.value?.messages ?? [];
+  const last = messages[messages.length - 1];
+  return isActivePollableAssistantWait(last);
+});
+
+function progressHintForMessage(message: ChatMessage): number | null {
+  const state = getChatState(currentChatId.value);
+  const messages = currentChat.value?.messages ?? [];
+  const isLast = messages[messages.length - 1] === message;
+  return progressHintForWait({
+    sendStartedAt: isLast ? state.sendStartedAt : null,
+    createdAt: message.created_at,
+  });
+}
+
+const chatHeaderTitle = computed(() => {
+  const currentTitle =
+    typeof currentChat.value?.title === "string"
+      ? currentChat.value.title.trim()
+      : "";
+  if (currentTitle) return currentTitle;
+
+  const listTitle = chatList.value.find(
+    (chat) => chat.dialogue_id === currentChatId.value
+  )?.title;
+  return listTitle?.trim() || t("chat.untitledConversation");
+});
+
+const toggleSidebarFromHeader = async () => {
+  if (leftSidebarCollapsed.value) {
+    leftSidebarCollapsed.value = false;
+  } else {
+    leftSidebarDrawerOpen.value = true;
+    await nextTick();
+    document
+      .querySelector<HTMLElement>('[data-testid="sidebar-drawer-close"]')
+      ?.focus();
+  }
+};
+
+// Optimize the permission loading logic
+const loadUserTools = async () => {
+  if (!userStore().roles.length) {
+    try {
+      await userStore().getUserTools();
+    } catch (error) {
+      console.error("Failed to load user permissions:", error);
+    }
+  }
+};
+
+onMounted(async () => {
+  updateMobileViewport();
+  window.addEventListener("resize", updateMobileViewport);
+
+  // Load permission info first
+  await loadUserTools();
+  await botCapabilities.load();
+
+  // Fetch the history question list
+  getHistoryQuestionData().then(() => {
+    if (demoKey.value) {
+      applyDemoTape(demoKey.value);
+      return;
+    }
+
+    // Get the chatId from the URL
+    const urlChatId = getChatIdFromUrl();
+
+    // If chatId is absent, default to a new chat
+    if (urlChatId) {
+      // Look up whether a corresponding chat exists. Local `new_*` rows are
+      // reopened from pending storage inside selectChat — they are never
+      // server parents, so a list miss must not fall through to another chat.
+      const chatExists = chatList.value.find(
+        (chat) => chat.dialogue_id === urlChatId
+      );
+      if (isLocalStorageChat(urlChatId) || chatExists) {
+        // If it exists, select that chat
+        void selectChat(urlChatId);
+      } else if (chatList.value.length > 0) {
+        // If it does not exist but there are chat records, update the URL to the first record's ID
+        const firstChatId = chatList.value[0].dialogue_id;
+        updateUrlWithChatId(firstChatId);
+        void selectChat(firstChatId);
+      } else {
+        // If there are no chat records, create a new chat state
+        startNewChat();
+      }
+    } else {
+      // If there are no chat records, create a new chat state
+      startNewChat();
+    }
+  });
+
+  // Check whether the tutorial guide needs to be shown
+  checkTutorialStatus();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateMobileViewport);
+  chatAgentRunLifecycle.dispose();
+});
+
+// Parallel chat state (independent UI state per dialogueId) + current chat + 10 computed proxies
+const {
+  chatStates,
+  getChatState,
+  rekeyChatState,
+  removeChatState,
+  currentChatId,
+  currentChat,
+  messageInput,
+  isSending,
+  chatMode,
+  selectedAgent,
+  fileList,
+  focusedUploadLocalId,
+  attachmentAnnouncement,
+  attachmentAnnouncementNonce,
+  uploadTransfer,
+  copyVisible,
+  copyTimeRef,
+  refreshingMessages,
+} = useChatStates();
+
+function applyDemoTape(key: AgentCaseDemoKey): void {
+  const applied = applyAgentCaseDemo({
+    demoKey: key,
+    currentChatId,
+    getChatState,
+  });
+  demoEmpty.value = applied.empty ?? null;
+  demoError.value = applied.error ?? null;
+}
+
+watch(
+  demoKey,
+  (key) => {
+    if (!key) {
+      demoEmpty.value = null;
+      demoError.value = null;
+      return;
+    }
+    applyDemoTape(key);
+  },
+  { immediate: true }
+);
+
+function announceAttachment(message: string): void {
+  const ownerDialogueId = currentChatId.value;
+  if (!ownerDialogueId) return;
+  const ownerState = getChatState(ownerDialogueId);
+  ownerState.attachmentAnnouncementNonce += 1;
+  ownerState.attachmentAnnouncement = "";
+  void nextTick(() => {
+    if (currentChatId.value === ownerDialogueId) {
+      ownerState.attachmentAnnouncement = message;
+    }
+  });
+}
+
+async function onAttachmentDuplicate(
+  localId: string,
+  fileName: string
+): Promise<void> {
+  const ownerDialogueId = currentChatId.value;
+  if (!ownerDialogueId) return;
+  focusedUploadLocalId.value = localId;
+  announceAttachment(
+    t("chat.upload.alreadyAttached", {
+      file: boundedAttachmentAnnouncementFileName(fileName),
+    })
+  );
+  composerRef.value?.openHeader();
+  await nextTick();
+  if (currentChatId.value !== ownerDialogueId) return;
+  const itemIndex = fileList.value.findIndex(
+    (item) => item.localId === localId
+  );
+  const directChips = chatRootRef.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip"]'
+  );
+  const overflowChip = chatRootRef.value?.querySelector<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow"]'
+  );
+  if (itemIndex < 0) return;
+  if (itemIndex >= 0 && itemIndex < 3) {
+    directChips?.[itemIndex]?.focus();
+    return;
+  }
+  if (!overflowChip) return;
+
+  overflowChip.focus();
+  overflowChip.click();
+  await nextTick();
+  if (currentChatId.value !== ownerDialogueId) return;
+  const hiddenChip = chatRootRef.value?.querySelectorAll<HTMLButtonElement>(
+    '[data-testid="attachment-chip-overflow-item"]'
+  )[itemIndex - 3];
+  if (!hiddenChip) return;
+  hiddenChip.click();
+  hiddenChip.focus();
+  await nextTick();
+}
+
+const botCapabilities = useBotCapabilities("chat");
+const uploadValidationLimits = computed<Readonly<UploadValidationLimits>>(() =>
+  Object.freeze({
+    maxFileBytes: botCapabilities.upload.value.max_file_bytes,
+    maxAttachments: botCapabilities.upload.value.max_attachments,
+  })
+);
+const attachmentTarget = computed(() => {
+  const byTool = botCapabilities.byTool.value;
+  return resolveAttachmentTarget({
+    uploadEnabled: botCapabilities.upload.value.enabled,
+    chatMode: chatMode.value,
+    selectedAgent: selectedAgent.value,
+    authorizedTools: authorizedAgentTools.value,
+    hasChannel: (tool) =>
+      hasAttachmentChannel(byTool[tool as CanonicalAgentTool]),
+  });
+});
+const attachmentTargetAvailable = computed(
+  () => attachmentTarget.value.available
+);
+const uploadUsername = computed(() => userStore().name ?? "");
+const uploadQueue = useResumableUploads({
+  currentChatId,
+  getChatState,
+  uploadCapability: botCapabilities.upload,
+  username: uploadUsername,
+  targetTool: () =>
+    resolveUploadTargetTool({
+      chatMode: chatMode.value,
+      selectedAgent: selectedAgent.value,
+    }),
+  onValidationError: onAttachmentValidationError,
+  onDuplicate: (localId, fileName) => {
+    onAttachmentDuplicate(localId, fileName).catch(() => undefined);
+  },
+});
+const hasBlockingUploads = computed(() => uploadQueue.hasBlockingUploads.value);
+const attachmentTargetBlocked = computed(
+  () => fileList.value.length > 0 && !attachmentTargetAvailable.value
+);
+
+watch(
+  currentChatId,
+  (dialogueId) => {
+    if (dialogueId) void uploadQueue.loadRecovery(dialogueId);
+  },
+  { immediate: true }
+);
+
+const currentHistoryHydration = computed(() => {
+  if (!currentChatId.value) return "new";
+  return getChatState(currentChatId.value).historyHydration;
+});
+
+watch(
+  [
+    instantModeEnabled,
+    expertModeEnabled,
+    () => currentChatId.value,
+    () => currentChat.value?.messages?.length ?? 0,
+  ],
+  ([instantEnabled, expertEnabled, , messageCount]) => {
+    if (messageCount > 0 || instantEnabled === expertEnabled) return;
+    chatMode.value = instantEnabled ? "instant" : "expert";
+  },
+  { immediate: true }
+);
+
+const {
+  artifactOpen,
+  activeArtifactIdentity,
+  artifactTab,
+  currentArtifactMessage,
+  currentArtifactLinks,
+  currentArtifactResources,
+  downloadArtifact,
+  downloadResultArchive,
+  retryResultArchive,
+  openArtifact: setArtifactOpen,
+  closeArtifact: resetArtifactPanel,
+  selectArtifactTab,
+  isHandled,
+  markHandled,
+} = useArtifactPanel({ currentChatId, currentChat, getChatState });
+
+const effectiveSidebarCollapsed = computed(
+  () => leftSidebarCollapsed.value || artifactOpen.value
+);
+
+function canonicalAgentTool(toolName?: string): CanonicalAgentTool | null {
+  if (!toolName || !(toolName in CANONICAL_AGENT_I18N_KEYS)) return null;
+  return toolName as CanonicalAgentTool;
+}
+
+function artifactAgentLabel(message: ChatMessage): string {
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return message.tool_name || "";
+  return locale.value === "zh-CN"
+    ? CANONICAL_AGENT_ZH_NAMES[tool]
+    : CANONICAL_AGENT_DISPLAY_NAMES[tool];
+}
+
+const currentArtifactPresentation = computed(() => {
+  const message = currentArtifactMessage.value;
+  return message ? artifactPresentationForMessage(message) : null;
+});
+
+function artifactPreviewForMessage(message: ChatMessage) {
+  const presentation = artifactPresentationForMessage(message);
+  if (presentation === null) return null;
+
+  const tool = canonicalAgentTool(message.tool_name);
+  if (!tool) return null;
+  const titleKey = artifactPreviewTitleKey(
+    message,
+    agentRunLifecycleForMessage(message)
+  );
+  if (titleKey === null) return null;
+  return {
+    title: t(titleKey),
+    kind: artifactAgentLabel(message),
+    summary: t(CANONICAL_AGENT_I18N_KEYS[tool]),
+    openLabel: t("common.view"),
+  };
+}
+
+function openArtifactForMessage(message: ChatMessage): void {
+  const identity = artifactIdentityForMessage(message);
+  if (identity) openArtifact(identity);
+}
+
+const artifactId = computed(() => {
+  const id = activeArtifactIdentity.value || "none";
+  return `chat-artifact-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+});
+const artifactNamespace = computed(() => `${artifactId.value}-references`);
+const deepGenomeArtifactRef = ref<DeepGenomeViewerHandle | null>(null);
+const currentArtifactMaterialState = computed(() => {
+  const states = getChatState(currentChatId.value).materialDetailsByArtifact;
+  const identity = activeArtifactIdentity.value || "none";
+  return (
+    states[identity] ??
+    (states[identity] = createDeepGenomeMaterialDetailState())
+  );
+});
+const currentArtifactMaterialReportKey = computed(
+  () =>
+    `${currentChatId.value}:${activeArtifactIdentity.value}:${currentArtifactMessage.value?.botProjection?.reportRevision ?? 0}`
+);
+async function readDeepGenomeCaseResource(
+  resourceId: string,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted();
+  const reader = await import("@/views/deep-genome-agent/deep-genome-case");
+  signal.throwIfAborted();
+  return reader.readDeepGenomeCaseResource(resourceId, signal);
+}
+const evidencePanelRef = ref<{
+  focusReferences(indices: readonly number[]): boolean;
+} | null>(null);
+const artifactTabLabels = computed(() => ({
+  content: t("common.view"),
+  evidence: t("agents.deepGenome.references"),
+  activity: t("chat.log.activityLabel"),
+  downloads: t("chat.actions.attachments"),
+}));
+const currentArtifactChrome = computed<ArtifactChrome>(() => {
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactChromeFromMessage(message)
+    : { tabs: ["content"], exportFormats: [] };
+});
+const artifactTabs = computed(() => currentArtifactChrome.value.tabs);
+const artifactMenuItems = computed(() =>
+  copyDownloadCloseArtifactMenuItems(
+    t,
+    currentArtifactChrome.value.exportFormats
+  )
+);
+
+async function activateEvidence(
+  activation: ScientificCitationActivation
+): Promise<void> {
+  if (activation.namespace !== artifactNamespace.value) return;
+  if (!artifactTabs.value.includes("evidence")) return;
+  await selectArtifactPanelTab("evidence");
+  await nextTick();
+  evidencePanelRef.value?.focusReferences(activation.indices);
+}
+
+function activateArtifactResource(
+  activation: ScientificResourceActivation
+): void {
+  const artifact = currentArtifactLinks.value.find(
+    (item) => item.id === activation.id
+  );
+  if (artifact) void downloadArtifact(artifact);
+}
+
+type ChatArtifactReportStatus = "loading" | "degraded" | "complete" | "failed";
+type ChatArtifactLifecycleState = BotLifecycleState &
+  Partial<
+    Pick<BotRunProjection, "reportStage" | "reportUpdatedAt" | "progress">
+  >;
+
+const currentArtifactProjection = computed(
+  () => currentArtifactMessage.value?.botProjection ?? null
+);
+
+function lifecycleFromMessage(
+  message: ChatMessage
+): ChatArtifactLifecycleState | null {
+  const projection = message.botProjection;
+  const presentation = artifactPresentationForMessage(message);
+  if (
+    !message.botLifecycle &&
+    projection &&
+    projection.reportPresentation !== true &&
+    !projection.report &&
+    presentation?.kind !== "research"
+  ) {
+    return null;
+  }
+  if (!projection && !message.botLifecycle && presentation?.kind !== "research")
+    return null;
+  return reportLifecycleForMessage(message);
+}
+
+const currentArtifactLifecycle = computed(() => {
+  const message = currentArtifactMessage.value;
+  return message ? lifecycleFromMessage(message) : null;
+});
+
+const currentArtifactDelivery = computed(
+  () =>
+    currentArtifactMessage.value?.delivery ??
+    currentArtifactLifecycle.value?.delivery ??
+    currentArtifactProjection.value?.delivery
+);
+const messageArchives = useResultArchiveDelivery({ getChatState });
+function downloadMessageArchive(
+  message: ChatMessage,
+  artifact: ConversationArtifactLink
+): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.downloadResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    artifact,
+  });
+}
+function retryMessageArchive(message: ChatMessage): void {
+  if (!message.id || !currentChatId.value) return;
+  void messageArchives.retryResultArchive({
+    dialogueId: currentChatId.value,
+    messageId: message.id,
+    onPending: (delivery) => {
+      message.delivery = { ...delivery };
+      if (message.botProjection)
+        message.botProjection = {
+          ...message.botProjection,
+          delivery: { ...delivery },
+        };
+      if (message.botLifecycle)
+        message.botLifecycle = {
+          ...message.botLifecycle,
+          delivery: { ...delivery },
+        };
+    },
+  });
+}
+
+const currentArtifactRetrying = computed(() => {
+  const messageId = currentArtifactMessage.value?.id;
+  return Boolean(
+    messageId &&
+    currentChatId.value &&
+    getChatState(currentChatId.value).archiveRetryingByMessageId[messageId]
+  );
+});
+
+function retryCurrentResultArchive(): void {
+  const dialogueId = currentChatId.value;
+  const selectedMessage = currentArtifactMessage.value;
+  const messageId = selectedMessage?.id;
+  const chat = currentChat.value;
+  if (!dialogueId || !messageId || !chat) return;
+
+  void retryResultArchive((delivery) => {
+    const matches = chat.messages.filter((message) => message.id === messageId);
+    if (matches.length !== 1) return;
+    const [message] = matches;
+    message.delivery = { ...delivery };
+    if (message.botProjection) {
+      message.botProjection = {
+        ...message.botProjection,
+        delivery: { ...delivery },
+      };
+    }
+    if (message.botLifecycle) {
+      message.botLifecycle = {
+        ...message.botLifecycle,
+        delivery: { ...delivery },
+      };
+    }
+  });
+}
+
+function reportStatusForArtifact(
+  state: BotLifecycleState
+): ChatArtifactReportStatus {
+  return reportPresentationFor(
+    state,
+    currentArtifactPresentation.value ?? undefined
+  ).state;
+}
+
+const currentArtifactReportStatus = computed<ChatArtifactReportStatus | null>(
+  () => {
+    const state = currentArtifactLifecycle.value;
+    if (state) return reportStatusForArtifact(state);
+    const message = currentArtifactMessage.value;
+    return message ? reportStatusForRow(message) : null;
+  }
+);
+
+function botReportLabelForLifecycle(state: ChatArtifactLifecycleState): string {
+  return t(
+    reportPresentationFor(state, currentArtifactPresentation.value ?? undefined)
+      .labelKey
+  );
+}
+
+function reportStatusForRow(message: ChatMessage): ChatArtifactReportStatus {
+  if (message.streaming === true) return "loading";
+  return reportPresentationFor(
+    reportLifecycleForMessage(message),
+    artifactPresentationForMessage(message) ?? undefined,
+    message.tool_name
+  ).state;
+}
+
+function artifactStatusLabelForMessage(message: ChatMessage): string {
+  if (message.streaming === true) return t("chat.botReport.waiting");
+  return t(
+    reportPresentationFor(
+      reportLifecycleForMessage(message),
+      artifactPresentationForMessage(message) ?? undefined,
+      message.tool_name
+    ).labelKey
+  );
+}
+
+const currentArtifactBotReportLabels = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  if (!state) return {};
+  const status = reportStatusForArtifact(state);
+  return {
+    loading:
+      status === "loading"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.waiting"),
+    degraded:
+      status === "degraded"
+        ? botReportLabelForLifecycle(state)
+        : t("chat.botReport.degraded"),
+    failed:
+      state.status === "TIMED_OUT"
+        ? t("chat.lifecycle.timed_out")
+        : t("chat.botReport.failed"),
+    complete: t("chat.botReport.complete"),
+  };
+});
+
+const currentArtifactEmptyReportLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  return state
+    ? botReportLabelForLifecycle(state)
+    : t("chat.botReport.waiting");
+});
+
+const currentArtifactStatusLabel = computed(() => {
+  const state = currentArtifactLifecycle.value;
+  if (state) return botReportLabelForLifecycle(state);
+  const message = currentArtifactMessage.value;
+  return message
+    ? artifactStatusLabelForMessage(message)
+    : t("chat.botReport.waiting");
+});
+
+const reconcileMatchedDialogue = (
+  tempId: string,
+  serverId: string,
+  pendingKey?: string
+): DialogueReconciliationResult => {
+  const wasCurrent = currentChatId.value === tempId;
+  const rekey = rekeyChatState(tempId, serverId);
+  const benign =
+    rekey.outcome === "moved" ||
+    rekey.outcome === "same-id" ||
+    rekey.outcome === "source-absent";
+  const reconciled = rekey.outcome === "moved" || rekey.outcome === "same-id";
+
+  if (benign) {
+    if (pendingKey !== undefined) {
+      localStorage.removeItem(pendingKey);
+    } else if (isLocalStorageChat(tempId)) {
+      clearPendingChat(tempId);
+    }
+  } else if (rekey.outcome === "target-collision") {
+    console.warn(
+      `[chat] dialogue reconciliation collision (temp=${tempId}, server=${serverId})`
+    );
+    return { status: "retained", tempId, reason: "collision" };
+  }
+
+  if (reconciled && wasCurrent && currentChatId.value === tempId) {
+    currentChatId.value = serverId;
+    updateUrlWithChatId(serverId);
+  }
+
+  if (reconciled) {
+    uploadQueue.rekeyDialogue(tempId, serverId);
+    return { status: "reconciled", tempId, serverId, rekey };
+  }
+
+  return { status: "retained", tempId, reason: "unmatched" };
+};
+
+// Fetch history question data; optional sendingDialogueId drives post-send reconciliation.
+const getHistoryQuestionData = (
+  sendingDialogueId?: string,
+  options?: { blockingDialogueId?: string }
+): Promise<DialogueReconciliationResult | undefined> => {
+  return new Promise((resolve) => {
+    getHistoryQuestionList()
+      .then((res) => {
+        if (res.code === 200 && res.data) {
+          const formattedData: Chat[] = res.data.map((item) => {
+            return {
+              id: item.id,
+              dialogue_id: item.dialogue_id,
+              title: item.title_query || item.query || "",
+              date: item.created_at,
+              isFavorite: false,
+            };
+          });
+
+          chatList.value = formattedData;
+          const skipRestoreTempIds =
+            sendingDialogueId &&
+            isLocalStorageChat(sendingDialogueId) &&
+            options?.blockingDialogueId
+              ? new Set([sendingDialogueId])
+              : undefined;
+          restorePendingChats(formattedData, skipRestoreTempIds);
+
+          if (sendingDialogueId && isLocalStorageChat(sendingDialogueId)) {
+            if (options?.blockingDialogueId) {
+              resolve(
+                reconcileMatchedDialogue(
+                  sendingDialogueId,
+                  options.blockingDialogueId
+                )
+              );
+              return;
+            }
+
+            resolve({
+              status: "retained",
+              tempId: sendingDialogueId,
+              reason: "unmatched",
+            });
+            return;
+          }
+        }
+        resolve(undefined);
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to fetch history question data:", err);
+        resolve(undefined);
+      });
+  });
+};
+
+// Restore pending localStorage rows against the authoritative chat list. Only
+// explicit dialogue-id equality may reconcile; titles are never identities.
+const restorePendingChats = (
+  knownChats: Chat[],
+  skipTempIds?: ReadonlySet<string>
+) => {
+  const pendingChatKeys = Object.keys(localStorage).filter((key) =>
+    key.startsWith("pending_chat_")
+  );
+
+  pendingChatKeys.forEach((key) => {
+    const tempChatId = key.replace("pending_chat_", "");
+    if (skipTempIds?.has(tempChatId)) {
+      return;
+    }
+    const pendingChatData = safeParse(localStorage.getItem(key));
+
+    if (!isValidPendingRecord(pendingChatData)) {
+      if (pendingChatData !== null) {
+        localStorage.removeItem(key);
+      }
+      return;
+    }
+
+    const candidates = knownChats.filter((chat) =>
+      matchesChat(
+        { dialogue_id: chat.dialogue_id, title: chat.title },
+        pendingChatData,
+        tempChatId
+      )
+    );
+
+    if (candidates.length === 1) {
+      reconcileMatchedDialogue(tempChatId, candidates[0].dialogue_id, key);
+      return;
+    }
+
+    const firstUserMessage = pendingChatData.messages.find(
+      (message) => message.role === "user"
+    );
+    const pendingTitle =
+      typeof pendingChatData.title === "string"
+        ? pendingChatData.title
+        : typeof firstUserMessage?.content === "string"
+          ? firstUserMessage.content
+          : "";
+    upsertPendingChatListEntry(knownChats, tempChatId, pendingTitle, {
+      date:
+        typeof pendingChatData.date === "string"
+          ? pendingChatData.date
+          : undefined,
+    });
+  });
+};
+
+// Copy conversation + file download
+const { fallbackCopyText, downloadFile, getFileDownUrl } = useCopyDownload({
+  copyVisible,
+  copyTimeRef,
+  t,
+});
+
+function triggerAnchorDownload(href: string, fileName: string): void {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
+}
+
+function downloadChatFile(path: string): void {
+  if (path === NETWORK_SAMPLE_DOWNLOAD_SENTINEL) {
+    startNetworkSampleDownloads(triggerAnchorDownload);
+    return;
+  }
+  if (path.startsWith("/static/")) {
+    const fileName = path.split("/").pop() || "download";
+    triggerAnchorDownload(path, fileName);
+    return;
+  }
+  void downloadFile(path);
+}
+
+// Agent image fetch state (GeneNetworkAgent / DigitalDesignAgent)
+const {
+  geneNetworkImages,
+  geneNetworkImagesLoading,
+  digitalDesignImages,
+  digitalDesignImagesLoading,
+} = useAgentImages(currentChat);
+
+// Start a new chat
+const startNewChat = () => {
+  if (demoKey.value) {
+    void router.push({ name: "chat" });
+  }
+  releaseDialogueUploads(currentChatId.value, uploadQueue.cancelDialogue);
+  // Create the state for a new chat
+  const newDialogueId = "new_" + Date.now();
+  const newChatState = getChatState(newDialogueId);
+  newChatState.historyHydration = "new";
+  newChatState.historyErrorKind = null;
+
+  // Set the current chat ID to the newly created ID
+  currentChatId.value = newDialogueId;
+  currentChat.value = { messages: [] };
+
+  // Remove the id parameter from the URL
+  const url = new URL(window.location.href);
+  url.searchParams.delete("dialogue_id");
+  window.history.pushState({}, "", url.toString());
+
+  // Ensure scrolling to the bottom
+  nextTick(() => {
+    scrollToBottom();
+  });
+};
+
+// Message container ref, used for auto-scrolling
+const messageContainer = ref<HTMLElement | null>(null);
+const artifactScrollPositions = new Map<string, number>();
+
+const restoreTranscriptScroll = async (
+  dialogueId: string,
+  scrollTop: number
+) => {
+  await nextTick();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (currentChatId.value === dialogueId && messageContainer.value) {
+        messageContainer.value.scrollTop = scrollTop;
+      }
+    });
+  });
+};
+
+const openArtifact = (identity: string) => {
+  const dialogueId = currentChatId.value;
+  const scrollTop = messageContainer.value?.scrollTop;
+  setArtifactOpen(identity);
+  if (
+    !dialogueId ||
+    scrollTop === undefined ||
+    !artifactOpen.value ||
+    activeArtifactIdentity.value !== identity
+  ) {
+    return;
+  }
+  artifactScrollPositions.set(dialogueId, scrollTop);
+  void restoreTranscriptScroll(dialogueId, scrollTop);
+};
+
+const closeArtifact = () => {
+  const message = currentArtifactMessage.value;
+  if (
+    artifactTab.value === "activity" &&
+    message?.tool_name === "InSilicoResearchAgent"
+  ) {
+    void setLogExpanded(message, false);
+  }
+  resetArtifactPanel();
+};
+
+const observeReportArtifacts = () => {
+  const foregroundDialogueId = currentChatId.value;
+  let foregroundCandidate: string | null = null;
+
+  Object.entries(chatStates.value).forEach(([dialogueId, state]) => {
+    (state.renderedChat?.messages ?? []).forEach((message) => {
+      const presentation = artifactPresentationForMessage(message);
+      if (!presentation) return;
+      const normalizedId = presentation.identity;
+
+      if (isHandled(normalizedId, dialogueId)) return;
+
+      // Mark every eligible server id as considered in its own dialogue. A
+      // background result is therefore never auto-opened when the user later
+      // switches into that conversation.
+      markHandled(normalizedId, dialogueId);
+      if (dialogueId === foregroundDialogueId) {
+        foregroundCandidate = normalizedId;
+      }
+    });
+  });
+
+  if (foregroundCandidate !== null) {
+    // Mark before opening so the same reactive update, close/reopen cycle, or
+    // history refresh cannot take focus from the user a second time.
+    markHandled(foregroundCandidate);
+    openArtifact(foregroundCandidate);
+  }
+};
+
+watch([chatStates, currentChatId], observeReportArtifacts, {
+  deep: true,
+  flush: "post",
+});
+
+watch(
+  artifactOpen,
+  (isOpen, wasOpen) => {
+    if (isOpen || !wasOpen) return;
+    const dialogueId = currentChatId.value;
+    const scrollTop = artifactScrollPositions.get(dialogueId);
+    if (scrollTop === undefined) return;
+    artifactScrollPositions.delete(dialogueId);
+    void restoreTranscriptScroll(dialogueId, scrollTop);
+  },
+  { flush: "sync" }
+);
+
+// Auto-scroll to the latest message
+const scrollToBottom = async () => {
+  await nextTick();
+  if (messageContainer.value) {
+    const mobileSafeInset =
+      typeof window !== "undefined" && window.innerWidth < 600 ? 24 : 0;
+    messageContainer.value.scrollTop = Math.max(
+      0,
+      messageContainer.value.scrollHeight -
+        messageContainer.value.clientHeight -
+        mobileSafeInset
+    );
+  }
+};
+
+// Input toolbar buttons + mention-selection state machine — logic extracted into the useComposer composable
+const {
+  displayMessageInput,
+  clearSelectedAgent,
+  handleButtonClick,
+  handleCommand,
+  handleSelect,
+  handleSearch,
+} = useComposer({
+  messageInput,
+  isSending,
+  selectedAgent,
+  chatMode,
+  scrollToBottom,
+  authorizedAgentTools,
+});
+const { setLogExpanded, updateLog, retryLog, refreshModernLog } = useLogView({
+  currentChat,
+  currentChatId,
+  getChatState,
+  scrollToBottom,
+});
+
+async function selectArtifactPanelTab(tab: ArtifactTab): Promise<void> {
+  selectArtifactTab(tab);
+  const message = currentArtifactMessage.value;
+  if (message?.tool_name !== "InSilicoResearchAgent") return;
+  await setLogExpanded(message, tab === "activity");
+}
+
+function analystLogStateKey(message: ChatMessage): string | null {
+  const rowId = deriveAnalystLogRowId(message);
+  return rowId ? analystLogActivityKey(rowId) : null;
+}
+
+function isAnalystLogExpanded(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  if (!rowId || !currentChatId.value) return false;
+  return (
+    getChatState(currentChatId.value).activityExpandedByMessage[
+      analystLogActivityKey(rowId)
+    ] === true
+  );
+}
+
+function analystLogState(message: ChatMessage): ChatUIState | null {
+  if (!currentChatId.value || !deriveAnalystLogRowId(message)) return null;
+  return getChatState(currentChatId.value);
+}
+
+function analystLogData(message: ChatMessage): ChatUIState["logData"][string] {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.logData[rowId] : undefined;
+}
+
+function agentRunLifecycleForMessage(message: ChatMessage) {
+  const rowId = deriveAnalystLogRowId(message);
+  if (!rowId || !currentChatId.value) return undefined;
+  return getChatState(currentChatId.value).agentRunLifecycles[rowId];
+}
+
+watch(
+  () => {
+    const dialogueId = currentChatId.value;
+    if (!dialogueId) return ["", ""] as const;
+    const signature = Object.entries(
+      getChatState(dialogueId).agentRunLifecycles
+    )
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([rowId, lifecycle]) =>
+        [
+          rowId,
+          lifecycle.phase,
+          lifecycle.child_task_count,
+          lifecycle.report_revision,
+          lifecycle.artifact_summary.image_count,
+          lifecycle.artifact_summary.output_directory_count,
+          lifecycle.artifact_summary.has_report,
+          lifecycle.terminal ? "1" : "0",
+        ].join(":")
+      )
+      .join("|");
+    return [dialogueId, signature] as const;
+  },
+  ([dialogueId, next], [previousDialogueId, previous]) => {
+    if (
+      !previousDialogueId ||
+      dialogueId !== previousDialogueId ||
+      !previous ||
+      next === previous
+    ) {
+      return;
+    }
+    for (const message of currentChat.value?.messages ?? []) {
+      if (agentRunLifecycleForMessage(message)) {
+        void refreshModernLog(message);
+      }
+    }
+  }
+);
+
+function analystLogLoading(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.loadingLog[rowId] === true : false;
+}
+
+function analystLogUpdating(message: ChatMessage): boolean {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.updatingLog[rowId] === true : false;
+}
+
+function analystLogErrorKind(
+  message: ChatMessage
+): ChatUIState["logErrorKinds"][string] {
+  const rowId = deriveAnalystLogRowId(message);
+  const state = analystLogState(message);
+  return rowId && state ? state.logErrorKinds[rowId] : undefined;
+}
+
+// File upload handling — state and logic extracted into the useFileUpload composable
+const { handleFileChange, handlePastedFiles, removeFile } = useFileUpload({
+  fileList,
+  currentChatId,
+  getChatState,
+  composerRef,
+  uploadCapability: botCapabilities.upload,
+  scrollToBottom,
+  queueFiles: uploadQueue.queueFiles,
+  removeUpload: uploadQueue.removeUpload,
+  onValidationError: onAttachmentValidationError,
+});
+
+// Message upvote/downvote feature — state and logic extracted into the useReactions composable
+const { getReactionState, handleReaction } = useReactions({
+  currentChatId,
+  getChatState,
+  scrollToBottom,
+});
+
+function findStateByRequestId(
+  requestId: string
+): { dialogueId: string; state: ChatUIState } | null {
+  for (const [dialogueId, state] of Object.entries(chatStates.value)) {
+    if (
+      state.activeRequestId === requestId ||
+      state.uploadTransfer?.requestId === requestId
+    ) {
+      return { dialogueId, state };
+    }
+  }
+  return null;
+}
+
+function abortTransfer(requestId: string) {
+  const owned = findStateByRequestId(requestId);
+  if (owned?.state.uploadTransfer?.requestId === requestId) {
+    void uploadQueue.cancelDialogue(owned.dialogueId);
+    return;
+  }
+  if (owned) {
+    owned.state.uploadTransfer = null;
+  }
+  if (owned && owned.state.activeRequestId === requestId) {
+    void abortDialogueRequest(owned.dialogueId, owned.state);
+    return;
+  }
+  abortRequest(requestId);
+}
+
+// Abort the current (focused) dialogue's in-flight request
+const abortCurrentRequest = async () => {
+  const dialogueId = currentChatId.value;
+  if (!dialogueId) return;
+  const chatState = getChatState(dialogueId);
+  await abortDialogueRequest(dialogueId, chatState);
+};
+
+const UUID_DIALOGUE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function canonicalDialogueIdForCancel(
+  dialogueId: string,
+  chatState: ChatUIState
+): string | null {
+  const candidates = [chatState.renderedChat?.dialogue_id, dialogueId];
+  for (const value of candidates) {
+    if (typeof value === "string" && UUID_DIALOGUE_PATTERN.test(value.trim())) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+async function resolveRowIdAfterStop(
+  dialogueId: string,
+  chatState: ChatUIState
+): Promise<string | null> {
+  const immediate = resolveCancellableTaskRowId(chatState);
+  if (immediate) return immediate;
+  let serverDialogue = canonicalDialogueIdForCancel(dialogueId, chatState);
+  if (!serverDialogue) {
+    try {
+      const list = await getHistoryQuestionList();
+      const newest = list.data?.[0]?.dialogue_id;
+      if (typeof newest === "string" && UUID_DIALOGUE_PATTERN.test(newest)) {
+        serverDialogue = newest;
+      }
+    } catch {
+      return null;
+    }
+  }
+  if (!serverDialogue) return null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    const local = resolveCancellableTaskRowId(chatState);
+    if (local) return local;
+    try {
+      const history = await getAnswerCheck({ dialogue_id: serverDialogue });
+      const records = history.data ?? [];
+      for (let index = records.length - 1; index >= 0; index -= 1) {
+        try {
+          return normalizePositiveTaskRowId(records[index]?.id ?? "");
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // The row may still be committing; keep polling.
+    }
+  }
+  return resolveCancellableTaskRowId(chatState);
+}
+
+const abortDialogueRequest = async (
+  dialogueId: string,
+  chatState: ChatUIState
+) => {
+  const requestId = chatState.activeRequestId;
+  const rowId = resolveCancellableTaskRowId(chatState);
+  if (chatState.generationStopped) return;
+  if (!requestId && !rowId) return;
+
+  // Claim the stop before aborting so a double click cannot race two abort
+  // attempts or append duplicate local stopped rows.
+  chatState.generationStopped = true;
+
+  try {
+    // Owner cancel must reach Bot before the local stream is disconnected.
+    // Aborting first settles the remote run as failed, then cancel is 409.
+    const resolvedRowId =
+      rowId ?? (await resolveRowIdAfterStop(dialogueId, chatState));
+    if (resolvedRowId) {
+      try {
+        await cancelTask(resolvedRowId);
+      } catch {
+        // Keep the local cancelled draft even if the gateway is already gone.
+      }
+      applyCancelledTaskDraft(
+        chatState,
+        resolvedRowId,
+        t("chat.generationStopped")
+      );
+    } else {
+      const messages = chatState.renderedChat?.messages;
+      if (messages) {
+        const abortMessage: ChatMessage = {
+          role: "assistant",
+          content: t("chat.generationStopped"),
+          instantMessage: true,
+        };
+        messages.push(abortMessage);
+      }
+      // No owner row yet: disconnect so a later submit cannot keep running.
+      if (requestId) {
+        abortRequest(requestId);
+      }
+    }
+
+    chatState.uploadTransfer = null;
+    // Leave isSending + activeRequestId for the owning send finally. This
+    // serializes a same-dialogue resend until authoritative reconciliation.
+
+    if (currentChatId.value === dialogueId) {
+      await scrollToBottom();
+    }
+  } catch (error) {
+    chatState.generationStopped = false;
+    console.error("Failed to abort request:", error);
+  }
+};
+
+// Sidebar control function
+const handleSidebarCollapse = (isCollapsed: boolean) => {
+  leftSidebarCollapsed.value = isCollapsed;
+};
+
+// After the sidebar renames a session, the parent updates the chatList it holds (the child emits instead of mutating the prop)
+const handleChatRenamed = (updatedChat: Chat) => {
+  const index = chatList.value.findIndex(
+    (c) => c.dialogue_id === updatedChat.dialogue_id
+  );
+  if (index !== -1) {
+    chatList.value[index] = updatedChat;
+  }
+};
+
+// The parent holds chatList; deletion removes the item from the list here (the child only emits the chatDeleted event).
+const handleChatDeleted = (deletedChat: Chat) => {
+  chatList.value = removeDeletedChat({
+    chatList: chatList.value,
+    deletedChat,
+    disposeDialogue: chatAgentRunLifecycle.disposeDialogue,
+    removeChatState,
+  });
+};
+
+// The favorite state is likewise updated by the parent (the child only emits the chatFavorited event).
+const handleChatFavorited = (updatedChat: Chat) => {
+  const index = chatList.value.findIndex(
+    (c) => c.dialogue_id === updatedChat.dialogue_id
+  );
+  if (index !== -1) {
+    chatList.value[index] = updatedChat;
+  }
+};
+
+// Update the chat ID in the URL
+const updateUrlWithChatId = (dialogueId: string) => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("dialogue_id", dialogueId);
+  window.history.pushState({}, "", url.toString());
+};
+
+// Select a chat — history-loading logic extracted into the useSelectChat composable
+const { selectChat, reloadChat } = useSelectChat({
+  getChatState,
+  ownsChatState: (dialogueId, state) => chatStates.value[dialogueId] === state,
+  currentChatId,
+  scrollToBottom,
+  updateUrlWithChatId,
+  chatList,
+  timestamp,
+  username: uploadUsername,
+  attachmentStore: uploadQueue.recoveryStore,
+});
+const chatAgentRunLifecycle = useChatAgentRunLifecycle({
+  chatStates,
+  getChatState,
+  reloadChat,
+});
+
+function onAskThisAgent(): void {
+  const key = demoKey.value;
+  if (!key) return;
+  void askThisAgentFromDemo({
+    demoKey: key,
+    router,
+    startNewChat,
+    chatMode,
+    messageInput,
+    selectedAgent,
+    authorizedAgentTools: authorizedAgentTools.value,
+  });
+}
+
+const retrySelectedChat = () => {
+  const dialogueId = currentChatId.value;
+  if (!dialogueId) return;
+  void selectChat(dialogueId);
+};
+
+// Read the chat ID from the URL
+const getChatIdFromUrl = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("dialogue_id");
+};
+
+/** Parent row id for the focused dialogue — refresh only; send uses a pre-await capture. */
+const getDialogueIdFromChatId = () => {
+  return parentRowIdForDialogue(currentChatId.value, chatList.value);
+};
+
+// Send message — send logic extracted into the useSendMessage composable
+const { sendMessage } = useSendMessage({
+  getChatState,
+  currentChatId,
+  currentChat,
+  composerRef,
+  t,
+  userStore,
+  getHistoryQuestionData,
+  reconcileDialogueIdentity: reconcileMatchedDialogue,
+  chatList,
+  timestamp,
+  selectChat,
+  scrollToBottom,
+  attachmentTargetBlocked,
+  researchInputCapability: botCapabilities.researchInput,
+  botCapabilitiesByTool: botCapabilities.byTool,
+});
+
+const { submitAction, retryAction } = useA2uiInteraction();
+
+// Handle the Markdown typing-effect completion event
+const handleMarkdownFinish = (messageIndex: number) => {
+  if (currentChat.value?.messages && currentChat.value.messages[messageIndex]) {
+    // Set the follow-up question display state to true
+    currentChat.value.messages[messageIndex].showFollowUpQuestions = true;
+
+    // Ensure scrolling to the bottom
+    nextTick(() => {
+      scrollToBottom();
+    });
+  }
+};
+
+// Handle the follow-up question click event
+const handleFollowUpQuestionClick = (question: string) => {
+  if (isDemoDialogueId(currentChatId.value)) return;
+  // If sending or refreshing, block the action
+  if (isSending.value || attachmentTargetBlocked.value) return;
+
+  if (!currentChatId.value) return;
+
+  const chatState = getChatState(currentChatId.value);
+  if (!chatState) return;
+
+  // Set the clicked question as the input content
+  chatState.messageInput = question;
+
+  // Ensure scrolling to the bottom
+  nextTick(() => {
+    scrollToBottom();
+  });
+
+  // Auto-send the message
+  nextTick(() => {
+    sendMessage();
+  });
+};
+
+// Message refresh (regenerate the assistant answer) — logic extracted into the useRefreshMessage composable
+const { refreshMessage } = useRefreshMessage({
+  currentChat,
+  currentChatId,
+  getChatState,
+  scrollToBottom,
+  getHistoryQuestionData,
+  getDialogueIdFromChatId,
+  timestamp,
+  botCapabilitiesByTool: botCapabilities.byTool,
+});
+
+// Tutorial guide feature — state and logic extracted into the useTutorial composable
+const prepareTutorialTarget = () => {
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = true;
+  }
+};
+const {
+  showTutorial,
+  startTutorial,
+  completeTutorial: markTutorialComplete,
+  checkTutorialStatus,
+} = useTutorial({ beforeStart: prepareTutorialTarget });
+
+const tourSidebarTarget = () =>
+  document.querySelector<HTMLElement>('[data-testid="chat-primary-action"]');
+const tutorialSidebarPlacement = computed<"bottom-start" | "right-start">(() =>
+  isMobileViewport.value ? "bottom-start" : "right-start"
+);
+const tutorialContentStyle = computed(() => ({
+  width: isMobileViewport.value ? "calc(100vw - 32px)" : "360px",
+  maxWidth: "calc(100vw - 32px)",
+  boxSizing: "border-box" as const,
+}));
+const handleTutorialStepChange = (step: number) => {
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = step === 0;
+  }
+};
+const completeTutorial = () => {
+  markTutorialComplete();
+  if (isMobileViewport.value) {
+    leftSidebarDrawerOpen.value = false;
+  }
+};
+
+const tourCasesTarget = ref<HTMLElement | null>(null);
+const tourInputTarget = ref<HTMLElement | null>(null);
+const setTourInputTarget = (el: HTMLElement | null) => {
+  tourInputTarget.value = el;
+};
+
+// Copy message content + cited document list (extracted from an inline @click to work around a
+// vue-tsc can mis-map a local const declared inside a multi-statement template
+// arrow function onto the component instance — see the @copy handler wiring below)
+const copyMessageWithDocs = (message: ChatMessage, index: number) => {
+  const docs =
+    message.doc_list && message.doc_list.length > 0
+      ? referenceListPlainText(
+          buildDisplayReferences(message.doc_list, `copy-${index + 1}`)
+        )
+      : "";
+  const text =
+    (artifactPresentationForMessage(message)?.report ??
+      messagePlainText(message)) +
+    (docs && docs !== "" ? "\nReferences:\n" : "") +
+    docs;
+  fallbackCopyText(text, index + 1);
+};
+
+const handleMessageCopy = (message: ChatMessage, index: number) => {
+  if (message.role === "user") {
+    fallbackCopyText(messagePlainText(message), index + 1);
+    return;
+  }
+  if (message.tableHeaders) {
+    fallbackCopyText(message.original ?? "", index + 1);
+    return;
+  }
+  copyMessageWithDocs(message, index);
+};
+
+const onArtifactMenu = async (command: string) => {
+  if (command === "close") {
+    closeArtifact();
+    return;
+  }
+  const format = artifactDownloadFormat(command);
+  if (format) {
+    if (demoKey.value === "deep-genome") {
+      if (format === "PDF" || format === "Markdown") {
+        await deepGenomeArtifactRef.value?.download(
+          format === "PDF" ? "pdf" : "markdown"
+        );
+      }
+      return;
+    }
+    const message = currentArtifactMessage.value;
+    if (message?.id) getFileDownUrl(message.id, format);
+    return;
+  }
+  if (command !== "copy") return;
+  const message = currentArtifactMessage.value;
+  if (!message) return;
+  const index = (currentChat.value?.messages ?? []).findIndex(
+    (entry) => entry.id === message.id && entry.role === message.role
+  );
+  handleMessageCopy(message, index >= 0 ? index : 0);
+};
+
+const getDirectDownloads = (message: ChatMessage): DirectDownloadItem[] => {
+  const items: DirectDownloadItem[] = [];
+  if (
+    message?.status === "SUCCEEDED" &&
+    message?.upload_path &&
+    message.upload_path !== ""
+  ) {
+    items.push({ kind: "upload", path: message.upload_path });
+  }
+  if (message?.download_path && message.download_path !== "") {
+    const allowDemoDownload =
+      isDemoDialogueId(currentChatId.value) ||
+      message.download_path === NETWORK_SAMPLE_DOWNLOAD_SENTINEL;
+    if (
+      allowDemoDownload ||
+      (message.tool_name !== "GeneNetworkAgent" &&
+        message.tool_name !== "DigitalDesignAgent")
+    ) {
+      items.push({ kind: "file", path: message.download_path });
+    }
+  }
+  return items;
+};
+</script>
+
+<style lang="scss" scoped>
+.tour-sidebar-wrap {
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.phy-btn-primary {
+  --el-button-bg-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary);
+  --el-button-hover-bg-color: var(--phy-color-primary-hover);
+  --el-button-hover-border-color: var(--phy-color-primary-hover);
+  --el-button-text-color: #fff;
+}
+
+.phy-btn-primary.is-plain {
+  --el-button-bg-color: var(--phy-color-primary-soft);
+  --el-button-text-color: var(--phy-color-primary);
+  --el-button-border-color: var(--phy-color-primary-soft);
+}
+
+.chat-page-root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-main-layout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+// Chat main view
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-header {
+  flex-shrink: 0;
+  padding: 0 clamp(var(--phy-space-16), 2vw, var(--phy-space-32));
+  border-bottom: 1px solid var(--phy-color-border);
+  min-height: var(--phy-control-height-primary);
+  height: var(--phy-control-height-primary);
+
+  .chat-header-inner {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--phy-space-8);
+  }
+
+  .header-leading {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+    overflow: hidden;
+  }
+
+  .chat-header-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 18px;
+    font-weight: 500;
+  }
+
+  .mobile-sidebar-toggle {
+    display: none;
+
+    &.is-visible {
+      display: inline-flex;
+    }
+  }
+
+  .header-controls {
+    flex: 0 0 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--phy-space-8);
+  }
+
+  .chat-expert-indicator {
+    flex-shrink: 0;
+    margin-left: var(--phy-space-8);
+    padding: 2px var(--phy-space-8);
+    border: 1px solid var(--phy-color-accent-soft);
+    border-radius: var(--phy-radius-pill);
+    color: var(--phy-color-accent);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
+
+.message-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--phy-space-16) var(--phy-space-16)
+    calc(
+      var(--phy-control-height-primary) + var(--phy-space-32) +
+        env(safe-area-inset-bottom, 0px)
+    );
+  display: flex;
+  flex-direction: column;
+  background: var(--phy-color-bg-page);
+}
+
+.chat-content-stack {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--phy-color-bg-page);
+}
+
+.chat-content-stack.is-empty {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-content-stack.is-populated {
+  overflow: hidden;
+}
+
+.chat-content-stack.is-empty .message-container {
+  flex: 0 0 auto;
+  min-height: clamp(196px, 34vh, 340px);
+  overflow: visible;
+  padding: clamp(var(--phy-space-16), 4vh, var(--phy-space-40))
+    var(--phy-space-16) var(--phy-space-8);
+}
+
+.chat-content-stack.is-populated .message-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.transcript-content {
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+}
+
+.message {
+  // Row owns bubble alignment/surface; Content owns overflow + gene image chrome.
+  :deep(.message-content) {
+    .ai-response {
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: none;
+
+      .steps-title {
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #333;
+      }
+
+      .step-item {
+        margin-bottom: 12px;
+        padding: 12px 16px;
+        background-color: #fff;
+        border-radius: 8px;
+        border: 1px solid var(--phy-color-border-subtle);
+
+        .step-label {
+          font-weight: bold;
+          color: #666;
+          margin-bottom: 8px;
+          font-size: 13px;
+        }
+
+        .step-text {
+          color: #333;
+        }
+      }
+
+      .final-answer {
+        .answer-title {
+          font-weight: bold;
+          margin-bottom: 12px;
+          color: #333;
+          font-size: 16px;
+        }
+
+        .answer-content {
+          word-break: break-word;
+          white-space: pre-wrap;
+          color: #333;
+        }
+      }
+    }
+  }
+}
+
+.empty-chat {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--phy-space-16);
+
+  .empty-chat-welcome {
+    width: 100%;
+    padding: 0;
+  }
+
+  .empty-chat-mark {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+  }
+}
+
+.chat-history-state {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, var(--phy-layout-transcript-max-width));
+  margin: 0 auto;
+  padding: var(--phy-space-16);
+  box-sizing: border-box;
+  justify-content: center;
+}
+
+.chat-cases-region {
+  width: 100%;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-bottom: clamp(var(--phy-space-24), 4vh, var(--phy-space-48));
+}
+
+@media (min-width: 900px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-block: auto;
+  }
+}
+
+@media (min-width: 1920px) {
+  .chat-content-stack.is-empty {
+    max-height: 840px;
+    margin-top: auto;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .chat-header {
+    padding: 0 var(--phy-space-8);
+
+    .header-controls {
+      gap: var(--phy-space-4);
+    }
+  }
+
+  .chat-content-stack.is-empty .message-container {
+    min-height: 180px;
+    padding: var(--phy-space-16) var(--phy-space-8) var(--phy-space-4);
+  }
+
+  .empty-chat {
+    padding: var(--phy-space-12);
+
+    .empty-chat-mark {
+      width: 36px;
+      height: 36px;
+    }
+  }
+
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-24) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+}
+
+@media (min-width: 390px) and (max-width: 600px) {
+  .chat-cases-region {
+    padding-bottom: calc(
+      var(--phy-space-48) + var(--phy-space-48) +
+        env(safe-area-inset-bottom, 0px)
+    );
+  }
+}
+
+.input-container {
+  width: 100%;
+  flex-shrink: 0;
+  position: relative;
+  background-color: var(--phy-color-bg-page);
+}
+
+/* Action hover chrome lives on ChatMessageActions + ChatMessageRow.
+   Keep this empty selector as the stable CSS section boundary that frame
+   layout contract tests use after `.input-container`. */
+.message-user {
+}
+
+// Loading animation
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wait-agent-label {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.loading-message {
+  display: block;
+  width: min(28rem, 100%);
+  min-height: 40px;
+  background-color: var(--phy-bubble-assistant-bg);
+  padding: 0;
+  border-radius: var(--phy-radius-lg);
+
+  :deep(.send-progress) {
+    width: 100%;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  .loading-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-left: 5px;
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--el-color-primary);
+      animation: dot-pulse 1.4s infinite ease-in-out;
+
+      &:nth-child(1) {
+        animation-delay: 0s;
+      }
+
+      &:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      &:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+    }
+  }
+
+  @keyframes dot-pulse {
+    0%,
+    100% {
+      opacity: 0.4;
+      transform: scale(0.8);
+    }
+
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+.doc-list-title {
+  color: #48a0f0;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
+.doc-list-item {
+  font-size: 13px;
+  font-weight: 400;
+  margin-bottom: 8px;
+
+  .doc-simple {
+    // Simple format (title only)
+  }
+
+  .doc-detailed {
+    .doc-citation {
+      color: var(--el-text-color-primary);
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+
+    .doc-link-inline {
+      display: inline;
+      margin-left: 8px;
+
+      a {
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 400;
+        transition: color 0.2s ease;
+
+        &.doi-link {
+          color: var(--el-color-primary);
+
+          &:hover {
+            color: var(--phy-color-primary-hover);
+            text-decoration: underline;
+          }
+        }
+
+        &.pmid-link {
+          color: var(--el-color-primary);
+
+          &:hover {
+            color: var(--phy-color-primary-hover);
+            text-decoration: underline;
+          }
+        }
+      }
+    }
+  }
+}
+
+// File display styles within messages
+.message-files {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--phy-color-bg-elevated);
+  border-radius: 8px;
+  border: 1px solid var(--phy-color-border-subtle);
+
+  .files-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--phy-color-text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .file-item-display {
+      // File item styles are inherited from the FilesCard component
+    }
+  }
+}
+
+::v-deep(.el-textarea__inner) {
+  box-shadow: none;
+  margin-bottom: 30px;
+}
+
+::v-deep(.el-textarea__inner):focus {
+  box-shadow: none;
+}
+
+::v-deep(.el-textarea__inner):hover {
+  box-shadow: none;
+}
+
+// Upvote / downvote button styles
+.reaction-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+
+  .reaction-btn {
+    transition:
+      color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      background-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+      transform var(--phy-motion-fast) var(--phy-motion-ease-out);
+
+    &:hover {
+      color: var(--el-color-primary);
+      background-color: #f0f9ff;
+      transform: scale(1.1);
+    }
+
+    &.active {
+      color: var(--el-color-primary);
+      background-color: #e6f7ff;
+
+      &:hover {
+        background-color: #bae7ff;
+      }
+    }
+  }
+}
+
+// Agent info dialog styles
+:deep(.agent-info-dialog) {
+  .el-message-box__content {
+    padding: 20px;
+
+    .agent-info-dialog {
+      h3 {
+        margin: 0 0 20px 0;
+        color: #303133;
+        font-size: 18px;
+        text-align: center;
+        border-bottom: 1px solid #e4e7ed;
+        padding-bottom: 10px;
+      }
+
+      .agent-detail {
+        max-height: 400px;
+        overflow-y: auto;
+
+        .agent-description {
+          margin-bottom: 20px;
+          padding: 15px;
+          background-color: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid var(--phy-color-border-subtle);
+
+          p {
+            margin: 0;
+            color: #606266;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+        }
+
+        .agent-image {
+          margin-bottom: 20px;
+          padding: 15px;
+          background-color: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid var(--phy-color-border-subtle);
+          text-align: center;
+          width: 300px !important;
+          height: 200px !important;
+          img {
+            width: 100% !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+
+            &:hover {
+              transform: scale(1.02);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/* Force-override Element Plus dialog styles */
+:deep(.el-message-box.agent-info-dialog) {
+  --el-messagebox-width: 800px !important;
+  max-width: 800px !important;
+  width: 800px !important;
+  min-width: 800px !important;
+}
+
+:deep(.el-message-box.agent-info-dialog .el-message-box__content) {
+  max-height: 600px !important;
+  height: 600px !important;
+  min-height: 600px !important;
+  overflow-y: auto !important;
+}
+
+:deep(.el-message-box.agent-info-dialog .el-message-box__container) {
+  width: 800px !important;
+  max-width: 800px !important;
+}
+
+:deep(.el-message-box.agent-info-dialog .el-message-box__main) {
+  width: 800px !important;
+  max-width: 800px !important;
+}
+
+/* Global style override to ensure the highest priority */
+:global(.el-message-box.agent-info-dialog) {
+  --el-messagebox-width: 800px !important;
+  max-width: 800px !important;
+  width: 800px !important;
+  min-width: 800px !important;
+}
+
+:global(.el-message-box.agent-info-dialog .el-message-box__content) {
+  max-height: 600px !important;
+  height: 600px !important;
+  min-height: 600px !important;
+}
+
+:global(.el-message-box.agent-info-dialog .el-message-box__container) {
+  width: 800px !important;
+  max-width: 800px !important;
+}
+
+:global(.el-message-box.agent-info-dialog .el-message-box__main) {
+  width: 800px !important;
+  max-width: 800px !important;
+}
+
+.tip-text {
+  font-size: 12px;
+  color: var(--phy-color-text-muted);
+  margin-top: 10px;
+  width: 100%;
+  text-align: right;
+}
+
+.authorized-artifact-list {
+  display: grid;
+  gap: var(--phy-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.authorized-artifact-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--phy-space-12);
+  min-width: 0;
+  padding: var(--phy-space-8) 0;
+  border-bottom: 1px solid var(--phy-color-border-subtle);
+}
+
+.authorized-artifact-list__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Agents architecture diagram dialog styles */
+.agents-view-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.agents-view-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Dialog title styles */
+:deep(.el-dialog__header) {
+  text-align: center;
+  padding: 20px 20px 10px;
+
+  .el-dialog__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+/* Dialog content styles */
+:deep(.el-dialog__body) {
+  padding: 10px 20px 30px;
+}
+
+/* Responsive design */
+@media (max-width: 899px) {
+  .mobile-sidebar-toggle {
+    display: inline-flex !important;
+  }
+
+  .agents-view-image {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  :deep(.el-dialog) {
+    margin: 5vh auto;
+    width: 95% !important;
+  }
+}
+</style>

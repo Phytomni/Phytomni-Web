@@ -1,0 +1,40 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "authorization-a"
+tool = "eslint"
+rule = "rule-a"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "sameTarget"
+fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+rationale = "A narrow reason."
+counterfactual = "Removing it would worsen the boundary."
+risk = "A bounded test risk."
+tests = ["scripts/tests/static_analysis/test_model.py"]
+
+[[exemptions]]
+id = "authorization-b"
+tool = "eslint"
+rule = "rule-a"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "sameTarget"
+fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+owner = "another-maintainer"
+introduced_on = 2026-07-19
+review_on = 2026-07-19
+rationale = "A duplicate authorization must not broaden authority."
+counterfactual = "Removing it would worsen the boundary."
+risk = "A bounded test risk."
+tests = ["scripts/tests/static_analysis/test_model.py"]

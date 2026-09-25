@@ -20,6 +20,8 @@ import (
 
 const e2eA2uiSucceededBody = `{"status":"succeeded","run_id":"run-1","result":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-1","widget":"confirm","props":{"status":"submitted","accepted":true}}}}`
 
+const e2eA2uiAuthoritativeRunBody = `{"run_id":"run-1","agent":"review","status":"succeeded","result":{"formatted":{"answer":"A2UI action completed","references":[]}}}`
+
 const e2eA2uiInputRequiredBody = `{"status":"input_required","run_id":"run-1","interrupt":{"draft":{"a2ui":{"catalog_version":"v1.0","surface_id":"surface-2","widget":"choice","props":{"title":"Choose","options":[{"id":"a","label":"A"}],"multiple":false}}}}}`
 
 const e2eA2uiConfirmBody = `{"surface_id":"surface-1","widget":"confirm","action_id":"submit","run_id":"run-1","payload":{"accepted":true}}`
@@ -38,15 +40,14 @@ func buildA2uiActionE2EEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 	return engine, gdb
 }
 
-func configureA2uiE2eBot(t *testing.T, baseURL string, timeoutSeconds int, enabled bool) {
+func configureA2uiE2eBot(t *testing.T, baseURL string, timeoutSeconds int, _ bool) {
 	t.Helper()
 	previous := bot.BotConfig
 	bot.BotConfig = &bot.Config{
-		BaseURL:            baseURL,
-		UserAPIKey:         "ptm-task34",
-		ProxyEnabled:       true,
-		A2uiActionsEnabled: enabled,
-		TimeoutSeconds:     timeoutSeconds,
+		BaseURL:        baseURL,
+		UserAPIKey:     "ptm-task34",
+		ProxyEnabled:   true,
+		TimeoutSeconds: timeoutSeconds,
 	}
 	t.Cleanup(func() { bot.BotConfig = previous })
 }
@@ -55,6 +56,12 @@ func startA2uiFakeBot(t *testing.T, status int, contentType string, body []byte,
 	t.Helper()
 	calls := new(atomic.Int64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/runs/run-1" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(e2eA2uiAuthoritativeRunBody))
+			return
+		}
 		calls.Add(1)
 		if r.URL.Path != "/v1/runs/run-1/a2ui-actions" {
 			t.Errorf("Bot path = %q, want /v1/runs/run-1/a2ui-actions", r.URL.Path)
@@ -350,14 +357,13 @@ func TestE2E_A2uiActionOverflowStopsBeforeAuditAndBot(t *testing.T) {
 func TestE2E_A2uiActionAuditMasksPayloadAndPreservesIdentifiers(t *testing.T) {
 	engine, gdb := buildA2uiActionE2EEnv(t)
 	token := seedA2uiActionOwner(t, gdb, "task34-audit@x.com", "1")
-	configureA2uiE2eBot(t, "http://127.0.0.1:1", 1, false)
+	configureA2uiE2eBot(t, "http://127.0.0.1:1", 1, true)
 	body := []byte(`{"surface_id":"surface-sensitive","widget":"form","action_id":"submit-sensitive","run_id":"run-1","payload":{"fields":{"email":"researcher@example.com","biological_input":"BRCA1","token":"secret-token"}}}`)
 
 	response := sendA2uiActionRequest(engine, token, body, "application/json")
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("audit action status = %d, want 503; body=%s", response.Code, response.Body.String())
+	if response.Code == http.StatusUnauthorized || response.Code == http.StatusForbidden {
+		t.Fatalf("audit action status = %d, want a post-auth response; body=%s", response.Code, response.Body.String())
 	}
-	assertA2uiGatewayError(t, response, "a2ui_gateway_disabled", false, true)
 	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 
 	var bodyParams string
@@ -464,21 +470,4 @@ func TestE2E_A2uiActionUpstreamFailuresHaveStableMappings(t *testing.T) {
 		}
 		waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 	})
-}
-
-func TestE2E_A2uiActionFlagOffDoesNotCallBot(t *testing.T) {
-	engine, gdb := buildA2uiActionE2EEnv(t)
-	token := seedA2uiActionOwner(t, gdb, "task34-flag-off@x.com", "1")
-	fakeBot, calls := startA2uiFakeBot(t, http.StatusOK, "application/json", []byte(e2eA2uiSucceededBody), 0)
-	configureA2uiE2eBot(t, fakeBot.URL, 5, false)
-
-	response := sendA2uiActionRequest(engine, token, []byte(e2eA2uiConfirmBody), "application/json")
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("flag-off action status = %d, want 503; body=%s", response.Code, response.Body.String())
-	}
-	assertA2uiGatewayError(t, response, "a2ui_gateway_disabled", false, true)
-	if got := calls.Load(); got != 0 {
-		t.Fatalf("flag-off Bot calls = %d, want 0", got)
-	}
-	waitForOperationLogCount(t, gdb, a2uiActionRoutePath, 1)
 }

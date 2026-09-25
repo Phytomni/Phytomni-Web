@@ -1,15 +1,10 @@
 // User info store.
 import { defineStore } from "pinia";
-import {
-  getToken,
-  setToken,
-  setExpiresIn,
-  removeToken,
-  removeExpiresIn,
-} from "@/utils/auth";
+import { getToken, removeToken, removeExpiresIn } from "@/utils/auth";
 import { getUserTool } from "@/api/chat";
+import { logout } from "@/api/login";
 import {
-  CANONICAL_AT_ABLE_TOOLS,
+  CANONICAL_AGENT_DISPLAY_ORDER,
   type RemoteAgentTool,
 } from "@/constants/agents";
 import Cookies from "js-cookie";
@@ -35,15 +30,22 @@ interface IState {
   permission: string;
   login_status: string; // login status field
   seen_tutorial: string; // UX-only flag, decoupled from password state
-  expertEnabled: boolean; // Expert routing dark-launch flag (server-delivered)
+  expertEnabled: boolean; // server-delivered Expert availability; always true
+  rolesLoading: boolean;
+  rolesLoadFailed: boolean;
 }
 
-export default defineStore({
-  id: "user",
+function effectiveToolList(toolList: readonly string[]): string[] {
+  return CANONICAL_AGENT_DISPLAY_ORDER.filter((tool) =>
+    toolList.includes(tool)
+  );
+}
+
+export default defineStore("user", {
   state: (): IState => ({
     name: localStorage.getItem("userName") || "",
     avatar: "",
-    roles: [...CANONICAL_AT_ABLE_TOOLS],
+    roles: [],
     permissions: [],
     permission_list: [], // permission list
     userType: "",
@@ -57,72 +59,87 @@ export default defineStore({
     // from change-password.vue) or from the sidebar's "Start Tutorial" button
     // (replay path for returning users).
     seen_tutorial: localStorage.getItem("seenTutorial") || "1",
-    expertEnabled: false,
+    expertEnabled: true,
+    rolesLoading: true,
+    rolesLoadFailed: false,
   }),
   getters: {
     isFirstLogin: (state): boolean => state.login_status === "0",
     hasRemoteAgentPermission:
-      (state) => (tool: RemoteAgentTool | string): boolean =>
+      (state) =>
+      (tool: RemoteAgentTool | string): boolean =>
         state.roles.includes(tool),
   },
   actions: {
-    getUserTools() {
-      return new Promise((resolve, reject) => {
-        getUserTool()
-          .then((res: UserToolResponse) => {
-            if (res.code === 200) {
-              this.$patch({
-                permission: res.data.permission,
-                roles: res.data.tool_list,
-                permission_list: res.data.permission_list || [],
-                expertEnabled: res.data.expert_enabled ?? false,
-              });
-              resolve(true);
-            } else {
-              reject(new Error("Failed to get user tools"));
-            }
-          })
-          .catch((error: unknown) => {
-            reject(error);
-          });
-      });
-    },
-    // frontend logout
-    FedLogOut() {
-      return new Promise((resolve, reject) => {
-        this.SET_ROLES([]);
-        this.SET_PERMISSIONS([]);
-        removeToken();
-        // clear the username
-        this.name = "";
-        localStorage.removeItem("userName");
-        // clear cookies
-        removeExpiresIn();
-        Object.keys(Cookies.get()).forEach((cookieName) => {
-          Cookies.remove(cookieName);
+    async getUserTools() {
+      this.$patch({ rolesLoading: true, rolesLoadFailed: false });
+      try {
+        const res = (await getUserTool()) as UserToolResponse;
+        if (res.code !== 200) {
+          throw new Error("Failed to get user tools");
+        }
+        this.$patch({
+          permission: res.data.permission,
+          roles: effectiveToolList(res.data.tool_list),
+          permission_list: res.data.permission_list || [],
+          expertEnabled: res.data.expert_enabled ?? true,
+          rolesLoadFailed: false,
         });
+        return true;
+      } catch (error) {
+        this.$patch({ roles: [], rolesLoadFailed: true });
+        throw error;
+      } finally {
+        this.rolesLoading = false;
+      }
+    },
+    // Local session teardown. Explicit logout passes { revoke: true } so the
+    // current JWT is blocklisted first. 401/403 interceptors must omit that
+    // flag — posting /logout from an already-rejected token would loop.
+    FedLogOut(options?: { revoke?: boolean }) {
+      const clearLocal = () =>
+        new Promise((resolve, reject) => {
+          this.SET_ROLES([]);
+          this.SET_PERMISSIONS([]);
+          removeToken();
+          // clear the username
+          this.name = "";
+          localStorage.removeItem("userName");
+          // clear cookies
+          removeExpiresIn();
+          Object.keys(Cookies.get()).forEach((cookieName) => {
+            Cookies.remove(cookieName);
+          });
 
-        const failures: string[] = [];
-        try {
-          localStorage.clear();
-        } catch (err) {
-          console.warn("FedLogOut: localStorage.clear failed", err);
-          failures.push("localStorage");
-        }
-        try {
-          sessionStorage.clear();
-        } catch (err) {
-          console.warn("FedLogOut: sessionStorage.clear failed", err);
-          failures.push("sessionStorage");
-        }
-        if (failures.length > 0) {
-          reject(
-            new Error(`FedLogOut storage clears failed: ${failures.join(", ")}`)
-          );
-        } else {
-          resolve(true);
-        }
-      });
+          const failures: string[] = [];
+          try {
+            localStorage.clear();
+          } catch (err) {
+            console.warn("FedLogOut: localStorage.clear failed", err);
+            failures.push("localStorage");
+          }
+          try {
+            sessionStorage.clear();
+          } catch (err) {
+            console.warn("FedLogOut: sessionStorage.clear failed", err);
+            failures.push("sessionStorage");
+          }
+          if (failures.length > 0) {
+            reject(
+              new Error(
+                `FedLogOut storage clears failed: ${failures.join(", ")}`
+              )
+            );
+          } else {
+            resolve(true);
+          }
+        });
+      if (!options?.revoke) {
+        return clearLocal();
+      }
+      return logout()
+        .catch(() => undefined)
+        .then(() => clearLocal());
     },
 
     /* synchronous state updates */
@@ -154,7 +171,7 @@ export default defineStore({
     /**
      * Server-write-only by convention AND enforced by G11 in
      * scripts/validate_web_local.sh — only stores/user.ts (this file)
-     * and views/login/index.vue may reference SET_LOGIN_STATUS.
+     * and views/login/LoginView.vue may reference SET_LOGIN_STATUS.
      * Calling this from any other code path can bypass the first-login
      * enforcement guard in permission.ts.
      */

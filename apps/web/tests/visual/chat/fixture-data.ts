@@ -1,16 +1,22 @@
 /** Deterministic synthetic data for the Chat visual fixture harness. */
 
-import type { ChatVisualFixtureDefinition } from "./fixture-registry";
-import type { ContentBlock, UploadFile, ChatMessage } from "@/views/chat/types";
+import type {
+  AgentLifecycleVisualFixtureKey,
+  ChatVisualFixtureDefinition,
+} from "./fixture-registry";
+import type { ContentBlock, ChatMessage } from "@/views/chat/types";
+import type {
+  ResumableUploadItem,
+  UploadStatus,
+} from "@/views/chat/upload/types";
 import type {
   A2uiOpenSurface,
   A2uiSurfaceState,
 } from "@/views/chat/streaming/a2uiContract";
 import type { ChatAgentPickerOption } from "@/views/chat/components/ChatAgentPicker.vue";
 import {
-  CANONICAL_AT_ABLE_TOOLS,
-  CANONICAL_AGENT_DISPLAY_NAMES,
-  CANONICAL_AGENT_I18N_KEYS,
+  CANONICAL_AGENT_LABEL_I18N_KEYS,
+  CANONICAL_AGENT_DISPLAY_ORDER,
 } from "@/constants/agents";
 import {
   isPhase3BMessageKey,
@@ -24,6 +30,7 @@ import {
   type Phase3BMessageKey,
   type Phase3CFixtureKey,
 } from "../../fixtures/chat";
+import { isWaitCotPollableKey, WAIT_COT_POLLABLE } from "./wait-cot-fixtures";
 
 /** Exact visible identity for harness and redaction scripts. */
 export const SYNTHETIC_IDENTITY = "Synthetic user";
@@ -41,6 +48,394 @@ export type SyntheticMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+type SyntheticLifecycle = {
+  id: number;
+  phase: "PREPARING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  terminal: boolean;
+  child_task_count: number;
+  child_work_accepted: boolean;
+  report_revision: number;
+  artifact_summary: {
+    image_count: number;
+    output_directory_count: number;
+    has_report: boolean;
+  };
+  reconciliation: "FRESH" | "CACHED" | "DEGRADED";
+  tracking_degraded: boolean;
+  error_code: "bot_transport_failed" | "run_contract_invalid" | null;
+};
+
+type SyntheticAnalystLog = {
+  state: "PENDING" | "AVAILABLE" | "TERMINAL_EMPTY" | "DEGRADED";
+  source: "BOT_RUN" | "LEGACY_TASK";
+  text: string;
+  revision: number;
+  truncated: boolean;
+  can_request_legacy_refresh: boolean;
+  error_code: "log_refresh_unavailable" | null;
+};
+
+type SyntheticResultArchiveDelivery = {
+  schema_version: 1;
+  required: true;
+  status: "pending" | "ready" | "failed";
+  revision: number;
+  name: string | null;
+  size_bytes: number | null;
+  error_code: "archive_generation_failed" | "archive_contract_invalid" | null;
+  retryable: boolean;
+};
+
+type SyntheticConversationArtifactLink = {
+  id: string;
+  name: string;
+  kind: "archive";
+};
+
+const SYNTHETIC_NETWORK_RESULT_DATA_URL =
+  "data:image/svg+xml," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+      <title id="title">Synthetic plant gene network</title>
+      <desc id="desc">A bounded fixture diagram with six connected genes.</desc>
+      <rect width="640" height="360" rx="24" fill="#f7fbf9"/>
+      <g stroke="#78a7c8" stroke-width="4" opacity="0.72">
+        <path d="M120 180 L250 90 L390 120 L520 190 L400 285 L235 270 Z" fill="none"/>
+        <path d="M120 180 L390 120 M250 90 L400 285 M235 270 L520 190" fill="none"/>
+      </g>
+      <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="600" text-anchor="middle">
+        <g><circle cx="120" cy="180" r="42" fill="#4f8f67"/><text x="120" y="186" fill="white">RGA1</text></g>
+        <g><circle cx="250" cy="90" r="38" fill="#3b82a0"/><text x="250" y="96" fill="white">DREB</text></g>
+        <g><circle cx="390" cy="120" r="44" fill="#5a9c73"/><text x="390" y="126" fill="white">NAC6</text></g>
+        <g><circle cx="520" cy="190" r="39" fill="#397f9d"/><text x="520" y="196" fill="white">WRKY</text></g>
+        <g><circle cx="400" cy="285" r="42" fill="#65a67a"/><text x="400" y="291" fill="white">ERF3</text></g>
+        <g><circle cx="235" cy="270" r="37" fill="#498ba8"/><text x="235" y="276" fill="white">MYB2</text></g>
+      </g>
+    </svg>
+  `);
+
+export type AgentLifecycleVisualData = {
+  message: ChatMessage;
+  lifecycle?: SyntheticLifecycle;
+  artifactPreview?: {
+    title: string;
+    kind: string;
+    summary: string;
+    openLabel: string;
+  };
+  delivery?: SyntheticResultArchiveDelivery;
+  artifactLinks?: SyntheticConversationArtifactLink[];
+  geneNetworkImages?: Record<string, string[]>;
+  log?: {
+    rowId: string;
+    taskId: string;
+    data: SyntheticAnalystLog;
+  };
+};
+
+const lifecycle = (
+  phase: SyntheticLifecycle["phase"],
+  options: {
+    imageCount?: number;
+    hasReport?: boolean;
+    reportRevision?: number;
+  } = {}
+): SyntheticLifecycle => ({
+  id: 901,
+  phase,
+  terminal: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(phase),
+  child_task_count: phase === "PREPARING" ? 0 : 1,
+  child_work_accepted: phase !== "PREPARING",
+  report_revision: options.reportRevision ?? 0,
+  artifact_summary: {
+    image_count: options.imageCount ?? 0,
+    output_directory_count: 0,
+    has_report: options.hasReport ?? false,
+  },
+  reconciliation: "FRESH",
+  tracking_degraded: false,
+  error_code: phase === "FAILED" ? "bot_transport_failed" : null,
+});
+
+const AGENT_LIFECYCLE_VISUAL_DATA: Record<
+  AgentLifecycleVisualFixtureKey,
+  AgentLifecycleVisualData
+> = {
+  "agent-preparing": {
+    message: {
+      id: "fixture-agent-preparing",
+      role: "assistant",
+      content: "",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("PREPARING", { imageCount: 1 }),
+  },
+  "agent-running-partial": {
+    message: {
+      id: "fixture-agent-running-partial",
+      role: "assistant",
+      content:
+        "### Partial network report\n\nThe Agent has accepted one bounded analysis step.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("RUNNING", {
+      imageCount: 1,
+      hasReport: true,
+      reportRevision: 1,
+    }),
+  },
+  "agent-succeeded-artifacts": {
+    message: {
+      id: "fixture-agent-succeeded-artifacts",
+      role: "assistant",
+      content:
+        "### Network report\n\nA synthetic regulatory edge passed the fixture threshold.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      imageCount: 1,
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    geneNetworkImages: {
+      "fixture-agent-succeeded-artifacts": [SYNTHETIC_NETWORK_RESULT_DATA_URL],
+    },
+  },
+  "agent-succeeded-empty": {
+    message: {
+      id: "fixture-agent-succeeded-empty",
+      role: "assistant",
+      content: "",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED"),
+  },
+  "agent-failed": {
+    message: {
+      id: "fixture-agent-failed",
+      role: "assistant",
+      content: "",
+      tool_name: "DigitalDesignAgent",
+    },
+    lifecycle: lifecycle("FAILED"),
+  },
+  "agent-delivery-pending": {
+    message: {
+      id: "fixture-agent-delivery-pending",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains available while delivery is prepared.",
+      tool_name: "AnalystAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "pending",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: null,
+      retryable: false,
+    },
+  },
+  "agent-delivery-ready": {
+    message: {
+      id: "fixture-agent-delivery-ready",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible with one result archive.",
+      tool_name: "InSilicoResearchAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "ready",
+      revision: 2,
+      name: "research-results.zip",
+      size_bytes: 2048,
+      error_code: null,
+      retryable: false,
+    },
+    artifactLinks: [
+      {
+        id: "fixture-archive-ready",
+        name: "research-results.zip",
+        kind: "archive",
+      },
+    ],
+  },
+  "agent-delivery-retryable": {
+    message: {
+      id: "fixture-agent-delivery-retryable",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible after archive generation failed.",
+      tool_name: "GeneNetworkAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_generation_failed",
+      retryable: true,
+    },
+  },
+  "agent-delivery-nonretryable": {
+    message: {
+      id: "fixture-agent-delivery-nonretryable",
+      role: "assistant",
+      content:
+        "### Analysis report\n\nThe scientific report remains visible when archive delivery cannot continue.",
+      tool_name: "DigitalDesignAgent",
+    },
+    lifecycle: lifecycle("SUCCEEDED", { hasReport: true, reportRevision: 2 }),
+    delivery: {
+      schema_version: 1,
+      required: true,
+      status: "failed",
+      revision: 2,
+      name: null,
+      size_bytes: null,
+      error_code: "archive_contract_invalid",
+      retryable: false,
+    },
+  },
+  "review-confirm-fallback": {
+    message: {
+      id: "fixture-review-confirm-fallback",
+      role: "assistant",
+      content: "",
+      tool_name: "ReviewAgent",
+      blocks: [
+        {
+          type: "agent-surface",
+          authority: "agent",
+          interactive: true,
+          a2ui: {
+            surface: {
+              catalog_version: "v1.0",
+              surface_id: "fixture-review-confirm-fallback",
+              widget: "confirm",
+              props: {
+                title: "Continue the synthetic review?",
+                body: "This fixture intentionally omits optional action copy.",
+              },
+            },
+            state: { status: "ready", round: 1 },
+          },
+        },
+      ],
+    },
+  },
+  "analyst-log-pending": {
+    message: {
+      id: "fixture-analyst-log-pending",
+      role: "assistant",
+      content: "The synthetic analysis request was accepted.",
+      tool_name: "AnalystAgent",
+      task_id: "fixture-analyst-task-pending",
+    },
+    lifecycle: lifecycle("RUNNING"),
+    log: {
+      rowId: "902",
+      taskId: "fixture-analyst-task-pending",
+      data: {
+        state: "PENDING",
+        source: "BOT_RUN",
+        text: "",
+        revision: 0,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    },
+  },
+  "analyst-log-available": {
+    message: {
+      id: "fixture-analyst-log-available",
+      role: "assistant",
+      content: "The synthetic analysis report is available.",
+      tool_name: "AnalystAgent",
+      task_id: "fixture-analyst-task-available",
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    log: {
+      rowId: "903",
+      taskId: "fixture-analyst-task-available",
+      data: {
+        state: "AVAILABLE",
+        source: "BOT_RUN",
+        text: "[INFO] Synthetic analysis initialized.\n[DONE] Fixture report ready.",
+        revision: 2,
+        truncated: false,
+        can_request_legacy_refresh: false,
+        error_code: null,
+      },
+    },
+  },
+  "deep-genome-preparing": {
+    message: {
+      id: "901",
+      role: "assistant",
+      content: "Server task created: synthetic-child",
+      status: "RUNNING",
+      tool_name: "DeepGenomeAgent",
+    },
+    lifecycle: lifecycle("PREPARING"),
+  },
+  "deep-genome-running-partial": {
+    message: {
+      id: "902",
+      role: "assistant",
+      content:
+        "### Synthetic partial report\n\nOne bounded analysis section is available.",
+      status: "RUNNING",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [],
+    },
+    lifecycle: lifecycle("RUNNING", {
+      hasReport: true,
+      reportRevision: 1,
+    }),
+  },
+  "deep-genome-succeeded": {
+    message: {
+      id: "903",
+      role: "assistant",
+      content:
+        "### Synthetic final report\n\nThe deterministic fixture report is complete.",
+      status: "SUCCEEDED",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [],
+    },
+    lifecycle: lifecycle("SUCCEEDED", {
+      hasReport: true,
+      reportRevision: 2,
+    }),
+    artifactPreview: {
+      title: "Finished",
+      kind: "Deep Genome Agent",
+      summary: "Synthetic deep genome report",
+      openLabel: "View",
+    },
+  },
+};
+
+export function getAgentLifecycleVisualData(
+  key: AgentLifecycleVisualFixtureKey
+): AgentLifecycleVisualData {
+  return AGENT_LIFECYCLE_VISUAL_DATA[key];
+}
 
 export function buildSyntheticMessages(
   fixture: ChatVisualFixtureDefinition
@@ -70,6 +465,16 @@ export function buildSyntheticMessages(
 export function buildHarnessMessages(
   fixture: ChatVisualFixtureDefinition
 ): ChatMessage[] | SyntheticMessage[] {
+  if (isWaitCotPollableKey(fixture.key)) {
+    const data = WAIT_COT_POLLABLE[fixture.key];
+    return [data.user, data.message];
+  }
+  if (fixture.key in AGENT_LIFECYCLE_VISUAL_DATA) {
+    return [
+      AGENT_LIFECYCLE_VISUAL_DATA[fixture.key as AgentLifecycleVisualFixtureKey]
+        .message,
+    ];
+  }
   if (isPhase3BMessageKey(fixture.key)) {
     return buildPhase3BTranscript(fixture.key);
   }
@@ -98,35 +503,114 @@ export function getSharedPhase3COverlay(key: Phase3CFixtureKey) {
 
 export function buildSyntheticFileList(
   fixture: ChatVisualFixtureDefinition
-): UploadFile[] {
+): ResumableUploadItem[] {
   if (!fixture.hasAttachment) {
     return [];
   }
-  const blob = new File(
-    ["synthetic fixture attachment contents"],
-    SYNTHETIC_FILE_NAME,
-    { type: "text/plain" }
-  );
-  return [
-    {
-      name: SYNTHETIC_FILE_NAME,
-      size: blob.size,
-      type: "text/plain",
+  const status: UploadStatus = fixture.uploadStatus ?? "completed";
+  const size = 1024 * 1024;
+
+  const buildItem = (
+    localId: string,
+    name: string,
+    itemStatus: UploadStatus,
+    type = "text/plain"
+  ): ResumableUploadItem => {
+    const loadedBytes =
+      itemStatus === "completed"
+        ? size
+        : itemStatus === "uploading"
+          ? 256 * 1024
+          : itemStatus === "paused" ||
+              itemStatus === "failed" ||
+              itemStatus === "expired"
+            ? 512 * 1024
+            : 0;
+    const blob = new File(["synthetic fixture attachment contents"], name, {
+      type,
+    });
+    return {
+      localId,
       file: blob,
-    },
-  ];
+      assetId: itemStatus === "completed" ? `asset-${localId}` : null,
+      name,
+      size,
+      type,
+      lastModified: 1_700_000_000_000,
+      status: itemStatus,
+      partSize: size,
+      partCount: 1,
+      receivedParts: itemStatus === "completed" ? [1] : [],
+      loadedBytes,
+      speedBytesPerSecond: itemStatus === "uploading" ? 256 * 1024 : 0,
+      etaSeconds: itemStatus === "uploading" ? 3 : null,
+      retryCount: itemStatus === "failed" || itemStatus === "expired" ? 1 : 0,
+      errorCode:
+        itemStatus === "failed"
+          ? "upload_failed"
+          : itemStatus === "expired"
+            ? "upload_session_expired"
+            : null,
+    };
+  };
+
+  if (fixture.key === "uploading-detail-open") {
+    return [
+      buildItem(
+        "fixture-upload-detail",
+        "fixture-reads.fastq.gz",
+        "uploading",
+        "application/gzip"
+      ),
+    ];
+  }
+
+  if (fixture.key === "mixed-ready-failed-expired") {
+    return [
+      buildItem(
+        "fixture-upload-ready",
+        "fixture-report.pdf",
+        "completed",
+        "application/pdf"
+      ),
+      buildItem(
+        "fixture-upload-failed",
+        "fixture-counts.tsv",
+        "failed",
+        "text/tab-separated-values"
+      ),
+      buildItem(
+        "fixture-upload-expired",
+        "fixture-archive.fastq.gz",
+        "expired",
+        "application/gzip"
+      ),
+    ];
+  }
+
+  if (fixture.key === "ten-files-overflow") {
+    return Array.from({ length: 10 }, (_value, index) =>
+      buildItem(
+        `fixture-upload-${index + 1}`,
+        `fixture-file-${String(index + 1).padStart(2, "0")}.txt`,
+        "completed"
+      )
+    );
+  }
+
+  return [buildItem("fixture-upload-local", SYNTHETIC_FILE_NAME, status)];
 }
 
 /** Deterministic picker options — no roles API / network. */
-export function buildSyntheticPickerOptions(): ChatAgentPickerOption[] {
-  return CANONICAL_AT_ABLE_TOOLS.map((tool) => ({
+export function buildSyntheticPickerOptions(
+  translate: (key: string) => string = (key) => key
+): ChatAgentPickerOption[] {
+  return CANONICAL_AGENT_DISPLAY_ORDER.map((tool) => ({
     tool,
-    labelKey: CANONICAL_AGENT_I18N_KEYS[tool],
-    label: CANONICAL_AGENT_DISPLAY_NAMES[tool],
+    labelKey: CANONICAL_AGENT_LABEL_I18N_KEYS[tool],
+    label: translate(CANONICAL_AGENT_LABEL_I18N_KEYS[tool]),
   }));
 }
-
-export const SYNTHETIC_ROLES_TOOL: string[] = [...CANONICAL_AT_ABLE_TOOLS];
 
 export const A2UI_LIFECYCLE_LONG_LABEL = "L".repeat(256);
 export const A2UI_LIFECYCLE_LONG_BODY = "B".repeat(4096);
@@ -304,6 +788,10 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   empty: "",
   populated: "",
   attachment: "",
+  "uploading-detail-open": "",
+  "mixed-ready-failed-expired": "",
+  "ten-files-overflow": "",
+  "incompatible-agent-blocked": "Synthetic incompatible attachment draft",
   sending: "Synthetic sending draft",
   "picker-open": "",
   "picker-search": "",
@@ -312,6 +800,12 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   "sidebar-compact": "",
   "sidebar-mobile-closed": "",
   "sidebar-mobile-open": "",
+  "agent-preview": "",
+  "sidebar-compact-explore-open": "",
+  "history-title-only": "",
+  "history-loading": "",
+  "history-empty": "",
+  "history-error": "",
   "short-generic": "",
   "long-generic": "",
   cited: "",
@@ -336,4 +830,8 @@ export const COMPOSER_MODEL_VALUE_BY_KEY: Partial<
   "send-stop": "Synthetic stop draft",
   "parallel-a": "Synthetic dialogue A draft",
   "parallel-b": "Synthetic dialogue B draft",
+  "wait-cot-chat-start": "Synthetic wait draft",
+  "wait-cot-chat-mid": "Synthetic wait draft",
+  "wait-cot-chat-flush": "Synthetic wait draft",
+  "wait-cot-knowledge-mid": "Synthetic wait draft",
 };

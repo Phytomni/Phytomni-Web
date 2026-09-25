@@ -96,14 +96,11 @@ func (h *Http) GracefulStart(ctx context.Context) {
 		}
 	}()
 
-	select {
-	case <-ctx.Done():
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := h.Shutdown(ctx); err != nil {
-			log.Fatal("Http server forced to shutdown:", err)
-		}
-		log.Println("Http server stopped")
-
+	<-ctx.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := h.Shutdown(ctx); err != nil {
+		log.Fatal("Http server forced to shutdown:", err)
 	}
+	log.Println("Http server stopped")
 }

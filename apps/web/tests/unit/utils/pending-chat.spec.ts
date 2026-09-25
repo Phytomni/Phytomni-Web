@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { mustGet } from "../../helpers/mockFactories";
 import {
   isValidPendingRecord,
   matchesChat,
@@ -6,9 +7,54 @@ import {
   writePendingChat,
   clearPendingChat,
   isLocalStorageChat,
+  upsertPendingChatListEntry,
+  removePendingChatListEntry,
   type PendingChatRecord,
   type ChatListEntry,
+  type SidebarChatListEntry,
 } from "@/utils/pending-chat";
+
+describe("upsertPendingChatListEntry", () => {
+  it("adds one selectable pending row and updates it without duplication", () => {
+    const chats: SidebarChatListEntry[] = [];
+
+    upsertPendingChatListEntry(chats, "new_visible", "x".repeat(55), {
+      date: "2026-07-21T00:00:00.000Z",
+    });
+    upsertPendingChatListEntry(chats, "new_visible", "Updated title", {
+      date: "2026-07-21T00:00:01.000Z",
+    });
+
+    expect(chats).toEqual([
+      expect.objectContaining({
+        id: 0,
+        dialogue_id: "new_visible",
+        title: "Updated title",
+        date: "2026-07-21T00:00:01.000Z",
+        isFavorite: false,
+        isPending: true,
+      }),
+    ]);
+  });
+
+  it("removes only the matching pending sidebar row", () => {
+    const chats: SidebarChatListEntry[] = [];
+    upsertPendingChatListEntry(chats, "new_keep", "keep");
+    upsertPendingChatListEntry(chats, "new_drop", "drop");
+    chats.push({
+      id: 9,
+      dialogue_id: "server-row",
+      title: "server",
+      date: "2026-07-21T00:00:00.000Z",
+      isFavorite: false,
+    });
+    removePendingChatListEntry(chats, "new_drop");
+    expect(chats.map((entry) => entry.dialogue_id)).toEqual([
+      "new_keep",
+      "server-row",
+    ]);
+  });
+});
 
 describe("isValidPendingRecord — strict predicate", () => {
   it("returns true for valid record", () => {
@@ -56,7 +102,7 @@ describe("isValidPendingRecord — strict predicate", () => {
   });
 });
 
-describe("matchesChat — ID + exact title only", () => {
+describe("matchesChat — authoritative ID only", () => {
   const pendingBase: PendingChatRecord = {
     isPending: true,
     messages: [{ role: "user", content: "exact title from user submission" }],
@@ -64,7 +110,10 @@ describe("matchesChat — ID + exact title only", () => {
   };
 
   it("returns true when chat.dialogue_id === pending.id", () => {
-    const chat: ChatListEntry = { dialogue_id: "stored-id-123", title: "anything" };
+    const chat: ChatListEntry = {
+      dialogue_id: "stored-id-123",
+      title: "anything",
+    };
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
   });
 
@@ -73,18 +122,18 @@ describe("matchesChat — ID + exact title only", () => {
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
   });
 
-  it("returns true when chat.title === first user message content", () => {
+  it("returns false when only the title matches", () => {
     const chat: ChatListEntry = {
       dialogue_id: "backend-real-id",
       title: "exact title from user submission",
     };
-    expect(matchesChat(chat, pendingBase, "temp-001")).toBe(true);
+    expect(matchesChat(chat, pendingBase, "temp-001")).toBe(false);
   });
 
   it("returns false when chat.title is only a prefix of the pending content (no substring fuzzy)", () => {
     const chat: ChatListEntry = {
       dialogue_id: "backend-real-id",
-      title: "exact title",  // shorter than pending.messages[0].content, so equality must fail
+      title: "exact title", // shorter than pending.messages[0].content, so equality must fail
     };
     expect(matchesChat(chat, pendingBase, "temp-001")).toBe(false);
   });
@@ -106,7 +155,7 @@ describe("matchesChat — ID + exact title only", () => {
     expect(matchesChat(chat, pending, "temp-001")).toBe(false);
   });
 
-  it("ambiguous title matches yield multiple candidates for restore (caller must retain temp)", () => {
+  it("same-title history rows never become reconciliation candidates", () => {
     const pending: PendingChatRecord = {
       isPending: true,
       messages: [{ role: "user", content: "shared title" }],
@@ -118,7 +167,7 @@ describe("matchesChat — ID + exact title only", () => {
     const candidates = chats.filter((c) =>
       matchesChat(c, pending, "new_ambiguous")
     );
-    expect(candidates).toHaveLength(2);
+    expect(candidates).toHaveLength(0);
   });
 });
 
@@ -130,12 +179,9 @@ describe("safeParse — log + null on fail", () => {
     });
   });
 
-  it.each([null, undefined, ""])(
-    "returns null for empty input %s",
-    (input) => {
-      expect(safeParse(input)).toBeNull();
-    }
-  );
+  it.each([null, undefined, ""])("returns null for empty input %s", (input) => {
+    expect(safeParse(input)).toBeNull();
+  });
 
   it("returns null + logs on malformed JSON", () => {
     const errSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
@@ -168,7 +214,7 @@ describe("writePendingChat", () => {
     writePendingChat("new_123", messages);
     const raw = localStorage.getItem("pending_chat_new_123");
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!);
+    const parsed = JSON.parse(mustGet(raw, "pending chat record"));
     expect(parsed).toEqual({
       id: "new_123",
       title: "hello",
@@ -185,7 +231,10 @@ describe("writePendingChat", () => {
     ];
     writePendingChat("new_123", messages, { title: "explicit caller title" });
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe("explicit caller title");
   });
@@ -198,7 +247,10 @@ describe("writePendingChat", () => {
     ];
     writePendingChat("new_123", messages);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe("second user");
   });
@@ -210,7 +262,10 @@ describe("writePendingChat", () => {
     ];
     writePendingChat("new_123", messages);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe("");
   });
@@ -219,7 +274,10 @@ describe("writePendingChat", () => {
     const title49 = "x".repeat(49);
     writePendingChat("new_123", [{ role: "user", content: title49 }]);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe(title49);
     expect(parsed.title.length).toBe(49);
@@ -229,7 +287,10 @@ describe("writePendingChat", () => {
     const title50 = "x".repeat(50);
     writePendingChat("new_123", [{ role: "user", content: title50 }]);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe(title50);
     expect(parsed.title.length).toBe(50);
@@ -239,7 +300,10 @@ describe("writePendingChat", () => {
     const title51 = "x".repeat(51);
     writePendingChat("new_123", [{ role: "user", content: title51 }]);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.title).toBe("x".repeat(50) + "...");
     expect(parsed.title.length).toBe(53);
@@ -277,7 +341,10 @@ describe("writePendingChat", () => {
     ];
     writePendingChat("new_123", messages);
     const parsed = JSON.parse(
-      localStorage.getItem("pending_chat_new_123")!
+      mustGet(
+        localStorage.getItem("pending_chat_new_123"),
+        "pending chat record"
+      )
     );
     expect(parsed.messages[0].attachedFiles).toEqual([
       {
@@ -291,18 +358,14 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on empty-string dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("", [{ role: "user", content: "hi" }]);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns void with console.warn on null dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat(null as unknown as string, [
       { role: "user", content: "hi" },
     ]);
@@ -311,9 +374,7 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on undefined dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat(undefined as unknown as string, [
       { role: "user", content: "hi" },
     ]);
@@ -322,18 +383,14 @@ describe("writePendingChat", () => {
   });
 
   it("returns void with console.warn on empty messages array", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("new_123", []);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns void with console.warn on null messages", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     writePendingChat("new_123", null as unknown as never[]);
     expect(localStorage.length).toBe(0);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
@@ -391,8 +448,8 @@ describe("writePendingChat", () => {
 
 describe("clearPendingChat", () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it("removes key when present", () => {
@@ -413,9 +470,7 @@ describe("clearPendingChat", () => {
   });
 
   it("returns void with console.warn on invalid dialogueId", () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockReturnValue(undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockReturnValue(undefined);
     clearPendingChat("");
     clearPendingChat(null as unknown as string);
     clearPendingChat(undefined as unknown as string);
@@ -478,7 +533,7 @@ describe("writePendingChat mode", () => {
   });
 });
 
-/** Mirrors index.vue streaming branch of getHistoryQuestionData (no blockingDialogueId). */
+/** Mirrors ChatView.vue ID-only pending lookup without a response dialogue id. */
 function streamingReconciliationOutcome(
   formattedData: ChatListEntry[],
   pendingData: PendingChatRecord,
@@ -492,16 +547,25 @@ function streamingReconciliationOutcome(
   return "retain-ambiguous";
 }
 
-describe("streaming history reconciliation (getHistoryQuestionData contract)", () => {
+describe("history reconciliation without a response dialogue id", () => {
   const pending: PendingChatRecord = {
     isPending: true,
     messages: [{ role: "user", content: "unique stream title" }],
   };
 
-  it("exactly one history candidate reconciles", () => {
+  it("a unique same-title history row does not reconcile", () => {
     const chats: ChatListEntry[] = [
       { dialogue_id: "srv-other", title: "other" },
       { dialogue_id: "srv-exact", title: "unique stream title" },
+    ];
+    expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
+      "retain-no-match"
+    );
+  });
+
+  it("an exact temporary dialogue id remains an ID match", () => {
+    const chats: ChatListEntry[] = [
+      { dialogue_id: "new_stream", title: "server-normalized title" },
     ];
     expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
       "reconcile"
@@ -517,13 +581,13 @@ describe("streaming history reconciliation (getHistoryQuestionData contract)", (
     );
   });
 
-  it("multiple candidates retain temp and pending", () => {
+  it("multiple same-title rows remain non-candidates", () => {
     const chats: ChatListEntry[] = [
       { dialogue_id: "srv-a", title: "unique stream title" },
       { dialogue_id: "srv-b", title: "unique stream title" },
     ];
     expect(streamingReconciliationOutcome(chats, pending, "new_stream")).toBe(
-      "retain-ambiguous"
+      "retain-no-match"
     );
   });
 });
@@ -572,13 +636,32 @@ describe("blocking restore ordering (restorePendingChats skip contract)", () => 
     ];
     const reconciled: Array<{ tempId: string; serverId: string }> = [];
 
-    restorePendingChatsHarness(
-      knownChats,
-      new Set([tempId]),
-      (t, s) => {
-        reconciled.push({ tempId: t, serverId: s });
-      }
+    restorePendingChatsHarness(knownChats, new Set([tempId]), (t, s) => {
+      reconciled.push({ tempId: t, serverId: s });
+    });
+
+    expect(reconciled).toEqual([]);
+    expect(localStorage.getItem(`pending_chat_${tempId}`)).not.toBeNull();
+  });
+
+  it("does not reconcile a failed pending chat to an old same-title history row", () => {
+    const tempId = "new_block";
+    localStorage.setItem(
+      `pending_chat_${tempId}`,
+      JSON.stringify({
+        id: tempId,
+        isPending: true,
+        messages: [{ role: "user", content: "repeated question" }],
+      })
     );
+    const knownChats: ChatListEntry[] = [
+      { dialogue_id: "old-dialogue", title: "repeated question" },
+    ];
+    const reconciled: Array<{ tempId: string; serverId: string }> = [];
+
+    restorePendingChatsHarness(knownChats, undefined, (t, s) => {
+      reconciled.push({ tempId: t, serverId: s });
+    });
 
     expect(reconciled).toEqual([]);
     expect(localStorage.getItem(`pending_chat_${tempId}`)).not.toBeNull();

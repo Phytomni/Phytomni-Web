@@ -17,12 +17,14 @@
           :title="title"
           :metadata="metadata"
           :status="status"
+          :format-scientific-agent-name="formatScientificAgentName"
           :back-label="backLabel"
           :close-label="closeLabel"
           :action-label="actionLabel"
+          :menu-items="menuItems"
           @back="emit('back')"
           @close="emit('close')"
-          @action="emit('action')"
+          @action="emit('action', $event)"
         />
       </slot>
 
@@ -88,16 +90,14 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from "vue";
+import type { ArtifactOverflowItem } from "./artifact-overflow";
 import ResearchArtifactHeader from "./ResearchArtifactHeader.vue";
 
 type ResearchArtifactTab = "content" | "evidence" | "activity" | "downloads";
 type ResearchArtifactTabLabels = Partial<Record<ResearchArtifactTab, string>>;
 type ResearchArtifactContentLayout = "reading" | "wide";
 type ResearchArtifactReportStatus =
-  | "loading"
-  | "degraded"
-  | "complete"
-  | "failed";
+  "loading" | "degraded" | "complete" | "failed";
 
 const DEFAULT_TAB_LABELS: Record<ResearchArtifactTab, string> = {
   content: "Report",
@@ -117,7 +117,9 @@ const props = withDefaults(
     title: string;
     metadata?: string | string[];
     status?: string;
+    formatScientificAgentName?: boolean;
     tab?: ResearchArtifactTab;
+    tabs?: readonly ResearchArtifactTab[];
     tabLabels?: ResearchArtifactTabLabels;
     contentLayout?: ResearchArtifactContentLayout;
     reportStatus?: ResearchArtifactReportStatus;
@@ -126,41 +128,48 @@ const props = withDefaults(
     backLabel: string;
     closeLabel: string;
     actionLabel: string;
+    menuItems?: readonly ArtifactOverflowItem[];
   }>(),
   {
     tab: "content",
     tabLabels: () => ({}),
     contentLayout: "reading",
     tablistLabel: "Report sections",
+    formatScientificAgentName: false,
+    menuItems: () => [],
   }
 );
 
 const emit = defineEmits<{
   (event: "back"): void;
   (event: "close"): void;
-  (event: "action"): void;
+  (event: "action", command: string): void;
   (event: "tab", tab: ResearchArtifactTab): void;
 }>();
 
-const shellRef = ref<HTMLElement | null>(null);
-const selectedTab = ref<ResearchArtifactTab>(props.tab);
 const instanceId = getCurrentInstance()?.uid ?? 0;
 const idBase = computed(
   () => props.artifactId || `research-artifact-${instanceId}`
 );
+const visibleTabs = computed<ResearchArtifactTab[]>(() => {
+  const requestedTabs = new Set(props.tabs ?? TAB_ORDER);
+  const filteredTabs = TAB_ORDER.filter((tab) => requestedTabs.has(tab));
+  return filteredTabs.length > 0 ? filteredTabs : [...TAB_ORDER];
+});
+const shellRef = ref<HTMLElement | null>(null);
+const selectedTab = ref<ResearchArtifactTab>(
+  visibleTabs.value.includes(props.tab) ? props.tab : visibleTabs.value[0]
+);
 const tabItems = computed(() =>
-  TAB_ORDER.map((id) => ({
+  visibleTabs.value.map((id) => ({
     id,
     label: props.tabLabels[id] || DEFAULT_TAB_LABELS[id],
   }))
 );
 
-watch(
-  () => props.tab,
-  (tab) => {
-    selectedTab.value = tab;
-  }
-);
+watch([() => props.tab, visibleTabs], ([tab, tabs]) => {
+  selectedTab.value = tabs.includes(tab) ? tab : tabs[0];
+});
 
 function tabId(tab: ResearchArtifactTab): string {
   return `${idBase.value}-tab-${tab}`;
@@ -183,7 +192,7 @@ function activateTab(tab: ResearchArtifactTab, moveFocus = false): void {
       shellRef.value
         ?.querySelector<HTMLElement>(`[data-tab-id="${tab}"]`)
         ?.focus();
-    });
+    }).catch(() => undefined);
   }
 }
 
@@ -191,23 +200,25 @@ function handleTabKeydown(
   event: KeyboardEvent,
   tab: ResearchArtifactTab
 ): void {
-  const currentIndex = TAB_ORDER.indexOf(tab);
+  const tabs = visibleTabs.value;
+  const currentIndex = tabs.indexOf(tab);
+  if (currentIndex < 0) return;
   let nextIndex: number | null = null;
 
   if (event.key === "ArrowRight") {
-    nextIndex = (currentIndex + 1) % TAB_ORDER.length;
+    nextIndex = (currentIndex + 1) % tabs.length;
   } else if (event.key === "ArrowLeft") {
-    nextIndex = (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
   } else if (event.key === "Home") {
     nextIndex = 0;
   } else if (event.key === "End") {
-    nextIndex = TAB_ORDER.length - 1;
+    nextIndex = tabs.length - 1;
   }
 
   if (nextIndex === null) return;
 
   event.preventDefault();
-  activateTab(TAB_ORDER[nextIndex], true);
+  activateTab(tabs[nextIndex], true);
 }
 </script>
 
@@ -285,6 +296,13 @@ function handleTabKeydown(
 .research-artifact-shell__tab:focus-visible {
   outline: 2px solid var(--phy-color-focus);
   outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+  .research-artifact-shell__tab.is-active::after {
+    border-block-end: 2px solid Highlight;
+    background: none;
+  }
 }
 
 .research-artifact-shell__body {

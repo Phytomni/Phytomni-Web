@@ -1,0 +1,2 @@
+token = "fixture"
+password = "fixture"

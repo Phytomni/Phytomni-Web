@@ -1,5 +1,21 @@
 // English language pack.
 export default {
+  scientificCif: {
+    title: "Protein structure",
+    surface: "Surface",
+    on: "On",
+    off: "Off",
+    reset: "Reset view",
+    enlarge: "Enlarge",
+    close: "Close structure view",
+    keyboardHelp:
+      "Use arrow keys to rotate, Shift and arrow keys to pan, and plus or minus to zoom while the structure is focused.",
+    label: "Interactive protein structure",
+    loadingSource: "Loading structure",
+    buildingSurface: "Building molecular surface",
+    error: "Structure unavailable",
+    unavailable: "Resource unavailable",
+  },
   // Common parts
   common: {
     confirm: "Confirm",
@@ -74,9 +90,9 @@ export default {
         'First, let\'s get to know the navigation. Quick access to functions: "Start New" initiates a brand-new task, "Deep Genome Database" allows you to view gene information, "Favorites" is for collecting frequently-used content, and there are also historical interactions categorized by time to help you efficiently find past records.',
     },
     step2: {
-      title: "Try a starter prompt",
+      title: "Explore agent cases",
       content:
-        "These suggestion cards above the input are starter prompts. Click one to fill the composer with an example question.",
+        "Browse the cases below the composer to open an existing agent demonstration.",
     },
     step3: {
       title: "Conversation Window",
@@ -193,6 +209,10 @@ export default {
   register: {
     title: "Create Account",
     subtitle: "Create your Phytomni account",
+    closedTitle: "Registration unavailable",
+    closedSubtitle: "New account registration is currently closed.",
+    closedDescription: "Please contact an administrator to open an account.",
+    returnToLogin: "Return to Login",
     email: "Email",
     emailPlaceholder: "Please enter your email address",
     password: "Password",
@@ -234,8 +254,6 @@ export default {
     icpFiling: "京ICP备07026971号-9",
     versionLabel: "Version",
     effectiveLabel: "Effective date",
-    draftBanner:
-      "Draft pending review by Biotechnology Research Institute, CAAS. Not a final legal instrument.",
     loadError: "Unable to load this document. Please try again later.",
   },
 
@@ -340,16 +358,168 @@ export default {
     useTool: "Use Tool",
     stepResult: "Step Result",
     resultImageAlt: "Result image {index}",
+    tableRowCount: "{count} rows",
     sendFailed: "Failed to send message, please try again later.",
     timeoutFailed:
       "The request timed out. Try narrowing your query or retry later.",
+    contextDegraded:
+      "Answer saved. Conversation context will be rebuilt on the next message.",
+    routingFallbackChat:
+      "No specialized agent was identified; this turn fell back to Chat.",
+    routingSelectedAgent: "{agent}",
+    requestId: "Request ID",
     sendAriaLabel: "Send",
     abortAriaLabel: "Stop answering",
     progress: {
       processing: "Processing",
+      selectingAgent: "Selecting an agent…",
       valueText: "Processing, {percent}%",
+      etaSeconds: "Usually {min}–{max} seconds",
+      etaMinutes: "Usually {min}–{max} min",
+      etaHours: "Usually {min}–{max} hours",
+      cotLabel: "Working steps",
+      cotCount: "{shown}/{total}",
+      stages: {
+        chat: {
+          prepareContext: "Preparing conversation context",
+          generate: "Writing the answer",
+          followUp: "Preparing follow-up questions",
+        },
+        knowledge: {
+          processFiles: "Processing attached files",
+          retrieve: "Searching the literature",
+          prepareGenerate: "Preparing the cited draft",
+          generate: "Writing the cited answer",
+          assemble: "Assembling citations",
+          prepareFollowUp: "Preparing follow-up prompts",
+          followUp: "Writing follow-up questions",
+        },
+        data: {
+          prepareRetrieve: "Preparing catalog lookup",
+          searchKnowledge: "Checking related knowledge",
+          collectRetrieve: "Collecting catalog matches",
+          prepareRewrite: "Preparing query rewrite",
+          rewriteQuery: "Rewriting the data query",
+          applyRewrite: "Applying the rewritten query",
+          searchCatalog: "Searching the data catalog",
+        },
+        briefGene: {
+          parseQuery: "Reading the gene query",
+          fetchAnnotation: "Fetching gene annotations",
+          prepareRetrieve: "Preparing literature tasks",
+          retrieveWorker: "Searching related literature",
+          retrieveReduce: "Merging literature hits",
+          prepareGenerate: "Preparing the gene brief",
+          generate: "Writing the gene brief",
+          prepareFollowUp: "Preparing follow-up prompts",
+          followUp: "Writing follow-up questions",
+        },
+        review: {
+          planPrep: "Preparing review questions",
+          planPost: "Locking the review plan",
+          retrieveDispatch: "Dispatching literature retrieval",
+          retrieveWorker: "Retrieving literature",
+          retrieveReduce: "Merging retrieved evidence",
+          draftDispatch: "Dispatching section drafts",
+          draftWorker: "Drafting review sections",
+          draftReduce: "Merging drafted sections",
+          reviewDispatch: "Dispatching section review",
+          reviewWorker: "Reviewing drafted sections",
+          reviewReduce: "Merging review notes",
+          reviseDispatch: "Dispatching revisions",
+          reviseWorker: "Revising the manuscript",
+          reviseReduce: "Merging revised sections",
+          summaryPrep: "Preparing the review summary",
+          summaryPost: "Writing the review summary",
+          prepareFollowUp: "Preparing follow-up prompts",
+          followUp: "Writing follow-up questions",
+        },
+        analyst: {
+          parsePrep: "Preparing to parse the request",
+          parsePost: "Parsing the analysis request",
+          selectPrep: "Preparing data selection",
+          selectPost: "Selecting datasets",
+          methodPrep: "Preparing method lookup",
+          methodKnowledge: "Retrieving analysis methods",
+          methodPost: "Locking selected methods",
+          planPrep: "Preparing the analysis plan",
+          planPost: "Writing the analysis plan",
+          checkPrep: "Preparing plan checks",
+          checkPost: "Checking the analysis plan",
+          toolExtractPrep: "Preparing tool extraction",
+          toolExtractPost: "Extracting required tools",
+          toolRetrieve: "Retrieving tool configurations",
+          submit: "Submitting compute jobs",
+          pool: "Waiting for analysis results",
+        },
+        deepGenome: {
+          brief: "Writing the gene background",
+          prepare: "Preparing multi-omics tasks",
+          tissues: "Collecting tissue expression",
+          cultivars: "Collecting cultivar expression",
+          treatments: "Collecting treatment expression",
+          genotypes: "Collecting genotype expression",
+          singleCell: "Collecting single-cell evidence",
+          promoter: "Collecting promoter evidence",
+          smep: "Collecting SMEP evidence",
+          smoc: "Collecting SMOC evidence",
+          protein: "Collecting protein structure",
+          design: "Collecting design evidence",
+          evolution: "Collecting evolution evidence",
+          synthesize: "Synthesizing collected evidence",
+          experiment: "Drafting suggested experiments",
+          protocol: "Drafting protocols",
+          discussion: "Writing the discussion",
+          summary: "Writing the deep-genome summary",
+          followUp: "Preparing follow-up questions",
+        },
+        design: {
+          prepare: "Preparing protein and promoter design tasks",
+          protein: "Submitting protein design",
+          promoter: "Submitting promoter design",
+          resume: "Resuming external design work",
+          wait: "Waiting for design results",
+        },
+        network: {
+          prepare: "Preparing network analysis",
+          submit: "Submitting network analysis",
+          build: "Building the regulatory network",
+          wait: "Waiting for network results",
+        },
+        research: {
+          validate: "Validating the research request",
+          resolveInputs: "Resolving research inputs",
+          extract: "Extracting research goals",
+          plan: "Planning in-silico experiments",
+          prepare: "Preparing research tasks",
+          run: "Running analysis tasks",
+          resume: "Resuming external research work",
+          pack: "Waiting for results and packaging",
+        },
+      },
     },
     botReport: {
+      unavailable: "Scientific report unavailable",
+      executionFailed:
+        "Execution failed; the available partial report is retained.",
+      warnings: {
+        report_artifact_count_capped:
+          "Some scientific artifacts were not included in the report.",
+        report_context_truncated:
+          "Some scientific context was shortened for the report.",
+        report_artifact_size_exceeded:
+          "A scientific artifact exceeded the report size limit.",
+        report_artifact_read_failed:
+          "A scientific artifact could not be read for the report.",
+        report_artifact_empty:
+          "A scientific artifact contained no report text.",
+        report_no_scientific_text:
+          "No validated scientific text was available for synthesis.",
+        report_synthesis_failed:
+          "Final report synthesis was unavailable. Available scientific content and result files are retained.",
+        deep_genome_report_degraded:
+          "Some analyses were unavailable. Available scientific content is retained.",
+      },
       waiting: "Preparing the report",
       partial: "Partial report available",
       degraded: "Some analysis is unavailable",
@@ -360,7 +530,17 @@ export default {
     },
     generationStopped: "Generation stopped",
     relatedDocuments: "Reference Material",
+    referenceUnavailable: "Reference details unavailable.",
     welcomeTitle: "What would you like to explore?",
+    history: {
+      loading: "Loading conversation history",
+      emptyTitle: "This conversation has no messages yet",
+      emptySubtitle: "Start with a question to continue this conversation.",
+      errorTitle: "Conversation history could not be loaded",
+      errorSubtitle:
+        "Please try again. Your other conversations are unchanged.",
+      retry: "Try again",
+    },
     mode: {
       instant: "Instant",
       expert: "Expert",
@@ -405,28 +585,105 @@ export default {
     reasoning: { show: "Show reasoning", hide: "Hide reasoning" },
     welcomeSubtitle:
       "Start with literature, a gene or species, or a deeper genomic analysis.",
-    starter: {
-      title: "Try one of these",
-      geneLabel: "Query a gene",
-      geneDesc: "Function and homologs of a gene",
-      genePrompt:
-        "Tell me about the function and homologs of gene Os01g0177400",
-      speciesLabel: "Explore a species",
-      speciesDesc: "Key genes and pathways of a species",
-      speciesPrompt:
-        "Which key genes are involved in drought resistance in rice?",
-      deepGenomeLabel: "Deep genome analysis",
-      deepGenomeDesc: "Run a deep genome report on a gene",
-      deepGenomePrompt: "Run a deep genome analysis for gene Os01g0177400",
+    cases: {
+      title: "Explore Agent Cases",
+      ariaLabel: "Agent case demonstrations",
+      askThisAgent: "Ask this agent",
+      demoEmpty: {
+        title: "No example conversation yet",
+        body: "This is a static example. A sample report will be added later. You can ask this agent now.",
+      },
+      demoLoadError: {
+        title: "Could not load this example",
+        body: "Return to chat and try again, or ask this agent now.",
+      },
     },
     inputPlaceholderTip: "Please enter your question",
     uploadFile:
-      "Support file upload(max 10, accept .pdf,.doc,.xlsx,.ppt,.txt,.png)",
+      "Attach biological data or text files (up to 10 GiB each, {maxFiles} files). You can also paste copied files.",
+    attachmentTargetUnavailable:
+      "This agent can't accept attachments. Remove them or choose a compatible agent.",
+    attachmentTargetUnsupported: "This agent does not accept file uploads.",
+    attachmentErrors: {
+      unsupported_type:
+        '"{file}" is not supported by this Agent. Check the Agent capability before retrying.',
+      file_too_large: '"{file}" exceeds the {maxFileMb} MB per-file limit.',
+      total_too_large: "Attachments cannot exceed {maxTotalMb} MB in total.",
+      too_many_files: "You can attach up to {maxFiles} files.",
+      invalid_filename: '"{file}" has an invalid filename.',
+      invalid_size: '"{file}" must be between 1 byte and 10 GiB.',
+      invalid_metadata: '"{file}" has invalid file metadata.',
+      upload_disabled: "File uploads are currently unavailable.",
+      upload_unavailable: "The file upload service is temporarily unavailable.",
+    },
+    upload: {
+      alreadyAttached: "Already attached: {file}",
+      attachments: "Attachments",
+      chipLabel: "{file}, {suffix}, {status}, {metric}",
+      fileSuffixFallback: "FILE",
+      more: "+{count} more",
+      hiddenFailed: "{count} failed",
+      hiddenExpired: "{count} expired",
+      status: {
+        queued: "Queued",
+        creating: "Preparing",
+        uploading: "Uploading",
+        paused: "Paused",
+        failed: "Upload failed",
+        completing: "Finalizing",
+        completed: "Ready to send",
+        aborted: "Cancelled",
+        expired: "Session expired",
+      },
+      stateChanged: "{file}: {status}",
+      progress: "{loaded} / {total} ({percent}%)",
+      progressLabel: "Upload progress for {file}",
+      speed: "{rate}",
+      eta: "About {seconds}s left",
+      pause: "Pause",
+      resume: "Resume",
+      retry: "Retry",
+      reselect: "Choose file",
+      cancel: "Cancel",
+      remove: "Remove",
+      actions: {
+        pause: "Pause upload for {file}",
+        resume: "Resume upload for {file}",
+        retry: "Retry upload for {file}",
+        reselect: "Choose the original file for {file}",
+        cancel: "Cancel upload for {file}",
+        remove: "Remove {file}",
+      },
+      completedFile: "Completed file",
+    },
     timeGroup: {
       today: "Today",
       yesterday: "Yesterday",
       week: "Within 7 Days",
       older: "Older Than a Week",
+    },
+    agentLabels: {
+      chatAgent: "Chat Agent",
+      knowledgeAgent: "Knowledge Agent",
+      dataAgent: "Data Agent",
+      analystAgent: "Analyst Agent",
+      reviewAgent: "Review Agent",
+      briefGeneAgent: "Brief Gene Agent",
+      deepGenomeAgent: "Deep Genome Agent",
+      inSilicoResearchAgent: "In Silico Research Agent",
+      geneNetworkAgent: "Gene Network Agent",
+      digitalDesignAgent: "Digital Design Agent",
+    },
+    agentPresentation: {
+      chatAgentAlt: "Chat Agent workflow flowchart",
+      knowledgeAgentAlt: "Knowledge Agent workflow flowchart",
+      dataAgentAlt: "Data Agent workflow flowchart",
+      analystAgentAlt: "Analyst Agent workflow flowchart",
+      reviewAgentAlt: "Review Agent workflow flowchart",
+      inSilicoResearchAgentAlt: "In Silico Research Agent workflow flowchart",
+      geneNetworkAgentAlt: "Gene Network Agent workflow flowchart",
+      deepGenomeAgentAlt: "Deep Genome Agent workflow flowchart",
+      digitalDesignAgentAlt: "Digital Design Agent workflow flowchart",
     },
     agents: {
       chatAgent:
@@ -474,6 +731,8 @@ export default {
       undoDislike: "Undo dislike",
       downloadAttachments: "Download attachments",
       downloadFormats: "Download as format",
+      download: "Download",
+      attachments: "Attachments",
     },
     favorites: "Favorites",
     noFavorites: "No Favorites",
@@ -490,11 +749,14 @@ export default {
     downloadFile: "Download File",
     testParallel: "Test parallel chats",
     refreshReply: "Refresh reply",
+    refreshConversationGone:
+      "This conversation is no longer available. Open it again from the sidebar.",
     abortTooltip: "Abort answer",
     loadingAgentPerms: "Loading agent permissions...",
     agentPicker: {
       loading: "Loading agent permissions...",
       empty: "No agents available for your account",
+      noAvailableAgents: "No agents are available for this account.",
       auto: "Auto",
       label: "Choose an agent",
       searchPlaceholder: "Search agents…",
@@ -514,6 +776,44 @@ export default {
       fetchError: "Failed to load log",
       updateError: "Failed to update log",
       retry: "Retry",
+      reconnecting: "Reconnecting to the Agent log…",
+      pending: "The Agent log is not available yet.",
+      terminalEmpty: "This Agent run completed without a log.",
+      truncated: "Only the available portion of this log is shown.",
+      historicalRefresh: "Refresh historical log",
+    },
+    lifecycle: {
+      preparing: "Preparing",
+      resolving_inputs: "Resolving inputs",
+      planning: "Planning tasks",
+      running: "Running",
+      finalizing: "Finalizing",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      timed_out: "Timed out",
+      cancelled: "Cancelled",
+      resultUnavailable:
+        "The task finished, but the report is not yet available.",
+      childKindFallback: "Child {ordinal}",
+      childKind: {
+        analyst: "Analysis",
+        research: "Research unit",
+        network: "Network analysis",
+        design: "Design analysis",
+        protein_structure_analysis: "Protein structure",
+        promoter_analysis: "Promoter design",
+        protein_design_analysis: "Protein design",
+        promoter_design_analysis: "Promoter design",
+        gene_network_analysis: "Gene network analysis",
+      },
+      childError: {
+        input_rejected:
+          "This child was rejected because the input is not valid.",
+        plan_rejected: "This child was rejected because the plan is not valid.",
+        remote_failed: "This child did not succeed.",
+        remote_cancelled: "This child was cancelled.",
+        fallback: "This child did not succeed.",
+      },
     },
     logUpdatedSuccess: "Log updated successfully",
     logUpdateFailed: "Failed to update log",
@@ -533,8 +833,22 @@ export default {
     transferProgressText: "{phase}: {loaded} / {total} ({percent}%)",
     transferProgressIndeterminate: "{phase}: {loaded} transferred",
     downloadCancelled: "Download cancelled",
+    pdfFontsUnavailable:
+      "PDF export is temporarily unavailable. You can still download Word or Markdown.",
     downloadError:
       "An error occurred while downloading, please contact the administrator!",
+    resultArchive: {
+      preparing: "Preparing result archive",
+      download: "Download {name}",
+      generationFailed: "Result archive generation failed",
+      none: "Completed with no downloadable attachments",
+      manifestInvalid: "Completed, but attachment packaging is incomplete",
+      unavailable: "Result archive is not available",
+      retry: "Retry archive generation",
+      retrying: "Retrying archive generation",
+      retryFailed: "The archive retry could not be started.",
+      downloadFailed: "The result archive could not be downloaded.",
+    },
   },
 
   // History module
@@ -624,6 +938,8 @@ export default {
       fetchDataFailed: "Failed to obtain data list",
     },
     operate: "Operate",
+    cancel: "Cancel",
+    cancelFailed: "Task cancellation is no longer available",
   },
 
   // User Feedback
@@ -662,7 +978,6 @@ export default {
     attempts: "attempts",
     ipWhitelist: "IP Whitelist",
     ipWhitelistPlaceholder: "Please enter IP addresses, one per line",
-    enableRegistration: "Enable User Registration",
     enableFileUpload: "Enable File Upload",
     enableChatHistory: "Enable Chat History",
     maxChatHistory: "Max Chat History Records",
@@ -692,11 +1007,41 @@ export default {
     analyst: {
       title: "Analyst Agent",
       subtitle:
-        "Analysis Agent - Provides bioinformatics data analysis and interpretation services",
-      sampleTask: "Static sample task ID",
-      sampleResult: "Static sample result",
-      taskCreated: "Task created successfully",
-      downloadResults: "Download sample results",
+        "Submit an analysis objective and datasets for a structured bioinformatics report.",
+      agentLabel: "Analysis workflow",
+      questionLabel: "Analysis question",
+      questionPlaceholder:
+        "Describe the analysis, species, and comparison you need",
+      contextFilesLabel: "Analysis files",
+      contextFilesHint:
+        "Attach supported documents or biological data, up to {maxFiles} files and {maxFileSize} each.",
+      submit: "Start analysis run",
+      submitting: "Submitting…",
+      reset: "Start another run",
+      progress: "Analysis run in progress",
+      complete: "Report ready",
+      degraded: "The report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
+      reportTitle: "Analysis report",
+      report: "Report",
+      evidence: "Evidence",
+      activity: "Activity",
+      downloads: "Downloads",
+      download: "Request download",
+      noEvidence: "No structured evidence is available for this run.",
+      noDownloads: "No safe downloads are available for this run.",
+      emptyReport: "The analysis report is not available yet.",
+      capabilityLoading: "Checking analysis capability…",
+      unavailableTitle: "Analyst Agent is not available",
+      unavailableMessage:
+        "This route is reserved for a capability-gated analysis workflow. No result was created.",
+      questionRequired: "Enter an analysis question before submitting.",
+      questionTooLong: "The analysis question is too long.",
+      submitFailed:
+        "The analysis run could not be submitted. Please try again.",
+      downloadFailed: "The download request could not be completed.",
+      sectionsLabel: "Analysis report sections",
     },
     data: {
       title: "Data Agent",
@@ -707,6 +1052,11 @@ export default {
         cdsLength: "Sample output — CDS length",
         homologs: "Sample output — homologous genes",
       },
+    },
+    review: {
+      title: "Review Agent",
+      subtitle:
+        "Review Agent - Provides structured literature reviews for plant research topics",
     },
     briefGene: {
       title: "Brief Gene Agent",
@@ -728,11 +1078,25 @@ export default {
       imageViewerTitle: "Image Viewer",
       references: "References",
       noReferences: "No references available.",
+      material: {
+        back: "Back to report",
+        download: "Download original",
+        excerpt: "View source excerpt",
+        excerptTitle: "Source excerpt · Reference {index}",
+        loading: "Opening material…",
+        unavailable: "This material is not available for this report.",
+        failed: "This material could not be opened. Please try again.",
+      },
     },
     geneNetwork: {
       title: "Gene Network Agent",
       subtitle:
         "Gene Network Agent - Provides gene network analysis and phenotype trait association services",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download requests",
+      startingDownload: "Starting download {current} of {total}",
+      allDownloadsStarted: "All five download requests started",
       agentLabel: "Gene network workflow",
       questionLabel: "Network question",
       questionPlaceholder:
@@ -767,7 +1131,8 @@ export default {
       questionTooLong: "The network question is too long.",
       traitValidation: "Choose a supported Trait Ontology target.",
       speciesValidation: "Choose a supported species.",
-      submitFailed: "The gene network run could not be submitted. Please try again.",
+      submitFailed:
+        "The gene network run could not be submitted. Please try again.",
       downloadFailed: "The download request could not be completed.",
       sectionsLabel: "Gene network report sections",
       traits: {
@@ -790,6 +1155,9 @@ export default {
       title: "Digital Design Agent",
       subtitle:
         "Digital Design Agent - Provides protein structure prediction and design services based on gene IDs",
+      sampleTask: "Static sample task ID",
+      sampleResult: "Static sample result",
+      downloadResults: "Start download request",
       agentLabel: "Digital design workflow",
       questionLabel: "Design question",
       questionPlaceholder:
@@ -800,13 +1168,16 @@ export default {
       speciesCodePlaceholder: "For example, ath",
       contextFilesLabel: "Context files (optional)",
       contextFilesHint:
-        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
+        "Attach biological or text data in any format, up to 10 files and 10 GiB each.",
       submit: "Start design run",
       submitting: "Submitting…",
       reset: "Start another run",
       progress: "Design run in progress",
       complete: "Design report ready",
-      degraded: "The design report is partial because some analysis was unavailable.",
+      degraded:
+        "The design report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
       trackingDegraded:
         "Run tracking is degraded. The displayed state may not include the latest Bot update.",
       reportTitle: "Digital design report",
@@ -823,7 +1194,7 @@ export default {
       unavailableMessage:
         "This route is reserved for a capability-gated design workflow. No result was created.",
       fileValidation:
-        "Some files were rejected. Check the supported types and 10 MB size limit.",
+        "Some files were rejected. Check the file metadata and 10 GiB size limit.",
       fileCountValidation: "You can upload at most 10 files.",
       questionRequired: "Enter a design question before submitting.",
       questionTooLong: "The design question is too long.",
@@ -853,16 +1224,15 @@ export default {
         "Describe the study you want to reproduce or explore",
       contextFilesLabel: "Paper and context files",
       contextFilesHint:
-        "Upload up to 10 files (.pdf, .doc, .xlsx, .ppt, .txt, or .png), up to 10 MB each.",
-      datasetDescriptionLabel: "Dataset description (optional)",
-      datasetDescriptionPlaceholder:
-        "Describe the dataset, species, parameters, or substitutions to consider",
+        "Attach papers or biological data in any format, up to {maxFiles} files and {maxFileSize} each.",
       submit: "Start research run",
       submitting: "Submitting…",
       reset: "Start another run",
       progress: "Research run in progress",
       complete: "Report ready",
       degraded: "The report is partial because some analysis was unavailable.",
+      unsupportedAssetFormat:
+        "This Agent cannot process that asset format. The upload completed; choose an input format supported by this Agent.",
       reportTitle: "Research report",
       report: "Report",
       evidence: "Evidence",
@@ -877,11 +1247,10 @@ export default {
       unavailableMessage:
         "This route is reserved for a capability-gated research workflow. No result was created.",
       fileValidation:
-        "Some files were rejected. Check the supported types and 10 MB size limit.",
+        "Some files were rejected. Check the file metadata and 10 GiB size limit.",
       fileCountValidation: "You can upload at most 10 files.",
       questionRequired: "Enter a research question before submitting.",
       questionTooLong: "The research question is too long.",
-      datasetTooLong: "The dataset description is too long.",
       submitFailed:
         "The research run could not be submitted. Please try again.",
       downloadFailed: "The download request could not be completed.",
@@ -962,9 +1331,28 @@ Phytomni accomplishes tasks by orchestrating a team of specialized agents. Here'
 
 -   The **Gene Network Agent** accepts user-defined gene lists to identify interaction partners, regulatory relationships, and functional associations. It synthesizes this information into coherent networks (e.g., hormone–gene–phenotype maps), enabling on-demand candidate gene network construction to help uncover biological pathways and link molecular interactions to phenotypes.
 
+-   The **Brief Gene Agent** creates a rapid, citation-backed orientation for a target gene. It summarizes known functions, key evidence, and practical research leads when you need a focused starting point before commissioning a full gene report.
+
 -   The **Deep Genome Agent** generates in-depth functional summaries for target genes by integrating literature, multi-omics data, and network information. Its final output is a gene-focused review report covering gene function, regulation, known variants, and potential breeding applications—serving as a one-stop reference for researchers.
 
--   The **Digital Design Agent** leverages the other agents for allele and protein engineering. Via natural language queries, it supports protein sequence modification and gene promoter optimization, predicts beneficial mutations, and generates protein variants with enhanced traits. It bridges computational design and experimental validation to accelerate synthetic biology, functional genomics, and crop improvement.`,
+-   The **Digital Design Agent** leverages the other agents for allele and protein engineering. Via natural language queries, it supports protein sequence modification and gene promoter optimization, predicts beneficial mutations, and generates protein variants with enhanced traits. It bridges computational design and experimental validation to accelerate synthetic biology, functional genomics, and crop improvement.
+
+### Choosing the Right Input
+
+**Best starting input and attachment guidance:**
+
+-   **Chat Agent:** A specific research question with species and experimental context. Optional supported documents or images can provide context.
+-   **Knowledge Agent:** A literature question, keywords, date range, and evidence scope. Optional supported documents can narrow the evidence set.
+-   **Data Agent:** Species, gene or other entity identifiers, and the fields or relationship you need. It queries the integrated biological database; an uploaded spreadsheet is not required.
+-   **Analyst Agent:** Analysis objective, data type, species, and a description or location for each dataset. Use only dataset controls explicitly offered by this agent.
+-   **Review Agent:** Review topic, scope, species, date range, and desired report emphasis. Optional supported documents can seed the review.
+-   ***In Silico* Research Agent:** Paper or hypothesis to reproduce, expected outcome, and dataset descriptions or locations. Use only dataset controls explicitly offered by this agent.
+-   **Gene Network Agent:** Gene list, species, and optional trait or phenotype identifier. State the meaning of each list or dataset when prompted.
+-   **Brief Gene Agent:** Gene identifier, species, and the aspect you want summarized. Optional supported documents can add local evidence.
+-   **Deep Genome Agent:** Gene identifier and species, plus any requested functional or breeding focus. It uses integrated literature and multi-omics evidence.
+-   **Digital Design Agent:** Target gene or protein sequence, design objective, and experimental constraints. Use only sequence or dataset controls explicitly offered by this agent.
+
+General chat attachments currently support PDF, Word, Excel, PowerPoint, TXT, and PNG files, up to 10 files, 25 MB per file, and 50 MB in total. CSV is not a universal chat attachment format: use CSV only when an agent-specific dataset control explicitly advertises it.`,
       },
       resources: {
         heading: "4. What resources does Phytomni integrate?",

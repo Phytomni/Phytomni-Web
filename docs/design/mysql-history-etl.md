@@ -30,32 +30,32 @@ The Web MySQL schema is owned by
 [`apps/server/model/table.go`](../../apps/server/model/table.go). History lives
 in **one** table:
 
-| Bot §3.2 asked for                         | Current Web answer                          |
-| ------------------------------------------ | ------------------------------------------- |
-| History table (was `s_question_agent_logs`)| **`question_agent_logs`** (no `s_` prefix)  |
-| Schema owner (was `nky_client_go/...`)     | **`apps/server/model/table.go`** (`QuestionAgentLog`) |
-| Per-turn grain                             | one row per turn, keyed by `dialogue_id` + `f_id` (parent id) |
-| Cross-service run identifier               | **`bot_run_id`** column (`varchar(64)`, nullable) |
+| Bot §3.2 asked for                          | Current Web answer                                            |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| History table (was `s_question_agent_logs`) | **`question_agent_logs`** (no `s_` prefix)                    |
+| Schema owner (was `nky_client_go/...`)      | **`apps/server/model/table.go`** (`QuestionAgentLog`)         |
+| Per-turn grain                              | one row per turn, keyed by `dialogue_id` + `f_id` (parent id) |
+| Cross-service run identifier                | **`bot_run_id`** column (`varchar(64)`, nullable)             |
 
 ### 2.1 Column map (`question_agent_logs` → Bot `runs`)
 
 Column names are verbatim from `QuestionAgentLog`. Bot's target columns are from
 its `_CREATE_RUNS_DDL`.
 
-| Web column (`question_agent_logs`) | → | Bot `runs` column | Notes                                          |
-| ---------------------------------- | - | ----------------- | ---------------------------------------------- |
-| `bot_run_id`                       | → | `run_id`          | **JOIN key.** Carry verbatim when present (see §3). |
-| `dialogue_id`                      | → | `dialogue_id`     | JOIN key for Web Go history reads. Carry verbatim. |
-| `query`                            | → | `query`           | User question text.                            |
-| `answer`                           | → | `result_json`     | Wrap in Bot's answer envelope; do not clobber if blank. |
-| `tool_name`                        | → | `agent`/`tool_name`| Alias → canonical slug via Bot `legacy_aliases`; keep the raw value for display. |
-| `mode`                             | → | `request_json`    | `'instant'` / `'expert'`; carry as request metadata. |
-| `model`  (n/a — Web does not store)| → | `model`           | Leave NULL; Web has no per-turn model column.  |
-| `status`                           | → | `status`          | Map to Bot terminal (`succeeded` / `failed`).  |
-| `created_at`                       | → | `created_at`      | Convert MySQL `datetime` → ISO-8601 UTC.       |
-| `updated_at`                       | → | `updated_at`      | Same conversion.                               |
-| — (constant)                       | → | `origin`          | New value `"web_etl"` (Bot §8 open decision).  |
-| — (constant)                       | → | `expires_at`      | **NULL** so TTL GC never reaps backfilled history. |
+| Web column (`question_agent_logs`) | →   | Bot `runs` column   | Notes                                                                            |
+| ---------------------------------- | --- | ------------------- | -------------------------------------------------------------------------------- |
+| `bot_run_id`                       | →   | `run_id`            | **JOIN key.** Carry verbatim when present (see §3).                              |
+| `dialogue_id`                      | →   | `dialogue_id`       | JOIN key for Web Go history reads. Carry verbatim.                               |
+| `query`                            | →   | `query`             | User question text.                                                              |
+| `answer`                           | →   | `result_json`       | Wrap in Bot's answer envelope; do not clobber if blank.                          |
+| `tool_name`                        | →   | `agent`/`tool_name` | Alias → canonical slug via Bot `legacy_aliases`; keep the raw value for display. |
+| `mode`                             | →   | `request_json`      | `'instant'` / `'expert'`; carry as request metadata.                             |
+| `model` (n/a — Web does not store) | →   | `model`             | Leave NULL; Web has no per-turn model column.                                    |
+| `status`                           | →   | `status`            | Map to Bot terminal (`succeeded` / `failed`).                                    |
+| `created_at`                       | →   | `created_at`        | Convert MySQL `datetime` → ISO-8601 UTC.                                         |
+| `updated_at`                       | →   | `updated_at`        | Same conversion.                                                                 |
+| — (constant)                       | →   | `origin`            | New value `"web_etl"` (Bot §8 open decision).                                    |
+| — (constant)                       | →   | `expires_at`        | **NULL** so TTL GC never reaps backfilled history.                               |
 
 Rows are soft-deleted via `delete_at` (nullable) — the extract MUST filter
 `delete_at IS NULL` so tombstoned turns do not resurface as history.

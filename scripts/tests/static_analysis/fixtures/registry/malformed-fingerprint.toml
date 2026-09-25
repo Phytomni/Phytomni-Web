@@ -1,0 +1,15 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+
+[[exemptions]]
+id = "bad-fingerprint"
+tool = "eslint"
+rule = "rule"
+classification = "structural"
+mechanism = "inline"
+target_kind = "symbol"
+path = "apps/web/src/a.ts"
+target = "name"
+fingerprint = "sha256:not-a-digest"

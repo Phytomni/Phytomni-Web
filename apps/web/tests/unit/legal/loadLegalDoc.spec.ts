@@ -23,7 +23,7 @@ describe("loadLegalDoc", () => {
     expect(doc.markdown).toBe(en.markdown);
   });
 
-  it("terms English draft covers research disclaimer and improvement opt-out", () => {
+  it("terms English policy covers research disclaimer and improvement opt-out", () => {
     const md = loadLegalDoc("terms", "en-US").markdown.toLowerCase();
     expect(md).toContain("peer review");
     expect(md).toMatch(/opt-?out/);
@@ -31,7 +31,7 @@ describe("loadLegalDoc", () => {
     expect(md).toContain("chinese prevails");
   });
 
-  it("privacy English draft covers no-sale and controller contact", () => {
+  it("privacy English policy covers no-sale and controller contact", () => {
     const md = loadLegalDoc("privacy", "en-US").markdown.toLowerCase();
     expect(md).toContain("do not sell");
     expect(md).toContain("bri-zhbgs@caas.cn");

@@ -1,11 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import {
   SIDEBAR_COLLAPSED_PREFERENCE_KEY,
   SIDEBAR_LEGACY_AUTO_EXPAND_KEY,
   useSidebarResponsive,
 } from "@/views/chat/composables/useSidebarResponsive";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../../../helpers/test-app-context";
+
+const mount: TestAppContext["mount"] = ((component, mountOptions) =>
+  createTestAppContext({ elementPlus: false }).mount(
+    component,
+    mountOptions
+  )) as TestAppContext["mount"];
 
 function setInnerWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {
@@ -131,6 +140,29 @@ describe("useSidebarResponsive", () => {
     );
     wrapper.unmount();
   });
+
+  it.each([
+    { width: 899, isMobile: true, sidebarCollapsed: false },
+    { width: 900, isMobile: false, sidebarCollapsed: true },
+    { width: 1024, isMobile: false, sidebarCollapsed: true },
+    { width: 1279, isMobile: false, sidebarCollapsed: true },
+    { width: 1280, isMobile: false, sidebarCollapsed: true },
+  ])(
+    "preserves the saved preference at $width pixels",
+    async ({ width, isMobile, sidebarCollapsed }) => {
+      localStorage.setItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY, "true");
+      setInnerWidth(width);
+      const wrapper = mount(makeHarness());
+      await nextTick();
+
+      expect(wrapper.vm.isMobile).toBe(isMobile);
+      expect(wrapper.vm.sidebarCollapsed).toBe(sidebarCollapsed);
+      expect(localStorage.getItem(SIDEBAR_COLLAPSED_PREFERENCE_KEY)).toBe(
+        "true"
+      );
+      wrapper.unmount();
+    }
+  );
 
   it("keeps a mobile sidebar out of layout until the drawer is opened", async () => {
     setInnerWidth(390);

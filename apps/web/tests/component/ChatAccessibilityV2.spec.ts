@@ -6,10 +6,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
 import {
@@ -18,7 +16,6 @@ import {
   FIXTURE_A2UI_REQUIRED_BLOCK,
   FIXTURE_PROGRESS_STARTED_AT,
 } from "../fixtures/chat";
-import { activityRegionDomId } from "@/views/chat/streaming/presentation";
 import ChatSidebarNav from "@/views/chat/components/ChatSidebarNav.vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
 import ChatActivity from "@/views/chat/components/ChatActivity.vue";
@@ -29,13 +26,26 @@ import FormWidget from "@/views/chat/components/blocks/a2ui/FormWidget.vue";
 import ChoiceWidget from "@/views/chat/components/blocks/a2ui/ChoiceWidget.vue";
 import StreamMessage from "@/views/chat/components/StreamMessage.vue";
 import PhyAdaptiveSidebar from "@/components/shell/PhyAdaptiveSidebar.vue";
-import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import AgentCapabilityPopover from "@/components/agent/AgentCapabilityPopover.vue";
+import { CANONICAL_AGENT_PRESENTATIONS } from "@/components/agent";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
 import type { A2uiOpenSurface } from "@/views/chat/streaming/a2uiContract";
 import {
   A2UI_LIFECYCLE_LONG_BODY,
   A2UI_LIFECYCLE_LONG_LABEL,
   buildA2uiLifecycleMessages,
 } from "../visual/chat/fixture-data";
+import { mustGet } from "../helpers/mockFactories";
+import {
+  createTestAppContext,
+  type TestAppContext,
+} from "../helpers/test-app-context";
+
+const mount: TestAppContext["mount"] = ((component, mountOptions) =>
+  createTestAppContext().mount(
+    component,
+    mountOptions
+  )) as TestAppContext["mount"];
 
 const ACTIONS_SOURCE = readFileSync(
   resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
@@ -80,12 +90,6 @@ const A2UI_LIFECYCLE_KEYS = [
   "refreshRequired",
 ] as const;
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS },
-});
-
 describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
   it("keeps lifecycle copy bilingual and free of upstream error details", () => {
     const english = enUS.chat.a2ui as Record<string, string>;
@@ -98,7 +102,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const block = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: {
           status: "unknown" as const,
           round: 1 as const,
@@ -109,7 +113,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     };
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
 
     expect(wrapper.find(".a2ui-status").text()).toBe(english.unknown);
@@ -122,13 +126,13 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const roundTwo = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: { status: "ready" as const, round: 2 as const },
       },
     };
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block: roundTwo },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
       attachTo: document.body,
     });
     await flushPromises();
@@ -147,12 +151,13 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
       block: {
         ...roundTwo,
         a2ui: {
-          ...roundTwo.a2ui!,
+          ...mustGet(roundTwo.a2ui, "round-two A2UI fixture"),
           state: {
             status: "submitting" as const,
             round: 2 as const,
             envelope: {
-              surface_id: roundTwo.a2ui!.surface.surface_id,
+              surface_id: mustGet(roundTwo.a2ui, "round-two A2UI fixture")
+                .surface.surface_id,
               widget: "form",
               action_id: "round-two-action",
               run_id: "round-two-run",
@@ -177,7 +182,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     const roundOne = structuredClone(FIXTURE_A2UI_REQUIRED_BLOCK);
     const wrapper = mount(AgentSurfaceBlock, {
       props: { block: roundOne },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(document.activeElement).not.toBe(
       wrapper.find(".agent-surface-block").element
@@ -189,18 +194,20 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     expect(A2UI_SOURCE).not.toContain("@keydown");
     wrapper.unmount();
 
-    const formSurface: Extract<
-      A2uiOpenSurface,
-      { widget: "form" }
-    >["props"] = {
+    const formSurface: Extract<A2uiOpenSurface, { widget: "form" }>["props"] = {
       title: "Enter species",
       fields: [
-        { name: "species", label: "Species", type: "text" as const, required: true },
+        {
+          name: "species",
+          label: "Species",
+          type: "text" as const,
+          required: true,
+        },
       ],
     };
     const form = mount(FormWidget, {
       props: { surface: formSurface, disabled: false },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(form.find("label[for='a2ui-field-species']").text()).toBe("Species");
     expect(form.find("input").attributes("aria-label")).toBe("Species");
@@ -221,7 +228,7 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
         },
         disabled: false,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(
       choice.find('[data-test="a2ui-choice-submit"]').attributes("aria-label")
@@ -238,15 +245,10 @@ describe("ChatAccessibilityV2 — A2UI lifecycle semantics", () => {
     expect(A2UI_LIFECYCLE_LONG_LABEL).toHaveLength(256);
 
     for (const locale of ["en-US", "zh-CN"] as const) {
-      const localeI18n = createI18n({
-        legacy: false,
-        locale,
-        fallbackLocale: "en-US",
-        messages: { "en-US": enUS, "zh-CN": zhCN },
-      });
-      const wrapper = mount(StreamMessage, {
+      const localeContext = createTestAppContext({ locale });
+      const wrapper = localeContext.mount(StreamMessage, {
         props: { blocks: structuredClone(blocks) },
-        global: { plugins: [localeI18n, ElementPlus] },
+        global: {},
       });
 
       expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
@@ -323,7 +325,6 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
         offCanvas: false,
       },
       global: {
-        plugins: [i18n],
         stubs: {
           ElIcon: true,
           ElButton: {
@@ -413,11 +414,93 @@ describe("ChatAccessibilityV2 — sidebar keyboard and labels", () => {
     expect(wrapper.attributes("aria-hidden")).toBeUndefined();
     wrapper.unmount();
   });
+
+  it("closes the mobile drawer from Escape or the scrim and restores opener focus", async () => {
+    const opener = document.createElement("button");
+    opener.type = "button";
+    document.body.append(opener);
+    opener.focus();
+
+    const wrapper = mount(PhyAdaptiveSidebar, {
+      props: { drawerOpen: false },
+      slots: {
+        close: "Close",
+        default: '<button type="button">Navigation item</button>',
+      },
+      attachTo: document.body,
+    });
+
+    await wrapper.setProps({ drawerOpen: true });
+    await nextTick();
+    const close = wrapper.get('[data-testid="sidebar-drawer-close"]');
+    expect(document.activeElement).toBe(close.element);
+
+    await close.trigger("keydown", { key: "Escape" });
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    await wrapper.setProps({ drawerOpen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    await wrapper.setProps({ drawerOpen: true });
+    await nextTick();
+    await wrapper.get(".phy-adaptive-sidebar__scrim").trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(2);
+    await wrapper.setProps({ drawerOpen: false });
+    await nextTick();
+    expect(document.activeElement).toBe(opener);
+
+    wrapper.unmount();
+    opener.remove();
+  });
+
+  it("keeps compact navigation actions in the sequential keyboard order", () => {
+    const wrapper = mount(ChatSidebarNav, {
+      props: {
+        collapsed: true,
+        activeItem: "",
+        userName: "Synthetic user",
+        canExploreAgents: true,
+        canHistory: true,
+        canProfile: true,
+        canCloudStorage: false,
+        canUserManagement: false,
+        canPermissionManagement: false,
+        canSystemMonitor: false,
+        canGlobalConfig: false,
+        canAdminManagement: false,
+        canHelp: true,
+        showAgentsList: false,
+        offCanvas: false,
+      },
+      global: {
+        stubs: {
+          ElIcon: true,
+          ElButton: {
+            name: "ElButton",
+            template: '<button type="button"><slot /></button>',
+          },
+          ElDropdown: true,
+          ElDropdownMenu: true,
+          ElDropdownItem: true,
+          LangSwitch: true,
+          ThemeSwitch: true,
+        },
+      },
+    });
+
+    const actionables = wrapper.findAll("button, a");
+    expect(actionables.length).toBeGreaterThan(3);
+    for (const actionable of actionables) {
+      expect(actionable.attributes("disabled")).toBeUndefined();
+      expect(actionable.attributes("tabindex")).not.toBe("-1");
+    }
+    wrapper.unmount();
+  });
 });
 
 describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
   it("opens, arrows, activates, and returns focus on Escape", async () => {
-    const tools = [...CANONICAL_AT_ABLE_TOOLS];
+    const tools = [...CANONICAL_AGENT_TOOLS];
     const wrapper = mount(ChatAgentPicker, {
       props: {
         options: makeOptions(tools),
@@ -468,7 +551,7 @@ describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
       },
       global: { mocks: { $t: (key: string) => key } },
     });
-    expect(loading.text()).toContain("chat.agentPicker.loading");
+    expect(loading.text()).toContain(enUS.chat.agentPicker.loading);
     expect(loading.find('[role="combobox"]').exists()).toBe(false);
 
     const disabled = mount(ChatAgentPicker, {
@@ -487,7 +570,7 @@ describe("ChatAccessibilityV2 — Composer picker keyboard", () => {
 });
 
 describe("ChatAccessibilityV2 — Activity disclosure linkage", () => {
-  const regionId = activityRegionDomId(FIXTURE_ACTIVITY_STATE_KEY);
+  const regionId = "chat-activity-stream%3Afixture-activity-msg%3Aactivity-0";
 
   it("links the disclosure control to the region and restores focus after toggle", async () => {
     const wrapper = mount(ChatActivity, {
@@ -497,7 +580,7 @@ describe("ChatAccessibilityV2 — Activity disclosure linkage", () => {
         expanded: false,
         streaming: true,
       },
-      global: { plugins: [i18n] },
+      global: {},
       attachTo: document.body,
     });
 
@@ -535,7 +618,7 @@ describe("ChatAccessibilityV2 — message actions and downloads", () => {
         directDownloads: [{ kind: "file", path: "/synthetic-path" }],
         generatedFormats: ["PDF"],
       },
-      global: { plugins: [i18n], stubs: actionStubs },
+      global: { stubs: actionStubs },
       attachTo: document.body,
     });
 
@@ -590,7 +673,7 @@ describe("ChatAccessibilityV2 — message actions and downloads", () => {
         canRefresh: true,
         refreshBusy: true,
       },
-      global: { plugins: [i18n], stubs: actionStubs },
+      global: { stubs: actionStubs },
     });
     const refresh = wrapper.find('[data-testid="action-refresh"]');
     expect(refresh.attributes("aria-busy")).toBe("true");
@@ -605,7 +688,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
       props: {
         block: FIXTURE_A2UI_REQUIRED_BLOCK,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
       attachTo: document.body,
     });
 
@@ -632,7 +715,7 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
     const block = {
       ...FIXTURE_A2UI_REQUIRED_BLOCK,
       a2ui: {
-        ...FIXTURE_A2UI_REQUIRED_BLOCK.a2ui!,
+        ...mustGet(FIXTURE_A2UI_REQUIRED_BLOCK.a2ui, "required A2UI fixture"),
         state: {
           status: "expired" as const,
           round: 1 as const,
@@ -644,13 +727,11 @@ describe("ChatAccessibilityV2 — A2UI required input", () => {
       props: {
         block,
       },
-      global: { plugins: [i18n, ElementPlus] },
+      global: {},
     });
     expect(wrapper.text()).toContain(enUS.chat.a2ui.expired);
     expect(wrapper.find(".a2ui-status").attributes("role")).toBe("status");
-    expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe(
-      "polite"
-    );
+    expect(wrapper.find(".a2ui-status").attributes("aria-live")).toBe("polite");
   });
 });
 
@@ -666,7 +747,7 @@ describe("ChatAccessibilityV2 — progressbar and live-region restraint", () => 
         completing: false,
         stageLabel: "Retrieving",
       },
-      global: { plugins: [i18n] },
+      global: {},
     });
     vi.advanceTimersByTime(7500);
     await nextTick();
@@ -699,5 +780,54 @@ describe("ChatAccessibilityV2 — focus-visible ownership", () => {
     expect(FOLLOW_UP_SOURCE).toMatch(/&:focus-visible\s*\{/);
     expect(SIDEBAR_SOURCE).toMatch(/:focus-visible/);
     expect(GLOBAL_CSS).toContain("a:focus-visible");
+  });
+});
+
+describe("ChatAccessibilityV2 — Agent preview focus recovery", () => {
+  it("keeps outside control focus when the preview closes from a pointer", async () => {
+    const wrapper = mount(AgentCapabilityPopover, {
+      props: {
+        presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
+      },
+      global: {},
+      attachTo: document.body,
+    });
+    const trigger = wrapper.get("button");
+    const outside = document.createElement("button");
+    outside.type = "button";
+    outside.textContent = "Outside";
+    document.body.append(outside);
+
+    await trigger.trigger("focus");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    outside.focus();
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(outside);
+
+    outside.remove();
+    wrapper.unmount();
+  });
+
+  it("restores trigger focus when Escape closes the preview", async () => {
+    const wrapper = mount(AgentCapabilityPopover, {
+      props: {
+        presentation: CANONICAL_AGENT_PRESENTATIONS.ChatAgent,
+      },
+      global: {},
+      attachTo: document.body,
+    });
+    const trigger = wrapper.get("button");
+
+    await trigger.trigger("focus");
+    await wrapper.get('[role="dialog"]').trigger("keydown", { key: "Escape" });
+    await nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(trigger.element);
+
+    wrapper.unmount();
   });
 });

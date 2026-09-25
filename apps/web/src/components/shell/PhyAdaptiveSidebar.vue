@@ -111,13 +111,13 @@ function getSurfaceFocusables(): HTMLElement[] {
 }
 
 function focusDrawer(): void {
-  void nextTick(() => {
+  nextTick(() => {
     const closeControl = sidebarRef.value?.querySelector<HTMLElement>(
       '[data-testid="sidebar-drawer-close"]'
     );
     const focusTarget = closeControl || getSurfaceFocusables()[0];
     focusTarget?.focus();
-  });
+  }).catch(() => undefined);
 }
 
 function restoreDrawerFocus(): void {
@@ -176,6 +176,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .phy-adaptive-sidebar {
+  container-type: inline-size;
   position: relative;
   width: var(--phy-layout-sidebar-expanded-width);
   height: 100%;

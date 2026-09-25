@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -33,6 +30,7 @@ const DeepGenomeArtifactStub = {
     status: { type: String, default: "" },
     markdown: { type: String, default: "" },
     references: { type: Array, default: () => [] },
+    resources: { type: Array, default: () => [] },
     ns: { type: String, default: "" },
   },
   template: `
@@ -42,6 +40,7 @@ const DeepGenomeArtifactStub = {
       :data-ns="ns"
       :data-markdown="markdown"
       :data-reference-count="references.length"
+      :data-resource-count="resources.length"
     >
       <div data-test="artifact-report">{{ markdown }}</div>
       <ol data-test="artifact-evidence">
@@ -57,18 +56,11 @@ const DeepGenomeResultViewerStub = {
   template: '<div data-test="legacy-deep-genome-viewer" />',
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-import DeepGenomeAgent from "@/views/deep-genome-agent/index.vue";
+import DeepGenomeAgent from "@/views/deep-genome-agent/DeepGenomeAgentView.vue";
 
 function mountDemo() {
-  return mount(DeepGenomeAgent, {
+  return mountWithApp(DeepGenomeAgent, {
     global: {
-      plugins: [i18n],
       stubs: {
         AgentDemoShell: AgentDemoShellStub,
         DeepGenomeArtifact: DeepGenomeArtifactStub,
@@ -83,18 +75,42 @@ describe("Deep Genome Agent static demonstration", () => {
     const wrapper = mountDemo();
 
     const question = wrapper.get("[data-test=shell-question]").text();
-    expect(question).toContain("Species Name: rice (Oryza sativa)");
-    expect(question).toContain("d18h|GA3ox1|OsGA3OX2|OsGA3ox-2");
-    expect(question).toContain("Maintain strict adherence to evidence-based reporting");
+    expect(question).toBe(
+      "Please give me a scientifically rigorous and integrated account of the rice (Oryza sativa) gene Os01g0177400."
+    );
 
     expect(wrapper.findAll("[data-test=deep-genome-artifact]")).toHaveLength(1);
     const artifact = wrapper.get("[data-test=deep-genome-artifact]");
     expect(artifact.attributes("data-ns")).toBe("deep-genome-demo");
-    expect(artifact.attributes("data-reference-count")).toBe("10");
+    expect(artifact.attributes("data-reference-count")).toBe("256");
+    expect(artifact.attributes("data-resource-count")).toBe("15");
+    expect(
+      wrapper.getComponent(DeepGenomeArtifactStub).props("resources")
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "markdown",
+          markdownHref: "./Os01g0177400_result-experiments.md",
+        }),
+      ])
+    );
     expect(artifact.attributes("data-markdown")).toContain(
       "# Deep Genome Analysis of Os01g0177400"
     );
-    expect(artifact.attributes("data-markdown")).toContain("GA3ox-2|D18|GA3OX2");
+    expect(artifact.attributes("data-markdown")).toContain(
+      "GA3ox-2, D18, GA3OX2"
+    );
+    expect(artifact.attributes("data-markdown")).toContain(
+      "Os01t0177400-01_seed_101_sample_0.cif"
+    );
+    expect(artifact.attributes("data-markdown")).toContain("[document:5]");
+    expect(
+      artifact.attributes("data-markdown").match(/\[document:\d+\]/g)
+    ).toHaveLength(94);
+    expect(artifact.attributes("data-markdown")).not.toContain(
+      "[256] Physiological and Transcriptome Analyses"
+    );
+    expect(artifact.attributes("data-markdown")).not.toContain("## Reference:");
     expect(artifact.get("[data-test=artifact-evidence]").text()).toContain(
       "The rice YABBY1 gene is involved in the feedback regulation of gibberellin metabolism."
     );
@@ -107,7 +123,10 @@ describe("Deep Genome Agent static demonstration", () => {
     routerBack.mockReset();
     const wrapper = mountDemo();
     const source = readFileSync(
-      resolve(__dirname, "../../../src/views/deep-genome-agent/index.vue"),
+      resolve(
+        __dirname,
+        "../../../src/views/deep-genome-agent/DeepGenomeAgentView.vue"
+      ),
       "utf8"
     );
 
@@ -120,9 +139,19 @@ describe("Deep Genome Agent static demonstration", () => {
     await wrapper.get("[data-test=shell-back]").trigger("click");
     expect(routerBack).toHaveBeenCalledTimes(1);
 
-    expect(wrapper.findAll("[data-test=legacy-deep-genome-viewer]")).toHaveLength(0);
-    expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar, .message-fotter")).toHaveLength(0);
-    expect(wrapper.findAll('[class*="reaction"], [data-test*="reaction"]')).toHaveLength(0);
-    expect(source).not.toMatch(/loveThisState|needsImprovementState|handleReaction|localStorage/);
+    expect(
+      wrapper.findAll("[data-test=legacy-deep-genome-viewer]")
+    ).toHaveLength(0);
+    expect(
+      wrapper.findAll(
+        ".chat-header, .chat-messages, .message-avatar, .message-fotter"
+      )
+    ).toHaveLength(0);
+    expect(
+      wrapper.findAll('[class*="reaction"], [data-test*="reaction"]')
+    ).toHaveLength(0);
+    expect(source).not.toMatch(
+      /loveThisState|needsImprovementState|handleReaction|localStorage/
+    );
   });
 });

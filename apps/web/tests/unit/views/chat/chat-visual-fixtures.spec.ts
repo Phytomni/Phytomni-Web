@@ -2,17 +2,16 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { mount, flushPromises } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import {
   CHAT_VISUAL_FIXTURE_KEYS,
   CHAT_VISUAL_LOCALES,
   CHAT_VISUAL_THEMES,
   resolveChatVisualFixture,
   getChatVisualFixture,
+  getChatRoutingFixture,
+  routingFixtures,
 } from "../../../visual/chat/fixture-registry";
 import {
   SYNTHETIC_IDENTITY,
@@ -22,6 +21,8 @@ import {
   getSharedMessageFixture,
   getSharedPhase3COverlay,
   buildA2uiLifecycleMessages,
+  getAgentLifecycleVisualData,
+  COMPOSER_MODEL_VALUE_BY_KEY,
 } from "../../../visual/chat/fixture-data";
 import {
   PHASE_3B_MESSAGE_KEYS,
@@ -31,8 +32,8 @@ import {
   isPhase3CFixtureKey,
   getPhase3COverlay,
 } from "../../../fixtures/chat";
-import enUS from "@/locales/langs/en-US";
 import zhCN from "@/locales/langs/zh-CN";
+import { createTestAppContext } from "../../../helpers/test-app-context";
 
 const WEB_ROOT = resolve(__dirname, "../../../..");
 const SRC_ROOT = resolve(WEB_ROOT, "src");
@@ -62,9 +63,36 @@ const ASSERT_PATH_SOURCE = readFileSync(
   resolve(VISUAL_CHAT, "assert-chat-path.js"),
   "utf8"
 );
+const REFINEMENT_ASSERT_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "assert-refinement-styles.js"),
+  "utf8"
+);
+const REFINEMENT_CAPTURE_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "capture-refinement-matrix.sh"),
+  "utf8"
+);
+const UPLOAD_ASSERT_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "assert-upload-styles.js"),
+  "utf8"
+);
+const UPLOAD_CAPTURE_SOURCE = readFileSync(
+  resolve(VISUAL_CHAT, "capture-upload-matrix.sh"),
+  "utf8"
+);
 
 type GeometryResult = {
   pass: boolean;
+  chatMode?: string | null;
+  composer?: { bottom: number };
+  attachmentStrip?: Rect;
+  composerEditor?: Rect;
+  attachmentDetail?: Rect;
+  attachmentGeometry?: {
+    fixture?: string | null;
+    pass?: boolean;
+    detailWithinStrip?: boolean;
+  } | null;
+  error?: string;
   reasons?: string[];
 };
 
@@ -78,6 +106,12 @@ type Rect = {
 };
 
 type GeometryHarnessOptions = {
+  state?: "empty" | "populated";
+  chatMode?: "instant" | "expert";
+  chatModeOverride?: string;
+  emptyScrollPosition?: "top" | "cases";
+  includeCases?: boolean;
+  includeQuickSelect?: boolean;
   width?: number;
   height?: number;
   documentScrollWidth?: number;
@@ -85,11 +119,27 @@ type GeometryHarnessOptions = {
   transcriptScrollWidth?: number;
   transcriptRect?: Rect;
   composerRect?: Rect;
+  composerSurfaceRect?: Rect;
   lastMessageRect?: Rect;
+  lastCaseRect?: Rect;
+  contentStackClientHeight?: number;
+  contentStackScrollHeight?: number;
   drawerState?: "closed" | "open" | "not-mobile";
+  includeTranscript?: boolean;
+  includeContentStack?: boolean;
   includeTrigger?: boolean;
+  includePrimary?: boolean;
+  includeComposer?: boolean;
   triggerVisible?: boolean;
   primaryVisible?: boolean;
+  composerVisible?: boolean;
+  includeAttachmentStrip?: boolean;
+  attachmentFixture?: string;
+  captureContract?: string;
+  attachmentStripRect?: Rect;
+  includeAttachmentDetail?: boolean;
+  attachmentDetailRect?: Rect;
+  composerEditorRect?: Rect;
 };
 
 const rect = (
@@ -112,6 +162,12 @@ async function runGeometryHarness(
   const width = options.width ?? 1440;
   const height = options.height ?? 900;
   const drawerState = options.drawerState ?? "not-mobile";
+  const state = options.state ?? "populated";
+  const chatMode = options.chatModeOverride ?? options.chatMode ?? "instant";
+  const emptyScrollPosition = options.emptyScrollPosition ?? "top";
+  const includeCases = options.includeCases ?? state === "empty";
+  const includeQuickSelect =
+    options.includeQuickSelect ?? (state === "empty" && chatMode === "expert");
   const makeElement = (bounds: Rect, visible = true) => ({
     __visible: visible,
     getBoundingClientRect: () => bounds,
@@ -122,8 +178,7 @@ async function runGeometryHarness(
     {
       scrollHeight: 1200,
       clientHeight: 672,
-      clientWidth:
-        options.transcriptClientWidth ?? Math.max(1, width - 280),
+      clientWidth: options.transcriptClientWidth ?? Math.max(1, width - 280),
       scrollWidth: options.transcriptScrollWidth ?? Math.max(1, width - 280),
     }
   );
@@ -139,19 +194,103 @@ async function runGeometryHarness(
     },
   });
 
+  const contentStack = Object.assign(makeElement(rect(0, 48, width, height)), {
+    scrollHeight: options.contentStackScrollHeight ?? 1200,
+    clientHeight: options.contentStackClientHeight ?? Math.max(1, height - 48),
+    clientWidth: width,
+    scrollWidth: width,
+  });
+  let contentStackScrollTop = 0;
+  Object.defineProperty(contentStack, "scrollTop", {
+    configurable: true,
+    get: () => contentStackScrollTop,
+    set: (value: number) => {
+      contentStackScrollTop = Math.max(
+        0,
+        Math.min(value, contentStack.scrollHeight - contentStack.clientHeight)
+      );
+    },
+  });
+
   const lastMessage = makeElement(
     options.lastMessageRect ?? rect(360, 620, Math.min(width - 40, 1080), 700)
   );
+  const casesRegion = makeElement(rect(240, 560, width - 24, 840));
+  const caseLinks = Array.from({ length: 8 }, (_value, index) =>
+    makeElement(
+      index === 7
+        ? (options.lastCaseRect ?? rect(280, 720, width - 40, 800))
+        : rect(280, 560 + index * 20, width - 40, 600 + index * 20)
+    )
+  );
+  const quickSelect = makeElement(rect(280, 500, width - 40, 548));
+  const headerPreferences = makeElement(rect(width - 180, 8, width - 16, 40));
+  const mainSurface = {
+    getAttribute: (name: string) =>
+      name === "aria-hidden" && drawerState === "open" ? "true" : null,
+  };
+  const drawerSurface = makeElement(rect(0, 0, Math.min(width, 272), height));
+  const drawerScrim = makeElement(rect(0, 0, width, height));
   const root = Object.assign(makeElement(rect(0, 0, width, height)), {
     getAttribute: (name: string) => {
-      if (name === "data-chat-state") return "populated";
+      if (name === "data-chat-state") return state;
       if (name === "data-sidebar-drawer-state") return drawerState;
+      if (name === "data-empty-scroll-position") return emptyScrollPosition;
+      if (name === "data-chat-mode") return chatMode;
+      if (name === "data-attachment-fixture") {
+        return options.attachmentFixture ?? null;
+      }
       return null;
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '[data-testid="chat-transcript"]') return [transcript];
-      if (selector === '[data-testid="chat-message-row"]') return [lastMessage];
+      if (selector === '[data-testid="chat-transcript"]') {
+        return options.includeTranscript === false ? [] : [transcript];
+      }
+      if (selector === '[data-testid="chat-content-stack"]') {
+        return options.includeContentStack === false ? [] : [contentStack];
+      }
+      if (selector === '[data-testid="chat-message-row"]') {
+        return state === "populated" ? [lastMessage] : [];
+      }
+      if (selector === '[data-testid="chat-cases"]') {
+        return includeCases ? [casesRegion] : [];
+      }
+      if (selector === '[data-testid="chat-case-link"]') {
+        return includeCases ? caseLinks : [];
+      }
+      if (selector === '[data-testid="chat-agent-quick-select"]') {
+        return includeQuickSelect ? [quickSelect] : [];
+      }
       return [];
+    },
+    querySelector: (selector: string) => {
+      if (selector === '[data-testid="chat-cases"]') {
+        return includeCases ? casesRegion : null;
+      }
+      if (selector === '[data-testid="chat-composer"]') return composer;
+      if (selector === '[data-testid="attachment-chip-strip"]') {
+        return options.includeAttachmentStrip === true ? attachmentStrip : null;
+      }
+      if (selector === '[data-testid="attachment-chip-detail"]') {
+        return options.includeAttachmentDetail === true
+          ? attachmentDetail
+          : null;
+      }
+      if (selector === ".chat-composer-body") return composerEditor;
+      if (selector === ".phy-adaptive-shell__main") return mainSurface;
+      if (
+        selector ===
+        ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface"
+      ) {
+        return drawerState === "open" ? drawerSurface : null;
+      }
+      if (
+        selector ===
+        ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__scrim"
+      ) {
+        return drawerState === "open" ? drawerScrim : null;
+      }
+      return null;
     },
   });
 
@@ -166,8 +305,39 @@ async function runGeometryHarness(
     options.triggerVisible ?? true
   );
   const composer = makeElement(
-    options.composerRect ?? rect(Math.min(300, width / 4), 740, width - 24, 880)
+    options.composerRect ??
+      rect(Math.min(300, width / 4), 740, width - 24, 880),
+    options.composerVisible ?? true
   );
+  const composerSurface = makeElement(
+    options.composerSurfaceRect ??
+      options.composerRect ??
+      rect(Math.min(300, width / 4), 740, width - 24, 880),
+    options.composerVisible ?? true
+  );
+  const attachmentStrip = makeElement(
+    options.attachmentStripRect ?? rect(300, 700, width - 24, 744)
+  );
+  const attachmentDetail = makeElement(
+    options.attachmentDetailRect ?? rect(300, 520, width - 24, 692)
+  );
+  const composerEditor = makeElement(
+    options.composerEditorRect ?? rect(300, 744, width - 24, 816)
+  );
+  if (options.composerSurfaceRect || options.composerEditorRect) {
+    Object.assign(composer, {
+      querySelector: (selector: string) => {
+        if (selector === ".chat-composer-surface") return composerSurface;
+        if (
+          selector === ".chat-composer-body" ||
+          selector.includes("chat-composer-body")
+        ) {
+          return composerEditor;
+        }
+        return null;
+      },
+    });
+  }
   const includeTrigger = options.includeTrigger ?? drawerState === "closed";
   const documentMock = {
     documentElement: {
@@ -182,17 +352,29 @@ async function runGeometryHarness(
       ) {
         return [root];
       }
-      if (selector === '[data-testid="chat-primary-action"]') return [primary];
+      if (selector === '[data-testid="chat-primary-action"]') {
+        return options.includePrimary === false ? [] : [primary];
+      }
       if (selector === '[data-testid="chat-sidebar-trigger"]') {
         return includeTrigger ? [trigger] : [];
       }
-      if (selector === '[data-testid="chat-composer"]') return [composer];
+      if (selector === '[data-testid="chat-composer"]') {
+        return options.includeComposer === false ? [] : [composer];
+      }
+      if (selector === '[data-testid="chat-header-preferences"]') {
+        return [headerPreferences];
+      }
       return [];
     },
   };
   const windowMock: Record<string, unknown> = {};
+  if (options.captureContract) {
+    windowMock.__PHY_CHAT_CAPTURE_META__ = {
+      contract: options.captureContract,
+    };
+  }
 
-  return (await runInNewContext(MEASURE_SOURCE, {
+  const result = (await runInNewContext(MEASURE_SOURCE, {
     window: windowMock,
     document: documentMock,
     innerWidth: width,
@@ -207,6 +389,58 @@ async function runGeometryHarness(
       return 1;
     },
   })) as GeometryResult;
+
+  const isInsideViewport = (bounds: Rect): boolean =>
+    bounds.left >= 0 &&
+    bounds.top >= 0 &&
+    bounds.right <= width &&
+    bounds.bottom <= height;
+  const fixtureReasons: string[] = [];
+  if (options.includeAttachmentStrip === true) {
+    if (
+      !isInsideViewport(
+        options.attachmentStripRect ?? attachmentStrip.getBoundingClientRect()
+      )
+    ) {
+      fixtureReasons.push("attachment chip strip escapes viewport");
+    }
+    if (
+      !isInsideViewport(
+        options.composerEditorRect ?? composerEditor.getBoundingClientRect()
+      )
+    ) {
+      fixtureReasons.push("composer editor escapes viewport");
+    }
+  }
+  if (
+    options.includeAttachmentDetail === true &&
+    !isInsideViewport(
+      options.attachmentDetailRect ?? attachmentDetail.getBoundingClientRect()
+    )
+  ) {
+    fixtureReasons.push("attachment detail escapes viewport");
+  }
+  return {
+    ...result,
+    attachmentStrip:
+      options.includeAttachmentStrip === true
+        ? (options.attachmentStripRect ??
+          attachmentStrip.getBoundingClientRect())
+        : undefined,
+    composerEditor:
+      options.includeAttachmentStrip === true
+        ? (options.composerEditorRect ?? composerEditor.getBoundingClientRect())
+        : undefined,
+    attachmentDetail:
+      options.includeAttachmentDetail === true
+        ? (options.attachmentDetailRect ??
+          attachmentDetail.getBoundingClientRect())
+        : undefined,
+    pass: result.pass && fixtureReasons.length === 0,
+    ...(fixtureReasons.length
+      ? { reasons: [...(result.reasons ?? []), ...fixtureReasons] }
+      : {}),
+  };
 }
 
 vi.mock("vue-element-plus-x", () => ({
@@ -214,7 +448,7 @@ vi.mock("vue-element-plus-x", () => ({
     name: "MentionSender",
     inheritAttrs: false,
     template:
-      '<div class="mention-sender-stub" v-bind="$attrs"><slot name="header" /><slot name="prefix" /><slot name="action-list" /></div>',
+      '<div class="mention-sender-stub" v-bind="$attrs"><textarea data-testid="mention-input" :disabled="disabled" :value="modelValue" /><slot name="header" /><slot name="prefix" /><slot name="action-list" /></div>',
     props: [
       "modelValue",
       "loading",
@@ -249,7 +483,6 @@ vi.mock("vue-element-plus-x", () => ({
     props: ["uid", "name", "fileSize", "showDelIcon"],
   },
   Typewriter: { name: "Typewriter", template: "<div></div>" },
-  Prompts: { name: "Prompts", template: "<div></div>" },
 }));
 
 import ChatVisualFixtureApp from "../../../visual/chat/ChatVisualFixtureApp.vue";
@@ -270,9 +503,24 @@ function walkFiles(dir: string, acc: string[] = []): string[] {
 describe("Chat visual fixture registry", () => {
   it("contains every exact frame, Phase 3B message-state, and Phase 3C key", () => {
     expect([...CHAT_VISUAL_FIXTURE_KEYS]).toEqual([
+      "report-integrity",
+      "instant-empty",
+      "expert-auto-empty",
+      "expert-selected-empty",
+      "expert-selected-populated",
       "empty",
+      "empty-cases",
       "populated",
       "attachment",
+      "upload-queued",
+      "upload-uploading",
+      "upload-paused",
+      "upload-failed",
+      "upload-completed",
+      "uploading-detail-open",
+      "mixed-ready-failed-expired",
+      "ten-files-overflow",
+      "incompatible-agent-blocked",
       "sending",
       "picker-open",
       "picker-search",
@@ -281,6 +529,12 @@ describe("Chat visual fixture registry", () => {
       "sidebar-compact",
       "sidebar-mobile-closed",
       "sidebar-mobile-open",
+      "agent-preview",
+      "sidebar-compact-explore-open",
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
       "short-generic",
       "long-generic",
       "cited",
@@ -305,6 +559,14 @@ describe("Chat visual fixture registry", () => {
       "send-stop",
       "parallel-a",
       "parallel-b",
+      "wait-cot-chat-start",
+      "wait-cot-chat-mid",
+      "wait-cot-chat-flush",
+      "wait-cot-knowledge-mid",
+      "wait-cot-design",
+      "wait-cot-genome",
+      "wait-cot-research",
+      "wait-cot-network-partial",
     ]);
   });
 
@@ -331,6 +593,67 @@ describe("Chat visual fixture registry", () => {
     }
   });
 
+  it("registers all bounded result-archive delivery visual states", () => {
+    for (const key of [
+      "agent-delivery-pending",
+      "agent-delivery-ready",
+      "agent-delivery-retryable",
+      "agent-delivery-nonretryable",
+    ] as const) {
+      const fixture = getChatVisualFixture(key);
+      const data = getAgentLifecycleVisualData(key);
+      expect(fixture.messageCount).toBe(1);
+      expect(data.message.content).toContain("Analysis report");
+      expect(data.message.content).not.toContain("obs://");
+      expect(data.artifactLinks?.length ?? 0).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("registers sanitized DeepGenome lifecycle visual states", () => {
+    const keys = [
+      "deep-genome-preparing",
+      "deep-genome-running-partial",
+      "deep-genome-succeeded",
+    ] as const;
+    const forbiddenContent =
+      /obs:\/\/|\/home\/|\brun_id\b|OsD18|Oryza sativa|Arabidopsis thaliana|[\w.+-]+@[\w.-]+|password|secret|token|credential/iu;
+
+    for (const key of keys) {
+      const resolved = resolveChatVisualFixture(key, "en-US", "light");
+      expect(resolved.ok).toBe(true);
+      const data = getAgentLifecycleVisualData(key);
+      expect(data.message.tool_name).toBe("DeepGenomeAgent");
+      expect(data.message.content).not.toMatch(forbiddenContent);
+    }
+
+    const preparing = getAgentLifecycleVisualData("deep-genome-preparing");
+    expect(preparing.message.content).toBe(
+      "Server task created: synthetic-child"
+    );
+
+    const partial = getAgentLifecycleVisualData("deep-genome-running-partial");
+    expect(partial.message.content).toContain("### Synthetic partial report");
+    expect(partial.message.doc_list).toEqual([]);
+
+    const succeeded = getAgentLifecycleVisualData("deep-genome-succeeded");
+    expect(succeeded.message.content).toContain("### Synthetic final report");
+    expect(succeeded.artifactPreview).toEqual({
+      title: "Finished",
+      kind: "Deep Genome Agent",
+      summary: "Synthetic deep genome report",
+      openLabel: "View",
+    });
+    expect(Object.keys(succeeded.artifactPreview ?? {})).toHaveLength(4);
+
+    for (const file of [
+      resolve(VISUAL_CHAT, "fixture-registry.ts"),
+      resolve(VISUAL_CHAT, "fixture-data.ts"),
+      resolve(VISUAL_CHAT, "ChatVisualFixtureApp.vue"),
+    ]) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/@\/api\b/);
+    }
+  });
+
   it("uses exact Synthetic user identity and empty has zero message rows", () => {
     expect(SYNTHETIC_IDENTITY).toBe("Synthetic user");
     const empty = getChatVisualFixture("empty");
@@ -343,6 +666,110 @@ describe("Chat visual fixture registry", () => {
     );
   });
 
+  it("registers the sanitized chip-state visual matrix", () => {
+    const empty = getChatVisualFixture("empty");
+    expect(buildSyntheticFileList(empty)).toHaveLength(0);
+
+    const detail = getChatVisualFixture("uploading-detail-open");
+    expect(detail.attachmentDetailOpen).toBe(true);
+    const detailItems = buildSyntheticFileList(detail);
+    expect(detailItems).toHaveLength(1);
+    expect(detailItems[0].status).toBe("uploading");
+    expect("purpose" in detailItems[0]).toBe(false);
+
+    const mixed = getChatVisualFixture("mixed-ready-failed-expired");
+    expect(buildSyntheticFileList(mixed).map((item) => item.status)).toEqual([
+      "completed",
+      "failed",
+      "expired",
+    ]);
+
+    const overflow = getChatVisualFixture("ten-files-overflow");
+    const overflowItems = buildSyntheticFileList(overflow);
+    expect(overflowItems).toHaveLength(10);
+    expect(overflowItems.every((item) => item.status === "completed")).toBe(
+      true
+    );
+
+    const blocked = getChatVisualFixture("incompatible-agent-blocked");
+    expect(blocked.selectedAgent).toBe("DeepGenomeAgent");
+    expect(blocked.attachmentTargetBlocked).toBe(true);
+    expect(blocked.attachmentTargetAvailable).toBe(false);
+    expect(COMPOSER_MODEL_VALUE_BY_KEY[blocked.key]).toBe(
+      "Synthetic incompatible attachment draft"
+    );
+
+    for (const key of [
+      "empty",
+      "uploading-detail-open",
+      "mixed-ready-failed-expired",
+      "ten-files-overflow",
+      "incompatible-agent-blocked",
+    ] as const) {
+      for (const theme of CHAT_VISUAL_THEMES) {
+        const resolved = resolveChatVisualFixture(key, "en-US", theme);
+        expect(resolved.ok).toBe(true);
+        if (resolved.ok) expect(resolved.theme).toBe(theme);
+      }
+    }
+  });
+
+  it("registers deterministic Instant and Expert routing snapshots", () => {
+    expect(routingFixtures).toEqual([
+      {
+        id: "instant-empty",
+        mode: "instant",
+        selectedAgent: "",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-auto-empty",
+        mode: "expert",
+        selectedAgent: "",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-selected-empty",
+        mode: "expert",
+        selectedAgent: "DataAgent",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "expert-selected-populated",
+        mode: "expert",
+        selectedAgent: "AnalystAgent",
+        populated: true,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DataAgent", "AnalystAgent"],
+      },
+      {
+        id: "incompatible-agent-blocked",
+        mode: "expert",
+        selectedAgent: "DeepGenomeAgent",
+        populated: false,
+        permissionsLoading: false,
+        allowedTools: ["ChatAgent", "DeepGenomeAgent"],
+      },
+    ]);
+
+    for (const routingFixture of routingFixtures) {
+      const fixture = getChatVisualFixture(
+        routingFixture.id as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
+      );
+      expect(getChatRoutingFixture(routingFixture.id)).toBe(routingFixture);
+      expect(fixture.chatState).toBe(
+        routingFixture.populated ? "populated" : "empty"
+      );
+      expect(fixture.selectedAgent).toBe(routingFixture.selectedAgent);
+    }
+  });
+
   it("keeps closed/open mobile as distinct registry keys", () => {
     expect(CHAT_VISUAL_FIXTURE_KEYS).toContain("sidebar-mobile-closed");
     expect(CHAT_VISUAL_FIXTURE_KEYS).toContain("sidebar-mobile-open");
@@ -352,6 +779,34 @@ describe("Chat visual fixture registry", () => {
     expect(closed.drawerOpen).toBe(false);
     expect(open.drawerOpen).toBe(true);
     expect(open.showSidebarTrigger).toBe(false);
+  });
+
+  it("registers deterministic Chat recovery fixtures", () => {
+    const recoveryKeys = [
+      "agent-preview",
+      "sidebar-compact-explore-open",
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
+    ] as const;
+
+    for (const key of recoveryKeys) {
+      expect(CHAT_VISUAL_FIXTURE_KEYS).toContain(key);
+      const fixture = getChatVisualFixture(
+        key as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
+      );
+      expect(fixture.key).toBe(key);
+    }
+
+    const titleOnly = getChatVisualFixture("history-title-only" as never);
+    expect(titleOnly.messageCount).toBe(1);
+    expect(buildSyntheticMessages(titleOnly)).toEqual([
+      expect.objectContaining({ role: "user" }),
+    ]);
+    expect(buildSyntheticMessages(titleOnly)).not.toEqual([
+      expect.objectContaining({ role: "assistant" }),
+    ]);
   });
 
   it("registers every Phase 3B message key with shared fixture objects", () => {
@@ -486,6 +941,52 @@ describe("Chat visual fixture source contracts", () => {
     expect(APP_SOURCE).not.toContain('class="fixture-message-row"');
     expect(scopedStyle).not.toContain(".fixture-message-row.is-user");
   });
+
+  it("mirrors the singleton header and state-specific landing scroll owners", () => {
+    expect(APP_SOURCE).toContain('data-testid="chat-header-preferences"');
+    expect(APP_SOURCE.match(/<LangSwitch/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE.match(/<ThemeSwitch/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE).toContain('data-testid="chat-content-stack"');
+    expect(
+      APP_SOURCE.match(/data-testid="chat-content-stack"/g) ?? []
+    ).toHaveLength(1);
+    expect(APP_SOURCE.match(/<ChatComposer/g) ?? []).toHaveLength(1);
+    expect(APP_SOURCE).toContain("'is-empty': fixture.chatState === 'empty'");
+    expect(APP_SOURCE).toContain(
+      "'is-populated': fixture.chatState === 'populated'"
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-empty\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s*\{[\s\S]*?overflow:\s*hidden/
+    );
+    expect(APP_SOURCE).toMatch(
+      /\.chat-content-stack\.is-populated\s+\.message-container\s*\{[\s\S]*?overflow-y:\s*auto/
+    );
+  });
+
+  it("mirrors the expanded Explore Agents disclosure in the fixture", () => {
+    expect(APP_SOURCE).toContain("deriveCaseRouteOptions");
+    expect(APP_SOURCE).toContain("AgentDisplayName");
+    expect(APP_SOURCE).toContain("activeSidebarItem === 'explore-agent'");
+    expect(APP_SOURCE).toContain('data-testid="chat-explore-agents-list"');
+    expect(APP_SOURCE).toMatch(
+      /<template #explore-agents>[\s\S]*?v-for="agent in presetAgents"/
+    );
+  });
+
+  it("exposes preview, compact disclosure, and history state contracts", () => {
+    expect(APP_SOURCE).toContain('data-history-state="');
+    expect(APP_SOURCE).toContain("agent-capability-popover");
+    expect(APP_SOURCE).toContain('data-testid="chat-history-retry"');
+    expect(APP_SOURCE).toContain('data-testid="chat-agent-preview"');
+    expect(APP_SOURCE).toContain('data-testid="chat-welcome"');
+    expect(APP_SOURCE).toContain("compactExploreOpen");
+    expect(MEASURE_SOURCE).toContain("agent-capability-popover__media");
+    expect(MEASURE_SOURCE).toContain("history-state");
+    expect(MEASURE_SOURCE).toContain("agent-option");
+  });
 });
 
 describe("Chat visual fixture boot contracts", () => {
@@ -549,6 +1050,21 @@ describe("Chat visual fixture script contracts", () => {
     expect(MEASURE_SOURCE).toContain("transcript overflow");
     expect(MEASURE_SOURCE).toContain("composer escapes viewport");
     expect(MEASURE_SOURCE).toContain("lastMessage.bottom");
+    expect(MEASURE_SOURCE).toContain("innerWidth >= 390 && innerWidth < 600");
+    expect(MEASURE_SOURCE).toContain("chat-composer");
+    expect(MEASURE_SOURCE).toContain('".chat-composer-surface"');
+    expect(MEASURE_SOURCE).toContain("querySelector?.");
+    expect(MEASURE_SOURCE).toContain("composerNodes[0]");
+    expect(MEASURE_SOURCE).toContain("attachmentGeometry");
+    expect(MEASURE_SOURCE).toContain("detailWithinStrip");
+    expect(MEASURE_SOURCE).toContain("isLegacyUploadFixture");
+    expect(MEASURE_SOURCE).toContain(
+      'captureContract === "unified-attachments-v1"'
+    );
+    expect(MEASURE_SOURCE).toContain('[data-testid="attachment-chip-detail"]');
+    expect(MEASURE_SOURCE).toContain("unified-attachments-v1");
+    expect(MEASURE_SOURCE).toContain("contractSha256");
+    expect(MEASURE_SOURCE).toContain("sourceSha");
     expect(MEASURE_SOURCE).toContain(
       "viewport below 900 requires mobile drawer state"
     );
@@ -587,12 +1103,391 @@ describe("Chat visual fixture script contracts", () => {
       /(?:const|let|var)\s+\w+\s*=\s*nodes\[0\]\.(?:textContent|innerText)/
     );
   });
+
+  it("locks upload-state style assertions to shared attachment semantics", () => {
+    expect(UPLOAD_ASSERT_SOURCE).toContain("attachment fixture key");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("ChatUploadCard");
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      '[data-testid="attachment-chip-strip"]'
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      '[data-testid="attachment-chip-detail"]'
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain("chat-composer-body");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("aria-valuenow");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("uploading");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("completed");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("document overflow");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("wrapped attachment strip");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("editor is hidden");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("detail surface overlaps editor");
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      "attachment detail escapes containing strip"
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain(
+      "attachment control escapes viewport"
+    );
+    expect(UPLOAD_ASSERT_SOURCE).toContain("focus ring");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("activeElement");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("focusWithin");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("focusCss");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("fake progress");
+    expect(UPLOAD_ASSERT_SOURCE).toContain("pass: true");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("location.href");
+    expect(UPLOAD_ASSERT_SOURCE).not.toContain("visual pass");
+  });
+
+  it("locks the unified attachment capture matrix and evidence boundary", () => {
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      'EVIDENCE_DIR="${REPO_ROOT}/.codex/evidence/frontend-v2/unified-attachments"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      '"320 568"\n    "390 844"\n    "480 800"\n    "768 1024"\n    "1024 768"\n    "1366 768"\n    "1920 1080"\n    "2560 1440"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain(
+      '"empty"\n    "uploading-detail-open"\n    "mixed-ready-failed-expired"\n    "ten-files-overflow"\n    "incompatible-agent-blocked"'
+    );
+    expect(UPLOAD_CAPTURE_SOURCE).toContain('themes=("light" "dark")');
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("measure-geometry.js");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("assert-geometry.js");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("SOURCE_SHA=");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("CONTRACT_SHA256=");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("__PHY_CHAT_CAPTURE_META__");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("TRACKED_CAPTURE_FILES");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("diff --exit-code");
+    expect(UPLOAD_CAPTURE_SOURCE).not.toContain("cp ");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("EXPECTED_COUNT=80");
+    expect(UPLOAD_CAPTURE_SOURCE).toContain("capture only creates evidence");
+    expect(UPLOAD_CAPTURE_SOURCE).not.toContain("resumable-upload");
+  });
 });
 
 describe("Chat visual fixture geometry negative controls", () => {
   it("passes a valid populated desktop layout", async () => {
     const result = await runGeometryHarness();
     expect(result).toMatchObject({ pass: true });
+  });
+
+  it("keeps a narrow chip strip and editor inside the composer viewport", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 304, 548),
+      includeAttachmentStrip: true,
+      attachmentStripRect: rect(16, 304, 304, 344),
+      composerEditorRect: rect(16, 348, 304, 420),
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      attachmentStrip: { top: 304, bottom: 344 },
+      composerEditor: { top: 348, bottom: 420 },
+    });
+  });
+
+  it("keeps ordinary empty fixtures on the Composer viewport contract", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 304, 650),
+      composerSurfaceRect: rect(16, 292, 304, 650),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons).toContain(
+      "composer escapes viewport in the reviewed state"
+    );
+    expect(result.attachmentGeometry).toBeNull();
+  });
+
+  it("uses the attachment contract for the unified empty fixture", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 320,
+      height: 568,
+      drawerState: "closed",
+      composerRect: rect(16, 292, 304, 650),
+      composerSurfaceRect: rect(16, 292, 304, 650),
+      composerEditorRect: rect(33, 413, 272, 471),
+      attachmentFixture: "empty",
+      captureContract: "unified-attachments-v1",
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      attachmentGeometry: {
+        fixture: "empty",
+        pass: true,
+      },
+    });
+  });
+
+  it("rejects a detail surface when it leaves the viewport", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      includeAttachmentStrip: true,
+      includeAttachmentDetail: true,
+      attachmentStripRect: rect(280, 700, 1160, 744),
+      composerEditorRect: rect(280, 744, 1160, 816),
+      attachmentDetailRect: rect(280, 920, 1160, 1000),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /attachment detail escapes viewport/
+    );
+  });
+
+  it("keeps the uploading detail fixture bounded above the editor", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+      width: 390,
+      height: 844,
+      drawerState: "closed",
+      includeAttachmentStrip: true,
+      includeAttachmentDetail: true,
+      attachmentStripRect: rect(16, 510, 374, 554),
+      composerEditorRect: rect(16, 554, 374, 626),
+      attachmentDetailRect: rect(16, 286, 374, 498),
+      composerRect: rect(16, 510, 374, 700),
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      attachmentStrip: { width: 358 },
+      composerEditor: { height: 72 },
+      attachmentDetail: { top: 286, bottom: 498 },
+    });
+  });
+
+  it.each([
+    {
+      label: "missing primary action",
+      options: { includePrimary: false },
+      reason: /visible unique primary action/,
+    },
+    {
+      label: "missing composer",
+      options: { includeComposer: false },
+      reason: /composer missing or not visible/,
+    },
+  ])(
+    "fails closed when the required $label node is missing",
+    async ({ options, reason }) => {
+      const result = await runGeometryHarness(options);
+      expect(result.pass).toBe(false);
+      expect(result.reasons?.join("; ")).toMatch(reason);
+    }
+  );
+
+  it("measures the visible composer surface when the wrapper provides one", async () => {
+    const result = await runGeometryHarness({
+      composerRect: rect(280, 740, 1160, 880),
+      composerSurfaceRect: rect(280, 740, 1160, 865.84),
+    });
+    expect(result).toMatchObject({ pass: true, composer: { bottom: 865.84 } });
+  });
+
+  it("falls back to the composer wrapper when no surface descendant exists", async () => {
+    const result = await runGeometryHarness({
+      composerRect: rect(280, 740, 1160, 880),
+    });
+    expect(result).toMatchObject({ pass: true, composer: { bottom: 880 } });
+  });
+
+  it("accepts empty Instant without an agent quick-select row", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "instant",
+      includeCases: true,
+      includeQuickSelect: false,
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it("rejects empty Expert without the agent quick-select row", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "expert",
+      includeCases: true,
+      includeQuickSelect: false,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /mode=expert requires 1 quick selection regions/
+    );
+  });
+
+  it("rejects an unsupported chat mode with explicit failure context", async () => {
+    const result = await runGeometryHarness({
+      chatModeOverride: "preview",
+    });
+    expect(result.pass).toBe(false);
+    expect(result.chatMode).toBe("preview");
+    expect(result.error).toMatch(/data-chat-mode must be instant\|expert/);
+  });
+
+  it.each([
+    {
+      label: "missing transcript",
+      options: { includeTranscript: false },
+      reason: /Expected exactly one chat-transcript/,
+    },
+    {
+      label: "missing content stack",
+      options: { includeContentStack: false },
+      reason: /Expected exactly one chat-content-stack/,
+    },
+  ])(
+    "retains validated mode context for $label",
+    async ({ options, reason }) => {
+      const result = await runGeometryHarness({
+        chatMode: "expert",
+        ...options,
+      });
+      expect(result.pass).toBe(false);
+      expect(result.chatMode).toBe("expert");
+      expect(result.error).toMatch(reason);
+    }
+  );
+
+  it("exposes interactive sidebar and mode state for visual review", () => {
+    expect(APP_SOURCE).toContain(
+      ':data-active-sidebar-item="activeSidebarItem"'
+    );
+    expect(APP_SOURCE).toContain(':data-chat-mode="fixtureChatMode"');
+    expect(APP_SOURCE).toContain(':active-item="activeSidebarItem"');
+    expect(APP_SOURCE).toContain(':chat-mode="fixtureChatMode"');
+    expect(APP_SOURCE).toContain(
+      '@update:chat-mode="fixtureChatMode = $event"'
+    );
+    expect(APP_SOURCE).toContain(':expert-mode-enabled="true"');
+    expect(APP_SOURCE).toContain("getChatRoutingFixture");
+    expect(APP_SOURCE).toContain("routingPermissionsLoading");
+    expect(APP_SOURCE).toContain("allowedTools.includes(option.tool)");
+    expect(APP_SOURCE).toContain(
+      ':attachment-target-available="attachmentTargetAvailable"'
+    );
+    expect(APP_SOURCE).toContain(
+      ':attachment-target-blocked="attachmentTargetBlocked"'
+    );
+  });
+
+  it("locks the focused computed-style capture contract", () => {
+    for (const needle of [
+      "--phy-color-primary-soft",
+      "--phy-color-action-text",
+      "chat-mode-selector",
+      "chat-header-inner",
+      "chat-case-icon img",
+      "In Silico",
+      "rendered In Silico label is not semantic",
+      "chat-agent-quick-option",
+      "quick-select trigger is not pill-shaped",
+      "selected quick-select background is not primary-soft",
+    ]) {
+      expect(REFINEMENT_ASSERT_SOURCE).toContain(needle);
+    }
+    for (const viewport of ["390 844", "1440 900", "2560 1440"]) {
+      expect(REFINEMENT_CAPTURE_SOURCE).toContain(viewport);
+    }
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain('test "${png_count}" -eq 30');
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain(
+      'test "${geometry_count}" -eq 30'
+    );
+    expect(REFINEMENT_CAPTURE_SOURCE).toContain(
+      'test "${refinement_count}" -eq 30'
+    );
+  });
+
+  it("keeps the empty landing at the top with Composer and Cases present", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "expert",
+      emptyScrollPosition: "top",
+      includeCases: true,
+      includeQuickSelect: true,
+      composerRect: rect(280, 360, 1160, 520),
+      lastCaseRect: rect(280, 760, 1160, 820),
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("accepts the Cases-anchored capture when the final case is visible", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "expert",
+      emptyScrollPosition: "cases",
+      includeCases: true,
+      includeQuickSelect: true,
+      composerRect: rect(280, -260, 1160, -100),
+      lastCaseRect: rect(280, 720, 1160, 800),
+      contentStackScrollHeight: 1500,
+      contentStackClientHeight: 852,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("allows an open mobile drawer to hide the main Composer", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      chatMode: "expert",
+      width: 390,
+      height: 844,
+      drawerState: "open",
+      composerVisible: false,
+      includeCases: true,
+      includeQuickSelect: true,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("rejects a Cases-anchored capture that cannot show the final case", async () => {
+    const result = await runGeometryHarness({
+      state: "empty",
+      emptyScrollPosition: "cases",
+      includeCases: true,
+      includeQuickSelect: true,
+      lastCaseRect: rect(280, 920, 1160, 1000),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(/final case is not visible/);
+  });
+
+  it("rejects Cases or quick selection in populated Chat", async () => {
+    const result = await runGeometryHarness({
+      state: "populated",
+      includeCases: true,
+      includeQuickSelect: true,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reasons?.join("; ")).toMatch(
+      /populated state must not render Cases|populated state must not render quick selection/
+    );
   });
 
   it.each([
@@ -653,6 +1548,7 @@ describe("Chat visual fixture geometry negative controls", () => {
 
 type VisualMountOptions = {
   renderA2ui?: boolean;
+  renderRoutingControls?: boolean;
   locale?: "en-US" | "zh-CN";
 };
 
@@ -678,12 +1574,20 @@ const mountFixtureApp = (
     ElDropdownItem: {
       template: "<button><slot /></button>",
     },
-    ElTooltip: true,
+    ElTooltip: {
+      name: "ElTooltip",
+      template: '<div class="tooltip-stub"><slot /></div>',
+    },
     ElAvatar: true,
     ElIcon: true,
+    RouterLink: {
+      name: "RouterLink",
+      props: ["to"],
+      template: '<a :href="to"><slot /></a>',
+    },
     ElButton: {
       name: "ElButton",
-      template: "<button><slot /></button>",
+      template: '<button v-bind="$attrs"><slot /></button>',
     },
     ElTable: true,
     ElTableColumn: true,
@@ -706,38 +1610,29 @@ const mountFixtureApp = (
       template:
         '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
     },
-    MarkdownViewer: {
-      name: "MarkdownViewer",
-      props: ["ns", "content"],
+    ScientificMarkdown: {
+      name: "ScientificMarkdown",
+      props: ["citationNamespace", "source"],
       template:
-        '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : String(ns)" />',
+        '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : String(citationNamespace)">{{ source }}</div>',
     },
     teleport: true,
   } as Record<string, unknown>;
   if (options.renderA2ui) delete stubs.StreamMessage;
+  if (options.renderRoutingControls) delete stubs.ChatAgentPicker;
 
-  const plugins = options.renderA2ui
-    ? [
-        createI18n({
-          legacy: false,
-          locale: options.locale ?? "en-US",
-          fallbackLocale: "en-US",
-          messages: { "en-US": enUS, "zh-CN": zhCN },
-        }),
-        ElementPlus,
-      ]
-    : [];
-
-  return mount(ChatVisualFixtureApp, {
-    props: { fixture, errorMessage },
-    global: {
-      plugins,
-      mocks: {
-        $t: (key: string) => key,
+  return createTestAppContext({ locale: options.locale ?? "en-US" }).mount(
+    ChatVisualFixtureApp,
+    {
+      props: { fixture, errorMessage },
+      global: {
+        mocks: {
+          $t: (key: string) => key,
+        },
+        stubs,
       },
-      stubs,
-    },
-  });
+    }
+  );
 };
 
 describe("Chat visual fixture rendering (no network)", () => {
@@ -745,7 +1640,6 @@ describe("Chat visual fixture rendering (no network)", () => {
   let xhrOpenSpy: ReturnType<typeof vi.spyOn> | undefined;
 
   beforeEach(() => {
-    setActivePinia(createPinia());
     fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("{}", { status: 200 }));
@@ -777,14 +1671,139 @@ describe("Chat visual fixture rendering (no network)", () => {
     ).toBe("empty");
     expect(wrapper.findAll('[data-testid="chat-message-row"]')).toHaveLength(0);
     expect(
+      wrapper.find('[data-test="sidebar-nav-explore-agent"]').exists()
+    ).toBe(true);
+    expect(
       wrapper.findAll('[data-testid="chat-account-identity"]')
     ).toHaveLength(1);
     expect(wrapper.find('[data-testid="chat-account-identity"]').text()).toBe(
       SYNTHETIC_IDENTITY
     );
+    expect(wrapper.find('[data-testid="attachment-chip-strip"]').exists()).toBe(
+      false
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
     expect(buildSyntheticFileList(fixture)).toHaveLength(0);
+  });
+
+  it.each([
+    ["upload-queued", "queued", "attachment-chip-detail-cancel"],
+    ["upload-uploading", "uploading", "attachment-chip-detail-pause"],
+    ["upload-paused", "paused", "attachment-chip-detail-resume"],
+    ["upload-failed", "failed", "attachment-chip-detail-retry"],
+    ["upload-completed", "completed", "attachment-chip-detail-remove"],
+  ] as const)(
+    "renders the %s resumable upload state through AttachmentChipStrip",
+    async (key, status, actionTestId) => {
+      const wrapper = mountFixtureApp(getChatVisualFixture(key));
+      await flushPromises();
+      await nextTick();
+
+      const root = wrapper.get('[data-testid="chat-visual-root"]');
+      expect(root.attributes("data-upload-status")).toBe(status);
+      const strip = wrapper.get('[data-testid="attachment-chip-strip"]');
+      const chip = strip.get('[data-testid="attachment-chip"]');
+      expect(chip.attributes("data-state")).toBe(status);
+      expect(
+        chip.get('[data-testid="attachment-chip-status"]').text()
+      ).not.toBe("");
+      await chip.trigger("click");
+      expect(
+        strip
+          .get('[data-testid="attachment-chip-detail-progress"]')
+          .attributes("aria-valuenow")
+      ).toMatch(/^\d+$/);
+      expect(strip.get(`[data-testid="${actionTestId}"]`).exists()).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(xhrOpenSpy?.mock.calls ?? []).toHaveLength(0);
+      wrapper.unmount();
+    }
+  );
+
+  it("renders compact mixed, overflow, detail, and incompatible-agent fixtures", async () => {
+    const detailWrapper = mountFixtureApp(
+      getChatVisualFixture("uploading-detail-open")
+    );
+    await flushPromises();
+    await nextTick();
+    expect(
+      detailWrapper.find('[data-testid="attachment-chip-strip"]').exists()
+    ).toBe(true);
+    expect(
+      detailWrapper.find('[data-testid="attachment-chip-detail"]').exists()
+    ).toBe(true);
+    detailWrapper.unmount();
+
+    const mixedWrapper = mountFixtureApp(
+      getChatVisualFixture("mixed-ready-failed-expired")
+    );
+    await flushPromises();
+    expect(
+      mixedWrapper
+        .findAll('[data-testid="attachment-chip"]')
+        .map((chip) => chip.attributes("data-state"))
+    ).toEqual(["completed", "failed", "expired"]);
+    mixedWrapper.unmount();
+
+    const overflowWrapper = mountFixtureApp(
+      getChatVisualFixture("ten-files-overflow")
+    );
+    await flushPromises();
+    expect(
+      overflowWrapper.find('[data-testid="attachment-chip-overflow"]').text()
+    ).toContain("+7 more");
+    overflowWrapper.unmount();
+
+    const blockedWrapper = mountFixtureApp(
+      getChatVisualFixture("incompatible-agent-blocked")
+    );
+    await flushPromises();
+    const editor = blockedWrapper.get('[data-testid="mention-input"]');
+    expect(editor.attributes("disabled")).toBeUndefined();
+    expect(
+      blockedWrapper
+        .get('[data-testid="chat-composer"] .composer-send-button')
+        .attributes("disabled")
+    ).toBeDefined();
+    blockedWrapper.unmount();
+  });
+
+  it("derives Chinese quick-select labels from the active locale", async () => {
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("expert-auto-empty"),
+      null,
+      {
+        renderA2ui: true,
+        renderRoutingControls: true,
+        locale: "zh-CN",
+      }
+    );
+    await flushPromises();
+    await nextTick();
+
+    expect(
+      wrapper
+        .findAll('[data-testid="chat-agent-quick-option"]')
+        .map((option) => option.text())
+    ).toEqual([
+      zhCN.chat.agentLabels.chatAgent,
+      zhCN.chat.agentLabels.dataAgent,
+      zhCN.chat.agentLabels.analystAgent,
+    ]);
+    wrapper.unmount();
+  });
+
+  it("renders all eight Cases in both empty fixture positions", async () => {
+    for (const key of ["empty", "empty-cases"] as const) {
+      const wrapper = mountFixtureApp(getChatVisualFixture(key));
+      await flushPromises();
+      expect(wrapper.findAll('[data-testid="chat-case-link"]')).toHaveLength(8);
+      expect(
+        wrapper.get('[data-testid="chat-content-stack"]').classes()
+      ).toContain("is-empty");
+      wrapper.unmount();
+    }
   });
 
   it("renders populated fixture with matching message row count", async () => {
@@ -800,6 +1819,83 @@ describe("Chat visual fixture rendering (no network)", () => {
         .attributes("data-chat-state")
     ).toBe("populated");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps Instant routing free of agent controls", async () => {
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("instant-empty"),
+      null,
+      {
+        renderRoutingControls: true,
+      }
+    );
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="chat-agent-picker"]').exists()).toBe(
+      false
+    );
+    expect(
+      wrapper.find('[data-testid="chat-agent-quick-select"]').exists()
+    ).toBe(false);
+    expect(wrapper.findAll(".composer-tool-button")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("renders autonomous and selected Expert picker/menu layouts", async () => {
+    const autoEmpty = mountFixtureApp(
+      getChatVisualFixture("expert-auto-empty"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+
+    expect(
+      autoEmpty
+        .find('[data-testid="chat-visual-root"]')
+        .attributes("data-chat-mode")
+    ).toBe("expert");
+    expect(autoEmpty.find('[data-testid="chat-agent-picker"]').exists()).toBe(
+      true
+    );
+    expect(
+      autoEmpty.find('[data-testid="agent-picker-trigger"]').exists()
+    ).toBe(true);
+    expect(
+      autoEmpty.findAll('[data-testid="chat-agent-quick-option"]')
+    ).toHaveLength(3);
+
+    const selectedEmpty = mountFixtureApp(
+      getChatVisualFixture("expert-selected-empty"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    expect(
+      selectedEmpty.find('[data-testid="agent-picker-chip"]').exists()
+    ).toBe(true);
+    expect(
+      selectedEmpty
+        .findAll('[data-testid="chat-agent-quick-option"]')
+        .filter((option) => option.classes().includes("is-selected"))
+    ).toHaveLength(1);
+
+    const selectedPopulated = mountFixtureApp(
+      getChatVisualFixture("expert-selected-populated"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    expect(
+      selectedPopulated.find('[data-testid="chat-agent-picker"]').exists()
+    ).toBe(false);
+    expect(
+      selectedPopulated.find('[data-testid="chat-agent-quick-select"]').exists()
+    ).toBe(false);
+    expect(selectedPopulated.findAll(".composer-tool-button")).toHaveLength(1);
+
+    autoEmpty.unmount();
+    selectedEmpty.unmount();
+    selectedPopulated.unmount();
   });
 
   it("adapts message fixtures to the closed mobile drawer below the medium breakpoint", async () => {
@@ -847,6 +1943,117 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("marks every mounted fixture root ready and renders explicit history recovery states", async () => {
+    for (const key of [
+      "history-title-only",
+      "history-loading",
+      "history-empty",
+      "history-error",
+    ] as const) {
+      const fixture = getChatVisualFixture(key);
+      const wrapper = mountFixtureApp(fixture, null, {
+        renderRoutingControls: true,
+      });
+      await flushPromises();
+      await nextTick();
+
+      const root = wrapper.get('[data-testid="chat-visual-root"]');
+      expect(root.attributes("data-fixture-ready")).toBe("true");
+      expect(root.attributes("data-history-state")).toBe(fixture.historyState);
+      expect(wrapper.find('[data-testid="chat-welcome"]').exists()).toBe(false);
+      if (key === "history-title-only") {
+        expect(
+          wrapper.findAll('[data-testid="chat-message-row"]')
+        ).toHaveLength(1);
+        expect(
+          wrapper
+            .get('[data-testid="chat-message-row"]')
+            .attributes("data-message-role")
+        ).toBe("user");
+      } else {
+        expect(
+          wrapper.findAll('[data-testid="chat-message-row"]')
+        ).toHaveLength(0);
+      }
+      if (key === "history-loading") {
+        expect(
+          wrapper.find('[data-testid="chat-history-loading"]').exists()
+        ).toBe(true);
+      }
+      if (key === "history-empty") {
+        expect(
+          wrapper.find('[data-testid="chat-history-empty"]').exists()
+        ).toBe(true);
+      }
+      if (key === "history-error") {
+        const retry = wrapper.get('[data-testid="chat-history-retry"]');
+        await retry.trigger("click");
+        expect(
+          wrapper.get('[data-testid="chat-fixture-action"]').text()
+        ).toContain("history-retry");
+      }
+      wrapper.unmount();
+    }
+  });
+
+  it("opens one canonical full Agent capability preview without cropped media", async () => {
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("agent-preview"),
+      null,
+      { renderRoutingControls: true }
+    );
+    await flushPromises();
+    await nextTick();
+
+    expect(
+      wrapper
+        .find('[data-testid="chat-visual-root"]')
+        .attributes("data-fixture-ready")
+    ).toBe("true");
+    expect(wrapper.findAll('[data-testid="chat-agent-preview"]').length).toBe(
+      1
+    );
+    expect(wrapper.findAll('[role="dialog"]')).toHaveLength(1);
+    expect(wrapper.findAll(".agent-capability-popover__media")).toHaveLength(1);
+    expect(
+      wrapper.get(".agent-capability-popover__media img").attributes("src")
+    ).toContain("DeepGenomeAgent.png");
+    expect(
+      wrapper
+        .find(".agent-capability-popover__media img")
+        .attributes("style") ?? ""
+    ).not.toContain("object-fit: cover");
+    wrapper.unmount();
+  });
+
+  it("keeps compact Explore Agents options inside the sidebar without changing preference", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    const wrapper = mountFixtureApp(
+      getChatVisualFixture("sidebar-compact-explore-open")
+    );
+    await nextTick();
+
+    const root = wrapper.get('[data-testid="chat-visual-root"]');
+    const sidebar = wrapper.get(".phy-adaptive-sidebar__surface");
+    const options = wrapper.findAll(".agent-option");
+    expect(root.attributes("data-compact-explore-open")).toBe("true");
+    expect(root.attributes("data-sidebar-collapsed-preference")).toBe("true");
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(sidebar.element.contains(option.element)).toBe(true);
+    }
+
+    wrapper.unmount();
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: previousWidth,
+    });
+  });
+
   it("surfaces a clear error for invalid dimensions", () => {
     const wrapper = mountFixtureApp(null, 'Unknown fixture state "nope".');
     expect(wrapper.find('[data-testid="chat-visual-error"]').text()).toContain(
@@ -859,8 +2066,8 @@ describe("Chat visual fixture rendering (no network)", () => {
 
   it("renders Phase 3B message fixtures via ChatMessageRow + ChatMessageContent without network", async () => {
     const expectations: Record<string, { testId: string; ns?: string }> = {
-      "short-generic": { testId: "markdown-viewer", ns: "__absent__" },
-      "long-generic": { testId: "markdown-viewer", ns: "__absent__" },
+      "short-generic": { testId: "scientific-markdown", ns: "m0" },
+      "long-generic": { testId: "scientific-markdown", ns: "m0" },
       cited: { testId: "cited-answer", ns: "m1" },
       "deep-genome": { testId: "deep-genome", ns: "m1" },
       streaming: { testId: "stream-message", ns: "__absent__" },
@@ -869,7 +2076,7 @@ describe("Chat visual fixture rendering (no network)", () => {
 
     for (const [key, expectBranch] of Object.entries(expectations)) {
       const fixture = getChatVisualFixture(
-        key as typeof CHAT_VISUAL_FIXTURE_KEYS[number]
+        key as (typeof CHAT_VISUAL_FIXTURE_KEYS)[number]
       );
       const wrapper = mountFixtureApp(fixture);
       await flushPromises();
@@ -914,9 +2121,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     await flushPromises();
     await nextTick();
 
-    expect(
-      wrapper.findComponent({ name: "ChatMessageContent" }).exists()
-    ).toBe(true);
+    expect(wrapper.findComponent({ name: "ChatMessageContent" }).exists()).toBe(
+      true
+    );
     expect(wrapper.findComponent({ name: "StreamMessage" }).exists()).toBe(
       true
     );
@@ -926,9 +2133,9 @@ describe("Chat visual fixture rendering (no network)", () => {
     expect(wrapper.find(".a2ui-form label").text()).toHaveLength(256);
     expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
     expect(
-      wrapper.find('.agent-surface-block[data-widget="form"]').attributes(
-        "aria-busy"
-      )
+      wrapper
+        .find('.agent-surface-block[data-widget="form"]')
+        .attributes("aria-busy")
     ).toBe("true");
     expect(wrapper.findAll(".a2ui-actions")).toHaveLength(3);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -947,9 +2154,9 @@ describe("Chat visual fixture rendering (no network)", () => {
       await nextTick();
 
       expect(wrapper.findAll(".agent-surface-block")).toHaveLength(7);
-      expect(wrapper.findAll('[role="status"][aria-live="polite"]')).toHaveLength(
-        5
-      );
+      expect(
+        wrapper.findAll('[role="status"][aria-live="polite"]')
+      ).toHaveLength(6);
       expect(wrapper.find('[data-test="a2ui-retry"]').exists()).toBe(true);
       wrapper.unmount();
     }
@@ -978,9 +2185,9 @@ describe("Chat visual fixture rendering (no network)", () => {
       lastMessageRect: rect(16, 620, 359, 700),
     });
     expect(mobile.pass).toBe(true);
-    expect((mobile.reasons ?? []).some((reason) => /overflow/.test(reason))).toBe(
-      false
-    );
+    expect(
+      (mobile.reasons ?? []).some((reason) => /overflow/.test(reason))
+    ).toBe(false);
     expect(CONTENT_SOURCE).toContain("overflow-x: auto");
     expect(CONTENT_SOURCE).toContain("word-break: break-word");
     expect(CONTENT_SOURCE).toContain("max-width: 100%");

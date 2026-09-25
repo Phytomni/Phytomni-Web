@@ -1,0 +1,14 @@
+{"code":"SA1016","severity":"warning","location":{"file":"apps/server/graceful/graceful.go","line":12,"column":4},"message":"os.Kill cannot be trapped"}
+{"code":"SA4000","severity":"warning","location":{"file":"apps/server/middleware/ratelimit_test.go","line":22,"column":5},"message":"identical expressions on the left and right"}
+{"code":"S1000","severity":"warning","location":{"file":"apps/server/server/http.go","line":30,"column":2},"message":"should use a simple channel receive"}
+{"code":"SA4006","severity":"warning","location":{"file":"apps/server/service/api_service/agent_task.go","line":44,"column":3},"message":"this value of err is never used"}
+{"code":"U1000","severity":"warning","location":{"file":"apps/server/service/api_service/gene.go","line":61,"column":1},"message":"unused function"}
+{"code":"SA1029","severity":"warning","location":{"file":"apps/server/service/api_service/query_compat_test.go","line":73,"column":10},"message":"should not use built-in type string as key"}
+{"code":"SA1029","severity":"warning","location":{"file":"apps/server/service/api_service/query_expert_test.go","line":74,"column":10},"message":"should not use built-in type string as key"}
+{"code":"SA1029","severity":"warning","location":{"file":"apps/server/service/api_service/query_stream_test.go","line":75,"column":10},"message":"should not use built-in type string as key"}
+{"code":"S1008","severity":"warning","location":{"file":"apps/server/service/api_service/user.go","line":86,"column":2},"message":"should use !ok instead of ok == false"}
+{"code":"SA1029","severity":"warning","location":{"file":"apps/server/utils/ctx.go","line":9,"column":16},"message":"should not use built-in type string as key"}
+{"code":"SA1019","severity":"warning","location":{"file":"apps/server/utils/file.go","line":19,"column":8},"message":"io/ioutil is deprecated"}
+{"code":"U1000","severity":"warning","location":{"file":"apps/server/utils/file.go","line":31,"column":1},"message":"unused function"}
+{"code":"S1002","severity":"warning","location":{"file":"apps/server/utils/helper.go","line":22,"column":9},"message":"should omit comparison to bool constant"}
+{"code":"SA1019","severity":"warning","location":{"file":"apps/server/utils/math.go","line":14,"column":2},"message":"rand.Seed is deprecated"}

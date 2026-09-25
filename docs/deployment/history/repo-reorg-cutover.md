@@ -19,7 +19,7 @@ to verify, how to roll back.
 
 > **Scope correction.** The older
 > [`python-to-go-cutover.md`](python-to-go-cutover.md)
-> describes the *original* Python→Go/Bot migration (Python retirement, bcrypt,
+> describes the _original_ Python→Go/Bot migration (Python retirement, bcrypt,
 > first-login gate, Bot wiring, OBS relay). **That migration is already live in
 > production** too. This document covers **only the `main` → `repo-reorg` delta** —
 > layout/module/table/port renames, the `/api/v1` RESTful sweep, Redis subsystem,
@@ -63,11 +63,13 @@ real values, never paste them into tickets or logs.
 (not in any repo) are marked **(verify on-server)** — confirm in place.
 
 **Companion documents.**
-- [`python-to-go-cutover.md`](python-to-go-cutover.md) — the *original* Python→Go/Bot migration manual (already live; reference only).
+
+- [`python-to-go-cutover.md`](python-to-go-cutover.md) — the _original_ Python→Go/Bot migration manual (already live; reference only).
 - [`operations.md`](../operations.md) — Bot key mint/rotation/staged-cutover/rollback (already done; reference only).
 - [`CHANGELOG.md`](../../../CHANGELOG.md) — full commit-level changelog for this release.
 
 **Contents.**
+
 1. [What changed](#1-what-changed-vs-the-current-production-stack)
 2. [Target topology & ports](#2-target-topology--ports)
 3. [Prerequisites & pre-flight](#3-prerequisites--pre-flight)
@@ -85,37 +87,37 @@ real values, never paste them into tickets or logs.
 
 ## 1. What changed vs the current production stack
 
-| Area | Currently in production (`main`) | This release (`repo-reorg`) | Why it matters |
-|---|---|---|---|
-| Repo layout | `chat-ai/` + `nky_client_go/` at root | `apps/web/` + `apps/server/` | Build paths, deploy scripts, supervisor CWD all change |
-| Go module | `nky_client_go` | `phytomni-server` | Binary name + import paths change; rebuild, no in-place swap |
-| Go port | `:8082` | `:8080` | nginx upstream + any direct clients must repoint |
-| Vite dev port | `80` | `5173` | Dev-only; production build unaffected |
-| DB name | `nongke` | `phytomni` | DSN changes; `CREATE DATABASE` + data copy or `RENAME` |
-| DB registry key | `nky_client_go` | `phytomni-server` | `app.yml` `db:` block key changes |
-| Table names | `s_user`, `s_question_agent_logs`, … (11 tables, `s_` prefix, singular) | `users`, `question_agent_logs`, … (unprefixed, plural) | `RENAME TABLE` for each; GORM `TableName()` rewritten |
-| API paths | `/auth/*`, `/v1/*`, `/query` (verb-in-path) | `/api/v1/*` RESTful + retained alias | nginx needs `/api/v1` location; frontend rebuilt |
-| Redis | Commented out at boot; cache package present but inert | Activated (`redis.enabled` default true); revocation + ratelimit + OBS cache | Requires reachable Redis; all fail-open if down |
-| Auth | Login only; no server logout; MD5/bcrypt lazy upgrade already live | + `POST /api/v1/auth/logout` + `/logout-all` (token revocation); unique email index; register flood floor; ChatLimit gate (OFF) | New endpoints; one-time unique-index migration; dark-launched gate |
-| Sentry | Wired (inert) | Removed | Drop dep; no config action |
-| SMTP email package | Present (dead — zero importers) | Removed | `email:` config block now orphan (§4) |
-| Huawei IAM/EIHealth | Direct connect in FreshGA cron | Removed; all async via Bot `SyncBotRuns` | `huawei:` config block now orphan (§4); Web holds no Huawei creds |
-| Agent naming | `BriefReviewAgent` (maps to `brief_gene`) | `BriefGeneAgent` canonical; SSOT + drift guard | One-time `rename-tool-names` + `backfill` migration |
-| Frontend | Monolithic chat view | Decomposed into composables; canonical render-switches; 504 message; send progress | Rebuild `dist`; behavior-compatible |
-| `.gitignore` | Flat, dead rules | Consolidated, grouped, pruned | No deploy impact |
+| Area                | Currently in production (`main`)                                        | This release (`repo-reorg`)                                                                                                     | Why it matters                                                     |
+| ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Repo layout         | `chat-ai/` + `nky_client_go/` at root                                   | `apps/web/` + `apps/server/`                                                                                                    | Build paths, deploy scripts, supervisor CWD all change             |
+| Go module           | `nky_client_go`                                                         | `phytomni-server`                                                                                                               | Binary name + import paths change; rebuild, no in-place swap       |
+| Go port             | `:8082`                                                                 | `:8080`                                                                                                                         | nginx upstream + any direct clients must repoint                   |
+| Vite dev port       | `80`                                                                    | `5173`                                                                                                                          | Dev-only; production build unaffected                              |
+| DB name             | `nongke`                                                                | `phytomni`                                                                                                                      | DSN changes; `CREATE DATABASE` + data copy or `RENAME`             |
+| DB registry key     | `nky_client_go`                                                         | `phytomni-server`                                                                                                               | `app.yml` `db:` block key changes                                  |
+| Table names         | `s_user`, `s_question_agent_logs`, … (11 tables, `s_` prefix, singular) | `users`, `question_agent_logs`, … (unprefixed, plural)                                                                          | `RENAME TABLE` for each; GORM `TableName()` rewritten              |
+| API paths           | `/auth/*`, `/v1/*`, `/query` (verb-in-path)                             | `/api/v1/*` RESTful + retained alias                                                                                            | nginx needs `/api/v1` location; frontend rebuilt                   |
+| Redis               | Commented out at boot; cache package present but inert                  | Activated (`redis.enabled` default true); revocation + ratelimit + OBS cache                                                    | Requires reachable Redis; all fail-open if down                    |
+| Auth                | Login only; no server logout; MD5/bcrypt lazy upgrade already live      | + `POST /api/v1/auth/logout` + `/logout-all` (token revocation); unique email index; register flood floor; ChatLimit gate (OFF) | New endpoints; one-time unique-index migration; dark-launched gate |
+| Sentry              | Wired (inert)                                                           | Removed                                                                                                                         | Drop dep; no config action                                         |
+| SMTP email package  | Present (dead — zero importers)                                         | Removed                                                                                                                         | `email:` config block now orphan (§4)                              |
+| Huawei IAM/EIHealth | Direct connect in FreshGA cron                                          | Removed; all async via Bot `SyncBotRuns`                                                                                        | `huawei:` config block now orphan (§4); Web holds no Huawei creds  |
+| Agent naming        | `BriefReviewAgent` (maps to `brief_gene`)                               | `BriefGeneAgent` canonical; SSOT + drift guard                                                                                  | One-time `rename-tool-names` + `backfill` migration                |
+| Frontend            | Monolithic chat view                                                    | Decomposed into composables; canonical render-switches; 504 message; send progress                                              | Rebuild `dist`; behavior-compatible                                |
+| `.gitignore`        | Flat, dead rules                                                        | Consolidated, grouped, pruned                                                                                                   | No deploy impact                                                   |
 
 ---
 
 ## 2. Target topology & ports
 
-| Component | Port | Role |
-|---|---|---|
-| nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8080` (**was `:8082`**) | Serves `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
-| Bot | `:8000` (internal) | Unchanged — Go relays chat here; deployed by the Bot team |
-| MySQL | `:3306` | **`phytomni` database** (was `nongke`) |
-| Redis | `:6379` (**now required**) | Token revocation + rate limit + OBS listing cache (all fail-open) |
-| Satellite: `/aiquery/*`, `/oneauth/*` | separate | Unchanged |
+| Component                             | Port                        | Role                                                                               |
+| ------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
+| nginx                                 | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA                           |
+| Go service                            | `:8080` (**was `:8082`**)   | Serves `/api/v1/*` + retained alias `/query/analyst/update_log`. Sole MySQL writer |
+| Bot                                   | `:8000` (internal)          | Unchanged — Go relays chat here; deployed by the Bot team                          |
+| MySQL                                 | `:3306`                     | **`phytomni` database** (was `nongke`)                                             |
+| Redis                                 | `:6379` (**now required**)  | Token revocation + rate limit + OBS listing cache (all fail-open)                  |
+| Satellite: `/aiquery/*`, `/oneauth/*` | separate                    | Unchanged                                                                          |
 
 **Current data flow (production, `main`)**
 
@@ -177,10 +179,11 @@ pointing at `nongke`; this release uses key `phytomni-server` pointing at
 
 ```yaml
 db:
-  phytomni-server:                       # was: nky_client_go
+  phytomni-server: # was: nky_client_go
     dialect: mysql
-    dsn: "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
-                                       # was: /nongke
+    dsn:
+      "<DB_USER>:<DB_PASSWORD>@tcp(<PROD_DB_HOST>:3306)/phytomni?charset=utf8mb4&parseTime=True&loc=Local"
+      # was: /nongke
 ```
 
 The `phytomni` database must exist and contain the **renamed tables** (§5)
@@ -192,13 +195,13 @@ had on `nongke`.
 
 ```yaml
 redis:
-  enabled: true                # default true = secure path; false ⇒ all Redis features fail-open
+  enabled: true # default true = secure path; false ⇒ all Redis features fail-open
   clients:
     web:
       addrs:
         - "<REDIS_HOST>:6379"
       db: 0
-      password: <REDIS_PASSWORD>   # empty if none
+      password: <REDIS_PASSWORD> # empty if none
       type: single-node
   default: web
 ```
@@ -211,10 +214,10 @@ fail-opens (a startup WARN is logged). See §11.
 
 ```yaml
 ratelimit:
-  enabled: false               # master switch; default OFF (dark launch)
-  login:    { limit: 60, window: 60s }    # per-IP on /auth/sessions
-  register: { limit: 10, window: 1h  }    # per-IP on /auth/registrations
-  query:    { limit: 30, window: 60s }    # per-user on /query
+  enabled: false # master switch; default OFF (dark launch)
+  login: { limit: 60, window: 60s } # per-IP on /auth/sessions
+  register: { limit: 10, window: 1h } # per-IP on /auth/registrations
+  query: { limit: 30, window: 60s } # per-user on /query
 ```
 
 Leave `enabled: false` for the initial deploy (zero behavior change). Flip to
@@ -225,7 +228,7 @@ Redis down ⇒ always allow (auth never degrades).
 
 ```yaml
 obscache:
-  enabled: true                # default ON; fail-open
+  enabled: true # default ON; fail-open
   ttl: 1h
 ```
 
@@ -236,7 +239,7 @@ set `false` to bypass the cache without affecting revocation/ratelimit.
 
 ```yaml
 chatlimit:
-  enforce: false               # default OFF; ON ⇒ self-registered users (chat_limit=0) blocked from /query
+  enforce: false # default OFF; ON ⇒ self-registered users (chat_limit=0) blocked from /query
 ```
 
 `enforce: false` = today's behavior (everyone can chat). Flip to `true` only
@@ -249,10 +252,10 @@ The `bot` block is unchanged except `api_base_url` now references `:8080`:
 
 ```yaml
 bot:
-  base_url: "http://<BOT_HOST>:8000"     # unchanged
-  user_api_key: "<PTM_WEB_KEY>"          # unchanged — reuse the existing key
-  timeout_seconds: 900                   # unchanged
-  proxy_enabled: true                    # unchanged
+  base_url: "http://<BOT_HOST>:8000" # unchanged
+  user_api_key: "<PTM_WEB_KEY>" # unchanged — reuse the existing key
+  timeout_seconds: 900 # unchanged
+  proxy_enabled: true # unchanged
   # …rest unchanged
 ```
 
@@ -296,20 +299,20 @@ instant, online, non-blocking).
 > **Table rename mapping (11 tables).** Production today uses the `s_`-prefixed
 > singular names; this release expects unprefixed plural:
 
-| Current (`main`) | This release (`repo-reorg`) |
-|---|---|
-| `s_user` | `users` |
-| `s_tool_name` | `tool_names` |
-| `s_user_tool_name` | `user_tool_names` |
-| `s_question_agent_logs` | `question_agent_logs` |
-| `s_gene_list` | `gene_lists` |
-| `s_gene_example` | `gene_examples` |
-| `s_user_permission` | `user_permissions` |
-| `s_server_tool_logs` | `server_tool_logs` |
-| `s_user_feedback` | `user_feedback` |
-| `s_user_operation_logs` | `user_operation_logs` |
-| `s_sql_operation_logs` | `sql_operation_logs` |
-| *(any other `s_*` table present)* | *(drop `s_`, pluralize — verify on-server)* |
+| Current (`main`)                     | This release (`repo-reorg`)                  |
+| ------------------------------------ | -------------------------------------------- |
+| `s_user`                             | `users`                                      |
+| `s_tool_name`                        | `tool_names`                                 |
+| `s_user_tool_name`                   | `user_tool_names`                            |
+| `s_question_agent_logs`              | `question_agent_logs`                        |
+| `s_gene_list`                        | `gene_lists`                                 |
+| `s_gene_example`                     | `gene_examples`                              |
+| `s_user_permission`                  | `user_permissions`                           |
+| `s_server_tool_logs`                 | `server_tool_logs`                           |
+| `s_user_feedback`                    | `user_feedback`                              |
+| `s_user_operation_logs`              | `user_operation_logs`                        |
+| `s_sql_operation_logs`               | `sql_operation_logs`                         |
+| \_(any other `s\__` table present)\* | _(drop `s_`, pluralize — verify on-server)\_ |
 
 ### 5.1 Rename the database
 
@@ -433,6 +436,7 @@ team before any removal.
    ```
 
    Put it under a process supervisor (systemd). Update the supervisor unit:
+
    - binary path → `phytomni-server`
    - CWD / `--config` → the new config location
    - port expectation → `8080`
@@ -670,6 +674,6 @@ and are **not** re-applied here:
 - `bot_run_id` / `image_paths` columns + enum tightenings (already migrated).
 - Huawei OBS credential move to Bot (already done; Web holds none).
 
-If any of these are *not* actually live in your production (verify on-server),
+If any of these are _not_ actually live in your production (verify on-server),
 stop and consult the older manual before proceeding — this release assumes
 they are all in place.

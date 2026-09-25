@@ -119,6 +119,10 @@ describe("PHY_TOKENS", () => {
       "--phy-layout-artifact-document-max-width",
       "--phy-layout-artifact-chat-min-width",
       "--phy-layout-artifact-content-min-width",
+      "--phy-layout-content-gutter",
+      "--phy-layout-overlay-gutter",
+      "--phy-layout-agent-preview-max-width",
+      "--phy-layout-scientific-media-max-height",
     ];
 
     for (const token of declarations) {
@@ -145,13 +149,17 @@ describe("PHY_TOKENS", () => {
       "--phy-control-height-primary: 48px;",
       "--phy-layout-sidebar-expanded-width: 272px;",
       "--phy-layout-sidebar-compact-width: 56px;",
-      "--phy-layout-transcript-max-width: clamp(860px, 72vw, 1600px);",
+      "--phy-layout-transcript-max-width: clamp(860px, 72vw, 1280px);",
       "--phy-layout-document-max-width: clamp(1120px, 78vw, 1600px);",
       "--phy-layout-reading-max-width: clamp(760px, 52vw, 1160px);",
       "--phy-layout-artifact-wide-max-width: clamp(1120px, 72vw, 1600px);",
       "--phy-layout-artifact-document-max-width: clamp(760px, 46vw, 1040px);",
       "--phy-layout-artifact-chat-min-width: 360px;",
       "--phy-layout-artifact-content-min-width: 560px;",
+      "--phy-layout-content-gutter: clamp(16px, 2.1vw, 40px);",
+      "--phy-layout-overlay-gutter: clamp(16px, 2vw, 32px);",
+      "--phy-layout-agent-preview-max-width: min(440px, calc(100vw - 32px));",
+      "--phy-layout-scientific-media-max-height: clamp(240px, 52vh, 640px);",
       "--phy-breakpoint-small: 600px;",
       "--phy-breakpoint-medium: 900px;",
       "--phy-breakpoint-large: 1280px;",
@@ -226,15 +234,13 @@ describe("PHY_TOKENS", () => {
       "utf8"
     );
     const chatIndex = readFileSync(
-      resolve(__dirname, "../../../src/views/chat/index.vue"),
+      resolve(__dirname, "../../../src/views/chat/ChatView.vue"),
       "utf8"
     );
     const surfaces = [rowCss, contentCss, chatIndex].join("\n");
 
     expect(surfaces).not.toMatch(/backdrop-filter\s*:/);
-    expect(surfaces).not.toMatch(
-      /linear-gradient\s*\(|radial-gradient\s*\(/
-    );
+    expect(surfaces).not.toMatch(/linear-gradient\s*\(|radial-gradient\s*\(/);
     // Banned competing brand blues must not reappear as bubble fills.
     for (const hex of ["#409eff", "#66b1ff", "#1890ff", "#626aef"]) {
       expect(surfaces.toLowerCase()).not.toContain(hex);

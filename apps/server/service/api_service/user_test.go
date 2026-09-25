@@ -53,6 +53,33 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
+func TestCheckEmailExists_ReturnsFalseForZeroAndTrueForNonzeroCount(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	ps := NewService()
+
+	if ps.CheckEmailExists(context.Background(), "missing@x.com") {
+		t.Fatal("missing email must report false")
+	}
+	if err := gdb.Exec(`INSERT INTO users (id, email, code) VALUES (1, 'present@x.com', 'user')`).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if !ps.CheckEmailExists(context.Background(), "present@x.com") {
+		t.Fatal("present email must report true")
+	}
+}
+
+func TestGetUserProfile_PropagatesUserQueryError(t *testing.T) {
+	gdb := setupUserTestDB(t)
+	if err := gdb.Exec(`DROP TABLE users`).Error; err != nil {
+		t.Fatalf("drop users table: %v", err)
+	}
+
+	_, err := NewService().GetUserProfile(context.Background(), "missing@x.com")
+	if err == nil {
+		t.Fatal("user query failure must be returned to the caller")
+	}
+}
+
 // TestGetUserInfo_LockoutOnFifthFailure pins the lockout threshold: the 5th
 // wrong password must lock the account for 15 minutes. Without this guard, a
 // threshold or window change goes undetected by any test.

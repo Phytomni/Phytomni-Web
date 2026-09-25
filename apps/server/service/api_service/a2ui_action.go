@@ -2,9 +2,11 @@ package api_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	"phytomni-server/common/citation"
 	rxBot "phytomni-server/external/bot"
 	"phytomni-server/model"
 )
@@ -35,34 +37,108 @@ func (ps *Service) A2uiAction(
 		return nil, err
 	}
 
-	var count int64
-	err = model.DB(ctx).Model(&model.QuestionAgentLog{}).
+	var rows []model.QuestionAgentLog
+	err = model.DB(ctx).
 		Where(
-			"dialogue_id = ? AND user_name = ? AND bot_run_id = ? AND delete_at IS NULL",
+			"dialogue_id = ? AND user_name = ? AND delete_at IS NULL",
 			dialogueID,
 			username,
-			env.RunID,
 		).
-		Count(&count).Error
+		Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	if count == 0 {
+	var authorizedRow *model.QuestionAgentLog
+	privateReplacement := false
+	for index := range rows {
+		_, private, decodeErr := unmarshalPersistedProjectionWithContext(rows[index].BotProjectionJSON)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if private != nil && private.Replacement != nil {
+			replacement := private.Replacement
+			if replacement.ActiveStatus == "INPUT_REQUIRED" &&
+				replacement.ActiveBotRunID == env.RunID {
+				authorizedRow = &rows[index]
+				privateReplacement = true
+				break
+			}
+			// While a private replacement is active, the old public run is no
+			// longer an actionable A2UI target even though it remains visible.
+			continue
+		}
+		if rows[index].BotRunId == env.RunID {
+			authorizedRow = &rows[index]
+			break
+		}
+	}
+	if authorizedRow == nil {
 		return nil, ErrA2uiActionNotFound
 	}
 	if rxBot.BotConfig == nil || !rxBot.BotConfig.ProxyEnabled {
 		return nil, ErrGatewayDisabled
 	}
-	if !rxBot.BotConfig.A2uiActionsEnabled {
-		return nil, ErrGatewayDisabled
-	}
 
-	result, err := rxBot.NewClient().PostA2uiAction(ctx, env.RunID, rawBody)
+	client := rxBot.NewClient()
+	result, err := client.PostA2uiAction(ctx, env.RunID, rawBody)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil || validateA2uiUpstreamResponse(result.Status, result.ContentType, result.Body) != nil {
 		return nil, ErrA2uiUpstreamProtocol
+	}
+	if result.Status >= 200 && result.Status < 300 {
+		var actionResponse struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(result.Body, &actionResponse); err != nil {
+			return nil, ErrA2uiUpstreamProtocol
+		}
+		if actionResponse.Status == "succeeded" {
+			normalized, err := rxBot.NormalizeActionReferences(result.Body)
+			if err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			record, meta, err := client.GetRunWithMeta(ctx, env.RunID)
+			if err != nil {
+				return nil, err
+			}
+			// Validate the raw known field before typed projection decoding can
+			// reject unrelated fields or discard a malformed formatted envelope.
+			source, err := json.Marshal(map[string]json.RawMessage{"result": record.Result})
+			if err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			if _, err := rxBot.NormalizeActionReferences(source); err != nil {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			projection, err := DecodeRunProjection(record)
+			if err != nil {
+				return nil, err
+			}
+			if projection.Status != statusSucceeded {
+				return nil, ErrA2uiUpstreamProtocol
+			}
+			if privateReplacement {
+				err = ps.applyPrivateReplacementRunProjection(
+					ctx,
+					authorizedRow.Id,
+					authorizedRow.UserName,
+					env.RunID,
+					record,
+					meta,
+				)
+			} else {
+				err = ps.applyBotRunProjection(ctx, authorizedRow, record, meta)
+			}
+			if err != nil {
+				if errors.Is(err, citation.ErrInvalidReferences) {
+					return nil, ErrA2uiUpstreamProtocol
+				}
+				return nil, err
+			}
+			result.Body = normalized
+		}
 	}
 	return &A2uiActionOutcome{
 		Status:      result.Status,

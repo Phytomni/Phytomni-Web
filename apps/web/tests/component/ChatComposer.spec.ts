@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
-import type { UploadFile } from "@/views/chat/types";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { ResumableUploadItem } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
+
+const COMPOSER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/chat/components/ChatComposer.vue"),
+  "utf8"
+);
 
 const mentionExpose = {
   openHeader: vi.fn(),
@@ -38,12 +46,6 @@ vi.mock("vue-element-plus-x", () => ({
       return {};
     },
   },
-  FilesCard: {
-    name: "FilesCard",
-    template: '<div class="files-card-stub" @click="$emit(\'delete\')" />',
-    props: ["uid", "name", "fileSize", "showDelIcon"],
-    emits: ["delete"],
-  },
 }));
 
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
@@ -63,18 +65,32 @@ const COMPACT_DOM_ORDER = [
 ];
 
 const pickerOptions = [
-  { tool: "RAG", label: "RAG", labelKey: "chat.agents.rAG" },
-  { tool: "BI", label: "BI", labelKey: "chat.agents.bI" },
+  { tool: "ChatAgent", label: "Chat Agent", labelKey: "chat.agents.chatAgent" },
+  {
+    tool: "KnowledgeAgent",
+    label: "Knowledge Agent",
+    labelKey: "chat.agents.knowledgeAgent",
+  },
+  {
+    tool: "InSilicoResearchAgent",
+    label: "In Silico Research Agent",
+    labelKey: "chat.agents.inSilicoResearchAgent",
+  },
 ];
 
 const baseProps = () => ({
   modelValue: "hello",
   isSending: false,
-  chatMode: "instant" as const,
+  chatMode: "expert" as const,
+  instantModeEnabled: true,
   expertModeEnabled: true,
+  modeUsable: true,
   showModeSelector: true,
-  fileList: [] as UploadFile[],
-  rolesTool: ["RAG", "BI"],
+  maxAttachments: 64,
+  fileList: [] as ResumableUploadItem[],
+  hasBlockingUploads: false,
+  attachmentTargetAvailable: true,
+  attachmentTargetBlocked: false,
   rolesLoading: false,
   hasMessages: false,
   selectedAgent: "",
@@ -82,14 +98,14 @@ const baseProps = () => ({
 });
 
 const mountComposer = (overrides: Record<string, unknown> = {}) =>
-  mount(ChatComposer, {
+  mountWithApp(ChatComposer, {
     props: { ...baseProps(), ...overrides },
     global: {
       stubs: {
         ChatModeSelector: {
           name: "ChatModeSelector",
           template: '<div class="composer-mode-selector" />',
-          props: ["modelValue", "expertEnabled"],
+          props: ["modelValue", "instantEnabled", "expertEnabled"],
           emits: ["update:modelValue"],
         },
         ChatAgentPicker: {
@@ -98,6 +114,35 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             '<div class="chat-agent-picker" data-testid="chat-agent-picker" />',
           props: ["options", "rolesLoading", "selectedAgent", "disabled"],
           emits: ["select", "clear"],
+        },
+        ChatAgentQuickSelect: {
+          name: "ChatAgentQuickSelect",
+          template:
+            '<div data-testid="chat-agent-quick-select"><button v-for="option in options" :key="option.tool">{{ option.label }}</button></div>',
+          props: ["options", "rolesLoading", "selectedAgent", "disabled"],
+          emits: ["toggle"],
+        },
+        AttachmentChipStrip: {
+          name: "AttachmentChipStrip",
+          template:
+            '<div data-testid="attachment-chip-strip"><button v-for="item in items" :key="item.localId" data-testid="attachment-chip" @click="$emit(\'select\', item.localId)">{{ item.name }}</button><button data-testid="stub-remove" @click="$emit(\'remove\', items[0]?.localId)">Remove</button></div>',
+          props: ["items", "disabled", "announcement", "announcementNonce"],
+          emits: [
+            "select",
+            "pause",
+            "resume",
+            "retry",
+            "reselect",
+            "cancel",
+            "remove",
+          ],
+        },
+        ChatUploadCard: {
+          name: "ChatUploadCard",
+          template:
+            '<div class="chat-upload-card-stub"><button data-testid="stub-remove" @click="$emit(\'remove\', item.localId)">Remove</button></div>',
+          props: ["item"],
+          emits: ["pause", "resume", "retry", "reselect", "cancel", "remove"],
         },
         ElUpload: {
           name: "ElUpload",
@@ -111,6 +156,7 @@ const mountComposer = (overrides: Record<string, unknown> = {}) =>
             "multiple",
             "action",
             "onChange",
+            "onExceed",
           ],
           emits: ["change"],
         },
@@ -157,6 +203,41 @@ describe("ChatComposer", () => {
     expect(roots).toHaveLength(1);
     expect(wrapper.element).toBe(roots[0].element);
     expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
+  });
+
+  it("renders one attach action without purpose or description controls", () => {
+    const wrapper = mountComposer();
+
+    expect(wrapper.findAllComponents({ name: "ElUpload" })).toHaveLength(1);
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      false
+    );
+    expect(
+      wrapper.findComponent({ name: "AttachmentPurposeSelector" }).exists()
+    ).toBe(false);
+    expect(wrapper.find('[data-testid="dataset-description"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.findAllComponents({ name: "MentionSender" })).toHaveLength(
+      1
+    );
+    expect(wrapper.findAll("input")).toHaveLength(0);
+  });
+
+  it("binds the upload action and copy to the negotiated attachment limit", async () => {
+    const wrapper = mountComposer({ maxAttachments: 64 });
+
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(64);
+    expect(
+      wrapper.findComponent(".composer-tool-button").props("ariaLabel")
+    ).toContain("64 files");
+
+    await wrapper.setProps({ maxAttachments: 10 });
+
+    expect(wrapper.getComponent({ name: "ElUpload" }).props("limit")).toBe(10);
+    expect(
+      wrapper.findComponent(".composer-tool-button").props("ariaLabel")
+    ).toContain("10 files");
   });
 
   it("keeps compact DOM order without legacy wrappers", () => {
@@ -221,6 +302,117 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["next"]);
   });
 
+  it("feeds mention suggestions from the same picker options in Expert", () => {
+    const wrapper = mountComposer({ chatMode: "expert" });
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([
+      { value: "ChatAgent" },
+      { value: "KnowledgeAgent" },
+      { value: "InSilicoResearchAgent" },
+    ]);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("triggerStrings")
+    ).toStrictEqual(["@"]);
+  });
+
+  it("disables mode controls, input, attachment upload, mention routing, and send while permissions load", () => {
+    const wrapper = mountComposer({ rolesLoading: true });
+
+    const modeSelector = wrapper.findComponent({ name: "ChatModeSelector" });
+    expect(modeSelector.props("instantEnabled")).toBe(false);
+    expect(modeSelector.props("expertEnabled")).toBe(false);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("triggerStrings")
+    ).toEqual([]);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+  });
+
+  it("shows the safe permission message when no mode is usable", () => {
+    const wrapper = mountComposer({
+      modeUsable: false,
+      instantModeEnabled: false,
+      expertModeEnabled: false,
+    });
+
+    expect(wrapper.get('[data-testid="chat-permission-status"]').text()).toBe(
+      "No agents are available for this account."
+    );
+  });
+
+  it("matches the agent-control matrix for empty and populated chats", () => {
+    const emptyInstant = mountComposer({ chatMode: "instant" });
+    expect(
+      emptyInstant.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
+    expect(
+      emptyInstant.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(false);
+    expect(
+      emptyInstant.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(
+      emptyInstant
+        .findComponent({ name: "MentionSender" })
+        .props("triggerStrings")
+    ).toEqual([]);
+
+    const emptyExpert = mountComposer({ chatMode: "expert" });
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(true);
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(true);
+
+    const populatedInstant = mountComposer({
+      chatMode: "instant",
+      hasMessages: true,
+      showModeSelector: false,
+    });
+    expect(
+      populatedInstant.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
+    expect(populatedInstant.find(".el-dropdown").exists()).toBe(false);
+
+    const populatedExpert = mountComposer({
+      chatMode: "expert",
+      hasMessages: true,
+      showModeSelector: false,
+    });
+    expect(populatedExpert.find(".el-dropdown").exists()).toBe(true);
+    expect(
+      populatedExpert.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(false);
+  });
+
+  it("forwards a quick toggle and uses localized labels in the populated menu", async () => {
+    const empty = mountComposer({ chatMode: "expert" });
+    await empty
+      .findComponent({ name: "ChatAgentQuickSelect" })
+      .vm.$emit("toggle", "KnowledgeAgent");
+    expect(empty.emitted("toggle-agent")?.[0]).toEqual(["KnowledgeAgent"]);
+
+    const populated = mountComposer({ chatMode: "expert", hasMessages: true });
+    expect(populated.find(".el-dropdown").text()).toContain("Chat Agent");
+    expect(populated.find(".el-dropdown").text()).toContain("Knowledge Agent");
+    const menu = populated.get(".el-dropdown");
+    expect(menu.text()).toContain("In Silico Research Agent");
+    expect(menu.get("em").text()).toBe("In Silico");
+    expect(menu.get("em").text()).not.toContain("Research Agent");
+  });
+
   it("emits submit from MentionSender and the enabled primary action", async () => {
     const wrapper = mountComposer({ modelValue: "go" });
     await wrapper.findComponent({ name: "MentionSender" }).vm.$emit("submit");
@@ -265,12 +457,24 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("update:chatMode")?.[0]).toEqual(["expert"]);
   });
 
-  it("shows attachment cards and emits remove-file", async () => {
-    const file: UploadFile = {
+  it("renders the production chip strip and emits remove-upload", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-doc",
+      assetId: null,
       name: "doc.pdf",
       size: 10,
       type: "application/pdf",
       file: new File(["x"], "doc.pdf"),
+      lastModified: 0,
+      status: "completed",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 10,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
     };
     const wrapper = mountComposer({ fileList: [file] });
     expect(wrapper.find(".composer-attachments").exists()).toBe(true);
@@ -279,9 +483,251 @@ describe("ChatComposer", () => {
         .find(".composer-attachments")
         .element.closest(".phy-composer-frame")
     ).toBeTruthy();
-    expect(wrapper.find(".file-list-container").exists()).toBe(true);
-    await wrapper.findComponent({ name: "FilesCard" }).vm.$emit("delete");
-    expect(wrapper.emitted("remove-file")?.[0]).toEqual([0]);
+    expect(
+      wrapper.findComponent({ name: "AttachmentChipStrip" }).exists()
+    ).toBe(true);
+    expect(wrapper.findComponent({ name: "ChatUploadCard" }).exists()).toBe(
+      false
+    );
+    await wrapper
+      .findComponent({ name: "AttachmentChipStrip" })
+      .vm.$emit("remove", file.localId);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("preserves every chip recovery event contract", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-actions",
+      assetId: null,
+      name: "reads.fastq.gz",
+      size: 10,
+      type: "application/gzip",
+      file: new File(["x"], "reads.fastq.gz"),
+      lastModified: 0,
+      status: "uploading",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [],
+      loadedBytes: 5,
+      speedBytesPerSecond: 1,
+      etaSeconds: 5,
+      retryCount: 0,
+      errorCode: null,
+    };
+    const replacement = new File(["y"], "reads.fastq.gz");
+    const wrapper = mountComposer({ fileList: [file] });
+    const strip = wrapper.findComponent({ name: "AttachmentChipStrip" });
+
+    await strip.vm.$emit("pause", file.localId);
+    await strip.vm.$emit("resume", file.localId);
+    await strip.vm.$emit("retry", file.localId);
+    await strip.vm.$emit("reselect", file.localId, replacement);
+    await strip.vm.$emit("cancel", file.localId);
+    await strip.vm.$emit("remove", file.localId);
+
+    expect(wrapper.emitted("pause-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("resume-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("retry-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("reselect-upload")?.[0]).toEqual([
+      file.localId,
+      replacement,
+    ]);
+    expect(wrapper.emitted("cancel-upload")?.[0]).toEqual([file.localId]);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("passes the duplicate announcement into the production strip", () => {
+    const wrapper = mountComposer({
+      fileList: [
+        {
+          localId: "upload-duplicate",
+          assetId: null,
+          name: "paper.pdf",
+          size: 10,
+          type: "application/pdf",
+          file: null,
+          lastModified: 0,
+          status: "completed",
+          partSize: 10,
+          partCount: 1,
+          receivedParts: [1],
+          loadedBytes: 10,
+          speedBytesPerSecond: 0,
+          etaSeconds: null,
+          retryCount: 0,
+          errorCode: null,
+        },
+      ],
+      attachmentAnnouncement: "Already attached: paper.pdf",
+      attachmentAnnouncementNonce: 1,
+    });
+    const strip = wrapper.findComponent({ name: "AttachmentChipStrip" });
+    expect(strip.props("announcement")).toBe("Already attached: paper.pdf");
+    expect(strip.props("announcementNonce")).toBe(1);
+  });
+
+  it("keeps the editor footprint and compact controls stable across attachment counts", () => {
+    expect(COMPOSER_SOURCE).toContain(
+      "min-height: var(--phy-control-height-primary)"
+    );
+    expect(COMPOSER_SOURCE).toContain("@media (max-width: 600px)");
+    expect(COMPOSER_SOURCE).toContain(
+      "grid-template-columns: minmax(0, 1fr) auto"
+    );
+
+    for (const count of [0, 1, 10]) {
+      const fileList: ResumableUploadItem[] = Array.from(
+        { length: count },
+        (_, index) => ({
+          localId: `upload-${index}`,
+          assetId: `asset-${index}`,
+          name: `sample-${index}.fastq.gz`,
+          size: 10,
+          type: "application/gzip",
+          file: null,
+          lastModified: index,
+          status: "completed",
+          partSize: 10,
+          partCount: 1,
+          receivedParts: [1],
+          loadedBytes: 10,
+          speedBytesPerSecond: 0,
+          etaSeconds: null,
+          retryCount: 0,
+          errorCode: null,
+        })
+      );
+      const wrapper = mountComposer({
+        modelValue: "keep editing",
+        fileList,
+      });
+
+      expect(wrapper.find(".chat-composer-body").exists()).toBe(true);
+      expect(wrapper.find(".composer-toolbar").exists()).toBe(true);
+      expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+      expect(
+        wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+      ).toBe(false);
+      expect(
+        wrapper.findComponent(".composer-send-button").props("disabled")
+      ).toBe(false);
+      expect(
+        wrapper.findComponent({ name: "AttachmentChipStrip" }).exists()
+      ).toBe(true);
+      expect(
+        wrapper.findComponent({ name: "AttachmentChipStrip" }).props("items")
+      ).toHaveLength(count);
+      wrapper.unmount();
+    }
+
+    const emptyExpert = mountComposer({ modelValue: "query" });
+    expect(emptyExpert.find(".composer-mode-selector").exists()).toBe(true);
+    expect(
+      emptyExpert.findComponent({ name: "ChatAgentPicker" }).exists()
+    ).toBe(true);
+    expect(emptyExpert.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+    expect(emptyExpert.find(".composer-send-button").exists()).toBe(true);
+
+    const populatedExpert = mountComposer({
+      modelValue: "query",
+      hasMessages: true,
+      showModeSelector: false,
+    });
+    expect(populatedExpert.find(".el-dropdown").exists()).toBe(true);
+    expect(populatedExpert.findComponent({ name: "ElUpload" }).exists()).toBe(
+      true
+    );
+    expect(populatedExpert.find(".composer-send-button").exists()).toBe(true);
+  });
+
+  it("blocks only send while an upload is incomplete and keeps the editor usable", () => {
+    const wrapper = mountComposer({
+      modelValue: "keep editing",
+      hasBlockingUploads: true,
+    });
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+  });
+
+  it("keeps editing, removal, and Agent switching available when attachments are incompatible", async () => {
+    const file: ResumableUploadItem = {
+      localId: "upload-incompatible",
+      assetId: "file_incompatible",
+      name: "counts.csv",
+      size: 10,
+      type: "text/csv",
+      file: null,
+      lastModified: 0,
+      status: "completed",
+      partSize: 10,
+      partCount: 1,
+      receivedParts: [1],
+      loadedBytes: 10,
+      speedBytesPerSecond: 0,
+      etaSeconds: 0,
+      retryCount: 0,
+      errorCode: null,
+    };
+    const wrapper = mountComposer({
+      modelValue: "keep editing",
+      fileList: [file],
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: true,
+    });
+
+    expect(wrapper.get('[data-testid="attachment-target-status"]').text()).toBe(
+      "This agent can't accept attachments. Remove them or choose a compatible agent."
+    );
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(false);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent({ name: "ChatAgentPicker" }).props("disabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+
+    await wrapper
+      .findComponent({ name: "AttachmentChipStrip" })
+      .vm.$emit("remove", file.localId);
+    expect(wrapper.emitted("remove-upload")?.[0]).toEqual([file.localId]);
+  });
+
+  it("explains a gray attach control when the selected Agent cannot accept files", () => {
+    const wrapper = mountComposer({
+      selectedAgent: "DataAgent",
+      attachmentTargetAvailable: false,
+      attachmentTargetBlocked: false,
+    });
+
+    expect(wrapper.get('[data-testid="attachment-target-status"]').text()).toBe(
+      "This agent does not accept file uploads."
+    );
+    expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(wrapper.get('[data-testid="composer-attach"]').exists()).toBe(true);
+  });
+
+  it("hides the attach control while the upload contract is dark", () => {
+    const wrapper = mountComposer({
+      uploadCapabilityEnabled: false,
+      attachmentTargetAvailable: false,
+    });
+
+    expect(wrapper.findComponent({ name: "ElUpload" }).exists()).toBe(false);
+    expect(
+      wrapper.find('[data-testid="attachment-target-status"]').exists()
+    ).toBe(false);
   });
 
   it("emits file-change from the upload control", async () => {
@@ -298,6 +744,39 @@ describe("ChatComposer", () => {
     expect(wrapper.emitted("file-change")).toHaveLength(1);
   });
 
+  it("forwards files rejected by the upload limit to shared validation", async () => {
+    const wrapper = mountComposer();
+    const upload = wrapper.findComponent({ name: "ElUpload" });
+    const extra = new File(["x"], "extra.txt", { type: "text/plain" });
+
+    upload.props("onExceed")?.([extra]);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("paste-files")?.[0]).toEqual([[extra]]);
+  });
+
+  it("emits clipboard files without intercepting ordinary text paste", () => {
+    const wrapper = mountComposer();
+    const pasted = new File(["x"], "notes.txt", { type: "text/plain" });
+    const filePaste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(filePaste, "clipboardData", {
+      value: { files: [pasted] },
+    });
+
+    wrapper.element.dispatchEvent(filePaste);
+
+    expect(filePaste.defaultPrevented).toBe(true);
+    expect(wrapper.emitted("paste-files")?.[0]).toEqual([[pasted]]);
+
+    const textPaste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(textPaste, "clipboardData", {
+      value: { files: [] },
+    });
+    wrapper.element.dispatchEvent(textPaste);
+    expect(textPaste.defaultPrevented).toBe(false);
+    expect(wrapper.emitted("paste-files")).toHaveLength(1);
+  });
+
   it("disables upload and mention controls while sending", () => {
     const wrapper = mountComposer({ isSending: true });
     expect(
@@ -312,27 +791,57 @@ describe("ChatComposer", () => {
     expect(wrapper.find(".file-list-container").exists()).toBe(false);
   });
 
+  it("disables composer controls while permissions are loading or mode is unavailable", () => {
+    const wrapper = mountComposer({ rolesLoading: true, modeUsable: false });
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper.findComponent({ name: "MentionSender" }).props("options")
+    ).toEqual([]);
+    expect(wrapper.findComponent({ name: "ElUpload" }).props("disabled")).toBe(
+      true
+    );
+    expect(
+      wrapper.findComponent(".composer-send-button").props("disabled")
+    ).toBe(true);
+    expect(
+      wrapper
+        .findComponent({ name: "ChatModeSelector" })
+        .props("instantEnabled")
+    ).toBe(false);
+    expect(
+      wrapper.findComponent({ name: "ChatModeSelector" }).props("expertEnabled")
+    ).toBe(false);
+    expect(wrapper.findComponent({ name: "ChatAgentPicker" }).exists()).toBe(
+      false
+    );
+  });
+
   it("forwards mention select/search and picker command/clear", async () => {
-    const wrapper = mountComposer();
+    const wrapper = mountComposer({ chatMode: "expert" });
     const mention = wrapper.findComponent({ name: "MentionSender" });
-    await mention.vm.$emit("select", { value: "RAG" });
+    await mention.vm.$emit("select", { value: "ChatAgent" });
     await mention.vm.$emit("search", "R");
-    expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "RAG" }]);
+    expect(wrapper.emitted("select")?.[0]).toEqual([{ value: "ChatAgent" }]);
     expect(wrapper.emitted("search")?.[0]).toEqual(["R"]);
 
     const picker = wrapper.findComponent({ name: "ChatAgentPicker" });
     expect(picker.exists()).toBe(true);
-    await picker.vm.$emit("select", "@RAG,");
+    await picker.vm.$emit("select", "@ChatAgent,");
     await picker.vm.$emit("clear");
-    expect(wrapper.emitted("command")?.[0]).toEqual(["@RAG,"]);
+    expect(wrapper.emitted("command")?.[0]).toEqual(["@ChatAgent,"]);
     expect(wrapper.emitted("clear-agent")).toHaveLength(1);
   });
 
-  it("hides the agent picker in expert mode", () => {
-    const wrapper = mountComposer({ chatMode: "expert" });
+  it("hides the agent picker and quick controls in instant mode", () => {
+    const wrapper = mountComposer({ chatMode: "instant" });
     expect(wrapper.findComponent({ name: "ChatAgentPicker" }).exists()).toBe(
       false
     );
+    expect(
+      wrapper.findComponent({ name: "ChatAgentQuickSelect" }).exists()
+    ).toBe(false);
   });
 
   it("exposes ChatComposerHandle methods consumed by composables", async () => {

@@ -32,7 +32,7 @@ export interface ChatHistoryGroup {
         <div class="chat-items" v-show="expandedGroups[group.key]">
           <el-tooltip
             v-for="chat in group.items"
-            :key="chat.id"
+            :key="chat.dialogue_id"
             :content="chat.title"
             placement="right"
             :show-after="1000"
@@ -52,7 +52,7 @@ export interface ChatHistoryGroup {
               >
                 <span class="chat-title">{{ chat.title }}</span>
               </button>
-              <div class="chat-actions" @click.stop>
+              <div v-if="!chat.isPending" class="chat-actions" @click.stop>
                 <el-dropdown
                   trigger="click"
                   @command="emitAction($event, chat)"

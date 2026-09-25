@@ -8,6 +8,7 @@ import {
 import type { BotArtifact, BotRunProjection } from "@/views/chat/botProjection";
 import {
   initBotLifecycleState,
+  reduceContextStagedNotice,
   reduceBotFailure,
   reduceBotProjection,
 } from "@/views/chat/streaming/botLifecycleReducer";
@@ -19,10 +20,12 @@ function projection(
     runId: "run-1",
     agent: "DeepGenomeAgent",
     status: "RUNNING",
+    workStage: null,
     reportStage: "intermediate",
     reportCompleteness: "partial",
     reportRevision: 1,
     reportUpdatedAt: null,
+    reportPresentation: true,
     intermediateReport: "",
     finalReport: "",
     progress: {
@@ -47,6 +50,145 @@ function artifact(outputDir: string, paths: string[] = []): BotArtifact {
 }
 
 describe("bot lifecycle reducer", () => {
+  it("reconciles report degradation and fresh empty warnings without tracking contamination", () => {
+    const degraded = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        reportRevision: 3,
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      })
+    );
+    expect(degraded.report?.degraded).toBe(true);
+    expect(degraded.reportWarningCodes).toEqual(["report_synthesis_failed"]);
+    const stale = reduceBotProjection(
+      degraded,
+      projection({
+        reportRevision: 2,
+        report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+        reportWarningCodes: [],
+      })
+    );
+    expect(stale.report).toEqual(degraded.report);
+    expect(stale.reportWarningCodes).toEqual(degraded.reportWarningCodes);
+    const fresh = reduceBotProjection(
+      degraded,
+      projection({
+        reportRevision: 4,
+        status: "SUCCEEDED",
+        finalReport: "# Scientific result",
+        trackingDegraded: true,
+        report: { state: "final", degraded: false, sourceArtifactCount: 2 },
+        reportWarningCodes: [],
+      })
+    );
+    expect(fresh.reportWarningCodes).toEqual([]);
+    expect(fresh.report?.degraded).toBe(false);
+    expect(fresh.degraded).toBe(false);
+    expect(fresh.trackingDegraded).toBe(true);
+  });
+
+  it("rejects invalid final placeholders and retains valid science across blank or stale snapshots", () => {
+    const current = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        reportRevision: 4,
+        intermediateReport: "# Intermediate science [1]",
+        finalReport: "Server task created: synthetic",
+      })
+    );
+    expect(current.visibleReport).toBe("# Intermediate science [1]");
+    expect(current.finalReport).toBe("");
+    expect(
+      reduceBotProjection(
+        current,
+        projection({ reportRevision: 3, finalReport: "# Stale science" })
+      ).visibleReport
+    ).toBe(current.visibleReport);
+    expect(
+      reduceBotProjection(current, projection({ reportRevision: 5 }))
+        .visibleReport
+    ).toBe(current.visibleReport);
+  });
+  it("preserves a newer work stage against a stale projection", () => {
+    const state = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ reportRevision: 3, workStage: "planning" })
+    );
+    const next = reduceBotProjection(
+      state,
+      projection({ reportRevision: 2, workStage: "input_resolution" })
+    );
+
+    expect(next.workStage).toBe("planning");
+  });
+
+  it("accepts equal and newer finite work stages", () => {
+    const state = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ reportRevision: 1, workStage: "input_resolution" })
+    );
+    const equal = reduceBotProjection(
+      state,
+      projection({ reportRevision: 1, workStage: "planning" })
+    );
+    const newer = reduceBotProjection(
+      equal,
+      projection({ reportRevision: 2, workStage: "report_assembly" })
+    );
+
+    expect(equal.workStage).toBe("planning");
+    expect(newer.workStage).toBe("report_assembly");
+  });
+
+  it("retains only public context booleans from context-staged events", () => {
+    const notice = reduceContextStagedNotice(
+      {},
+      {
+        type: "Custom",
+        data: {
+          name: "phyto.context_staged",
+          value: {
+            context_rebuilt: true,
+            context_degraded: true,
+            context_version: 8,
+            context_hash: "private-hash",
+            assistant_summary: "private summary",
+          },
+        },
+      }
+    );
+
+    expect(notice).toEqual({
+      context_rebuilt: true,
+      context_degraded: true,
+    });
+    expect(JSON.stringify(notice)).not.toContain("private");
+  });
+
+  it("ignores unknown and malformed custom context events", () => {
+    const current = { context_rebuilt: true };
+
+    expect(
+      reduceContextStagedNotice(current, {
+        type: "Custom",
+        data: {
+          name: "phyto.other",
+          value: { context_degraded: true },
+        },
+      })
+    ).toBe(current);
+    expect(
+      reduceContextStagedNotice(current, {
+        type: "Custom",
+        data: {
+          name: "phyto.context_staged",
+          value: { context_degraded: "true" },
+        },
+      })
+    ).toBe(current);
+  });
+
   it("accepts a newer revision while status stays RUNNING", () => {
     const state = reduceBotProjection(
       initBotLifecycleState(),
@@ -64,6 +206,32 @@ describe("bot lifecycle reducer", () => {
     expect(next.visibleReport).toBe("two");
     expect(next.status).toBe("RUNNING");
     expect(next.reportRevision).toBe(2);
+  });
+
+  it("retains v1 delivery while suppressing raw artifact paths", () => {
+    const next = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({
+        agent: "InSilicoResearchAgent",
+        status: "SUCCEEDED",
+        resultArchiveV1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "pending",
+          revision: 1,
+          name: null,
+          size_bytes: null,
+          error_code: null,
+          retryable: false,
+        },
+        artifacts: [artifact("/obs/private/run", ["/obs/private/run/a.tsv"])],
+      } as BotRunProjection)
+    );
+
+    expect(next.delivery?.status).toBe("pending");
+    expect(next.artifacts).toEqual([]);
+    expect(JSON.stringify(next)).not.toContain("/obs/private");
   });
 
   it("ignores older blank content and retains final content", () => {
@@ -197,14 +365,15 @@ describe("bot lifecycle reducer", () => {
     expect(next.failures).toEqual(["artifact export warning"]);
   });
 
-  it("marks a null-id projection as degraded when tracking is unavailable", () => {
+  it("keeps null-id tracking degradation separate from scientific report degradation", () => {
     const next = reduceBotProjection(
       initBotLifecycleState(),
       projection({ runId: null, trackingDegraded: true })
     );
 
     expect(next.runId).toBeNull();
-    expect(next.degraded).toBe(true);
+    expect(next.degraded).toBe(false);
+    expect(next.trackingDegraded).toBe(true);
     expect(next.status).toBe("RUNNING");
   });
 
@@ -221,12 +390,68 @@ describe("bot lifecycle reducer", () => {
         projection({ status: "INPUT_REQUIRED" })
       ).status
     ).toBe("INPUT_REQUIRED");
-    expect(
-      reduceBotProjection(
+  });
+
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])(
+    "preserves cancellation %s as a sticky terminal state",
+    (_name, report) => {
+      const cancelled = reduceBotProjection(
         initBotLifecycleState(),
-        projection({ status: "CANCELLED" })
-      ).status
-    ).toBe("FAILED");
+        projection({
+          status: "CANCELLED",
+          reportRevision: 2,
+          finalReport: report,
+        })
+      );
+
+      expect(cancelled.status).toBe("CANCELLED");
+      expect(cancelled.visibleReport).toBe(report);
+      expect(
+        reduceBotProjection(
+          cancelled,
+          projection({ status: "RUNNING", reportRevision: 3 })
+        ).status
+      ).toBe("CANCELLED");
+      expect(
+        reduceBotFailure(cancelled, new Error("late transport")).status
+      ).toBe("CANCELLED");
+    }
+  );
+
+  it("preserves a timed-out run as its own sticky terminal state", () => {
+    const timedOut = reduceBotProjection(
+      initBotLifecycleState(),
+      projection({ status: "TIMED_OUT", reportRevision: 2 })
+    );
+
+    expect(timedOut.status).toBe("TIMED_OUT");
+    for (const status of ["RUNNING", "SUCCEEDED", "FAILED"] as const) {
+      expect(
+        reduceBotProjection(timedOut, projection({ status, reportRevision: 3 }))
+          .status
+      ).toBe("TIMED_OUT");
+    }
+    expect(reduceBotFailure(timedOut, new Error("late transport")).status).toBe(
+      "TIMED_OUT"
+    );
+  });
+
+  it("does not let a timeout overwrite another committed terminal state", () => {
+    for (const status of ["SUCCEEDED", "FAILED"] as const) {
+      const terminal = reduceBotProjection(
+        initBotLifecycleState(),
+        projection({ status, reportRevision: 2 })
+      );
+      expect(
+        reduceBotProjection(
+          terminal,
+          projection({ status: "TIMED_OUT", reportRevision: 3 })
+        ).status
+      ).toBe(status);
+    }
   });
 
   it("folds a terminal failure without exposing the raw error", () => {
@@ -347,14 +572,11 @@ describe("bot lifecycle reducer", () => {
       code: "no_evidence",
     });
 
-    const stale = reduceBotProjection(
-      state,
-      {
-        ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
-        interop: { mode: "off", status: "local" },
-        degradedInterop: false,
-      } as BotRunProjection
-    );
+    const stale = reduceBotProjection(state, {
+      ...projection({ agent: "InSilicoResearchAgent", reportRevision: 1 }),
+      interop: { mode: "off", status: "local" },
+      degradedInterop: false,
+    } as BotRunProjection);
     expect(stale.interop).toEqual(state.interop);
     expect(stale.degradedInterop).toBe(true);
   });

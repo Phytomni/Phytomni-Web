@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { mountWithApp } from "../../helpers/test-app-context";
 
 const routerBack = vi.hoisted(() => vi.fn());
 
@@ -14,19 +13,23 @@ vi.mock("vue-element-plus-x", () => ({
   Typewriter: { name: "Typewriter", template: "<div />" },
 }));
 
-import KnowledgeAgent from "@/views/knowledge-agent/index.vue";
-import BriefGeneAgent from "@/views/brief-gene-agent/index.vue";
+import KnowledgeAgent from "@/views/knowledge-agent/KnowledgeAgentView.vue";
+import { KNOWLEDGE_CASE } from "@/views/knowledge-agent/knowledge-case";
+import BriefGeneAgent from "@/views/brief-gene-agent/BriefGeneAgentView.vue";
+import { BRIEF_GENE_CASE } from "@/views/brief-gene-agent/brief-gene-case";
+import ReviewAgent from "@/views/review-agent/ReviewAgentView.vue";
+import { REVIEW_CASE } from "@/views/review-agent/review-case";
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
+const AGENT_DEMO_SHELL_SOURCE = readFileSync(
+  resolve(__dirname, "../../../src/components/demo/AgentDemoShell.vue"),
+  "utf8"
+);
 
-function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
-  return mount(component, {
+function mountDemo(
+  component: typeof KnowledgeAgent | typeof BriefGeneAgent | typeof ReviewAgent
+) {
+  return mountWithApp(component, {
     global: {
-      plugins: [i18n],
       stubs: {
         AgentDemoShell: {
           emits: ["back"],
@@ -56,9 +59,34 @@ function mountDemo(component: typeof KnowledgeAgent | typeof BriefGeneAgent) {
 }
 
 describe("cited agent demonstrations", () => {
+  it("keeps cited reports inside the shared fluid artifact measure", () => {
+    expect(AGENT_DEMO_SHELL_SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-artifact-wide-max-width));"
+    );
+    expect(AGENT_DEMO_SHELL_SOURCE).not.toContain(
+      "width: min(100%, clamp(1040px"
+    );
+  });
+
   it.each([
-    [KnowledgeAgent, "kb", "20", "epigenetic modifications"],
-    [BriefGeneAgent, "bg", "17", "single-cell RNA sequencing"],
+    [
+      KnowledgeAgent,
+      "kb",
+      String(KNOWLEDGE_CASE.references.length),
+      "DNA methylation",
+    ],
+    [
+      ReviewAgent,
+      "review",
+      String(REVIEW_CASE.references.length),
+      "single-cell RNA sequencing",
+    ],
+    [
+      BriefGeneAgent,
+      "bg",
+      String(BRIEF_GENE_CASE.references.length),
+      "Os01g0177400",
+    ],
   ])(
     "keeps the %s cited report in the shared static shell",
     async (component, namespace, referenceCount, contentMarker) => {
@@ -71,10 +99,26 @@ describe("cited agent demonstrations", () => {
       expect(cited.attributes("data-surface")).toBe("artifact");
       expect(cited.attributes("data-reference-count")).toBe(referenceCount);
       expect(cited.text().toLowerCase()).toContain(contentMarker.toLowerCase());
-      expect(wrapper.findAll(".chat-header, .chat-messages, .message-avatar")).toHaveLength(0);
+      expect(
+        wrapper.findAll(".chat-header, .chat-messages, .message-avatar")
+      ).toHaveLength(0);
 
       await wrapper.get("[data-test=shell-back]").trigger("click");
       expect(routerBack).toHaveBeenCalledTimes(1);
     }
   );
+
+  it("uses the admitted Os01g0177400 result instead of the Review fixture", () => {
+    expect(BRIEF_GENE_CASE.question).toBe(
+      "Please give me a brief gene analysis of the rice (Oryza sativa) gene Os01g0177400."
+    );
+    expect(BRIEF_GENE_CASE.content).toContain(
+      "# Brief Gene Analysis of Os01g0177400"
+    );
+    expect(BRIEF_GENE_CASE.content).not.toContain("single-cell RNA sequencing");
+    expect(BRIEF_GENE_CASE.references.length).toBeGreaterThan(0);
+    expect(BRIEF_GENE_CASE.provenance.botCommit).toBe(
+      "1278384920e9a806d44b5a46ac62397531215bc6"
+    );
+  });
 });

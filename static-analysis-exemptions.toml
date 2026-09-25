@@ -1,0 +1,27 @@
+schema_version = 1
+
+[policy]
+default = "deny"
+allow_temporary = false
+
+[[exemptions]]
+id = "web-sa-77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69"
+tool = "typescript"
+rule = "skipLibCheck"
+classification = "structural"
+mechanism = "config"
+target_kind = "config"
+path = "apps/web/tsconfig.json"
+target = "compilerOptions.skipLibCheck"
+fingerprint = "sha256:77d14daf8270955ead2494ef50d53280e57f157aec66e8e7b93103bd0d29da69"
+owner = "web-maintainers"
+introduced_on = 2026-07-19
+review_on = 2026-08-31
+rationale = "The supported TypeScript 6.0.3/vue-tsc 3.3.8 toolchain still emits an exact third-party declaration family with skipLibCheck=false across the pinned 3dmol, Element Plus, Pinia, chatarea, vue-element-plus-x, and transitive declaration graph; the config project is clean independently."
+counterfactual = "Removing this exact setting fails the application probe only on node_modules declarations; the config-project probe remains clean with skipLibCheck=false."
+risk = "Only apps/web/tsconfig.json compilerOptions.skipLibCheck=true is authorized; project, tool-version, or diagnostic-family drift fails the probe and requires re-adjudication."
+tests = [
+  "scripts/tests/test_typescript_dependency_probe.py::test_skip_lib_check_probe_is_project_and_dependency_bound",
+  "scripts/tests/test_typescript_dependency_probe.py::test_first_party_canary_is_visible_with_or_without_skip_lib_check",
+  "scripts/check_static_analysis_exemptions.py --check",
+]

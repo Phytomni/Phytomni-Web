@@ -1,30 +1,46 @@
 import { describe, it, expect, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-
-// The real vue-element-plus-x barrel eagerly imports aggregated CSS that the test
-// transform can't load. CitedAnswer imports the real MarkdownViewer module (even
-// though it's stubbed below via global.stubs, Vue still resolves and evaluates the
-// component's <script setup> import graph), so neutralize the module here too —
-// mirrors tests/component/MarkdownViewer.spec.ts.
-vi.mock("vue-element-plus-x", () => ({
-  Typewriter: { name: "Typewriter", template: "<div></div>" },
-}));
+import { defineComponent, nextTick } from "vue";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { mountWithApp } from "../helpers/test-app-context";
 
 import CitedAnswer from "@/components/CitedAnswer.vue";
+import contractReferences from "../fixtures/cited-contract.generated.json";
+import contract from "../../../server/common/document_format/testdata/cited-contract.json";
+import scientificReferences from "../fixtures/scientific-formatting-contract.generated.json";
+import scientificContract from "../../../server/common/document_format/testdata/scientific-formatting-contract.json";
+import { decodeCitationDocuments } from "@/views/chat/utils/format";
+import {
+  citationMarkdown,
+  decodeCitationPresentation,
+} from "@/utils/citation-presentation";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
 
-// MarkdownViewer is stubbed so these tests isolate CitedAnswer's reference-list wiring
-// (the body renderer and its XSS rules are locked in MarkdownViewer's own specs).
+const CITED_ANSWER_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/components/CitedAnswer.vue"),
+  "utf8"
+);
+
+// The scientific renderers are stubbed so these tests isolate CitedAnswer's
+// reference-list wiring (their own specs lock the rendering contract).
 // CitationReferenceList is real so CitedAnswer→list parity stays locked.
 const mountCited = (props: Record<string, unknown>) =>
-  mount(CitedAnswer, {
-    props,
+  mountWithApp(CitedAnswer, {
+    props: { ns: "cited-test", ...props },
     global: {
       stubs: {
-        MarkdownViewer: {
+        ScientificMarkdown: defineComponent({
+          props: ["source", "citationNamespace", "referenceCount", "surface"],
+          emits: ["citation-activate"],
           template:
-            '<div class="mv-stub">{{ content }}|{{ instantMessage }}|{{ ns }}|{{ surface }}</div>',
-          props: ["content", "instantMessage", "ns", "surface"],
-        },
+            '<button class="sm-stub" @click="$emit(\'citation-activate\', { namespace: citationNamespace, indices: [1, 2] })">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</button>',
+        }),
+        ScientificMarkdownTypewriter: defineComponent({
+          props: ["source", "citationNamespace", "referenceCount", "surface"],
+          emits: ["citation-activate"],
+          template:
+            '<button class="smt-stub" @click="$emit(\'citation-activate\', { namespace: citationNamespace, indices: [1, 2] })">{{ source }}|{{ citationNamespace }}|{{ referenceCount }}|{{ surface }}</button>',
+        }),
       },
       mocks: {
         $t: (key: string) => key,
@@ -33,22 +49,180 @@ const mountCited = (props: Record<string, unknown>) =>
   });
 
 describe("CitedAnswer", () => {
+  it("preserves actual Go-produced scientific references through hydration, rows and Markdown", async () => {
+    const references = decodeCitationDocuments(scientificReferences);
+    expect(references?.map((row) => row.citation?.runs)).toEqual(
+      scientificContract.expected.reference_runs
+    );
+    const wrapper = mountWithApp(CitedAnswer, {
+      props: {
+        ns: "scientific-cited",
+        content: scientificContract.content,
+        references,
+      },
+      attachTo: document.body,
+    });
+    try {
+      await vi.dynamicImportSettled();
+      await nextTick();
+      const rows = wrapper.findAll(".doc-list-item");
+      expect(rows).toHaveLength(2);
+      expect(
+        rows.map((row) => row.get(".citation-reference-row__sentence").text())
+      ).toEqual(
+        scientificContract.expected.reference_runs.map((runs) =>
+          runs.map((run) => run.text).join("")
+        )
+      );
+      expect(rows[0].get("sub").text()).toBe("2");
+      expect(rows[1].get("sup").text()).toBe("3+");
+      expect(
+        wrapper.findAll(
+          ".scientific-inline--superscript a, .scientific-inline--subscript a"
+        )
+      ).toHaveLength(
+        scientificContract.expected.ordinary_script_citation_links
+      );
+      const links = wrapper.findAll(".scientific-citation__link");
+      expect(links.map((link) => link.attributes("href"))).toEqual(
+        scientificContract.expected.citation_indices.map(
+          (indices) => `#scientific-cited-ref-${indices[0]}`
+        )
+      );
+      await links[1].trigger("click");
+      expect(document.activeElement).toBe(rows[1].element);
+      for (const [index, row] of scientificReferences.entries()) {
+        const citation = decodeCitationPresentation(row.citation);
+        if (!citation) throw new Error("Go canonical fixture was rejected");
+        const markdown = mountWithApp(ScientificMarkdown, {
+          props: { source: citationMarkdown(citation) },
+        });
+        try {
+          await vi.dynamicImportSettled();
+          expect(markdown.findAll("p")[0].text()).toBe(
+            scientificContract.expected.reference_runs[index]
+              .map((run) => run.text)
+              .join("")
+          );
+          expect(markdown.get(index === 0 ? "sub" : "sup").text()).toBe(
+            index === 0 ? "2" : "3+"
+          );
+          expect(markdown.findAll(".scientific-citation")).toHaveLength(0);
+          expect(
+            markdown.findAll("a").map((link) => link.attributes("href"))
+          ).toEqual(citation.links.map((link) => link.href));
+        } finally {
+          markdown.unmount();
+        }
+      }
+    } finally {
+      wrapper.unmount();
+    }
+  });
+  it("renders the reviewed contract with real Markdown, rows, and namespace-local group navigation", async () => {
+    const wrappers = ["contract-a", "contract-b"].map((ns) =>
+      mountWithApp(CitedAnswer, {
+        props: {
+          ns,
+          content: contract.content,
+          references: contractReferences,
+        },
+        attachTo: document.body,
+      })
+    );
+    try {
+      await vi.dynamicImportSettled();
+      await nextTick();
+      for (const [message, wrapper] of wrappers.entries()) {
+        const ns = message === 0 ? "contract-a" : "contract-b";
+        const rows = wrapper.findAll(".doc-list-item");
+        expect(
+          rows.map((row) => row.get(".citation-reference-row__sentence").text())
+        ).toEqual(contract.expected.sentences);
+        expect(rows.map((row) => row.attributes("id"))).toEqual(
+          contract.expected.sentences.map((_, i) => `${ns}-ref-${i + 1}`)
+        );
+        const emphasis = rows.flatMap((row, i) =>
+          row.findAll("em, strong").map((node) => ({
+            index: i + 1,
+            text: node.text(),
+            ...(node.element.tagName === "EM"
+              ? { italic: true }
+              : { bold: true }),
+          }))
+        );
+        expect(emphasis).toEqual(contract.expected.emphasis);
+        expect(
+          rows.flatMap((row, i) =>
+            row.findAll("a").map((node) => ({
+              index: i + 1,
+              label: node.text(),
+              href: node.attributes("href"),
+            }))
+          )
+        ).toEqual(contract.expected.links);
+        const marks = wrapper.findAll("sup.scientific-citation");
+        expect(marks.map((node) => node.text())).toEqual(
+          contract.expected.citations.map((mark) => mark.text)
+        );
+        for (const [i, expected] of contract.expected.citations.entries()) {
+          expect(marks[i].find("a").exists()).toBe(expected.active);
+          if (!expected.active) continue;
+          expect(marks[i].get("a").attributes("href")).toBe(
+            `#${ns}-ref-${expected.indices[0]}`
+          );
+          await marks[i].get("a").trigger("click");
+          expect(document.activeElement).toBe(
+            rows[expected.indices[0] - 1].element
+          );
+          expect(
+            wrapper
+              .findAll(".is-citation-target")
+              .map((row) => row.attributes("id"))
+          ).toEqual(expected.indices.map((index) => `${ns}-ref-${index}`));
+        }
+        expect(wrapper.get(".inline-code-tag").text()).toBe("[4]");
+        expect(wrapper.text()).toContain("escaped [5] are not citations.");
+      }
+    } finally {
+      wrappers.forEach((wrapper) => wrapper.unmount());
+    }
+  });
+  it("keeps the cited-answer wrapper shrinkable around long cited content", () => {
+    expect(CITED_ANSWER_SOURCE).toContain("min-width: 0;");
+    expect(CITED_ANSWER_SOURCE).toContain("max-width: 100%;");
+    expect(CITED_ANSWER_SOURCE).toContain("overflow-wrap: anywhere;");
+  });
+
   it("renders one reference row per doc with ref-N ids from buildDisplayReferences", () => {
     const wrapper = mountCited({
       content: "body",
-      references: [{ title: "Doc A" }, { au: "Smith", ti: "T", so: "Nature" }],
+      ns: "cited-rows",
+      references: [
+        { citation: { runs: [{ text: "Doc A" }], links: [] } },
+        {
+          citation: {
+            runs: [{ text: "Smith. T. " }, { text: "Nature", italic: true }],
+            links: [],
+          },
+        },
+      ],
     });
     const rows = wrapper.findAll(".doc-list-item");
     expect(rows).toHaveLength(2);
-    expect(rows[0].attributes("id")).toBe("ref-1");
-    expect(rows[1].attributes("id")).toBe("ref-2");
+    expect(rows[0].attributes("id")).toBe("cited-rows-ref-1");
+    expect(rows[1].attributes("id")).toBe("cited-rows-ref-2");
     expect(wrapper.html()).toContain("Doc A");
     expect(wrapper.html()).toContain("Smith");
   });
 
   it("renders no reference list when references is empty or absent", () => {
-    expect(mountCited({ content: "body", references: [] }).find(".doc-list").exists()).toBe(false);
-    expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(false);
+    expect(
+      mountCited({ content: "body", references: [] }).find(".doc-list").exists()
+    ).toBe(false);
+    expect(mountCited({ content: "body" }).find(".doc-list").exists()).toBe(
+      false
+    );
   });
 
   it("keeps the cited body and namespace while references are presented externally", () => {
@@ -60,16 +234,22 @@ describe("CitedAnswer", () => {
       referencePresentation: "external",
     });
 
-    expect(wrapper.find(".mv-stub").text()).toContain("Evidence-backed body [1]");
-    expect(wrapper.find(".mv-stub").text()).toContain("artifact-a");
-    expect(wrapper.find(".mv-stub").text()).toContain("artifact");
+    expect(wrapper.find(".sm-stub").text()).toContain(
+      "Evidence-backed body [1]"
+    );
+    expect(wrapper.find(".sm-stub").text()).toContain("artifact-a");
+    expect(wrapper.find(".sm-stub").text()).toContain("artifact");
     expect(wrapper.find(".doc-list").exists()).toBe(false);
   });
 
-  it("passes content and instantMessage through to MarkdownViewer", () => {
-    const wrapper = mountCited({ content: "hello", references: [], instantMessage: true });
-    expect(wrapper.find(".mv-stub").text()).toContain("hello");
-    expect(wrapper.find(".mv-stub").text()).toContain("true");
+  it("switches to the typewriter with the same citation contract", () => {
+    const wrapper = mountCited({
+      content: "hello",
+      references: [],
+      instantMessage: true,
+    });
+    expect(wrapper.find(".smt-stub").text()).toContain("hello");
+    expect(wrapper.find(".smt-stub").text()).toContain("0");
   });
 
   it("namespaces reference-row ids with the ns prop", () => {
@@ -84,29 +264,75 @@ describe("CitedAnswer", () => {
   });
 
   it("gives two CitedAnswers with different ns disjoint ids (multi-message regression lock)", () => {
-    const a = mountCited({ content: "a", references: [{ title: "A" }], ns: "m0" });
-    const b = mountCited({ content: "b", references: [{ title: "B" }], ns: "m1" });
+    const a = mountCited({
+      content: "a",
+      references: [{ title: "A" }],
+      ns: "m0",
+    });
+    const b = mountCited({
+      content: "b",
+      references: [{ title: "B" }],
+      ns: "m1",
+    });
     expect(a.find(".doc-list-item").attributes("id")).toBe("m0-ref-1");
     expect(b.find(".doc-list-item").attributes("id")).toBe("m1-ref-1");
   });
 
-  it("passes ns through to MarkdownViewer", () => {
+  it("passes ns through to ScientificMarkdown", () => {
     const wrapper = mountCited({ content: "hi", references: [], ns: "m3" });
-    expect(wrapper.find(".mv-stub").text()).toContain("m3");
+    expect(wrapper.find(".sm-stub").text()).toContain("m3");
   });
 
-  it("forwards each explicit surface to MarkdownViewer", () => {
+  it("forwards each explicit surface to ScientificMarkdown", () => {
     for (const surface of ["chat", "artifact", "document"]) {
       const withSurface = mountCited({
         content: "hi",
         references: [],
         surface,
       });
-      expect(withSurface.find(".mv-stub").text()).toContain(surface);
+      expect(withSurface.find(".sm-stub").text()).toContain(surface);
     }
 
-    const legacyDefault = mountCited({ content: "hi", references: [] });
-    // Absent surface is not forwarded as chat — stub interpolates empty/undefined.
-    expect(legacyDefault.find(".mv-stub").text()).not.toContain("chat");
+    const readingDefault = mountCited({ content: "hi", references: [] });
+    expect(readingDefault.find(".sm-stub").text()).toContain("reading");
+  });
+
+  it("focuses its own inline reference list for grouped citations", async () => {
+    const wrapper = mountCited({
+      content: "Evidence [1-2]",
+      references: [{ title: "First source" }, { title: "Second source" }],
+      ns: "inline-cited",
+    });
+    const rows = wrapper.findAll(".doc-list-item");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(rows[0].element, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const focus = vi.spyOn(rows[0].element as HTMLElement, "focus");
+
+    await wrapper.get(".sm-stub").trigger("click");
+
+    expect(
+      rows.map((row) => row.classes().includes("is-citation-target"))
+    ).toEqual([true, true]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted("citation-activate")).toBeUndefined();
+  });
+
+  it("re-emits citation activation when references are presented externally", async () => {
+    const wrapper = mountCited({
+      content: "Evidence [1-2]",
+      references: [{ title: "First source" }, { title: "Second source" }],
+      ns: "external-cited",
+      referencePresentation: "external",
+    });
+
+    await wrapper.get(".sm-stub").trigger("click");
+
+    expect(wrapper.emitted("citation-activate")).toEqual([
+      [{ namespace: "external-cited", indices: [1, 2] }],
+    ]);
   });
 });

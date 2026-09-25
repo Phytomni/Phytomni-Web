@@ -1,7 +1,10 @@
 <template>
   <article class="research-artifact-preview research-artifact-preview--neutral">
     <div class="research-artifact-preview__body">
-      <p class="research-artifact-preview__kind">{{ kind }}</p>
+      <p class="research-artifact-preview__kind">
+        <AgentDisplayName v-if="formatScientificAgentName" :label="kind" />
+        <template v-else>{{ kind }}</template>
+      </p>
       <h3
         class="research-artifact-preview__title"
         :title="title"
@@ -25,12 +28,20 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  title: string;
-  kind: string;
-  summary: string;
-  openLabel: string;
-}>();
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
+
+withDefaults(
+  defineProps<{
+    title: string;
+    kind: string;
+    summary: string;
+    openLabel: string;
+    formatScientificAgentName?: boolean;
+  }>(),
+  {
+    formatScientificAgentName: false,
+  }
+);
 
 const emit = defineEmits<{
   (event: "open"): void;
@@ -39,8 +50,9 @@ const emit = defineEmits<{
 
 <style scoped>
 .research-artifact-preview {
-  display: flex;
+  display: grid;
   align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--phy-space-16);
   width: 100%;
   min-width: 0;
@@ -56,6 +68,7 @@ const emit = defineEmits<{
 .research-artifact-preview__body {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .research-artifact-preview__kind {
@@ -120,13 +133,14 @@ const emit = defineEmits<{
 @media (max-width: 599px) {
   .research-artifact-preview {
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--phy-space-12);
     padding: var(--phy-space-12);
   }
 
   .research-artifact-preview__open {
     align-self: flex-start;
+    max-width: 100%;
     min-height: calc(var(--phy-control-height-default) + var(--phy-space-4));
   }
 }

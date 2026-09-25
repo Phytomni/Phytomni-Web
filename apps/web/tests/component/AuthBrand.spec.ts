@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../helpers/test-app-context";
 import PhyBrandMark from "@/components/brand/PhyBrandMark.vue";
 import PhyAuthBrand from "@/components/shell/PhyAuthBrand.vue";
 
 describe("PhyAuthBrand", () => {
   it("preserves the production bitmap fallback and accessible title", () => {
-    const wrapper = mount(PhyAuthBrand, {
+    const wrapper = mountWithApp(PhyAuthBrand, {
       props: { title: "Phytomni" },
     });
 
@@ -18,7 +18,7 @@ describe("PhyAuthBrand", () => {
 
 describe("PhyBrandMark", () => {
   it("renders a code-native accessible mark when labelled", () => {
-    const wrapper = mount(PhyBrandMark, {
+    const wrapper = mountWithApp(PhyBrandMark, {
       props: { label: "Phytomni" },
     });
 
@@ -31,7 +31,7 @@ describe("PhyBrandMark", () => {
   });
 
   it("can be used as a decorative mark without an accessible name", () => {
-    const wrapper = mount(PhyBrandMark);
+    const wrapper = mountWithApp(PhyBrandMark);
     expect(wrapper.find("svg").attributes("aria-hidden")).toBe("true");
     expect(wrapper.find("svg").attributes("aria-label")).toBeUndefined();
   });

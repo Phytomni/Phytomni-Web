@@ -8,7 +8,25 @@
         :expanded="isActivityExpanded(item.startIndex)"
         :streaming="streaming"
         :ns="citationNs"
+        :reference-count="references?.length ?? 0"
         @update:expanded="(v) => onActivityExpanded(item.startIndex, v)"
+        @citation-activate="onCitationActivate"
+      />
+      <MarkdownBlock
+        v-else-if="item.block.type === 'markdown'"
+        :block="item.block"
+        :ns="citationNs"
+        :reference-count="references?.length ?? 0"
+        :streaming="streaming"
+        @citation-activate="onCitationActivate"
+      />
+      <ReasoningBlock
+        v-else-if="item.block.type === 'reasoning'"
+        :block="item.block"
+        :ns="citationNs"
+        :reference-count="references?.length ?? 0"
+        :streaming="streaming"
+        @citation-activate="onCitationActivate"
       />
       <component
         :is="renderer(item.block.type)"
@@ -20,14 +38,15 @@
       />
     </template>
     <!--
-      Live-session only: phyto.references → message.doc_list is wired for the
-      current stream so [N] can target #m<index>-ref-N rows. The Go accumulator
-      does not persist a dedicated streaming-reference field, so after history
-      reload these safe links are unavailable unless a separate L2 server/API
-      design lands — do not invent persisted rows here.
+      Live-session: phyto.references → message.doc_list is wired for the current
+      stream so [N] can target #m<index>-ref-N rows. Stream end persists that
+      same list into the cited answer JSON {content, doc_list}; history reload
+      hydrates from the stored answer. A blocks-only message without doc_list
+      still has no safe citation targets — do not invent rows here.
     -->
     <CitationReferenceList
       v-if="references && references.length > 0"
+      ref="referenceListRef"
       :references="references"
       :ns="citationNs"
     />
@@ -35,12 +54,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import CitationReferenceList from "@/components/CitationReferenceList.vue";
 import ChatActivity from "./ChatActivity.vue";
+import MarkdownBlock from "./blocks/MarkdownBlock.vue";
+import ReasoningBlock from "./blocks/ReasoningBlock.vue";
 import type { ContentBlock } from "../types";
 import type { A2uiActionIntent } from "../streaming/a2uiContract";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import {
   activityDisclosureStateKey,
@@ -54,7 +76,7 @@ const props = withDefaults(
     /** Page-unique citation namespace (m<index>); empty/absent → literal [N]. */
     ns?: string;
     /** Live phyto.references rows (message.doc_list); render only when nonempty. */
-    references?: unknown[];
+    references?: readonly unknown[];
     /** Server message id when present (preferred Activity identity). */
     messageId?: string;
     /** Runtime-only request-key stamp on the streaming placeholder. */
@@ -74,13 +96,14 @@ const emit = defineEmits<{
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
 // Defense in depth: never pass a non-empty ns to markdown/reasoning (or the
 // reference list) unless real reference rows exist — avoids dead #mN-ref-K
 // anchors when a caller supplies ns without references.
 const citationNs = computed(() =>
-  props.references && props.references.length ? props.ns ?? "" : ""
+  props.references && props.references.length ? (props.ns ?? "") : ""
 );
 
 const messageKey = computed(() =>
@@ -91,6 +114,9 @@ const messageKey = computed(() =>
 );
 
 const presentationItems = computed(() => buildPresentationItems(props.blocks));
+const referenceListRef = ref<{
+  focusReferences(indices: readonly number[]): boolean;
+} | null>(null);
 
 const renderer = (type: string) => resolveBlockRenderer(type);
 
@@ -104,6 +130,13 @@ function onA2uiRetry(block: ContentBlock) {
   const surfaceId = block.a2ui?.surface.surface_id;
   if (!surfaceId) return;
   emit("a2ui-retry", surfaceId);
+}
+
+function onCitationActivate(activation: ScientificCitationActivation) {
+  if (activation.namespace === citationNs.value) {
+    referenceListRef.value?.focusReferences(activation.indices);
+  }
+  emit("citation-activate", activation);
 }
 
 function activityStateKeyFor(startIndex: number): string | null {

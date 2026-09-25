@@ -8,10 +8,14 @@ const CSS = Object.fromEntries(
     filename,
     readFileSync(resolve(__dirname, `../../../src/assets/${filename}`), "utf8"),
   ])
-) as Record<typeof CSS_PATHS[number], string>;
+) as Record<(typeof CSS_PATHS)[number], string>;
 const GLOBAL_CSS = Object.values(CSS).join("\n");
 const TOKENS_CSS = readFileSync(
   resolve(__dirname, "../../../src/styles/tokens.css"),
+  "utf8"
+);
+const DESIGN_SYSTEM_SOURCE = readFileSync(
+  resolve(__dirname, "../../../../../docs/frontend-design-system.md"),
   "utf8"
 );
 
@@ -50,6 +54,20 @@ describe("global CSS contract", () => {
     expect(TOKENS_CSS).toContain("@media (prefers-reduced-motion: reduce)");
     expect(TOKENS_CSS).toContain("--phy-motion-fast: 0ms;");
     expect(TOKENS_CSS).toContain("--phy-motion-normal: 0ms;");
+  });
+
+  it("keeps fluid layout measures in the semantic token owner", () => {
+    expect(TOKENS_CSS).toContain("--phy-layout-content-gutter");
+    expect(TOKENS_CSS).toContain("--phy-layout-overlay-gutter");
+    expect(TOKENS_CSS).toContain("--phy-layout-agent-preview-max-width");
+    expect(TOKENS_CSS).toContain("--phy-layout-scientific-media-max-height");
+    expect(TOKENS_CSS).not.toMatch(/transition:\s*all/);
+  });
+
+  it("records semantic transitions and scroll ownership in the design-system contract", () => {
+    expect(DESIGN_SYSTEM_SOURCE).toContain("600px`, `900px`, and `1280px");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("scroll root");
+    expect(DESIGN_SYSTEM_SOURCE).toContain("narrow replacement");
   });
 
   it("limits transitions to explicit interactive anchor behavior", () => {

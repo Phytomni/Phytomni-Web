@@ -58,6 +58,9 @@ func TestApiV1AuthUserRoutes(t *testing.T) {
 	assertRoutes(t, routes,
 		[]string{
 			"GET /api/v1/bot/capabilities",
+			"POST /api/v1/files",
+			"POST /api/v1/files/:asset_id/capability",
+			"GET /api/v1/auth/capabilities",
 			"POST /api/v1/auth/sessions",
 			"POST /api/v1/auth/registrations",
 			"POST /api/v1/users",
@@ -184,19 +187,22 @@ func TestBotCapabilitiesAuthenticatedRouteReturnsManifest(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%s)", res.Code, http.StatusOK, res.Body.String())
 	}
 	var envelope struct {
-		Code int                      `json:"code"`
-		Data []map[string]interface{} `json:"data"`
+		Code int `json:"code"`
+		Data struct {
+			Agents []map[string]interface{} `json:"agents"`
+			Upload map[string]interface{}   `json:"upload"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode envelope: %v", err)
 	}
-	if envelope.Code != http.StatusOK || len(envelope.Data) != 10 {
+	if envelope.Code != http.StatusOK || len(envelope.Data.Agents) != 10 || len(envelope.Data.Upload) == 0 {
 		t.Fatalf("envelope = %#v, want success with ten rows", envelope)
 	}
-	if _, ok := envelope.Data[0]["api_key"]; ok {
+	if _, ok := envelope.Data.Agents[0]["api_key"]; ok {
 		t.Fatal("private field leaked through authenticated route")
 	}
-	if enabled, _ := envelope.Data[0]["enabled"].(bool); !enabled {
+	if enabled, _ := envelope.Data.Agents[0]["enabled"].(bool); !enabled {
 		t.Fatal("present ChatAgent should be enabled")
 	}
 }
@@ -211,6 +217,7 @@ func TestApiV1ConversationRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/conversations",
 			"GET /api/v1/conversations/:id/messages",
+			"GET /api/v1/conversations/:id/messages/:message_id/artifacts/:artifact_id/download-url",
 			"POST /api/v1/conversations/:id/a2ui-actions",
 			"DELETE /api/v1/conversations/:id",
 			"PATCH /api/v1/conversations/:id",
@@ -238,14 +245,44 @@ func TestApiV1AsyncTaskRoutes(t *testing.T) {
 		[]string{
 			"GET /api/v1/async-tasks",
 			"GET /api/v1/async-tasks/:id",
+			"GET /api/v1/async-tasks/:id/lifecycle",
+			"POST /api/v1/async-tasks/:id/cancel",
 			"GET /api/v1/async-tasks/:id/analyst-log",
 		},
 		[]string{
+			"GET /api/v1/auth/async-tasks/:id/lifecycle",
+			"POST /api/v1/auth/async-tasks/:id/cancel",
 			"GET /v1/async_task/list",
 			"GET /v1/async_task/info",
 			"GET /v1/analyst/get_log",
 		},
 	)
+}
+
+func TestAgentTaskLifecycleRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/async-tasks/1/lifecycle", nil)
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated lifecycle request status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAgentTaskCancelRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/async-tasks/1/cancel", nil)
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated cancel request status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
 }
 
 // TestApiV1AuditGeneDownloadRoutes pins the §5.6 migration of the audit, gene and
@@ -286,12 +323,33 @@ func TestApiV1AuditGeneDownloadRoutes(t *testing.T) {
 // TestApiV1ChatSendRoute pins the D4 chat-send migration: POST /query becomes
 // POST /api/v1/conversations/:id/messages (id=0 means a new conversation), co-
 // existing with the GET on the same path. The old root /query route must be gone.
-func TestApiV1ChatSendRoute(t *testing.T) {
+func TestAgentProductRunRoute(t *testing.T) {
 	routes := routeSet(t)
 	assertRoutes(t, routes,
-		[]string{"POST /api/v1/conversations/:id/messages"},
+		[]string{
+			"POST /api/v1/conversations/:id/messages",
+			"POST /api/v1/agent-products/:tool/runs",
+		},
 		[]string{"POST /query"},
 	)
+}
+
+func TestAgentProductRunRouteRequiresAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Api(engine.Group("/"))
+
+	for _, tool := range []string{"InSilicoResearchAgent", "DigitalDesignAgent", "GeneNetworkAgent"} {
+		t.Run(tool, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-products/"+tool+"/runs", nil)
+			res := httptest.NewRecorder()
+			engine.ServeHTTP(res, req)
+
+			if res.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 (body=%s)", res.Code, res.Body.String())
+			}
+		})
+	}
 }
 
 // TestApiV1AuthLifecycleRoutes pins the Phase 1 logout endpoints. They live on a

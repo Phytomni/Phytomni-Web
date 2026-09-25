@@ -1,19 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { nextTick } from "vue";
 import type { BotArtifact } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
 import BotReportState from "@/components/research/BotReportState.vue";
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
-import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
-
-vi.mock("@/components/MarkdownViewer.vue", () => ({
-  default: {
-    props: ["content"],
-    template: '<article data-test="report-markdown">{{ content }}</article>',
-  },
-}));
+import enUS from "@/locales/langs/en-US";
+import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 type ReportStage = "waiting_for_brief_gene" | "intermediate" | "final";
 
@@ -34,14 +30,22 @@ function lifecycle(
   };
 }
 
-function mountReport(state: BotLifecycleState & { reportStage?: ReportStage }) {
-  return mount(BotReportState, {
-    props: { state },
+function mountReport(
+  state: BotLifecycleState & { reportStage?: ReportStage },
+  hideActiveReport?: boolean
+) {
+  return mountWithApp(BotReportState, {
+    props: {
+      state,
+      ns: "bot-report-test",
+      ...(hideActiveReport === undefined ? {} : { hideActiveReport }),
+    },
     global: {
       stubs: {
-        MarkdownViewer: {
-          props: ["content"],
-          template: '<article data-test="report-markdown">{{ content }}</article>',
+        ScientificMarkdown: {
+          props: ["source", "citationNamespace", "referenceCount"],
+          template:
+            '<article data-test="report-markdown">{{ source }}</article>',
         },
       },
     },
@@ -49,26 +53,169 @@ function mountReport(state: BotLifecycleState & { reportStage?: ReportStage }) {
 }
 
 describe("BotReportState", () => {
+  it.each(["en-US", "zh-CN"] as const)(
+    "localizes safe partial warnings in %s without altering science",
+    (locale) => {
+      const pack = locale === "zh-CN" ? zhCN : enUS;
+      const wrapper = createTestAppContext({ locale }).mount(BotReportState, {
+        props: {
+          ns: "report-localized",
+          state: lifecycle({
+            status: "FAILED",
+            intermediateReport:
+              "The alignment failed at a synthetic locus [1].",
+            reportWarningCodes: [
+              "deep_genome_report_degraded",
+              "private provider text" as never,
+            ],
+          }),
+        },
+      });
+      expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+        pack.chat.botReport.partial
+      );
+      expect(wrapper.get('[data-test="bot-report-warnings"]').text()).toContain(
+        pack.chat.botReport.warnings.deep_genome_report_degraded
+      );
+      expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+        "The alignment failed at a synthetic locus"
+      );
+      expect(wrapper.text()).not.toContain("private provider text");
+      wrapper.unmount();
+    }
+  );
+  it("shows a failed intermediate report as partial with the execution warning outside science", () => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "FAILED",
+        intermediateReport: "# Retained science [1]",
+        visibleReport: "# Retained science [1]",
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      })
+    );
+    expect(wrapper.attributes("data-report-status")).toBe("degraded");
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      "Partial report available"
+    );
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toBe(
+      "# Retained science [1]"
+    );
+    expect(wrapper.get('[data-test="bot-report-warnings"]').text()).toContain(
+      "Final report synthesis was unavailable"
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+  });
+
+  it("does not call an empty successful result ready or show terminal waiting", () => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "SUCCEEDED",
+        report: { state: "degraded", degraded: true, sourceArtifactCount: 2 },
+        reportWarningCodes: ["report_synthesis_failed"],
+      })
+    );
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      "Scientific report unavailable"
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows the finished report immediately without terminal CoT flushing", async () => {
+    vi.useFakeTimers();
+    const wrapper = mountReport(lifecycle({ status: "RUNNING" }));
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+
+    await wrapper.setProps({
+      state: lifecycle({
+        status: "SUCCEEDED",
+        visibleReport: "# Final report",
+        finalReport: "# Final report",
+      }),
+    });
+    await nextTick();
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+
+    vi.advanceTimersByTime(180);
+    await nextTick();
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+      "# Final report"
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+  });
+
   it.each([
     ["waiting", "waiting_for_brief_gene", "loading"],
     ["partial", "intermediate", "degraded"],
     ["final", "final", "complete"],
     ["failed", "final", "failed"],
-  ] as const)(
-    "renders %s with localized status",
-    (_name, stage, expected) => {
-      const state = lifecycle({
-        reportStage: stage,
-        status: expected === "failed" ? "FAILED" : expected === "complete" ? "SUCCEEDED" : "RUNNING",
-        visibleReport: expected === "complete" ? "# Final report" : "",
-        finalReport: expected === "complete" ? "# Final report" : "",
-      });
-      const wrapper = mountReport(state);
+  ] as const)("renders %s with localized status", (_name, stage, expected) => {
+    const state = lifecycle({
+      reportStage: stage,
+      status:
+        expected === "failed"
+          ? "FAILED"
+          : expected === "complete"
+            ? "SUCCEEDED"
+            : "RUNNING",
+      visibleReport: expected === "complete" ? "# Final report" : "",
+      finalReport: expected === "complete" ? "# Final report" : "",
+      intermediateReport: stage === "intermediate" ? "# Partial science" : "",
+    });
+    const wrapper = mountReport(state);
 
-      expect(wrapper.attributes("data-report-status")).toBe(expected);
-      expect(wrapper.text()).not.toContain("raw.phytomni_state");
-    }
-  );
+    expect(wrapper.attributes("data-report-status")).toBe(expected);
+    expect(wrapper.text()).not.toContain("raw.phytomni_state");
+  });
+
+  it.each([
+    [
+      "final report content",
+      {
+        visibleReport: "# Premature final report",
+        finalReport: "# Premature final report",
+      },
+    ],
+    ["final report stage", { reportStage: "final" as const }],
+  ])("defers active %s when requested", (_name, overrides) => {
+    const wrapper = mountReport(lifecycle(overrides), true);
+
+    expect(wrapper.attributes("data-report-status")).toBe("loading");
+    expect(wrapper.find('[data-test="bot-report-content"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Premature final report");
+  });
+
+  it("renders a successful report when active report deferral is enabled", () => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "SUCCEEDED",
+        reportStage: "final",
+        visibleReport: "# Successful report",
+        finalReport: "# Successful report",
+      }),
+      true
+    );
+
+    expect(wrapper.attributes("data-report-status")).toBe("complete");
+    expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+      "# Successful report"
+    );
+  });
 
   it("renders the sanitized report body and a localized timestamp", () => {
     const wrapper = mountReport(
@@ -87,37 +234,53 @@ describe("BotReportState", () => {
     );
   });
 
-  it("formats report timestamps through the locale-aware datetime preset", () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: "en-US",
-      datetimeFormats,
-      messages: { "en-US": {}, "zh-CN": {} },
-    });
-    const updatedAt = "2026-07-16T08:30:00.000Z";
-    const wrapper = mount(BotReportState, {
+  it("renders lifecycle citations against the supplied reference rows", async () => {
+    const wrapper = mountWithApp(BotReportState, {
       props: {
         state: lifecycle({
           status: "SUCCEEDED",
-          visibleReport: "# Final report",
-          finalReport: "# Final report",
+          visibleReport: "Evidence [1-2]",
+          finalReport: "Evidence [1-2]",
         }),
-        updatedAt,
-      },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          MarkdownViewer: {
-            props: ["content"],
-            template:
-              '<article data-test="report-markdown">{{ content }}</article>',
-          },
-        },
+        ns: "bot-report-citations",
+        referenceCount: 2,
       },
     });
 
+    await vi.dynamicImportSettled();
+    const citation = wrapper.get(".scientific-citation__link");
+    expect(citation.attributes("href")).toBe("#bot-report-citations-ref-1");
+    expect(citation.attributes("aria-label")).toBe("Citation 1-2");
+  });
+
+  it("formats report timestamps through the locale-aware datetime preset", () => {
+    const updatedAt = "2026-07-16T08:30:00";
+    const wrapper = createTestAppContext({ locale: "en-US" }).mount(
+      BotReportState,
+      {
+        props: {
+          state: lifecycle({
+            status: "SUCCEEDED",
+            visibleReport: "# Final report",
+            finalReport: "# Final report",
+          }),
+          ns: "bot-report-timestamp",
+          updatedAt,
+        },
+        global: {
+          stubs: {
+            ScientificMarkdown: {
+              props: ["source", "citationNamespace", "referenceCount"],
+              template:
+                '<article data-test="report-markdown">{{ source }}</article>',
+            },
+          },
+        },
+      }
+    );
+
     expect(wrapper.get('[data-test="bot-report-updated-at"]').text()).toBe(
-      formatDisplayDate(i18n.global.d, updatedAt, "datetime")
+      "7/16/2026, 8:30 AM"
     );
   });
 
@@ -125,11 +288,70 @@ describe("BotReportState", () => {
     const wrapper = mountReport(lifecycle({ status: "FAILED" }));
 
     expect(wrapper.get('[data-test="bot-report-empty"]').text()).toBe(
-      "common.failed"
+      enUS.common.failed
     );
     expect(wrapper.get('[data-test="bot-report-empty"]').text()).not.toBe(
       "common.loading"
     );
+  });
+
+  it("keeps timeout as a distinct label with failed visual treatment", () => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "TIMED_OUT",
+        failures: ["analysis task timed out"],
+      })
+    );
+
+    expect(wrapper.attributes("data-report-status")).toBe("failed");
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      enUS.chat.lifecycle.timed_out
+    );
+    expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(false);
+    expect(wrapper.get('[data-test="bot-report-failure"]').text()).toBe(
+      enUS.chat.lifecycle.timed_out
+    );
+    expect(wrapper.text()).not.toContain(enUS.common.failed);
+  });
+
+  it.each([
+    ["without a report", ""],
+    ["with a valid report", "# Retained scientific report"],
+  ])("keeps cancellation distinct %s", (_name, report) => {
+    const wrapper = mountReport(
+      lifecycle({
+        status: "CANCELLED",
+        visibleReport: report,
+        finalReport: report,
+        failures: ["analysis task cancelled"],
+      })
+    );
+
+    expect(wrapper.attributes("data-report-status")).toBe(
+      report ? "degraded" : "failed"
+    );
+    expect(wrapper.get(".bot-report-state__status-label").text()).toBe(
+      report ? enUS.chat.botReport.partial : enUS.chat.lifecycle.cancelled
+    );
+    expect(
+      wrapper
+        .get(
+          report
+            ? '[data-test="bot-report-warnings"]'
+            : '[data-test="bot-report-failure"]'
+        )
+        .text()
+    ).toBe(enUS.chat.lifecycle.cancelled);
+    if (report) {
+      expect(wrapper.get('[data-test="bot-report-content"]').text()).toContain(
+        report
+      );
+    } else {
+      expect(wrapper.find('[data-test="bot-report-empty"]').exists()).toBe(
+        false
+      );
+    }
+    expect(wrapper.text()).not.toContain(enUS.common.failed);
   });
 });
 
@@ -147,13 +369,17 @@ describe("BotArtifactList", () => {
       },
       { outputDir: "/obs/bucket/run-1", paths: [] },
     ];
-    const wrapper = mount(BotArtifactList, {
+    const wrapper = mountWithApp(BotArtifactList, {
       props: { artifacts, download, emptyLabel: "Warning" },
     });
 
     expect(wrapper.text()).toContain("Warning");
-    expect(wrapper.findAll('button[data-test="bot-artifact-download"]')).toHaveLength(1);
-    await wrapper.get('button[data-test="bot-artifact-download"]').trigger("click");
+    expect(
+      wrapper.findAll('button[data-test="bot-artifact-download"]')
+    ).toHaveLength(1);
+    await wrapper
+      .get('button[data-test="bot-artifact-download"]')
+      .trigger("click");
     expect(download).toHaveBeenCalledWith("/obs/bucket/run-1");
     expect(wrapper.html()).not.toContain('href="/obs/');
   });

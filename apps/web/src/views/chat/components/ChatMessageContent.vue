@@ -1,12 +1,57 @@
 <template>
-  <!-- User message, or an answer without reasoning steps -->
   <div
-    v-if="message.role === 'user' || (!message.steps && !message.tableHeaders)"
+    v-if="routingNotice"
+    class="routing-notice"
+    :role="isRoutingFallbackNotice ? 'status' : undefined"
+    data-testid="routing-notice"
+  >
+    {{ routingNotice }}
+  </div>
+  <div
+    v-if="message.contextNotice?.degraded"
+    class="context-degraded"
+    role="status"
+  >
+    {{ $t("chat.contextDegraded") }}
+  </div>
+  <p
+    v-if="showReportUnavailable"
+    class="agent-lifecycle"
+    data-test="report-unavailable"
+    role="status"
+  >
+    {{ t(reportPresentation.labelKey) }}
+  </p>
+  <BotReportWarnings :warning-keys="reportPresentation.warningKeys" />
+  <div
+    v-if="showStandaloneCot"
+    class="message-text phy-bubble-assistant agent-wait"
+    data-test="agent-wait"
+  >
+    <div class="agent-lifecycle" role="status" aria-live="polite">
+      <SendProgress
+        :started-at="resolvedProgressStartedAt"
+        :agent-name="progressAgentName"
+        :completing="false"
+        :wait-children="props.lifecycle?.children ?? []"
+      />
+    </div>
+  </div>
+  <!-- User message, lifecycle-owned DeepGenome, or an answer without reasoning steps -->
+  <div
+    v-if="
+      message.role === 'user' ||
+      (!isWaitOnlyBody &&
+        (hasArtifactPresentation ||
+          isDeepGenomeMessage ||
+          isResearchNonterminal ||
+          (!message.steps && !message.tableHeaders)))
+    "
     :class="[
       'message-text',
       message.role === 'user'
         ? 'phy-bubble-user has-user'
-        : 'phy-bubble-assistant',
+        : !showArtifactPreview && 'phy-bubble-assistant',
     ]"
   >
     <!-- Streaming assistant messages (AG-UI content blocks) render via
@@ -15,8 +60,27 @@
          assigns phyto.references → doc_list, the same blocks rerender to
          #m<index>-ref-N links. Live-session only — history reload does not
          invent persisted streaming references. -->
+    <div v-if="showInlineCot" class="agent-wait-inline" data-test="agent-wait">
+      <div class="agent-lifecycle" role="status" aria-live="polite">
+        <SendProgress
+          :started-at="resolvedProgressStartedAt"
+          :agent-name="progressAgentName"
+          :completing="false"
+          :wait-children="props.lifecycle?.children ?? []"
+        />
+      </div>
+    </div>
+    <div
+      v-if="showLeadingLifecycleStatus && !showWaitProgress"
+      class="agent-lifecycle"
+      role="status"
+      aria-live="polite"
+    >
+      <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+    </div>
+    <template v-if="isResearchNonterminal && !hasArtifactPresentation" />
     <StreamMessage
-      v-if="
+      v-else-if="
         message.role === 'assistant' &&
         (message.streaming || (message.blocks && message.blocks.length))
       "
@@ -30,23 +94,55 @@
       @update:activity-expanded="onActivityExpanded"
       @a2ui-action="(event) => emit('a2ui-action', event)"
       @a2ui-retry="(surfaceId) => emit('a2ui-retry', surfaceId)"
+      @citation-activate="(activation) => emit('citation-activate', activation)"
     />
     <!-- GeneNetworkAgent image display -->
     <div
       v-else-if="
-        message.role === 'assistant' && message.tool_name === 'GeneNetworkAgent'
+        message.role === 'assistant' &&
+        message.tool_name === 'GeneNetworkAgent' &&
+        !artifactPreview
       "
       class="gene-network-images"
     >
       <div
-        v-if="geneNetworkImagesLoading[message.id || '']"
+        v-if="lifecycleLabel && !showWaitProgress"
+        class="agent-lifecycle"
+        role="status"
+        aria-live="polite"
+      >
+        <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+      </div>
+      <ScientificMarkdownTypewriter
+        v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
+        @finish="emit('finish')"
+      />
+      <ScientificMarkdown
+        v-else-if="hasSpecializedReport"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
+      />
+      <div
+        v-if="
+          !isTerminalLifecycle &&
+          !showWaitProgress &&
+          (geneNetworkImagesLoading[message.id || ''] ||
+            awaitingSpecializedImages)
+        "
         class="images-loading"
       >
         <el-icon class="is-loading"><Loading /></el-icon>
         {{ $t("common.loading") }}
       </div>
       <div
-        v-else-if="geneNetworkImages[message.id || '']?.length > 0"
+        v-else-if="
+          !isTerminalLifecycle &&
+          geneNetworkImages[message.id || '']?.length > 0
+        "
         class="images-container"
       >
         <img
@@ -57,7 +153,7 @@
           class="result-image"
         />
       </div>
-      <div v-else class="no-images">
+      <div v-else-if="shouldShowSpecializedNoData" class="no-images">
         {{ $t("common.noData") }}
       </div>
     </div>
@@ -65,19 +161,49 @@
     <div
       v-else-if="
         message.role === 'assistant' &&
-        message.tool_name === 'DigitalDesignAgent'
+        message.tool_name === 'DigitalDesignAgent' &&
+        !artifactPreview
       "
       class="gene-network-images"
     >
       <div
-        v-if="digitalDesignImagesLoading[message.id || '']"
+        v-if="lifecycleLabel && !showWaitProgress"
+        class="agent-lifecycle"
+        role="status"
+        aria-live="polite"
+      >
+        <span data-test="lifecycle-phase">{{ $t(lifecycleLabel) }}</span>
+      </div>
+      <ScientificMarkdownTypewriter
+        v-if="hasSpecializedReport && message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
+        @finish="emit('finish')"
+      />
+      <ScientificMarkdown
+        v-else-if="hasSpecializedReport"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
+      />
+      <div
+        v-if="
+          !isTerminalLifecycle &&
+          !showWaitProgress &&
+          (digitalDesignImagesLoading[message.id || ''] ||
+            awaitingSpecializedImages)
+        "
         class="images-loading"
       >
         <el-icon class="is-loading"><Loading /></el-icon>
         {{ $t("common.loading") }}
       </div>
       <div
-        v-else-if="digitalDesignImages[message.id || '']?.length > 0"
+        v-else-if="
+          !isTerminalLifecycle &&
+          digitalDesignImages[message.id || '']?.length > 0
+        "
         class="images-container"
       >
         <img
@@ -88,64 +214,102 @@
           class="result-image"
         />
       </div>
-      <div v-else class="no-images">
+      <div v-else-if="shouldShowSpecializedNoData" class="no-images">
         {{ $t("common.noData") }}
       </div>
     </div>
     <ResearchArtifactPreview
-      v-else-if="artifactPreview"
+      v-else-if="hasArtifactPresentation && artifactPreview"
       :title="artifactPreview.title"
       :kind="artifactPreview.kind"
       :summary="artifactPreview.summary"
       :open-label="artifactPreview.openLabel"
+      :format-scientific-agent-name="
+        message.tool_name === 'InSilicoResearchAgent'
+      "
       @open="emit('open-artifact')"
     />
-    <!-- Ineligible DeepGenome results (streaming, missing id, failed, or
-         transient file loading) retain the embedded compatibility viewer. -->
-    <DeepGenomeResultViewer
-      v-else-if="
-        message.role === 'assistant' && message.tool_name === 'DeepGenomeAgent'
-      "
-      :markdown="String(message.content).replace(/\n/g, '\\n')"
-      :references="message.doc_list || []"
-      :ns="'m' + index"
-      embedded
-    />
+    <template v-else-if="isDeepGenomeMessage">
+      <DeepGenomeResultViewer
+        v-if="hasMeaningfulDeepGenomeReport"
+        :markdown="
+          artifactPresentation?.report ?? chatContentToText(message.content)
+        "
+        :references="message.doc_list || []"
+        :resources="message.resources ?? []"
+        :ns="'m' + index"
+        :rendering-file-id="message.id"
+        :show-actions="showDeepGenomeFinalActions"
+        :show-references="hasDeepGenomeReferences"
+        embedded
+      />
+      <p
+        v-else-if="showDeepGenomeResultUnavailable"
+        class="deep-genome-result-unavailable"
+      >
+        {{ $t("chat.lifecycle.resultUnavailable") }}
+      </p>
+    </template>
     <CitedAnswer
       v-else-if="
         message.doc_list &&
         message.doc_list.length > 0 &&
         message.role === 'assistant'
       "
-      :content="message.content"
+      :content="chatContentToText(message.content)"
       :references="message.doc_list"
       :ns="'m' + index"
       surface="chat"
       :instant-message="(message?.instantMessage && isLastMessage) || false"
       @finish="emit('finish')"
     />
-    <MarkdownViewer
-      v-else
-      :instantMessage="(message?.instantMessage && isLastMessage) || false"
-      :content="message.content"
+    <ScientificMarkdownTypewriter
+      v-else-if="
+        message?.instantMessage && isLastMessage && !hideWaitPlaceholderBody
+      "
+      :source="chatContentToText(message.content)"
+      :citation-namespace="'m' + index"
       surface="chat"
       @finish="emit('finish')"
     />
+    <ScientificMarkdown
+      v-else-if="!hideWaitPlaceholderBody"
+      :source="chatContentToText(message.content)"
+      :citation-namespace="'m' + index"
+      surface="chat"
+    />
   </div>
   <!-- Table data display -->
-  <div v-else-if="message.tableHeaders" class="table-response">
-    <el-table :data="message.content" border style="width: 100%">
-      <el-table-column
-        v-for="header in message.tableHeaders"
-        :key="header.prop"
-        :prop="header.prop"
-        :label="header.label"
-        align="center"
-      />
-    </el-table>
+  <div
+    v-else-if="!isWaitOnlyBody && message.tableHeaders"
+    class="table-response"
+  >
+    <figure class="chat-data-figure">
+      <figcaption :id="'table-caption-' + index">
+        {{ tableCaptionText }}
+      </figcaption>
+      <PhyTableFrame>
+        <el-table
+          :data="tableRows"
+          border
+          class="chat-data-table"
+          header-cell-class-name="chat-table-header-cell"
+          max-height="min(24rem, 55vh)"
+          style="width: 100%"
+        >
+          <el-table-column
+            v-for="header in message.tableHeaders"
+            :key="header.prop"
+            :prop="header.prop"
+            :label="humanizeTableHeaderLabel(header.label)"
+            min-width="140"
+          />
+        </el-table>
+      </PhyTableFrame>
+    </figure>
   </div>
   <!-- Assistant answer with reasoning steps; currently unused 2025/07/21 -->
-  <div v-else class="ai-response">
+  <div v-else-if="!isWaitOnlyBody" class="ai-response">
     <!-- Reasoning steps -->
     <div v-if="message.steps && message.steps.length > 0">
       <div class="steps-title">{{ $t("chat.stepResult") }}:</div>
@@ -165,27 +329,75 @@
     </div>
     <!-- Final answer -->
     <div class="final-answer">
-      <MarkdownViewer
-        :instantMessage="(message?.instantMessage && isLastMessage) || false"
-        :content="message.content"
+      <ScientificMarkdownTypewriter
+        v-if="message?.instantMessage && isLastMessage"
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
         surface="chat"
         @finish="emit('finish')"
       />
+      <ScientificMarkdown
+        v-else
+        :source="chatContentToText(message.content)"
+        :citation-namespace="'m' + index"
+        surface="chat"
+      />
     </div>
   </div>
+  <ResultArchiveDelivery
+    v-if="message.role === 'assistant' && archiveDelivery"
+    :delivery="archiveDelivery"
+    :artifacts="message.artifacts ?? []"
+    :retrying="archiveRetrying"
+    @download="emit('download-result-archive', $event)"
+    @retry="emit('retry-result-archive')"
+  />
 </template>
 
 <script setup lang="ts">
 import { Loading } from "@element-plus/icons-vue";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import ScientificMarkdownTypewriter from "@/components/ScientificMarkdownTypewriter.vue";
 import CitedAnswer from "@/components/CitedAnswer.vue";
 import DeepGenomeResultViewer from "@/components/DeepGenomeResultViewer.vue";
 import ResearchArtifactPreview from "@/components/research/ResearchArtifactPreview.vue";
+import BotReportWarnings from "@/components/research/BotReportWarnings.vue";
+import ResultArchiveDelivery from "@/components/research/ResultArchiveDelivery.vue";
+import { PhyTableFrame } from "@/components/shell";
 import StreamMessage from "./StreamMessage.vue";
+import SendProgress from "./SendProgress.vue";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import type { AgentTaskLifecycle, ConversationArtifactLink } from "@/api/types";
 import type { ChatMessage } from "../types";
+import {
+  isAgentWaitPhase,
+  isStreamWaitProgressMessage,
+  parseProgressStartedAt,
+  progressStartedAtFor,
+} from "../utils/agentProgress";
+import {
+  CANONICAL_AGENT_DISPLAY_NAMES,
+  CANONICAL_AGENT_ZH_NAMES,
+  type CanonicalAgentTool,
+} from "@/constants/agents";
 import type { A2uiSurfaceActionEvent } from "../composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
+import { chatContentToRows, chatContentToText } from "../messageTypes";
+import { humanizeTableHeaderLabel } from "../utils/format";
+import { normalizePositiveTaskRowId } from "@/api/task";
+import {
+  artifactPresentationForMessage,
+  isDeepGenomeTransportPlaceholder,
+  isMeaningfulDeepGenomeReport,
+} from "../utils/artifact-policy";
+import { isApprovedReportText } from "../utils/valid-report-ledger";
+import {
+  reportLifecycleForMessage,
+  reportPresentationFor,
+} from "../utils/report-presentation";
 
-defineProps<{
+const props = defineProps<{
   message: ChatMessage;
   index: number;
   isLastMessage: boolean;
@@ -200,22 +412,342 @@ defineProps<{
   geneNetworkImagesLoading: Record<string, boolean>;
   digitalDesignImages: Record<string, string[]>;
   digitalDesignImagesLoading: Record<string, boolean>;
+  lifecycle?: AgentTaskLifecycle;
+  progressStartedAt?: number | null;
+  archiveRetrying?: boolean;
 }>();
 
 const emit = defineEmits<{
   finish: [];
   "open-artifact": [];
+  "download-result-archive": [artifact: ConversationArtifactLink];
+  "retry-result-archive": [];
   "update:activity-expanded": [stateKey: string, expanded: boolean];
   "a2ui-action": [event: A2uiSurfaceActionEvent];
   "a2ui-retry": [surfaceId: string];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
+
+const { t, locale } = useI18n();
+
+const tableRows = computed(() => chatContentToRows(props.message.content));
+const tableCaptionText = computed(() => {
+  const titled = props.message.tableCaption?.trim();
+  if (titled) return titled;
+  return t("chat.tableRowCount", { count: tableRows.value.length });
+});
 
 const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   emit("update:activity-expanded", stateKey, expanded);
 };
+
+function routedAgentLabel(): string {
+  const tool = props.message.tool_name;
+  if (!tool || !(tool in CANONICAL_AGENT_ZH_NAMES)) return "";
+  const agent =
+    locale.value === "zh-CN"
+      ? CANONICAL_AGENT_ZH_NAMES[tool as CanonicalAgentTool]
+      : CANONICAL_AGENT_DISPLAY_NAMES[tool as CanonicalAgentTool];
+  return t("chat.routingSelectedAgent", { agent });
+}
+
+const isRoutingFallbackNotice = computed(
+  () => props.message.route_reason_code === "CHAT_FALLBACK"
+);
+
+const routingNotice = computed(() => {
+  if (props.message.role !== "assistant") return "";
+  const reason = props.message.route_reason_code;
+  if (reason === "CHAT_FALLBACK") {
+    return t("chat.routingFallbackChat");
+  }
+  if (reason === "ROUTER_SELECTED" || reason === "EXPLICIT_SELECTION") {
+    return routedAgentLabel();
+  }
+  if (showWaitProgress.value) {
+    return routedAgentLabel();
+  }
+  return "";
+});
+
+// Canonical tool_name spelling: 'DeepGenomeAgent'.
+const isDeepGenomeMessage = computed(
+  () =>
+    props.message.role === "assistant" &&
+    props.message.tool_name === "DeepGenomeAgent"
+);
+const isResearchMessage = computed(
+  () =>
+    props.message.role === "assistant" &&
+    props.message.tool_name === "InSilicoResearchAgent"
+);
+const artifactPresentation = computed(() =>
+  artifactPresentationForMessage(props.message)
+);
+const reportLifecycle = computed(() =>
+  reportLifecycleForMessage(props.message)
+);
+const reportPresentation = computed(() =>
+  reportPresentationFor(
+    {
+      ...reportLifecycle.value,
+      status: effectiveLifecyclePhase.value ?? reportLifecycle.value.status,
+    },
+    artifactPresentation.value ?? undefined,
+    props.message.tool_name
+  )
+);
+const showReportUnavailable = computed(
+  () =>
+    props.message.role === "assistant" &&
+    Boolean(
+      reportLifecycle.value.report ||
+      reportLifecycle.value.reportWarningCodes?.length
+    ) &&
+    !reportPresentation.value.active &&
+    !reportPresentation.value.reportText
+);
+const archiveDelivery = computed(
+  () => props.message.delivery ?? reportLifecycle.value.delivery
+);
+const hasArtifactPresentation = computed(
+  () => artifactPresentation.value !== null
+);
+const hasMeaningfulDeepGenomeReport = computed(
+  () =>
+    isDeepGenomeMessage.value &&
+    (artifactPresentation.value?.kind === "deep-genome" ||
+      isMeaningfulDeepGenomeReport(props.message.content))
+);
+const hasDeepGenomeReferences = computed(
+  () => isDeepGenomeMessage.value && (props.message.doc_list?.length ?? 0) > 0
+);
+
+function messageLifecyclePhase(): AgentTaskLifecycle["phase"] | null {
+  const status = props.message.status?.trim().toUpperCase();
+  if (status === "PENDING" || status === "SUBMITTED") return "PREPARING";
+  if (status === "TIMEOUT" || status === "TIMED_OUT") return "TIMED_OUT";
+  if (status === "CANCELED") return "CANCELLED";
+  if (
+    isResearchMessage.value &&
+    (status === "RESOLVING_INPUTS" ||
+      status === "PLANNING" ||
+      status === "FINALIZING")
+  ) {
+    return status;
+  }
+  if (
+    status === "PREPARING" ||
+    status === "RUNNING" ||
+    status === "FINALIZING" ||
+    status === "SUCCEEDED" ||
+    status === "FAILED" ||
+    status === "TIMED_OUT" ||
+    status === "CANCELLED"
+  ) {
+    return status;
+  }
+  if (
+    isDeepGenomeMessage.value &&
+    !hasMeaningfulDeepGenomeReport.value &&
+    isDeepGenomeTransportPlaceholder(props.message.content)
+  ) {
+    try {
+      normalizePositiveTaskRowId(props.message.id ?? "");
+      return "PREPARING";
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+const effectiveLifecyclePhase = computed(() => {
+  const status = reportLifecycle.value.status;
+  if (
+    (props.message.botProjection || props.message.botLifecycle) &&
+    (status === "SUCCEEDED" ||
+      status === "FAILED" ||
+      status === "TIMED_OUT" ||
+      status === "CANCELLED")
+  )
+    return status;
+  return props.lifecycle?.phase ?? messageLifecyclePhase();
+});
+const isResearchNonterminal = computed(
+  () =>
+    isResearchMessage.value &&
+    (effectiveLifecyclePhase.value === "PREPARING" ||
+      effectiveLifecyclePhase.value === "RESOLVING_INPUTS" ||
+      effectiveLifecyclePhase.value === "PLANNING" ||
+      effectiveLifecyclePhase.value === "RUNNING" ||
+      effectiveLifecyclePhase.value === "FINALIZING")
+);
+const lifecycleLabel = computed(() =>
+  effectiveLifecyclePhase.value
+    ? `chat.lifecycle.${effectiveLifecyclePhase.value.toLowerCase()}`
+    : ""
+);
+const showDeepGenomeFinalActions = computed(
+  () =>
+    effectiveLifecyclePhase.value === null ||
+    effectiveLifecyclePhase.value === "SUCCEEDED"
+);
+const showDeepGenomeResultUnavailable = computed(
+  () =>
+    isDeepGenomeMessage.value &&
+    effectiveLifecyclePhase.value === "SUCCEEDED" &&
+    !hasMeaningfulDeepGenomeReport.value
+);
+const isSpecializedImageAgent = computed(
+  () =>
+    props.message.tool_name === "GeneNetworkAgent" ||
+    props.message.tool_name === "DigitalDesignAgent"
+);
+const showLeadingLifecycleStatus = computed(
+  () =>
+    props.message.role === "assistant" &&
+    lifecycleLabel.value !== "" &&
+    (isResearchNonterminal.value ||
+      (!props.message.streaming &&
+        !(props.message.blocks && props.message.blocks.length))) &&
+    !isSpecializedImageAgent.value
+);
+const showArtifactPreview = computed(
+  () =>
+    hasArtifactPresentation.value &&
+    !!props.artifactPreview &&
+    !props.message.streaming &&
+    !props.message.blocks?.length
+);
+const streamWaitProgress = computed(() =>
+  isStreamWaitProgressMessage(props.message)
+);
+const showWaitProgress = computed(
+  () =>
+    props.message.role === "assistant" &&
+    !["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(
+      effectiveLifecyclePhase.value ?? ""
+    ) &&
+    (isAgentWaitPhase(effectiveLifecyclePhase.value) ||
+      streamWaitProgress.value)
+);
+const progressAgentName = computed(() =>
+  typeof props.message.tool_name === "string" ? props.message.tool_name : ""
+);
+const resolvedProgressStartedAt = computed(() =>
+  progressStartedAtFor(
+    props.message.id || `row-${props.index}`,
+    props.progressStartedAt ?? parseProgressStartedAt(props.message.created_at)
+  )
+);
+const isWaitOnlyBodyContent = computed(() => {
+  if (isDeepGenomeMessage.value && !hasArtifactPresentation.value) return true;
+  if (hasArtifactPresentation.value) return false;
+  if (hasMeaningfulDeepGenomeReport.value) return false;
+  if (hasSpecializedReport.value && !isDeepGenomeMessage.value) return false;
+  if (streamWaitProgress.value) return true;
+  if (props.message.streaming) return false;
+  if (props.message.blocks && props.message.blocks.length) return false;
+  if (props.message.doc_list && props.message.doc_list.length > 0) return false;
+  return true;
+});
+const isWaitOnlyBody = computed(
+  () => showWaitProgress.value && isWaitOnlyBodyContent.value
+);
+const hideWaitPlaceholderBody = computed(
+  () =>
+    props.message.role === "assistant" &&
+    effectiveLifecyclePhase.value !== null &&
+    !showWaitProgress.value &&
+    isWaitOnlyBodyContent.value
+);
+const showStandaloneCot = computed(
+  () => showWaitProgress.value && isWaitOnlyBody.value
+);
+const showInlineCot = computed(
+  () => showWaitProgress.value && !isWaitOnlyBody.value
+);
+const isTerminalLifecycle = computed(
+  () =>
+    effectiveLifecyclePhase.value === "FAILED" ||
+    effectiveLifecyclePhase.value === "TIMED_OUT" ||
+    effectiveLifecyclePhase.value === "CANCELLED"
+);
+const hasSpecializedReport = computed(() =>
+  isApprovedReportText(props.message.tool_name ?? "", props.message.content)
+);
+const activeSpecializedLifecycle = computed(
+  () =>
+    effectiveLifecyclePhase.value === "PREPARING" ||
+    effectiveLifecyclePhase.value === "RUNNING" ||
+    effectiveLifecyclePhase.value === "FINALIZING"
+);
+const awaitingSpecializedImages = computed(
+  () =>
+    activeSpecializedLifecycle.value &&
+    (props.lifecycle?.artifact_summary.image_count ?? 0) > 0
+);
+const selectedImages = computed(() =>
+  props.message.tool_name === "GeneNetworkAgent"
+    ? props.geneNetworkImages[props.message.id || ""]
+    : props.digitalDesignImages[props.message.id || ""]
+);
+const shouldShowSpecializedNoData = computed(() => {
+  if (!props.lifecycle) {
+    return (
+      (effectiveLifecyclePhase.value === null ||
+        effectiveLifecyclePhase.value === "SUCCEEDED") &&
+      !hasSpecializedReport.value &&
+      (selectedImages.value?.length ?? 0) === 0
+    );
+  }
+  return (
+    props.lifecycle.phase === "SUCCEEDED" &&
+    !hasSpecializedReport.value &&
+    (selectedImages.value?.length ?? 0) === 0 &&
+    props.lifecycle.artifact_summary.image_count === 0 &&
+    props.lifecycle.artifact_summary.output_directory_count === 0
+  );
+});
 </script>
 
 <style scoped lang="scss">
+.routing-notice,
+.context-degraded {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.agent-wait {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.agent-wait-inline {
+  margin-bottom: var(--phy-space-8);
+}
+
+.agent-lifecycle {
+  margin-bottom: var(--phy-space-8);
+  color: var(--phy-color-text-muted);
+  font-size: 13px;
+}
+
+.agent-wait .agent-lifecycle,
+.agent-wait-inline .agent-lifecycle {
+  margin-bottom: 0;
+}
+
+.deep-genome-result-unavailable {
+  margin: 0;
+  padding: var(--phy-space-8) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 14px;
+}
+
 /* Content owns internal overflow so wide children cannot stretch the transcript. */
 .message-text {
   position: relative;
@@ -223,8 +755,15 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   max-width: 100%;
   overflow-x: auto;
   word-break: break-word;
-  white-space: pre-wrap;
   box-sizing: border-box;
+
+  &.phy-bubble-user {
+    white-space: pre-wrap;
+  }
+
+  &.phy-bubble-assistant {
+    white-space: normal;
+  }
 
   :deep(pre),
   :deep(table),
@@ -239,6 +778,38 @@ const onActivityExpanded = (stateKey: string, expanded: boolean) => {
   max-width: 100%;
   overflow-x: auto;
   box-sizing: border-box;
+  --el-table-header-bg-color: var(--phy-color-fill-subtle);
+  --el-table-header-text-color: var(--phy-color-text);
+  --el-table-tr-bg-color: var(--phy-color-bg-elevated);
+  --el-table-text-color: var(--phy-color-text);
+
+  :deep(th.chat-table-header-cell) {
+    background-color: var(--phy-color-fill-subtle) !important;
+    color: var(--phy-color-text);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 -1px 0 var(--phy-color-border-control);
+  }
+
+  :deep(.chat-data-table td.el-table__cell) {
+    color: var(--phy-color-text);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.chat-data-figure {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-data-figure figcaption {
+  margin: 0 0 var(--phy-space-8);
+  color: var(--phy-color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .gene-network-images {

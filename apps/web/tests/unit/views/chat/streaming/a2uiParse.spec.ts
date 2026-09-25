@@ -19,7 +19,10 @@ import type {
 
 const fixture = (relativePath: string): unknown =>
   JSON.parse(
-    readFileSync(resolve(process.cwd(), "tests/fixtures/a2ui", relativePath), "utf8")
+    readFileSync(
+      resolve(process.cwd(), "tests/fixtures/a2ui", relativePath),
+      "utf8"
+    )
   );
 
 const openSurface = (
@@ -84,17 +87,121 @@ describe("decodeA2uiOpenSurface", () => {
     if (result.ok) expect(result.value.widget).toBe(_widget);
   });
 
-  it.each(["confirm_label", "cancel_label"] as const)(
-    "rejects a Confirm surface missing required %s",
-    (missingLabel) => {
-      const props = { ...confirmProps };
-      delete props[missingLabel];
+  it("accepts a minimal Confirm surface and omits optional copy", () => {
+    const result = decodeA2uiOpenSurface(
+      openSurface("confirm", { title: "Approve" })
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        widget: "confirm",
+        props: { title: "Approve" },
+      }),
+    });
+  });
+
+  it.each([true, 7, {}, []])("rejects invalid optional label %j", (value) => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", confirm_label: value })
+      ),
+      "props_invalid"
+    );
+  });
+
+  it.each([null, "", "   "])(
+    "normalizes optional Confirm labels %j to absence",
+    (value) => {
+      const result = decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          confirm_label: value,
+          cancel_label: value,
+        })
+      );
+      expect(result).toEqual({
+        ok: true,
+        value: expect.objectContaining({
+          props: { title: "Approve" },
+        }),
+      });
+    }
+  );
+
+  it("normalizes a null optional Confirm body to absence", () => {
+    expect(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: null })
+      )
+    ).toEqual({
+      ok: true,
+      value: expect.objectContaining({ props: { title: "Approve" } }),
+    });
+  });
+
+  it("preserves an explicit empty optional Confirm body", () => {
+    expect(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: "" })
+      )
+    ).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        props: { title: "Approve", body: "" },
+      }),
+    });
+  });
+
+  it("rejects a whitespace-only optional Confirm body", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", body: "   " })
+      ),
+      "props_invalid"
+    );
+  });
+
+  it.each([true, 7, {}, []])(
+    "rejects invalid optional Confirm body %j",
+    (value) => {
       expectReason(
-        decodeA2uiOpenSurface(openSurface("confirm", props)),
+        decodeA2uiOpenSurface(
+          openSurface("confirm", { title: "Approve", body: value })
+        ),
         "props_invalid"
       );
     }
   );
+
+  it("rejects unknown Confirm props", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", { title: "Approve", onclick: "alert(1)" })
+      ),
+      "props_invalid"
+    );
+  });
+
+  it("checks optional Confirm copy bounds before blank normalization", () => {
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          confirm_label: " ".repeat(A2UI_LIMITS.labelChars + 1),
+        })
+      ),
+      "limit_exceeded"
+    );
+    expectReason(
+      decodeA2uiOpenSurface(
+        openSurface("confirm", {
+          title: "Approve",
+          body: " ".repeat(A2UI_LIMITS.textChars + 1),
+        })
+      ),
+      "limit_exceeded"
+    );
+  });
 
   it("rejects a Choice surface missing required multiple", () => {
     expectReason(
@@ -266,9 +373,10 @@ describe("decodeA2uiOpenSurface", () => {
 
   it("allows identifiers at 256 chars and rejects 257", () => {
     expect(
-      decodeA2uiOpenSurface(
-        openSurface("confirm", { ...confirmProps, surface_id: "x".repeat(256) })
-      ).ok
+      decodeA2uiOpenSurface({
+        ...openSurface("confirm", confirmProps),
+        surface_id: "x".repeat(256),
+      }).ok
     ).toBe(true);
     expectReason(
       decodeA2uiOpenSurface({
@@ -288,19 +396,28 @@ describe("decodeA2uiOpenSurface", () => {
     });
     expect(
       decodeA2uiOpenSurface(
-        openSurface("form", { title: "Fields", fields: Array.from({ length: 20 }, (_, i) => field(i)) })
+        openSurface("form", {
+          title: "Fields",
+          fields: Array.from({ length: 20 }, (_, i) => field(i)),
+        })
       ).ok
     ).toBe(true);
     expectReason(
       decodeA2uiOpenSurface(
-        openSurface("form", { title: "Fields", fields: Array.from({ length: 21 }, (_, i) => field(i)) })
+        openSurface("form", {
+          title: "Fields",
+          fields: Array.from({ length: 21 }, (_, i) => field(i)),
+        })
       ),
       "limit_exceeded"
     );
   });
 
   it("allows 100 choice options and rejects 101", () => {
-    const option = (index: number) => ({ id: `option-${index}`, label: `Option ${index}` });
+    const option = (index: number) => ({
+      id: `option-${index}`,
+      label: `Option ${index}`,
+    });
     expect(
       decodeA2uiOpenSurface(
         openSurface("choice", {
@@ -328,9 +445,18 @@ describe("decodeA2uiOpenSurface", () => {
     [[], "invalid_object"],
     [{ ...openSurface("confirm", confirmProps), props: [] }, "props_invalid"],
     [{ ...openSurface("confirm", confirmProps), props: null }, "props_invalid"],
-    [{ ...openSurface("confirm", confirmProps), widget: "chart" }, "widget_unsupported"],
-    [{ ...openSurface("confirm", confirmProps), catalog_version: "v0.9" }, "catalog_unsupported"],
-    [{ ...openSurface("confirm", confirmProps), surface_id: 4 }, "identifier_invalid"],
+    [
+      { ...openSurface("confirm", confirmProps), widget: "chart" },
+      "widget_unsupported",
+    ],
+    [
+      { ...openSurface("confirm", confirmProps), catalog_version: "v0.9" },
+      "catalog_unsupported",
+    ],
+    [
+      { ...openSurface("confirm", confirmProps), surface_id: 4 },
+      "identifier_invalid",
+    ],
   ] as const)("fails closed for malformed open input %#", (value, reason) => {
     expectReason(decodeA2uiOpenSurface(value), reason);
   });
@@ -338,7 +464,10 @@ describe("decodeA2uiOpenSurface", () => {
   it("requires trimmed, non-empty strings for identifiers", () => {
     for (const surface_id of ["", " surface-1", "surface-1 "]) {
       expectReason(
-        decodeA2uiOpenSurface({ ...openSurface("confirm", confirmProps), surface_id }),
+        decodeA2uiOpenSurface({
+          ...openSurface("confirm", confirmProps),
+          surface_id,
+        }),
         surface_id ? "identifier_invalid" : "identifier_invalid"
       );
     }
@@ -385,7 +514,9 @@ describe("decodeA2uiTerminalSurface", () => {
   it.each([
     { ...openSurface("confirm", { status: "submitted", accepted: "yes" }) },
     { ...openSurface("form", { status: "submitted", fields: { gene: true } }) },
-    { ...openSurface("choice", { status: "submitted", selected: { id: "a" } }) },
+    {
+      ...openSurface("choice", { status: "submitted", selected: { id: "a" } }),
+    },
   ])("rejects invalid terminal scalar branches", (value) => {
     expectReason(decodeA2uiTerminalSurface(value), "props_invalid");
   });
@@ -393,7 +524,9 @@ describe("decodeA2uiTerminalSurface", () => {
 
 describe("decodeA2uiActionResponse", () => {
   it("decodes terminal_succeeded with full-envelope metadata", () => {
-    const result = decodeA2uiActionResponse(fixture("http/terminal_succeeded.json"));
+    const result = decodeA2uiActionResponse(
+      fixture("http/terminal_succeeded.json")
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.status).toBe("succeeded");
@@ -409,14 +542,22 @@ describe("decodeA2uiActionResponse", () => {
     if (result.ok) {
       expect(result.value.status).toBe("input_required");
       if (result.value.status === "input_required") {
-        expect(result.value.interrupt.draft.a2ui.surface_id).toBe("sfc-contract-2");
+        expect(result.value.interrupt.draft.a2ui.surface_id).toBe(
+          "sfc-contract-2"
+        );
       }
     }
   });
 
   it("rejects empty, malformed, unknown-status, missing-branch, and mixed branches", () => {
-    const terminal = fixture("http/terminal_succeeded.json") as Record<string, unknown>;
-    const input = fixture("http/input_required_round2.json") as Record<string, unknown>;
+    const terminal = fixture("http/terminal_succeeded.json") as Record<
+      string,
+      unknown
+    >;
+    const input = fixture("http/input_required_round2.json") as Record<
+      string,
+      unknown
+    >;
     const cases: [unknown, A2uiDecodeReason][] = [
       [null, "invalid_object"],
       [[], "invalid_object"],
@@ -433,7 +574,8 @@ describe("decodeA2uiActionResponse", () => {
         "response_invalid",
       ],
     ];
-    for (const [value, reason] of cases) expectReason(decodeA2uiActionResponse(value), reason);
+    for (const [value, reason] of cases)
+      expectReason(decodeA2uiActionResponse(value), reason);
   });
 
   it("does not accept conflict_not_open as a success response", () => {
@@ -444,12 +586,17 @@ describe("decodeA2uiActionResponse", () => {
   });
 
   it("requires a bounded trimmed run_id", () => {
-    const response = fixture("http/terminal_succeeded.json") as Record<string, unknown>;
+    const response = fixture("http/terminal_succeeded.json") as Record<
+      string,
+      unknown
+    >;
     for (const run_id of ["", " run-1", "run-1 ", "x".repeat(257)]) {
       const result = decodeA2uiActionResponse({ ...response, run_id });
       expectReason(
         result,
-        run_id.length > A2UI_LIMITS.identifierChars ? "limit_exceeded" : "identifier_invalid"
+        run_id.length > A2UI_LIMITS.identifierChars
+          ? "limit_exceeded"
+          : "identifier_invalid"
       );
     }
   });
@@ -462,8 +609,79 @@ describe("decodeA2uiActionResponse", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).not.toHaveProperty("attacker");
-      expect(result.value).toMatchObject({ status: "succeeded", run_id: "run-contract-1" });
+      expect(result.value).toMatchObject({
+        status: "succeeded",
+        run_id: "run-contract-1",
+      });
     }
+  });
+
+  it("preserves the complete allowlisted terminal formatted projection", () => {
+    const answer = `REVIEW-START\n${"x".repeat(
+      A2UI_LIMITS.textChars + 256
+    )}\nREVIEW-END`;
+    const references = [
+      {
+        title: "Review source",
+        pm: "12345",
+        citation: { runs: [{ text: "Canonical review source" }], links: [] },
+      },
+    ];
+    const followUpQuestions = ["Which evidence should be compared next?"];
+    const response = structuredClone(
+      fixture("http/terminal_succeeded.json")
+    ) as { result: Record<string, unknown> };
+    response.result.formatted = {
+      answer,
+      references,
+      follow_up_questions: followUpQuestions,
+      private_provider_state: "drop-me",
+    };
+
+    const result = decodeA2uiActionResponse(response);
+
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.status === "succeeded") {
+      expect(result.value.result.formatted).toEqual({
+        answer,
+        references,
+        follow_up_questions: followUpQuestions,
+      });
+      expect(
+        result.value.result.formatted?.answer?.endsWith("REVIEW-END")
+      ).toBe(true);
+    }
+  });
+
+  it.each([
+    ["references", "invalid"],
+    ["follow_up_questions", ["valid", 7]],
+  ] as const)("rejects a malformed formatted %s array", (field, value) => {
+    const response = structuredClone(
+      fixture("http/terminal_succeeded.json")
+    ) as { result: Record<string, unknown> };
+    response.result.formatted = { answer: "Complete review", [field]: value };
+
+    expectReason(decodeA2uiActionResponse(response), "props_invalid");
+  });
+
+  it("retains malformed reference slots without rejecting the valid terminal answer", () => {
+    const doc = { citation: { runs: [{ text: "Canonical" }], links: [] } };
+    const response = structuredClone(
+      fixture("http/terminal_succeeded.json")
+    ) as { result: Record<string, unknown> };
+    response.result.formatted = {
+      answer: "Complete review",
+      references: [doc, null, doc],
+    };
+    const result = decodeA2uiActionResponse(response);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.status === "succeeded")
+      expect(result.value.result.formatted?.references).toEqual([
+        doc,
+        { citation: null },
+        doc,
+      ]);
   });
 });
 

@@ -14,7 +14,10 @@ import userStore from "@/stores/user";
 const user = userStore();
 
 const today = new Date();
-const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
+  2,
+  "0"
+)}-${String(today.getDate()).padStart(2, "0")}`;
 
 const userName = computed(() => user.name ?? "");
 const content = computed(() => [userName.value, dateStr]);

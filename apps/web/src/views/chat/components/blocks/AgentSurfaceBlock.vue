@@ -158,16 +158,12 @@ async function focusFreshRound2Surface() {
 }
 
 onMounted(focusFreshRound2Surface);
-watch(
-  () => {
-    const runtime = props.block.a2ui;
-    return runtime
-      ? [runtime.surface.surface_id, runtime.state.round, runtime.state.status]
-      : [];
-  },
-  focusFreshRound2Surface
-);
-
+watch(() => {
+  const runtime = props.block.a2ui;
+  return runtime
+    ? [runtime.surface.surface_id, runtime.state.round, runtime.state.status]
+    : [];
+}, focusFreshRound2Surface);
 </script>
 
 <style scoped>

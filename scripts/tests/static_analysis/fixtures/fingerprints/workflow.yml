@@ -1,0 +1,7 @@
+name: quality
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run lint --if-present

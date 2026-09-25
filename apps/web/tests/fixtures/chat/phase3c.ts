@@ -8,6 +8,17 @@ import type { TransferSnapshot } from "@/utils/transfer-progress";
 import { activityDisclosureStateKey } from "@/views/chat/streaming/presentation";
 import { PHASE_3B_USER_PROMPT } from "./messages";
 
+/** Bounded analyst-log DTO shape kept local so visual fixtures have no API dependency. */
+type Phase3CAnalystLog = {
+  state: "PENDING" | "AVAILABLE" | "TERMINAL_EMPTY" | "DEGRADED";
+  source: "BOT_RUN" | "LEGACY_TASK";
+  text: string;
+  revision: number;
+  truncated: boolean;
+  can_request_legacy_refresh: boolean;
+  error_code: "log_refresh_unavailable" | null;
+};
+
 /** Exact Phase 3C visual/registry keys (stable contract). */
 export const PHASE_3C_FIXTURE_KEYS = [
   "activity-closed",
@@ -26,7 +37,7 @@ export const PHASE_3C_FIXTURE_KEYS = [
   "parallel-b",
 ] as const;
 
-export type Phase3CFixtureKey = typeof PHASE_3C_FIXTURE_KEYS[number];
+export type Phase3CFixtureKey = (typeof PHASE_3C_FIXTURE_KEYS)[number];
 
 export function isPhase3CFixtureKey(
   value: string | null | undefined
@@ -152,7 +163,7 @@ export const FIXTURE_PROGRESS_STARTED_AT = 1_700_000_000_000;
 export type Phase3CLogProps = {
   rowId?: string;
   taskId?: string;
-  logData?: unknown;
+  logData?: Phase3CAnalystLog;
   loading?: boolean;
   updating?: boolean;
   errorKind?: "fetch" | "update";
@@ -216,7 +227,15 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       log: {
         rowId: "42",
         taskId: "fixture-task-42",
-        logData: "Synthetic analyst log line 1\nline 2",
+        logData: {
+          state: "AVAILABLE",
+          source: "BOT_RUN",
+          text: "Synthetic analyst log line 1\nline 2",
+          revision: 1,
+          truncated: false,
+          can_request_legacy_refresh: false,
+          error_code: null,
+        },
         loading: false,
       },
       assistantMessage: MESSAGE_ANALYST_LOG,
@@ -237,7 +256,15 @@ export const PHASE_3C_OVERLAYS: Record<Phase3CFixtureKey, Phase3COverlaySpec> =
       log: {
         rowId: "43",
         taskId: undefined,
-        logData: "Synthetic log without update path",
+        logData: {
+          state: "AVAILABLE",
+          source: "BOT_RUN",
+          text: "Synthetic log without update path",
+          revision: 1,
+          truncated: false,
+          can_request_legacy_refresh: false,
+          error_code: null,
+        },
       },
       assistantMessage: MESSAGE_ANALYST_LOG_MISSING_TASK,
     },

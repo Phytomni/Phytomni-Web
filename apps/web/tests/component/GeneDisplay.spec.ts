@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   computed,
   defineComponent,
@@ -11,8 +12,7 @@ import {
   type ComputedRef,
   type InjectionKey,
 } from "vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getGeneList: vi.fn(),
@@ -22,7 +22,12 @@ vi.mock("@/api/gene-display", () => ({
   getGeneList: mocks.getGeneList,
 }));
 
-import GeneDisplay from "@/views/gene-display/index.vue";
+import GeneDisplay from "@/views/gene-display/GeneDisplayView.vue";
+
+const GENE_DISPLAY_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/gene-display/GeneDisplayView.vue"),
+  "utf8"
+);
 
 const rows = [
   {
@@ -48,15 +53,6 @@ const successResponse = {
     total_pages: 1,
   },
 };
-
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n];
 
 type Row = Record<string, unknown>;
 const tableDataKey: InjectionKey<ComputedRef<Row[]>> = Symbol("table-data");
@@ -134,7 +130,9 @@ const ElTableColumnStub = defineComponent({
             { class: "el-table-cell" },
             slots.default?.({ row, $index: index }) ??
               String(
-                props.type === "index" ? index + 1 : row[props.prop ?? ""] ?? ""
+                props.type === "index"
+                  ? index + 1
+                  : (row[props.prop ?? ""] ?? "")
               )
           )
         ),
@@ -164,7 +162,7 @@ const ElPaginationStub = defineComponent({
 });
 
 const mountView = () =>
-  mount(GeneDisplay, {
+  mountWithApp(GeneDisplay, {
     global: {
       stubs: {
         ElInput: ElInputStub,
@@ -173,7 +171,6 @@ const mountView = () =>
         ElTableColumn: ElTableColumnStub,
         ElPagination: ElPaginationStub,
       },
-      directives: { loading: () => undefined },
     },
   });
 
@@ -181,6 +178,18 @@ describe("Gene Display workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getGeneList.mockResolvedValue(successResponse);
+  });
+
+  it("keeps the table width bounded while its frame owns narrow-screen scrolling", () => {
+    const tableStyleStart = GENE_DISPLAY_SOURCE.indexOf(".gene-table {");
+    const tableStyleEnd = GENE_DISPLAY_SOURCE.indexOf("}", tableStyleStart);
+    const tableStyle = GENE_DISPLAY_SOURCE.slice(
+      tableStyleStart,
+      tableStyleEnd + 1
+    );
+
+    expect(tableStyle).toContain("max-width: 100%;");
+    expect(GENE_DISPLAY_SOURCE).toContain("<PhyTableFrame>");
   });
 
   it("loads the first page into the shared workspace and table frame", async () => {

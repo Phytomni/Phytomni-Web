@@ -5,12 +5,28 @@
       <div class="chat-activity__body chat-activity__body--forced">
         <slot>
           <template v-for="(block, i) in blocks" :key="i">
-            <component
-              :is="renderer(block.type)"
-              v-if="renderer(block.type)"
+            <MarkdownBlock
+              v-if="block.type === 'markdown'"
               :block="block"
               :ns="ns"
-              :within-activity="block.type === 'reasoning'"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <ReasoningBlock
+              v-else-if="block.type === 'reasoning'"
+              :block="block"
+              :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              within-activity
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <component
+              :is="renderer(block.type)"
+              v-else-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
             />
           </template>
         </slot>
@@ -30,7 +46,8 @@
         }}</span>
         <span
           class="chat-activity__status"
-          :class="streaming ? 'is-running' : 'is-done'"
+          :class="isActive ? 'is-running' : 'is-done'"
+          aria-live="polite"
         >
           {{ statusLabel }}
         </span>
@@ -48,12 +65,28 @@
       >
         <slot>
           <template v-for="(block, i) in blocks" :key="i">
-            <component
-              :is="renderer(block.type)"
-              v-if="renderer(block.type)"
+            <MarkdownBlock
+              v-if="block.type === 'markdown'"
               :block="block"
               :ns="ns"
-              :within-activity="block.type === 'reasoning'"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <ReasoningBlock
+              v-else-if="block.type === 'reasoning'"
+              :block="block"
+              :ns="ns"
+              :reference-count="referenceCount"
+              :streaming="streaming"
+              within-activity
+              @citation-activate="emit('citation-activate', $event)"
+            />
+            <component
+              :is="renderer(block.type)"
+              v-else-if="renderer(block.type)"
+              :block="block"
+              :ns="ns"
             />
           </template>
         </slot>
@@ -66,6 +99,10 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ContentBlock } from "../types";
+import type { AgentTaskLifecycle } from "@/api/types";
+import MarkdownBlock from "./blocks/MarkdownBlock.vue";
+import ReasoningBlock from "./blocks/ReasoningBlock.vue";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import { resolveBlockRenderer } from "../streaming/blockRegistry";
 import { activityRegionDomId } from "../streaming/presentation";
 
@@ -77,10 +114,13 @@ const props = withDefaults(
     expanded?: boolean;
     streaming?: boolean;
     ns?: string;
+    referenceCount?: number;
     /** Optional disclosure label override (e.g. analyst execution log). */
     label?: string;
     /** Hide the block-count chip (slot-driven bodies such as analyst logs). */
     hideCount?: boolean;
+    /** Sanitized async-agent lifecycle, when this disclosure owns a task row. */
+    lifecycle?: AgentTaskLifecycle;
   }>(),
   {
     blocks: () => [],
@@ -88,12 +128,14 @@ const props = withDefaults(
     expanded: false,
     streaming: false,
     ns: "",
+    referenceCount: 0,
     hideCount: false,
   }
 );
 
 const emit = defineEmits<{
   "update:expanded": [value: boolean];
+  "citation-activate": [activation: ScientificCitationActivation];
 }>();
 
 const { t } = useI18n();
@@ -102,14 +144,25 @@ const regionId = computed(() =>
   props.stateKey ? activityRegionDomId(props.stateKey) : ""
 );
 
-const displayLabel = computed(
-  () => props.label || t("chat.activity.label")
-);
+const displayLabel = computed(() => props.label || t("chat.activity.label"));
 
+const lifecycleStatusKey = computed(() =>
+  props.lifecycle
+    ? `chat.lifecycle.${props.lifecycle.phase.toLowerCase()}`
+    : null
+);
 const statusLabel = computed(() =>
-  props.streaming
-    ? t("chat.activity.status.running")
-    : t("chat.activity.status.done")
+  lifecycleStatusKey.value
+    ? t(lifecycleStatusKey.value)
+    : props.streaming
+      ? t("chat.activity.status.running")
+      : t("chat.activity.status.done")
+);
+const isActive = computed(
+  () =>
+    props.lifecycle?.phase === "PREPARING" ||
+    props.lifecycle?.phase === "RUNNING" ||
+    props.streaming
 );
 
 const renderer = (type: string) => resolveBlockRenderer(type);

@@ -7,7 +7,7 @@ import {
 } from "../visual/chat/fixture-registry";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CHAT_COMPOSER_SOURCE = readFileSync(
@@ -64,8 +64,8 @@ describe("ChatFrameV2 — production capture hooks", () => {
       countOccurrences(CHAT_SOURCE, 'data-test="chat-transcript-scroll-root"')
     ).toBe(1);
     expect(countOccurrences(CHAT_SOURCE, 'ref="messageContainer"')).toBe(1);
-    expect(TRANSCRIPT_SOURCE).toContain(
-      'v-if="!currentChat?.messages?.length"'
+    expect(CHAT_SOURCE).toMatch(
+      /currentHistoryHydration === 'new' &&\s*!currentChat\?\.messages\?\.length &&\s*!demoKey/
     );
     expect(TRANSCRIPT_SOURCE).toContain('v-if="currentChat?.messages?.length"');
   });
@@ -82,14 +82,14 @@ describe("ChatFrameV2 — production capture hooks", () => {
     expect(TRANSCRIPT_SOURCE).toContain(
       'v-for="(message, index) in currentChat.messages"'
     );
-    expect(TRANSCRIPT_SOURCE).toContain(
-      'v-if="isSending && !getChatState(currentChatId).isStreaming"'
+    expect(TRANSCRIPT_SOURCE).toMatch(
+      /v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
       /<ChatMessageRow[\s\S]*v-for="\(message, index\) in currentChat\.messages"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(
-      /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
+      /<ChatMessageRow[\s\S]*v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(TRANSCRIPT_SOURCE).toMatch(/<ChatMessageRow[\s\S]*\bloading\b/);
   });
@@ -242,9 +242,6 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
     expect(CHAT_SOURCE).toContain("phy-layout-transcript-max-width");
     expect(CHAT_SOURCE).toContain('class="chat-header-inner"');
     expect(CHAT_SOURCE).toMatch(
-      /\.chat-header-inner \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
-    );
-    expect(CHAT_SOURCE).toMatch(
       /\.transcript-content \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
     );
     expect(CHAT_SOURCE).toContain('class="empty-chat"');
@@ -264,6 +261,29 @@ describe("ChatFrameV2 — frame state matrix via 3A.8 registry", () => {
     expect(inputBlock).not.toContain("overflow-y");
     expect(CHAT_COMPOSER_SOURCE).toContain(
       "var(--phy-layout-transcript-max-width)"
+    );
+  });
+
+  it("separates full-width header chrome from the bounded transcript lane", () => {
+    const start = CHAT_SOURCE.indexOf(".chat-header {");
+    const end = CHAT_SOURCE.indexOf(".chat-content-stack {", start);
+    const headerBlock = CHAT_SOURCE.slice(start, end);
+
+    expect(headerBlock).toMatch(
+      /\.chat-header-inner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?margin:\s*0;/
+    );
+    expect(headerBlock).not.toContain("--phy-layout-transcript-max-width");
+    expect(headerBlock).toContain(
+      "clamp(var(--phy-space-16), 2vw, var(--phy-space-32))"
+    );
+    expect(FIXTURE_APP_SOURCE).toMatch(
+      /\.chat-header-inner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?margin:\s*0;/
+    );
+    expect(CHAT_SOURCE).toMatch(
+      /\.transcript-content \{[\s\S]*?width: min\(100%, var\(--phy-layout-transcript-max-width\)\)/
+    );
+    expect(CHAT_COMPOSER_SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-transcript-max-width))"
     );
   });
 });

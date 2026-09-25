@@ -1,4 +1,3 @@
-import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 
 const requestMock = vi.hoisted(() => vi.fn());
@@ -10,6 +9,7 @@ vi.mock("@/utils/request", () => ({
 import BotArtifactList from "@/components/research/BotArtifactList.vue";
 import { getChatdownloadURL } from "@/api/chat";
 import type { BotArtifact } from "@/views/chat/botProjection";
+import { mountWithApp } from "../../../helpers/test-app-context";
 
 describe("BotArtifactList provenance boundary", () => {
   it("uses the approved server-issued OBS download action", async () => {
@@ -39,7 +39,7 @@ describe("BotArtifactList provenance boundary", () => {
         paths: ["obs://bucket/run-1/output.zip"],
       },
     ];
-    const wrapper = mount(BotArtifactList, {
+    const wrapper = mountWithApp(BotArtifactList, {
       props: {
         artifacts,
         download,
@@ -55,8 +55,31 @@ describe("BotArtifactList provenance boundary", () => {
     expect(wrapper.html()).not.toContain("obs://");
   });
 
+  it("contains a rejected download callback without losing the download event", async () => {
+    const download = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("download failed"));
+    const wrapper = mountWithApp(BotArtifactList, {
+      props: {
+        artifacts: [
+          {
+            outputDir: "obs://bucket/run-1",
+            paths: ["obs://bucket/run-1/output.zip"],
+          },
+        ],
+        download,
+        emptyLabel: "No artifacts",
+      },
+    });
+
+    await expect(
+      wrapper.get('[data-test="bot-artifact-download"]').trigger("click")
+    ).resolves.toBeUndefined();
+    expect(wrapper.emitted("download")).toEqual([["obs://bucket/run-1"]]);
+  });
+
   it("keeps malformed paths warning-only and never exposes private diagnostics", () => {
-    const wrapper = mount(BotArtifactList, {
+    const wrapper = mountWithApp(BotArtifactList, {
       props: {
         artifacts: [
           {

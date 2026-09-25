@@ -1,6 +1,9 @@
-# vue3
+# Phytomni Web frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+This is the Vue 3 frontend for Phytomni Web. The supported build and test
+toolchain is Node 26.x/npm 11.x with Vite 8, Vitest 4, TypeScript 6.0.3, and
+vue-tsc 3.3.8. Production assets target Chrome/Edge 111, Firefox 114, and
+Safari 16.4 or newer.
 
 ## Recommended IDE Setup
 
@@ -27,6 +30,9 @@ See [Vite Configuration Reference](https://vitejs.dev/config/).
 npm install
 ```
 
+Use `npm ci` in a clean checkout or release build so the lockfile remains the
+source of truth.
+
 ### Compile and Hot-Reload for Development
 
 ```sh
@@ -39,10 +45,29 @@ npm run dev
 npm run build
 ```
 
+`npm run build` runs type-checking and the guarded Vite production build.
+Guarded test evidence uses:
+
+```sh
+npm run test:run
+npm run coverage
+```
+
+These commands fail on unexpected Vue, intlify, Sass, or Vite infrastructure
+warnings. The corresponding `build-only:raw`, `test:run:raw`, and
+`coverage:raw` commands are diagnostic-only and must not be used as release or
+pre-push evidence. The repository-wide gate is run from the repository root:
+
+```sh
+./scripts/validate_web_local.sh
+```
+
 ### Lint with [ESLint](https://eslint.org/)
 
 ```sh
 npm run lint
+npm run lint:raw       # diagnostic-only structured ESLint JSON
+npm run format:write   # the explicit broad formatter write command
 ```
 
 ## SSH Public Key
@@ -58,6 +83,7 @@ An intelligent chat system that supports parallel handling of multiple conversat
 ## Features
 
 ### Conversation independence
+
 - Each conversation has its own independent state management
 - Supports parallel handling of multiple conversations
 - Each conversation maintains its own:
@@ -70,12 +96,14 @@ An intelligent chat system that supports parallel handling of multiple conversat
   - Refresh state (`refreshingMessages`)
 
 ### Parallel processing
+
 - Can send messages in multiple conversations at the same time
 - Each conversation's loading state is independent of the others
 - Supports fast switching between conversations
 - Preserves the full context of each conversation
 
 ### State management
+
 - Uses the `chatStates` object to manage all conversation state
 - Gets or creates conversation state via the `getChatState()` function
 - Uses computed properties for reactive state binding
@@ -84,19 +112,25 @@ An intelligent chat system that supports parallel handling of multiple conversat
 ## Implementation
 
 ### Core architecture
+
 ```typescript
 // Conversation state management
-const chatStates = ref<Record<string, {
-  isSending: boolean;
-  messageInput: string;
-  fileList: UploadFile[];
-  historyQuestion: any;
-  copyVisible: number;
-  copyTimeRef: number | undefined;
-  logData: Record<string, any>;
-  loadingLog: Record<string, boolean>;
-  refreshingMessages: Record<string, boolean>;
-}>>({});
+const chatStates = ref<
+  Record<
+    string,
+    {
+      isSending: boolean;
+      messageInput: string;
+      fileList: UploadFile[];
+      historyQuestion: any;
+      copyVisible: number;
+      copyTimeRef: number | undefined;
+      logData: Record<string, any>;
+      loadingLog: Record<string, boolean>;
+      refreshingMessages: Record<string, boolean>;
+    }
+  >
+>({});
 
 // Get or create conversation state
 const getChatState = (dialogueId: string) => {
@@ -110,17 +144,18 @@ const getChatState = (dialogueId: string) => {
 ```
 
 ### Reactive state binding
+
 ```typescript
 // Input content — based on the current conversation
 const messageInput = computed({
   get: () => {
-    if (!currentChatId.value) return '';
+    if (!currentChatId.value) return "";
     return getChatState(currentChatId.value).messageInput;
   },
   set: (value: string) => {
     if (!currentChatId.value) return;
     getChatState(currentChatId.value).messageInput = value;
-  }
+  },
 });
 ```
 

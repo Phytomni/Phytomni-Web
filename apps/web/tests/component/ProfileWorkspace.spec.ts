@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -13,10 +12,10 @@ import {
 } from "vue";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getUserProfile: vi.fn(),
@@ -41,15 +40,25 @@ vi.mock("@/stores", () => ({ userStore: () => mocks.store }));
 vi.mock("vue-router", () => ({
   useRouter: () => ({ replace: mocks.replace }),
 }));
-vi.mock("element-plus", () => ({
-  ElMessage: {
-    success: mocks.success,
-    error: mocks.error,
-    warning: mocks.warning,
-  },
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: {
+      success: mocks.success,
+      error: mocks.error,
+      warning: mocks.warning,
+    },
+  };
+});
 
-import ProfileWorkspace from "@/views/profile/index.vue";
+import ProfileWorkspace from "@/views/profile/ProfileView.vue";
+
+const PROFILE_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/profile/ProfileView.vue"),
+  "utf8"
+);
 
 type Rule = {
   required?: boolean;
@@ -121,7 +130,7 @@ const ElFormStub = defineComponent({
             nextErrors[field] =
               typeof rule.message === "function"
                 ? rule.message()
-                : rule.message ?? "Required";
+                : (rule.message ?? "Required");
             break;
           }
           if (rule.validator) {
@@ -202,40 +211,29 @@ const stubs = {
   ElIcon: { template: "<span><slot /></span>" },
 };
 
-config.global.plugins = [];
-
 const profile = {
   email: "researcher@example.test",
   phone: "010-5555-0101",
   organization: "CAAS BRI",
   position: "Scientist",
   dialogue_count: 12,
-  last_login_at: "2026-07-12T08:30:45.000Z",
+  last_login_at: "2026-07-12T08:30:45",
 };
 
-const makeI18n = () =>
-  createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-
 const mountView = () => {
-  const i18n = makeI18n();
+  const context = createTestAppContext();
   return {
-    i18n,
-    wrapper: mount(ProfileWorkspace, { global: { plugins: [i18n], stubs } }),
+    i18n: context.i18n,
+    wrapper: context.mount(ProfileWorkspace, { global: { stubs } }),
   };
 };
 
-const openPasswordDialog = async (wrapper: ReturnType<typeof mount>) => {
+const openPasswordDialog = async (wrapper: ReturnType<typeof mountWithApp>) => {
   await wrapper.get(".profile-password-action").trigger("click");
 };
 
 const setPassword = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   oldPassword: string,
   newPassword: string,
   confirmPassword = newPassword
@@ -246,7 +244,7 @@ const setPassword = async (
   await fields[2].setValue(confirmPassword);
 };
 
-const submitPassword = async (wrapper: ReturnType<typeof mount>) => {
+const submitPassword = async (wrapper: ReturnType<typeof mountWithApp>) => {
   await wrapper.get(".profile-password-submit").trigger("click");
   await flushPromises();
 };
@@ -270,6 +268,17 @@ describe("Profile workspace", () => {
     mocks.getUserProfile.mockResolvedValue({ code: 200, data: { ...profile } });
     mocks.changePassword.mockResolvedValue({ code: 200 });
     mocks.FedLogOut.mockResolvedValue(undefined);
+  });
+
+  it("keeps the route shell, raw dates, and password dialog fluid", () => {
+    expect(PROFILE_SOURCE).toContain("PhyWorkspaceShell");
+    expect(PROFILE_SOURCE).toContain("min-width: 0;");
+    expect(PROFILE_SOURCE).not.toContain("toLocaleDateString");
+    expect(PROFILE_SOURCE).toContain('width="min(640px, calc(100vw - 24px))"');
+    expect(PROFILE_SOURCE).toContain(
+      "max-height: min(720px, calc(100dvh - 32px));"
+    );
+    expect(PROFILE_SOURCE).toContain("overflow: auto;");
   });
 
   afterEach(() => {
@@ -319,15 +328,11 @@ describe("Profile workspace", () => {
     const { i18n, wrapper } = mountView();
     await flushPromises();
     const englishDate = wrapper.get(".profile-last-login").text();
-    expect(englishDate).toBe(
-      formatDisplayDate(i18n.global.d, profile.last_login_at, "datetime")
-    );
+    expect(englishDate).toBe("7/12/2026, 8:30 AM");
 
     i18n.global.locale.value = "zh-CN";
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".profile-last-login").text()).toBe(
-      formatDisplayDate(i18n.global.d, profile.last_login_at, "datetime")
-    );
+    expect(wrapper.get(".profile-last-login").text()).toBe("2026/7/12 08:30");
     expect(wrapper.get(".profile-last-login").text()).not.toBe(englishDate);
   });
 
@@ -507,7 +512,7 @@ describe("Profile workspace", () => {
 
   it("keeps profile free of sensitive logs and preserves the approved login-status writer boundary", () => {
     const profileSource = readFileSync(
-      resolve(__dirname, "../../src/views/profile/index.vue"),
+      resolve(__dirname, "../../src/views/profile/ProfileView.vue"),
       "utf8"
     );
     expect(profileSource).not.toMatch(
@@ -520,6 +525,6 @@ describe("Profile workspace", () => {
     const writers = findLoginStatusWriters(srcDirectory)
       .map((file) => file.replace(`${srcDirectory}/`, ""))
       .sort();
-    expect(writers).toEqual(["stores/user.ts", "views/login/index.vue"]);
+    expect(writers).toEqual(["stores/user.ts", "views/login/LoginView.vue"]);
   });
 });

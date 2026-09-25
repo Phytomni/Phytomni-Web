@@ -5,12 +5,56 @@ vi.mock("@/utils/request", () => ({
   registerAbortController: vi.fn(),
   unregisterAbortController: vi.fn(),
 }));
+vi.mock("@/api/chat", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/chat")>()),
+  getAnswerCheck: vi.fn(),
+}));
 
 import { useStreamMessage } from "@/views/chat/composables/useStreamMessage";
-import { unregisterAbortController } from "@/utils/request";
-import type { ChatMessage } from "@/views/chat/types";
+import { artifactPresentationForMessage } from "@/views/chat/utils/artifact-policy";
+import {
+  registerAbortController,
+  unregisterAbortController,
+} from "@/utils/request";
+import { getAnswerCheck } from "@/api/chat";
+import type { ApiEnvelope, ChatHistoryRecord } from "@/api/types";
+import type { ChatMessage, ChatUIState } from "@/views/chat/types";
+import { buildChatState } from "../../../../helpers/chatBuilders";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 const CANONICAL_DIALOGUE_ID = "11111111-1111-4111-8111-111111111142";
+
+type FetchCall = Parameters<typeof fetch>;
+
+function mockedFetch() {
+  return vi.mocked(fetch);
+}
+
+function fetchCallAt(index: number, label: string): FetchCall {
+  return mustGet(mockedFetch().mock.calls[index], label);
+}
+
+function makeStreamState(): ChatUIState {
+  return buildChatState();
+}
+
+type StreamBlock = NonNullable<ChatMessage["blocks"]>[number];
+type MarkdownBlock = Extract<StreamBlock, { type: "markdown" }>;
+type StreamFailureMarkedMessage = ChatMessage & {
+  streamTerminalFailure?: "run-error" | "interrupted" | "cancelled";
+};
+
+function streamTerminalFailure(message: ChatMessage) {
+  return (message as StreamFailureMarkedMessage).streamTerminalFailure;
+}
+
+function markdownBlock(placeholder: ChatMessage, label: string): MarkdownBlock {
+  const blocks = mustGet(placeholder.blocks, `${label}: blocks`);
+  return mustGet(
+    blocks.find((block): block is MarkdownBlock => block.type === "markdown"),
+    `${label}: markdown block`
+  );
+}
 
 function sseStream(frames: string[]): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
@@ -37,7 +81,346 @@ function chunkedStream(chunks: string[]): ReadableStream<Uint8Array> {
 describe("useStreamMessage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(getAnswerCheck).mockReset();
+    vi.mocked(getAnswerCheck).mockResolvedValue({
+      code: 200,
+      message: "ok",
+      data: [],
+    });
   });
+
+  function authoritativeRecord(
+    overrides: Partial<ChatHistoryRecord> = {}
+  ): ChatHistoryRecord {
+    return {
+      id: "42",
+      dialogue_id: CANONICAL_DIALOGUE_ID,
+      bot_run_id: "r1",
+      tool_name: "ReviewAgent",
+      status: "SUCCEEDED",
+      answer: JSON.stringify({
+        content: "Canonical body [1].\n\n",
+        doc_list: [
+          {
+            title: "Study",
+            citation: { runs: [{ text: "Study." }], links: [] },
+          },
+        ],
+      }),
+      ...overrides,
+    };
+  }
+
+  function terminalFixture(
+    headers: Record<string, string> = {
+      "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+      "X-Phyto-Message-Id": "42",
+    },
+    runId = "r1"
+  ) {
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "ReviewAgent",
+    };
+    const chatState = makeStreamState();
+    const otherState = makeStreamState();
+    const api = useStreamMessage({
+      getChatState: (id) => (id === "other" ? otherState : chatState),
+      t: (key) => key,
+    });
+    mockedFetch().mockResolvedValueOnce(
+      new Response(
+        sseStream([
+          `data: ${JSON.stringify({ type: "RunStarted", run_id: runId })}\n\n`,
+          'data: {"type":"TextMessageContent","delta":"Received [1].\\n\\n## References\\n\\n1. Study"}\n\n',
+          'data: {"type":"TextMessageEnd"}\n\n',
+          'data: {"type":"ToolCallStart","tool_name":"review"}\n\n',
+          'data: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-terminal","widget":"confirm","props":{"title":"OK?"}}}\n\n',
+          'data: {"type":"Custom","name":"phyto.follow_up","value":["More?"]}\n\n',
+          'data: {"type":"RunFinished","run_id":"r1"}\n\n',
+        ]),
+        {
+          status: 200,
+          headers,
+        }
+      )
+    );
+    return { placeholder, chatState, otherState, api };
+  }
+
+  it.each(["send", "resume"])(
+    "reconciles one captured %s message body and references after successful EOF",
+    async (mode) => {
+      const { placeholder, api } = terminalFixture();
+      vi.mocked(getAnswerCheck).mockResolvedValueOnce({
+        code: 200,
+        message: "ok",
+        data: [authoritativeRecord({ id: "41" }), authoritativeRecord()],
+      });
+      const result =
+        mode === "send"
+          ? await api.streamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              formData: new FormData(),
+              requestId: "terminal",
+              placeholder,
+            })
+          : await api.resumeStreamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              messageId: "42",
+              requestId: "terminal",
+              placeholder,
+            });
+      expect(result.completed).toBe(true);
+      expect(getAnswerCheck).toHaveBeenCalledExactlyOnceWith(
+        {
+          dialogue_id: CANONICAL_DIALOGUE_ID,
+        },
+        expect.any(AbortSignal)
+      );
+      expect(placeholder.content).toBe("Canonical body [1].\n\n");
+      expect(markdownBlock(placeholder, "reconciled").text).toBe(
+        "Canonical body [1].\n\n"
+      );
+      expect(placeholder.doc_list?.[0].citation?.runs[0].text).toBe("Study.");
+      expect(
+        placeholder.blocks?.find((block) => block.type === "tool")?.toolName
+      ).toBe("review");
+      expect(
+        placeholder.blocks?.find((block) => block.type === "agent-surface")
+          ?.a2ui?.surface.surface_id
+      ).toBe("surf-terminal");
+      expect(placeholder.followUpQuestions).toEqual(["More?"]);
+      expect(placeholder.id).toBe("42");
+      expect(placeholder.a2uiRuntime?.runId).toBe("r1");
+    }
+  );
+
+  it("retains received text on failed authoritative read without rerunning", async () => {
+    const { placeholder, api } = terminalFixture();
+    vi.mocked(getAnswerCheck).mockRejectedValueOnce(
+      new Error("read unavailable")
+    );
+    const result = await api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    expect(result.completed).toBe(true);
+    expect(markdownBlock(placeholder, "received").text).toContain(
+      "Received [1]"
+    );
+    expect(placeholder.streamTerminalFailure).toBeUndefined();
+    expect(mockedFetch()).toHaveBeenCalledTimes(1);
+    expect(getAnswerCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["send", "resume"])(
+    "promptly cleans up an aborted %s while the owner-read promise stays unresolved",
+    async (mode) => {
+      const { placeholder, chatState, api } = terminalFixture();
+      let settleRead!: (value: ApiEnvelope<ChatHistoryRecord[]>) => void;
+      vi.mocked(getAnswerCheck).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            settleRead = resolve;
+          })
+      );
+      let settled = false;
+      const pending = (
+        mode === "send"
+          ? api.streamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              formData: new FormData(),
+              requestId: "pending-owner-read",
+              placeholder,
+            })
+          : api.resumeStreamMessage({
+              dialogueId: CANONICAL_DIALOGUE_ID,
+              messageId: "42",
+              requestId: "pending-owner-read",
+              placeholder,
+            })
+      ).then((result) => {
+        settled = true;
+        return result;
+      });
+      await vi.waitFor(() => expect(getAnswerCheck).toHaveBeenCalledTimes(1));
+      const registration = vi.mocked(registerAbortController).mock.calls.at(-1);
+      expect(registration?.[0]).toBe("pending-owner-read");
+      const controller = mustGet(registration, "pending read controller")[1];
+      const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+      expect(getAnswerCheck).toHaveBeenCalledWith(
+        { dialogue_id: CANONICAL_DIALOGUE_ID },
+        controller.signal
+      );
+      controller.abort();
+      await vi.waitFor(() => expect(settled).toBe(true));
+      expect((await pending).completed).toBe(true);
+      expect(unregisterAbortController).toHaveBeenCalledWith(
+        "pending-owner-read"
+      );
+      expect(chatState.isStreaming).toBe(false);
+      expect(chatState.streamingMessageId).toBeNull();
+      expect(placeholder.streaming).toBe(false);
+      expect(markdownBlock(placeholder, "cancelled owner read").text).toContain(
+        "Received [1]"
+      );
+      expect(placeholder.doc_list).toBeUndefined();
+      expect(mockedFetch()).toHaveBeenCalledTimes(1);
+      expect(removeListener).toHaveBeenCalledWith(
+        "abort",
+        expect.any(Function)
+      );
+      // Only after prompt cleanup is proven may the ignored read settle.
+      const receivedBlocks = placeholder.blocks;
+      settleRead({ code: 200, message: "ok", data: [authoritativeRecord()] });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(placeholder.blocks).toBe(receivedBlocks);
+      expect(placeholder.doc_list).toBeUndefined();
+      expect(placeholder.streaming).toBe(false);
+      removeListener.mockRestore();
+    }
+  );
+
+  it.each([
+    { id: "99" },
+    { dialogue_id: "other" },
+    { bot_run_id: "new-run" },
+    { bot_run_id: undefined },
+    { status: "RUNNING" },
+    { answer: "malformed" },
+    { answer: '{"content":"Bad","doc_list":{}}' },
+  ])("ignores unrelated or incomplete terminal history %j", async (record) => {
+    const { placeholder, api } = terminalFixture();
+    vi.mocked(getAnswerCheck).mockResolvedValueOnce({
+      code: 200,
+      message: "ok",
+      data: [authoritativeRecord(record)],
+    });
+    await api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    expect(markdownBlock(placeholder, "received").text).toContain(
+      "Received [1]"
+    );
+    expect(placeholder.doc_list).toBeUndefined();
+  });
+
+  it.each([
+    "switched-chat",
+    "replacement-run",
+    "replacement-run-in-place",
+    "replacement-blocks",
+    "new-request",
+    "aborted-read",
+  ])("guards captured reconciliation during %s", async (race) => {
+    const { placeholder, chatState, otherState, api } = terminalFixture();
+    let resolveRead!: (response: ApiEnvelope<ChatHistoryRecord[]>) => void;
+    vi.mocked(getAnswerCheck).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        })
+    );
+    const pending = api.streamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      formData: new FormData(),
+      requestId: "terminal",
+      placeholder,
+    });
+    await vi.waitFor(() => expect(getAnswerCheck).toHaveBeenCalledTimes(1));
+    const oldTool = placeholder.blocks?.find((block) => block.type === "tool");
+    if (race === "replacement-run" && placeholder.a2uiRuntime)
+      placeholder.a2uiRuntime = {
+        ...placeholder.a2uiRuntime,
+        runId: "new-run",
+      };
+    if (race === "replacement-run-in-place" && placeholder.a2uiRuntime)
+      placeholder.a2uiRuntime.runId = "new-run";
+    if (race === "replacement-blocks")
+      placeholder.blocks = [
+        { type: "markdown", authority: "web", text: "New replacement" },
+      ];
+    if (race === "new-request") chatState.streamingMessageId = "new-request";
+    if (race === "aborted-read") {
+      const registration = vi.mocked(registerAbortController).mock.calls.at(-1);
+      expect(registration?.[0]).toBe("terminal");
+      registration?.[1].abort();
+    }
+    if (race === "switched-chat")
+      otherState.messageInput = "Another chat selected";
+    resolveRead({ code: 200, message: "ok", data: [authoritativeRecord()] });
+    await pending;
+    if (race === "switched-chat") {
+      expect(markdownBlock(placeholder, "captured").text).toBe(
+        "Canonical body [1].\n\n"
+      );
+      expect(placeholder.blocks?.find((block) => block.type === "tool")).toBe(
+        oldTool
+      );
+      expect(otherState.messageInput).toBe("Another chat selected");
+    } else {
+      expect(markdownBlock(placeholder, "newer").text).not.toContain(
+        "Canonical"
+      );
+      expect(placeholder.doc_list).toBeUndefined();
+    }
+    if (race === "new-request")
+      expect(chatState.streamingMessageId).toBe("new-request");
+    if (race.startsWith("replacement-")) {
+      expect(placeholder.streaming).toBe(true);
+      expect(placeholder.instantMessage).toBeUndefined();
+    } else {
+      expect(placeholder.streaming).toBe(false);
+      expect(placeholder.instantMessage).toBe(true);
+    }
+  });
+
+  it.each([
+    [{}, "r1"],
+    [
+      { "X-Phyto-Dialogue-Id": "not-a-dialogue", "X-Phyto-Message-Id": "42" },
+      "r1",
+    ],
+    [
+      {
+        "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+        "X-Phyto-Message-Id": "new_42",
+      },
+      "r1",
+    ],
+    [
+      {
+        "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+        "X-Phyto-Message-Id": "42",
+      },
+      "",
+    ],
+  ] as [Record<string, string>, string][])(
+    "does not reconcile an absent or malformed terminal identity %j",
+    async (headers, runId) => {
+      const { placeholder, api } = terminalFixture(headers, runId);
+      await api.streamMessage({
+        dialogueId: CANONICAL_DIALOGUE_ID,
+        formData: new FormData(),
+        requestId: "terminal",
+        placeholder,
+      });
+      expect(getAnswerCheck).not.toHaveBeenCalled();
+      expect(markdownBlock(placeholder, "identity").text).toContain(
+        "Received [1]"
+      );
+    }
+  );
 
   it("accumulates content into placeholder.blocks and finalizes on RunFinished", async () => {
     const body = sseStream([
@@ -46,10 +429,17 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"world"}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
 
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "turn-reducer-report",
+    };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -62,10 +452,56 @@ describe("useStreamMessage", () => {
       placeholder,
     });
 
-    const md = placeholder.blocks!.find((b) => b.type === "markdown");
+    const md = markdownBlock(placeholder, "completed stream");
     expect(md?.text).toBe("hello world");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
+    expect(chatState.agentRunLifecycles).toEqual({});
+    expect(streamTerminalFailure(placeholder)).toBeUndefined();
+    expect(artifactPresentationForMessage(placeholder)).toMatchObject({
+      kind: "cited-report",
+      report: "hello world",
+      source: "message",
+      identity: "stream:turn-reducer-report",
+    });
+  });
+
+  it("appends the provided logical turn ID once for direct stream callers", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r-turn"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-turn"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const formData = new FormData();
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d-turn",
+      formData,
+      requestId: "req-turn",
+      placeholder,
+      clientTurnId: "turn-direct-identity",
+    });
+
+    expect(formData.getAll("client_turn_id")).toEqual(["turn-direct-identity"]);
+    const [, init] = fetchCallAt(0, "direct stream call");
+    expect((init?.body as FormData).get("client_turn_id")).toBe(
+      "turn-direct-identity"
+    );
+    expect(init?.headers).toEqual(
+      expect.objectContaining({
+        "X-Phyto-Client-Turn-Id": "turn-direct-identity",
+      })
+    );
   });
 
   it("keeps one bounded stream identity for Chat, Knowledge, and BriefGene", async () => {
@@ -94,7 +530,7 @@ describe("useStreamMessage", () => {
     ];
 
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -106,7 +542,7 @@ describe("useStreamMessage", () => {
         `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${fixture.runId}"}\n\n`,
         "data: [DONE]\r\n\r\n",
       ]);
-      (fetch as any).mockResolvedValueOnce(
+      mockedFetch().mockResolvedValueOnce(
         new Response(body, {
           status: 200,
           headers: {
@@ -115,7 +551,7 @@ describe("useStreamMessage", () => {
             "X-Request-Id": fixture.webRequestId,
             "X-Bot-Request-Id": fixture.botRequestId,
           },
-        }),
+        })
       );
       const formData = new FormData();
       formData.append("tool", fixture.tool);
@@ -139,18 +575,20 @@ describe("useStreamMessage", () => {
         messageId: fixture.messageId,
         requestId: fixture.webRequestId,
         botRequestId: fixture.botRequestId,
+        completed: true,
       });
       expect(placeholder.a2uiRuntime?.runId).toBe(fixture.runId);
       expect(placeholder.a2uiRuntime?.messageId).toBe(fixture.messageId);
       expect(placeholder.a2uiRuntime?.messageId).not.toBe(fixture.runId);
-      expect(placeholder.blocks?.find((block) => block.type === "markdown")?.text).toBe(
-        fixture.tool,
-      );
-      const request = (fetch as any).mock.calls[index][1] as RequestInit;
-      expect((request.body as FormData).get("tool")).toBe(fixture.tool);
-      expect((request.body as FormData).get("mode")).toBe("instant");
+      expect(
+        placeholder.blocks?.find((block) => block.type === "markdown")?.text
+      ).toBe(fixture.tool);
+      const [, request] = fetchCallAt(index, `stream request ${index}`);
+      const requestInit = mustGet(request, `stream request ${index} init`);
+      expect((requestInit.body as FormData).get("tool")).toBe(fixture.tool);
+      expect((requestInit.body as FormData).get("mode")).toBe("instant");
     }
-    expect((fetch as any).mock.calls).toHaveLength(cases.length);
+    expect(mockedFetch().mock.calls).toHaveLength(cases.length);
   });
 
   it("preserves streamPresentationKey across stream finally cleanup", async () => {
@@ -159,7 +597,7 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"hi"}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
 
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -168,7 +606,7 @@ describe("useStreamMessage", () => {
       blocks: [],
       streamPresentationKey: "chat-request-keep",
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -187,57 +625,252 @@ describe("useStreamMessage", () => {
     expect(placeholder.id).toBeUndefined();
   });
 
-  it("marks the placeholder errored on RunError", async () => {
+  it("marks RunError terminal copy without obscuring accumulated Markdown", async () => {
     const body = sseStream([
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"# Retained report\\n\\nEvidence."}\n\n',
+      'event: TextMessageEnd\ndata: {"type":"TextMessageEnd"}\n\n',
       'event: RunError\ndata: {"type":"RunError","message":"boom"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
-    expect(placeholder.streaming).toBe(false);
-    expect(placeholder.content).toContain("boom");
-  });
-
-  it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
-    (fetch as any).mockResolvedValue(new Response(null, { status: 503 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "run-error-with-report",
+    };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
     });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const result = await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
+    expect(result.completed).toBe(false);
+    expect(placeholder.streaming).toBe(false);
+    expect(placeholder.content).toContain("boom");
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+    expect(artifactPresentationForMessage(placeholder)).toMatchObject({
+      report: "# Retained report\n\nEvidence.",
+      source: "message",
+    });
+  });
+
+  it("does not promote RunError copy when no report Markdown was accumulated", async () => {
+    const body = sseStream([
+      'event: RunError\ndata: {"type":"RunError","message":"upstream failure"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "KnowledgeAgent",
+      streamPresentationKey: "run-error-no-report",
+    };
+
+    await useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (key: string) => key,
+    }).streamMessage({
+      dialogueId: "d-run-error",
+      formData: new FormData(),
+      requestId: "run-error-no-report",
+      placeholder,
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+    expect(artifactPresentationForMessage(placeholder)).toBeNull();
+  });
+
+  it("shows the interrupted copy and finalizes when the HTTP response is not ok", async () => {
+    mockedFetch().mockResolvedValue(new Response(null, { status: 503 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    const result = await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     // A non-ok stream throws before the read loop; the catch marks it resend-able.
     expect(placeholder.content).toBe("chat.streamInterrupted");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
     expect(chatState.streamingMessageId).toBeNull();
+    expect(result.preDispatch4xx).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
+  });
+
+  it("rejects a blocking JSON envelope instead of reading it as SSE", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(JSON.stringify({ data: { final_answer: "blocking" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "json-response",
+      placeholder,
+    });
+
+    expect(result.completed).toBeUndefined();
+    expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(placeholder.blocks).toEqual([]);
+    expect(placeholder.a2uiRuntime).toBeUndefined();
+    expect(chatState.isStreaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
+  });
+
+  it("marks a definite stream validation rejection for logical-turn cleanup", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(null, {
+        status: 422,
+        headers: { "X-Phyto-Dispatch-State": "not-started" },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    const result = await streamMessage({
+      dialogueId: "d-validation",
+      formData: new FormData(),
+      requestId: "r-validation",
+      placeholder,
+    });
+
+    expect(result.preDispatch4xx).toBe(true);
+    expect(placeholder.content).toBe("chat.streamInterrupted");
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
+  });
+
+  it("surfaces the gateway 4xx message instead of the interrupted copy", async () => {
+    mockedFetch().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 400,
+          message: "Uploaded attachments exceed the allowed limit.",
+          pre_dispatch: true,
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Phyto-Dispatch-State": "not-started",
+          },
+        }
+      )
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+    const result = await streamMessage({
+      dialogueId: "d-limit",
+      formData: new FormData(),
+      requestId: "r-limit",
+      placeholder,
+    });
+    expect(result.preDispatch4xx).toBe(true);
+    expect(placeholder.content).toBe(
+      "Uploaded attachments exceed the allowed limit."
+    );
+    expect(streamTerminalFailure(placeholder)).toBe("run-error");
   });
 
   it("shows the interrupted copy when the fetch itself fails (network error)", async () => {
-    (fetch as any).mockRejectedValue(new Error("network down"));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    mockedFetch().mockRejectedValue(new Error("network down"));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect(placeholder.content).toBe("chat.streamInterrupted");
     expect(placeholder.streaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("interrupted");
   });
 
   it("does NOT show the interrupted copy when the user aborts (AbortError)", async () => {
     const abortErr = new Error("aborted");
     abortErr.name = "AbortError";
-    (fetch as any).mockRejectedValue(abortErr);
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    mockedFetch().mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     // A deliberate user abort is not an interruption — no error copy, but still finalized.
     expect(placeholder.content).toBe("");
     expect(placeholder.streaming).toBe(false);
     expect(chatState.isStreaming).toBe(false);
+    expect(streamTerminalFailure(placeholder)).toBe("cancelled");
   });
 
   it("captures phyto.references into placeholder.doc_list on finalize", async () => {
@@ -246,12 +879,59 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.references","value":{"doc_list":[{"title":"T1"}]}}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
-    expect((placeholder as any).doc_list).toEqual([{ title: "T1" }]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
+    expect(placeholder.doc_list).toEqual([{ title: "T1", citation: null }]);
+  });
+
+  it("keeps the first valid context notice and rejects malformed or conflicting duplicates", async () => {
+    const body = sseStream([
+      'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r-context"}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":true,"context_degraded":false}}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":false,"context_degraded":true}}\n\n',
+      'event: Custom\ndata: {"type":"Custom","name":"phyto.context_staged","value":{"context_rebuilt":"true","context_degraded":false}}\n\n',
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"answer"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-context"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+
+    await useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    }).streamMessage({
+      dialogueId: "d-context",
+      formData: new FormData(),
+      requestId: "r-context",
+      placeholder,
+    });
+
+    expect(placeholder.contextNotice).toEqual({
+      rebuilt: true,
+      degraded: false,
+    });
+    expect(markdownBlock(placeholder, "context stream").text).toBe("answer");
   });
 
   it("reassembles a frame whose bytes are split across two reader chunks", async () => {
@@ -261,14 +941,103 @@ describe("useStreamMessage", () => {
       'event: TextMessageContent\ndata: {"type":"TextMessageContent",',
       '"delta":"split-safe"}\n\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
-    const md = placeholder.blocks!.find((b) => b.type === "markdown");
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
+    const md = markdownBlock(placeholder, "split UTF-8 stream");
     expect(md?.text).toBe("split-safe");
     expect(placeholder.streaming).toBe(false);
+  });
+
+  it("ignores unknown and malformed event frames without aborting the stream", async () => {
+    const body = sseStream([
+      'data: {"type":"FutureEvent","value":"ignored"}\n\n',
+      "data: null\n\n",
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":{"unsafe":true}}\n\n',
+      'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"safe"}\n\n',
+      'event: RunFinished\ndata: {"type":"RunFinished"}\n\n',
+    ]);
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-hostile-frame",
+      placeholder,
+    });
+
+    expect(placeholder.blocks?.map((block) => block.text)).toEqual(["safe"]);
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
+  });
+
+  it("preserves a partial UTF-8 code point across reader chunks", async () => {
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          enc.encode(
+            'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"'
+          )
+        );
+        const value = enc.encode("叶");
+        controller.enqueue(value.slice(0, 1));
+        controller.enqueue(value.slice(1));
+        controller.enqueue(
+          enc.encode(
+            '"}\n\nevent: RunFinished\ndata: {"type":"RunFinished"}\n\n'
+          )
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (k: string) => k,
+    });
+
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-utf8",
+      placeholder,
+    });
+
+    expect(
+      placeholder.blocks?.find((block) => block.type === "markdown")?.text
+    ).toBe("叶");
   });
 
   it("reveals follow-up questions on the live turn (no @finish from StreamMessage)", async () => {
@@ -277,13 +1046,25 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.follow_up","value":["q1","q2"]}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
-      role: "assistant", content: "", streaming: true, blocks: [], showFollowUpQuestions: false,
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      showFollowUpQuestions: false,
     };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "r", placeholder });
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "r",
+      placeholder,
+    });
     expect(placeholder.followUpQuestions).toEqual(["q1", "q2"]);
     // The blocking path reveals chips via MarkdownViewer @finish; the stream
     // path has no @finish, so finalize must flip the reveal flag itself.
@@ -291,7 +1072,7 @@ describe("useStreamMessage", () => {
   });
 
   it("owns canonical A2UI identity on the message and retains it after RunFinished", async () => {
-    let release!: () => void;
+    let release: (() => void) | undefined;
     const gate = new Promise<void>((r) => {
       release = r;
     });
@@ -300,24 +1081,24 @@ describe("useStreamMessage", () => {
       async start(controller) {
         controller.enqueue(
           enc.encode(
-            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-42"}\n\n',
-          ),
+            'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-42"}\n\n'
+          )
         );
         controller.enqueue(
           enc.encode(
-            'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
-          ),
+            'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n'
+          )
         );
         await gate;
         controller.enqueue(
           enc.encode(
-            'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-42"}\n\n',
-          ),
+            'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-42"}\n\n'
+          )
         );
         controller.close();
       },
     });
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         new Response(body, {
           status: 200,
@@ -348,11 +1129,13 @@ describe("useStreamMessage", () => {
         )
       );
 
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = {
-      isStreaming: false,
-      streamingMessageId: null,
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
     };
+    const chatState = makeStreamState();
     const formData = new FormData();
     formData.append("id", "42");
     const { streamMessage } = useStreamMessage({
@@ -372,15 +1155,18 @@ describe("useStreamMessage", () => {
     expect(placeholder.id).toBe("142");
     expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
     expect(placeholder.a2uiRuntime?.messageId).toBe("142");
-    release();
+    const releaseStream = mustGet(release, "A2UI stream release");
+    releaseStream();
     const result = await streamPromise;
     expect(result).toEqual({
       dialogueId: CANONICAL_DIALOGUE_ID,
       messageId: "142",
+      completed: true,
     });
     expect(placeholder.a2uiRuntime?.runId).toBe("run-42");
     expect(placeholder.a2uiRuntime?.transport).toBeTypeOf("function");
-    await placeholder.a2uiRuntime!.transport({
+    const runtime = mustGet(placeholder.a2uiRuntime, "canonical A2UI runtime");
+    await runtime.transport({
       surface_id: "surf-1",
       widget: "confirm",
       action_id: "action-canonical-1",
@@ -390,8 +1176,49 @@ describe("useStreamMessage", () => {
     expect(fetch).toHaveBeenNthCalledWith(
       2,
       `/api/v1/conversations/${CANONICAL_DIALOGUE_ID}/a2ui-actions`,
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("invokes onIdentity from headers before the first body frame", async () => {
+    const order: string[] = [];
+    mockedFetch().mockImplementation(async () => {
+      order.push("fetch");
+      return new Response(
+        sseStream([
+          'event: RunStarted\ndata: {"type":"RunStarted","run_id":"r1"}\n\n',
+          'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
+        ]),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+            "X-Phyto-Message-Id": "42",
+          },
+        }
+      );
+    });
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      blocks: [],
+    };
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => makeStreamState(),
+      t: (key) => key,
+    });
+    await streamMessage({
+      dialogueId: "temp",
+      formData: new FormData(),
+      requestId: "req-id",
+      placeholder,
+      onIdentity: ({ dialogueId, messageId }) => {
+        order.push(`id:${dialogueId}:${messageId}`);
+      },
+    });
+    expect(order[0]).toBe("fetch");
+    expect(order[1]).toBe(`id:${CANONICAL_DIALOGUE_ID}:42`);
   });
 
   it("captures safe Web and Bot request ids without using temporary A2UI identity", async () => {
@@ -400,7 +1227,7 @@ describe("useStreamMessage", () => {
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe-ids"}\n\n',
       "data: [DONE]\n\n",
     ]);
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -409,7 +1236,7 @@ describe("useStreamMessage", () => {
           "X-Request-Id": "web-req-314",
           "X-Bot-Request-Id": "bot-req-2718",
         },
-      }),
+      })
     );
     const formData = new FormData();
     formData.append("id", "0");
@@ -420,7 +1247,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -436,6 +1263,7 @@ describe("useStreamMessage", () => {
       messageId: "314",
       requestId: "web-req-314",
       botRequestId: "bot-req-2718",
+      completed: true,
     });
     expect(placeholder.a2uiRuntime?.dialogueId).toBe(CANONICAL_DIALOGUE_ID);
     expect(placeholder.a2uiRuntime?.messageId).toBe("314");
@@ -447,7 +1275,7 @@ describe("useStreamMessage", () => {
     const body = sseStream([
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-safe"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -456,7 +1284,7 @@ describe("useStreamMessage", () => {
           "X-Request-Id": "web request with spaces",
           "X-Bot-Request-Id": "bot/request",
         },
-      }),
+      })
     );
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -465,7 +1293,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -479,6 +1307,7 @@ describe("useStreamMessage", () => {
     expect(result).toEqual({
       dialogueId: CANONICAL_DIALOGUE_ID,
       messageId: "315",
+      completed: true,
     });
   });
 
@@ -488,7 +1317,7 @@ describe("useStreamMessage", () => {
       'event: Custom\ndata: {"type":"Custom","name":"phyto.a2ui","value":{"catalog_version":"v1.0","surface_id":"surf-1","widget":"confirm","props":{"title":"OK?"}}}\n\n',
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"run-no-headers"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const formData = new FormData();
     formData.append("id", "42");
     const placeholder: ChatMessage = {
@@ -498,7 +1327,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -509,7 +1338,11 @@ describe("useStreamMessage", () => {
       placeholder,
     });
 
-    expect(result).toEqual({ dialogueId: undefined, messageId: undefined });
+    expect(result).toEqual({
+      dialogueId: undefined,
+      messageId: undefined,
+      completed: true,
+    });
     expect(placeholder.id).toBeUndefined();
     expect(placeholder.a2uiRuntime).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -520,7 +1353,7 @@ describe("useStreamMessage", () => {
   });
 
   it("rejects partial or client-shaped response identities", async () => {
-    const bodies = [
+    const bodies: Array<Record<string, string>> = [
       {
         "X-Phyto-Dialogue-Id": "new_spoofed",
         "X-Phyto-Message-Id": "42",
@@ -533,12 +1366,12 @@ describe("useStreamMessage", () => {
     ];
     const placeholders: ChatMessage[] = [];
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
     for (const [index, headers] of bodies.entries()) {
-      (fetch as any).mockResolvedValueOnce(
+      mockedFetch().mockResolvedValueOnce(
         new Response(
           sseStream([
             'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-x"}\n\n',
@@ -575,7 +1408,7 @@ describe("useStreamMessage", () => {
           "X-Phyto-Message-Id": messageId,
         },
       });
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         response(
           [
@@ -594,7 +1427,7 @@ describe("useStreamMessage", () => {
         )
       );
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
     const errored: ChatMessage = {
@@ -638,15 +1471,15 @@ describe("useStreamMessage", () => {
           sent = true;
           controller.enqueue(
             enc.encode(
-              'event: RunError\ndata: {"type":"RunError","message":"upstream boom"}\n\n',
-            ),
+              'event: RunError\ndata: {"type":"RunError","message":"upstream boom"}\n\n'
+            )
           );
           return;
         }
         controller.error(new Error("late transport close"));
       },
     });
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
@@ -654,17 +1487,18 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "local-terminal-error",
       formData: new FormData(),
       requestId: "req-terminal-error",
       placeholder,
     });
 
+    expect(result.completed).toBe(false);
     expect(placeholder.content).toBe("upstream boom");
     expect(placeholder.content).not.toBe("chat.streamInterrupted");
   });
@@ -674,7 +1508,7 @@ describe("useStreamMessage", () => {
       'event: RunStarted\ndata: {"type":"RunStarted","run_id":"run-done"}\n\n',
       "data: [DONE]\n\n",
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
     const placeholder: ChatMessage = {
       role: "assistant",
       content: "",
@@ -682,7 +1516,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -705,14 +1539,14 @@ describe("useStreamMessage", () => {
         controller.error(abortError);
       },
     });
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
           "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
           "X-Phyto-Message-Id": "203",
         },
-      }),
+      })
     );
     const placeholder: ChatMessage = {
       role: "assistant",
@@ -721,7 +1555,7 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
@@ -755,7 +1589,7 @@ describe("useStreamMessage", () => {
         controller.error(new Error("late close failure"));
       },
     });
-    (fetch as any).mockResolvedValue(
+    mockedFetch().mockResolvedValue(
       new Response(body, {
         status: 200,
         headers: {
@@ -771,17 +1605,18 @@ describe("useStreamMessage", () => {
       blocks: [],
     };
     const { streamMessage } = useStreamMessage({
-      getChatState: () => ({ isStreaming: false, streamingMessageId: null }),
+      getChatState: () => makeStreamState(),
       t: (k: string) => k,
     });
 
-    await streamMessage({
+    const result = await streamMessage({
       dialogueId: "local-finished",
       formData: new FormData(),
       requestId: "req-finished-close",
       placeholder,
     });
 
+    expect(result.completed).toBe(true);
     expect(placeholder.a2uiRuntime?.runId).toBe("run-finished");
     expect(placeholder.a2uiRuntime?.messageId).toBe("204");
     expect(placeholder.content).toBe("");
@@ -791,18 +1626,31 @@ describe("useStreamMessage", () => {
     const body = sseStream([
       'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r1"}\n\n',
     ]);
-    (fetch as any).mockResolvedValue(new Response(body, { status: 200 }));
-    const placeholder: ChatMessage = { role: "assistant", content: "", streaming: true, blocks: [] };
-    const chatState: any = { isStreaming: false, streamingMessageId: null };
-    const { streamMessage } = useStreamMessage({ getChatState: () => chatState, t: (k: string) => k });
-    await streamMessage({ dialogueId: "d1", formData: new FormData(), requestId: "req-9", placeholder });
+    mockedFetch().mockResolvedValue(new Response(body, { status: 200 }));
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+    };
+    const chatState = makeStreamState();
+    const { streamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (k: string) => k,
+    });
+    await streamMessage({
+      dialogueId: "d1",
+      formData: new FormData(),
+      requestId: "req-9",
+      placeholder,
+    });
     // The map must not accumulate a stale controller per streamed message.
     expect(unregisterAbortController).toHaveBeenCalledWith("req-9");
   });
 
   it("stale stream finally does not clear a newer request's streaming fields", async () => {
-    let releaseStale!: () => void;
-    let releaseFresh!: () => void;
+    let releaseStale: (() => void) | undefined;
+    let releaseFresh: (() => void) | undefined;
     const staleGate = new Promise<void>((r) => {
       releaseStale = r;
     });
@@ -815,20 +1663,20 @@ describe("useStreamMessage", () => {
         async start(controller) {
           controller.enqueue(
             enc.encode(
-              `event: RunStarted\ndata: {"type":"RunStarted","run_id":"${runId}"}\n\n`,
-            ),
+              `event: RunStarted\ndata: {"type":"RunStarted","run_id":"${runId}"}\n\n`
+            )
           );
           await gate;
           controller.enqueue(
             enc.encode(
-              `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${runId}"}\n\n`,
-            ),
+              `event: RunFinished\ndata: {"type":"RunFinished","run_id":"${runId}"}\n\n`
+            )
           );
           controller.close();
         },
       });
 
-    (fetch as any)
+    mockedFetch()
       .mockResolvedValueOnce(
         new Response(gatedBody("old", staleGate), {
           status: 200,
@@ -848,10 +1696,7 @@ describe("useStreamMessage", () => {
         })
       );
 
-    const chatState: any = {
-      isStreaming: false,
-      streamingMessageId: null,
-    };
+    const chatState = makeStreamState();
     const { streamMessage } = useStreamMessage({
       getChatState: () => chatState,
       t: (k: string) => k,
@@ -890,7 +1735,8 @@ describe("useStreamMessage", () => {
       expect(chatState.streamingMessageId).toBe("req-new");
     });
 
-    releaseStale();
+    const releaseStaleStream = mustGet(releaseStale, "stale stream release");
+    releaseStaleStream();
     await stalePromise;
 
     // Stale finally must not wipe the newer stream's ownership markers.
@@ -902,7 +1748,8 @@ describe("useStreamMessage", () => {
     expect(freshPlaceholder.a2uiRuntime?.runId).toBe("new");
     expect(freshPlaceholder.a2uiRuntime?.messageId).toBe("302");
 
-    releaseFresh();
+    const releaseFreshStream = mustGet(releaseFresh, "fresh stream release");
+    releaseFreshStream();
     await freshPromise;
     expect(chatState.streamingMessageId).toBeNull();
     expect(chatState.isStreaming).toBe(false);
@@ -911,9 +1758,9 @@ describe("useStreamMessage", () => {
   });
 
   /**
-   * Live-session limitation: phyto.references land on placeholder.doc_list only
-   * for the current stream. History reload does not invent persisted reference
-   * rows — a blocks-only message without doc_list remains references-unavailable.
+   * Live-session: phyto.references land on placeholder.doc_list for the current
+   * stream, and stream end persists them on cited answer JSON. History reload
+   * still does not invent rows for a blocks-only message without doc_list.
    */
   it("documents history-refresh placeholders as references-unavailable", () => {
     const historyReload: ChatMessage = {
@@ -923,5 +1770,174 @@ describe("useStreamMessage", () => {
       blocks: [{ type: "markdown", authority: "web", text: "See [1]." }],
     };
     expect(historyReload.doc_list).toBeUndefined();
+  });
+
+  it("resumes GET stream with Last-Event-ID and stamps streamSeq", async () => {
+    const body = sseStream([
+      'id: 4\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"tail"}\n\n',
+      'id: 5\nevent: RunFinished\ndata: {"type":"RunFinished","run_id":"r-resume"}\n\n',
+    ]);
+    mockedFetch().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "42",
+        },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+      streamSeq: "3",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    const result = await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      lastEventId: "3",
+      requestId: "resume:42",
+    });
+
+    expect(result.completed).toBe(true);
+    expect(placeholder.streamSeq).toBe("5");
+    expect(markdownBlock(placeholder, "resumed stream").text).toBe("tail");
+    expect(placeholder.streaming).toBe(false);
+    const [url, init] = fetchCallAt(0, "resume GET");
+    expect(url).toBe(
+      `/api/v1/conversations/${CANONICAL_DIALOGUE_ID}/messages/42/stream`
+    );
+    expect(init?.method).toBe("GET");
+    expect(init?.headers).toEqual(
+      expect.objectContaining({
+        Accept: "text/event-stream",
+        Authorization: "Bearer tok",
+        satoken: "tok",
+        "Last-Event-ID": "3",
+      })
+    );
+  });
+
+  it("owns sending state while a resumed stream is active", async () => {
+    let streamController: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    mockedFetch().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "X-Phyto-Dialogue-Id": CANONICAL_DIALOGUE_ID,
+          "X-Phyto-Message-Id": "42",
+        },
+      })
+    );
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+      tool_name: "ChatAgent",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    const resultPromise = resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:42",
+    });
+    await vi.waitFor(() => expect(mockedFetch()).toHaveBeenCalledTimes(1));
+
+    expect(chatState.isSending).toBe(true);
+    expect(chatState.activeRequestId).toBe("resume:42");
+
+    const controller = mustGet(streamController, "resume stream controller");
+    controller.enqueue(
+      new TextEncoder().encode(
+        'event: RunFinished\ndata: {"type":"RunFinished","run_id":"r-resume"}\n\n'
+      )
+    );
+    controller.close();
+    await resultPromise;
+
+    expect(chatState.isSending).toBe(false);
+    expect(chatState.activeRequestId).toBe("");
+  });
+
+  it("does not mark streamTerminalFailure when resume aborts without Stop", async () => {
+    const abortErr = new Error("unmount abort");
+    abortErr.name = "AbortError";
+    mockedFetch().mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+    };
+    const chatState = makeStreamState();
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:unmount",
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBeUndefined();
+    expect(placeholder.content).toBe("");
+    expect(placeholder.streaming).toBe(false);
+  });
+
+  it("marks resume abort as cancelled only after owner Stop", async () => {
+    const abortErr = new Error("owner stop");
+    abortErr.name = "AbortError";
+    mockedFetch().mockRejectedValue(abortErr);
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      id: "42",
+    };
+    const chatState = makeStreamState();
+    chatState.generationStopped = true;
+    const { resumeStreamMessage } = useStreamMessage({
+      getChatState: () => chatState,
+      t: (key: string) => key,
+    });
+
+    await resumeStreamMessage({
+      dialogueId: CANONICAL_DIALOGUE_ID,
+      messageId: "42",
+      placeholder,
+      requestId: "resume:stop",
+    });
+
+    expect(streamTerminalFailure(placeholder)).toBe("cancelled");
+    expect(placeholder.streaming).toBe(false);
   });
 });

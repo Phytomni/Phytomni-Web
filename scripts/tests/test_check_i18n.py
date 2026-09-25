@@ -48,12 +48,20 @@ def test_skips_spec_files_entirely():
     assert v == []
 
 
+def test_skips_agent_case_demo_tapes():
+    v = scan_text_for_violations(
+        "apps/web/src/views/review-agent/review-case.ts",
+        'title: "单细胞转录组测序技术发展及其在甘薯中的应用_赵楠",\n',
+    )
+    assert v == []
+
+
 # --- ElMessage literal (rule B) ---
 
 
 def test_detects_elmessage_string_literal():
     v = scan_text_for_violations(
-        "apps/web/src/views/history/index.vue",
+        "apps/web/src/views/history/HistoryView.vue",
         '    ElMessage.error("Failed to load history");\n',
     )
     assert any(x.rule == "toast" and x.literal == "Failed to load history" for x in v)
@@ -61,7 +69,7 @@ def test_detects_elmessage_string_literal():
 
 def test_ignores_elmessage_with_t_call():
     v = scan_text_for_violations(
-        "apps/web/src/views/history/index.vue",
+        "apps/web/src/views/history/HistoryView.vue",
         "    ElMessage.error(t('history.loadFailed'));\n",
     )
     assert [x for x in v if x.rule == "toast"] == []
@@ -99,7 +107,7 @@ def test_ignores_ginh_err_error_passthrough():
 
 
 def test_icp_number_permanently_allowed():
-    assert is_permanently_allowed("apps/web/src/components/Footer.vue", "京ICP备07026971号-9")
+    assert is_permanently_allowed("apps/web/src/components/AppFooter.vue", "京ICP备07026971号-9")
 
 
 def test_langswitch_chinese_toggle_allowed():
@@ -120,13 +128,13 @@ def test_ordinary_cjk_not_permanently_allowed():
 def test_parse_allowlist_extracts_entries():
     md = (
         "## A: Vue templates\n"
-        "- [ ] `apps/web/src/views/chat/index.vue` | `回复内容`\n"
-        "- [x] `apps/web/src/views/error/401.vue` | `返回`\n"
+        "- [ ] `apps/web/src/views/chat/ChatView.vue` | `回复内容`\n"
+        "- [x] `apps/web/src/views/error/UnauthorizedView.vue` | `返回`\n"
         "\nsome prose that is not an entry\n"
     )
     entries = parse_allowlist(md)
-    assert ("apps/web/src/views/chat/index.vue", "回复内容") in entries
-    assert ("apps/web/src/views/error/401.vue", "返回") in entries
+    assert ("apps/web/src/views/chat/ChatView.vue", "回复内容") in entries
+    assert ("apps/web/src/views/error/UnauthorizedView.vue", "返回") in entries
     assert len(entries) == 2
 
 

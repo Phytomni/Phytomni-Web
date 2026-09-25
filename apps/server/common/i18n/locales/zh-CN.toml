@@ -7,6 +7,7 @@ account_locked_threshold = "登录失败次数过多，账户已锁定15分钟"
 missing_context = "缺少认证上下文"
 user_lookup_failed = "用户查询失败"
 first_login_must_change_password = "首次登录用户必须先修改初始密码才能访问其他接口"
+registration_disabled = "当前暂未开放注册"
 
 [register]
 email_required = "邮箱不能为空"
@@ -50,11 +51,28 @@ capabilities_unavailable = "Bot 能力不可用"
 capabilities_not_found = "互操作能力不存在"
 capabilities_unavailable = "互操作能力不可用"
 
+[upload]
+invalid_request = "上传请求无效"
+attachment_type_unsupported = "文件名无法识别为受支持的附件类型"
+attachment_type_ambiguous = "文件名同时匹配文档和分析数据"
+unsupported_media_type = "上传请求必须使用 JSON"
+request_too_large = "上传元数据过大"
+unavailable = "文件上传暂时不可用"
+state_conflict = "上传状态已变更，请重试上传"
+session_expired = "上传会话已过期，请重新开始上传"
+limit_exceeded = "同时上传已达上限，请取消失败的上传后重试"
+
 [gene]
 file_name_required = "参数file_name不能为空"
 fetch_failed = "获取文件失败"
 missing_parameter = "缺少参数"
 email_download_unavailable = "邮件下载链接当前不可用"
+
+[conversation_artifact]
+unauthorized = "未授权"
+not_found = "工件不存在"
+unavailable = "工件下载不可用"
+retry_unavailable = "归档重试不可用"
 
 [common]
 not_logged_in = "未登录"
@@ -63,10 +81,13 @@ rate_limited = "请求过于频繁，请稍后再试"
 
 [query]
 upload_too_large = "上传内容过大"
+file_parts_unsupported = "不支持直接上传文件，请先创建资产"
 query_empty = "查询内容不能为空"
 file_unreadable = "无法读取上传的文件"
 task_id_required = "task_id必填"
 invalid_interop_controls = "互操作控制参数无效"
+invalid_artifact_ids = "工件标识无效"
+research_input_incompatible = "研究输入兼容能力暂时不可用"
 
 [permission]
 user_id_required = "用户ID不能为空"
@@ -83,6 +104,8 @@ not_admin_create = "您不是管理员，无法创建用户"
 [agent_task]
 invalid_reaction_type = "无效的reaction_type值"
 invalid_collect_type = "无效的collect_type值"
+not_found = "任务不存在"
+cancel_unavailable = "任务已无法取消"
 
 [a2ui]
 invalid_body = "请求体无效"

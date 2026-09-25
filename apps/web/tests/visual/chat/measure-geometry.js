@@ -1,7 +1,7 @@
 /**
  * Page-context geometry measurement for Chat visual capture.
  *
- * Scrolls the transcript owner, applies every reviewed overflow / clearance /
+ * Scrolls the active transcript/content owner, applies every reviewed overflow / clearance /
  * responsive-navigation contract, stores the result on
  * window.__PHY_CHAT_GEOMETRY_RESULT__, and returns it. This measurement step
  * never throws solely because pass === false; assert-geometry.js is the only
@@ -9,9 +9,39 @@
  */
 (async () => {
   const GEOMETRY_KEY = "__PHY_CHAT_GEOMETRY_RESULT__";
+  const CAPTURE_METADATA_KEY = "__PHY_CHAT_CAPTURE_META__";
   const MOBILE_BREAKPOINT = 900;
   const MOBILE_HEADER_MAX_HEIGHT = 96;
   const EDGE_TOLERANCE = 0.5;
+  const HISTORY_STATES = new Set(["title-only", "loading", "empty", "error"]);
+
+  function captureMetadata() {
+    const metadata = window[CAPTURE_METADATA_KEY];
+    return metadata && typeof metadata === "object" ? metadata : null;
+  }
+
+  function captureEvidence() {
+    const metadata = captureMetadata();
+    return {
+      fixtureSource: "tests/visual/chat",
+      contract:
+        typeof metadata?.contract === "string" ? metadata.contract : null,
+      sourceSha:
+        typeof metadata?.sourceSha === "string" ? metadata.sourceSha : null,
+      geometryScriptSha256:
+        typeof metadata?.geometryScriptSha256 === "string"
+          ? metadata.geometryScriptSha256
+          : null,
+      styleScriptSha256:
+        typeof metadata?.styleScriptSha256 === "string"
+          ? metadata.styleScriptSha256
+          : null,
+      contractSha256:
+        typeof metadata?.contractSha256 === "string"
+          ? metadata.contractSha256
+          : null,
+    };
+  }
 
   function measureRect(el) {
     if (!el) {
@@ -46,6 +76,18 @@
     };
   }
 
+  function queryElement(el, selector) {
+    return typeof el?.querySelector === "function"
+      ? el.querySelector(selector)
+      : null;
+  }
+
+  function queryElements(el, selector) {
+    return typeof el?.querySelectorAll === "function"
+      ? Array.from(el.querySelectorAll(selector))
+      : [];
+  }
+
   function isInsideViewport(rect) {
     return (
       rect.present &&
@@ -74,11 +116,33 @@
       },
       root: { present: false },
       transcript: null,
+      contentStack: null,
+      scrollOwner: null,
+      emptyScrollPosition: null,
       primaryAction: measureRect(null),
       navigationTrigger: measureRect(null),
       composer: measureRect(null),
+      headerPreferences: measureRect(null),
+      quickSelectCount: 0,
+      caseRegionCount: 0,
+      caseLinkCount: 0,
+      lastCase: { present: false },
       lastMessage: { present: false },
+      historyState: null,
+      welcomePresent: false,
+      agentPreview: {
+        dialog: { present: false },
+        media: { present: false },
+      },
+      compactDisclosure: {
+        open: false,
+        sidebar: { present: false },
+        optionCount: 0,
+      },
+      attachmentGeometry: null,
+      evidence: captureEvidence(),
       state: null,
+      chatMode: null,
       pass: false,
       error,
       ...partial,
@@ -105,6 +169,22 @@
       `Root data-chat-state must be empty|populated; got "${String(state)}"`
     );
   }
+  const historyState = root.getAttribute("data-history-state");
+  if (historyState !== null && !HISTORY_STATES.has(historyState)) {
+    return persistFailure(
+      { root: measureRect(root), state, historyState },
+      `Root data-history-state must be title-only|loading|empty|error; got "${String(
+        historyState
+      )}"`
+    );
+  }
+  const chatMode = root.getAttribute("data-chat-mode") || "instant";
+  if (chatMode !== "instant" && chatMode !== "expert") {
+    return persistFailure(
+      { root: measureRect(root), state, chatMode },
+      `Root data-chat-mode must be instant|expert; got "${String(chatMode)}"`
+    );
+  }
 
   const transcripts = root.querySelectorAll('[data-testid="chat-transcript"]');
   if (transcripts.length !== 1) {
@@ -113,19 +193,96 @@
         root: measureRect(root),
         transcript: { present: false, count: transcripts.length },
         state,
+        historyState,
+        chatMode,
       },
       `Expected exactly one chat-transcript; found ${transcripts.length}`
     );
   }
 
   const transcriptEl = transcripts[0];
-  const mobileSafeInset = innerWidth < 600 ? 24 : 0;
-  transcriptEl.scrollTop = Math.max(
-    0,
-    transcriptEl.scrollHeight - transcriptEl.clientHeight - mobileSafeInset
+  const contentStacks = root.querySelectorAll(
+    '[data-testid="chat-content-stack"]'
   );
+  if (contentStacks.length !== 1) {
+    return persistFailure(
+      {
+        root: measureRect(root),
+        contentStack: { present: false, count: contentStacks.length },
+        state,
+        historyState,
+        chatMode,
+      },
+      `Expected exactly one chat-content-stack; found ${contentStacks.length}`
+    );
+  }
+
+  const contentStackEl = contentStacks[0];
+  const captureContract = captureMetadata()?.contract;
+  const attachmentFixture = root.getAttribute("data-attachment-fixture");
+  const unifiedAttachmentFixtureKeys = new Set([
+    "empty",
+    "uploading-detail-open",
+    "mixed-ready-failed-expired",
+    "ten-files-overflow",
+    "incompatible-agent-blocked",
+  ]);
+  const isUnifiedAttachmentFixture =
+    captureContract === "unified-attachments-v1" &&
+    unifiedAttachmentFixtureKeys.has(attachmentFixture);
+  const uploadStatus = root.getAttribute("data-upload-status");
+  const uploadFixtureStatuses = new Set([
+    "queued",
+    "uploading",
+    "paused",
+    "failed",
+    "completed",
+  ]);
+  const isUploadFixture = uploadFixtureStatuses.has(uploadStatus);
+  const isLegacyUploadFixture = isUploadFixture && !isUnifiedAttachmentFixture;
+  const emptyScrollPosition =
+    root.getAttribute("data-empty-scroll-position") === "cases"
+      ? "cases"
+      : "top";
+  const scrollOwnerEl = state === "empty" ? contentStackEl : transcriptEl;
+  const shouldScrollToBottom = state === "populated";
+  const shouldLandOnCases =
+    state === "empty" && emptyScrollPosition === "cases";
+  const mobileSafeInset = innerWidth < 600 ? 24 : 0;
+
+  if (shouldScrollToBottom) {
+    scrollOwnerEl.scrollTop = Math.max(
+      0,
+      scrollOwnerEl.scrollHeight - scrollOwnerEl.clientHeight - mobileSafeInset
+    );
+  } else if (shouldLandOnCases) {
+    const landingSelector =
+      innerWidth >= 390 && innerWidth < 600
+        ? '[data-testid="chat-composer"]'
+        : '[data-testid="chat-cases"]';
+    const casesLandingEl = root.querySelector?.(landingSelector);
+    const ownerTop = scrollOwnerEl.getBoundingClientRect().top;
+    const casesTop = casesLandingEl?.getBoundingClientRect().top ?? ownerTop;
+    const landingInset = innerWidth < 600 ? 8 : 16;
+    scrollOwnerEl.scrollTop = Math.max(
+      0,
+      scrollOwnerEl.scrollTop + casesTop - ownerTop - landingInset
+    );
+  } else {
+    scrollOwnerEl.scrollTop = 0;
+  }
   await frame();
   await frame();
+
+  const ownerScrollTop = scrollOwnerEl.scrollTop;
+  const ownerScrollHeight = scrollOwnerEl.scrollHeight;
+  const ownerClientHeight = scrollOwnerEl.clientHeight;
+  const ownerClientWidth = scrollOwnerEl.clientWidth;
+  const ownerScrollWidth = scrollOwnerEl.scrollWidth;
+  const ownerAtBottom =
+    ownerScrollHeight - ownerClientHeight - ownerScrollTop <=
+      Math.max(1, mobileSafeInset) || ownerScrollHeight <= ownerClientHeight;
+  const ownerAtTop = ownerScrollTop <= 1;
 
   const scrollTop = transcriptEl.scrollTop;
   const scrollHeight = transcriptEl.scrollHeight;
@@ -145,6 +302,16 @@
   const composerNodes = document.querySelectorAll(
     '[data-testid="chat-composer"]'
   );
+  const preferenceNodes = document.querySelectorAll(
+    '[data-testid="chat-header-preferences"]'
+  );
+  const quickSelectNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-quick-select"]'
+  );
+  const caseRegions = root.querySelectorAll('[data-testid="chat-cases"]');
+  const caseLinks = root.querySelectorAll('[data-testid="chat-case-link"]');
+  const lastCase =
+    caseLinks.length > 0 ? caseLinks[caseLinks.length - 1] : null;
   const messageRows = root.querySelectorAll('[data-testid="chat-message-row"]');
   const lastRow =
     messageRows.length > 0 ? messageRows[messageRows.length - 1] : null;
@@ -159,22 +326,120 @@
       : { ...measureRect(null), count: triggerNodes.length };
   const composer =
     composerNodes.length === 1
-      ? measureRect(composerNodes[0])
+      ? measureRect(
+          composerNodes[0].querySelector?.(".chat-composer-surface") ||
+            composerNodes[0]
+        )
       : { ...measureRect(null), count: composerNodes.length };
+  const uploadCardNode = root.querySelector?.(
+    '[data-testid="chat-upload-card"]'
+  );
+  const uploadCard = uploadCardNode
+    ? measureRect(uploadCardNode)
+    : { ...measureRect(null), count: 0 };
+  const attachmentStripNode = root.querySelector(
+    '[data-testid="attachment-chip-strip"]'
+  );
+  const attachmentRowNode = queryElement(
+    attachmentStripNode,
+    ".attachment-chip-strip__row"
+  );
+  const attachmentChipNodes = queryElements(
+    attachmentStripNode,
+    '[data-testid="attachment-chip"]'
+  );
+  const attachmentDetailNode = root.querySelector(
+    '[data-testid="attachment-chip-detail"]'
+  );
+  const attachmentEditorNode =
+    queryElement(
+      composerNodes[0],
+      '[data-testid="chat-composer-editor"], [data-testid="mention-input"], .chat-composer-body textarea, .chat-composer-body [contenteditable="true"], .chat-composer-body .el-textarea__inner'
+    ) || queryElement(composerNodes[0], ".chat-composer-body");
+  const attachmentStrip = measureRect(attachmentStripNode);
+  const attachmentRow = measureRect(attachmentRowNode);
+  const attachmentChips = attachmentChipNodes.map((chip) => ({
+    ...measureRect(chip),
+    state: chip.getAttribute("data-state"),
+  }));
+  const attachmentDetail = measureRect(attachmentDetailNode);
+  const attachmentEditor = measureRect(attachmentEditorNode);
+  const attachmentDetailWithinStrip = attachmentDetailNode
+    ? attachmentStrip.present &&
+      attachmentDetail.left >= attachmentStrip.left - EDGE_TOLERANCE &&
+      attachmentDetail.right <= attachmentStrip.right + EDGE_TOLERANCE
+    : true;
+  const attachmentDetailWithinViewport = attachmentDetailNode
+    ? isInsideViewport(attachmentDetail)
+    : true;
+  const attachmentGeometry = isUnifiedAttachmentFixture
+    ? {
+        fixture: attachmentFixture,
+        strip: attachmentStrip,
+        row: attachmentRow,
+        chips: attachmentChips,
+        detail: attachmentDetail,
+        editor: attachmentEditor,
+        detailWithinStrip: attachmentDetailWithinStrip,
+        detailWithinViewport: attachmentDetailWithinViewport,
+        pass: true,
+      }
+    : null;
   const lastMessage = lastRow
     ? { present: true, ...measureRect(lastRow) }
     : { present: false };
+  const headerPreferences =
+    preferenceNodes.length === 1
+      ? measureRect(preferenceNodes[0])
+      : { ...measureRect(null), count: preferenceNodes.length };
+  const lastCaseRect = lastCase
+    ? { present: true, ...measureRect(lastCase) }
+    : { present: false };
   const rootRect = measureRect(root);
   const transcriptRect = measureRect(transcriptEl);
+
+  const welcomeNodes = root.querySelectorAll('[data-testid="chat-welcome"]');
+  const historyLoadingNodes = root.querySelectorAll(
+    '[data-testid="chat-history-loading"]'
+  );
+  const historyEmptyNodes = root.querySelectorAll(
+    '[data-testid="chat-history-empty"]'
+  );
+  const historyErrorNodes = root.querySelectorAll(
+    '[data-testid="chat-history-error"]'
+  );
+  const historyRetryNodes = root.querySelectorAll(
+    '[data-testid="chat-history-retry"]'
+  );
+  const previewDialogNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-preview"] [role="dialog"]'
+  );
+  const previewMediaNodes = root.querySelectorAll(
+    '[data-testid="chat-agent-preview"] .agent-capability-popover__media'
+  );
+  const sidebarSurface = root.querySelector?.(".phy-adaptive-sidebar__surface");
+  const compactOptionNodes = root.querySelectorAll(".agent-option");
+  const compactDisclosureOpen =
+    root.getAttribute("data-compact-explore-open") === "true";
+  const previewDialog =
+    previewDialogNodes.length === 1
+      ? measureRect(previewDialogNodes[0])
+      : { ...measureRect(null), count: previewDialogNodes.length };
+  const previewMedia =
+    previewMediaNodes.length === 1
+      ? measureRect(previewMediaNodes[0])
+      : { ...measureRect(null), count: previewMediaNodes.length };
+  const sidebarRect = measureRect(sidebarSurface);
+  const compactOptions = Array.from(compactOptionNodes).map((option) =>
+    measureRect(option)
+  );
 
   const drawerState = root.getAttribute("data-sidebar-drawer-state");
   const isMobileViewport = innerWidth < MOBILE_BREAKPOINT;
   const closedMobile = drawerState === "closed";
   const openMobile = drawerState === "open";
   const desktopState = drawerState === "not-mobile" || drawerState == null;
-  const mainSurface = root.querySelector?.(
-    ".phy-adaptive-shell__main"
-  );
+  const mainSurface = root.querySelector?.(".phy-adaptive-shell__main");
   const drawerSurface = root.querySelector?.(
     ".phy-adaptive-sidebar.is-drawer-open .phy-adaptive-sidebar__surface"
   );
@@ -184,6 +449,126 @@
   const docScrollWidth = document.documentElement.scrollWidth;
   const docClientWidth = document.documentElement.clientWidth;
   const reasons = [];
+  const attachmentReasons = [];
+
+  if (isUnifiedAttachmentFixture) {
+    if (attachmentFixture === "empty") {
+      if (attachmentStripNode) {
+        attachmentReasons.push(
+          "empty attachment fixture unexpectedly renders a strip"
+        );
+      }
+    } else if (!attachmentStripNode || !attachmentRowNode) {
+      attachmentReasons.push("unified attachment strip or row is missing");
+    }
+    if (!attachmentEditor.present || !attachmentEditor.visible) {
+      attachmentReasons.push("unified attachment editor is hidden");
+    }
+    if (
+      attachmentRowNode &&
+      getComputedStyle(attachmentRowNode).flexWrap !== "nowrap"
+    ) {
+      attachmentReasons.push("unified attachment strip wraps");
+    }
+    if (attachmentStripNode && !isInsideViewport(attachmentStrip)) {
+      attachmentReasons.push("unified attachment strip escapes viewport");
+    }
+    if (attachmentDetailNode) {
+      if (!attachmentDetailWithinViewport) {
+        attachmentReasons.push("unified attachment detail escapes viewport");
+      }
+      if (!attachmentDetailWithinStrip) {
+        attachmentReasons.push(
+          "unified attachment detail escapes containing strip"
+        );
+      }
+      if (
+        attachmentEditor.present &&
+        attachmentDetail.bottom > attachmentEditor.top + EDGE_TOLERANCE
+      ) {
+        attachmentReasons.push(
+          "unified attachment detail overlaps the Composer editor"
+        );
+      }
+    }
+    reasons.push(...attachmentReasons);
+  }
+
+  if (historyState === "loading") {
+    if (historyLoadingNodes.length !== 1) {
+      reasons.push(
+        `history loading state requires one node; found ${historyLoadingNodes.length}`
+      );
+    }
+  }
+  if (historyState === "empty") {
+    if (historyEmptyNodes.length !== 1) {
+      reasons.push(
+        `history empty state requires one node; found ${historyEmptyNodes.length}`
+      );
+    }
+  }
+  if (historyState === "error") {
+    if (historyErrorNodes.length !== 1 || historyRetryNodes.length !== 1) {
+      reasons.push(
+        `history error state requires one error and retry node; found error=${historyErrorNodes.length} retry=${historyRetryNodes.length}`
+      );
+    }
+  }
+  if (
+    (historyState === "loading" ||
+      historyState === "empty" ||
+      historyState === "error") &&
+    welcomeNodes.length !== 0
+  ) {
+    reasons.push(
+      `history ${historyState} state must not render the welcome title`
+    );
+  }
+  if (compactDisclosureOpen) {
+    if (!sidebarSurface || !sidebarRect.present) {
+      reasons.push("compact Explore Agents state requires a sidebar surface");
+    }
+    if (compactOptionNodes.length < 1) {
+      reasons.push(
+        "compact Explore Agents state requires visible agent options"
+      );
+    }
+    compactOptions.forEach((optionRect, index) => {
+      const insideSidebar =
+        sidebarRect.present &&
+        optionRect.present &&
+        optionRect.left >= sidebarRect.left - EDGE_TOLERANCE &&
+        optionRect.right <= sidebarRect.right + EDGE_TOLERANCE &&
+        optionRect.top >= sidebarRect.top - EDGE_TOLERANCE &&
+        optionRect.bottom <= sidebarRect.bottom + EDGE_TOLERANCE;
+      if (!insideSidebar) {
+        reasons.push(`compact agent option ${index} escapes sidebar surface`);
+      }
+      if (
+        typeof sidebarSurface?.contains === "function" &&
+        !sidebarSurface.contains(compactOptionNodes[index])
+      ) {
+        reasons.push(`compact agent option ${index} is outside sidebar DOM`);
+      }
+    });
+  }
+  if (
+    root.getAttribute("data-agent-preview") === "true" ||
+    previewDialogNodes.length > 0
+  ) {
+    if (previewDialogNodes.length !== 1 || !isInsideViewport(previewDialog)) {
+      reasons.push("Agent preview requires one dialog inside the viewport");
+    }
+    if (
+      previewMediaNodes.length !== 1 ||
+      !isInsideViewport(previewMedia) ||
+      previewMedia.width <= 0 ||
+      previewMedia.height <= 0
+    ) {
+      reasons.push("Agent preview requires one positive bounded media rect");
+    }
+  }
 
   if (docScrollWidth > docClientWidth) {
     reasons.push(
@@ -196,10 +581,24 @@
     );
   }
 
-  if (composerNodes.length !== 1 || (!openMobile && !composer.visible)) {
+  if (composerNodes.length !== 1 || (!composer.visible && !openMobile)) {
     reasons.push("composer missing or not visible");
-  } else if (!openMobile && !isInsideViewport(composer)) {
-    reasons.push("composer escapes viewport");
+  } else if (
+    !openMobile &&
+    !isUploadFixture &&
+    !isUnifiedAttachmentFixture &&
+    (state === "populated" || emptyScrollPosition === "top") &&
+    !isInsideViewport(composer)
+  ) {
+    reasons.push("composer escapes viewport in the reviewed state");
+  }
+
+  if (isLegacyUploadFixture) {
+    if (!uploadCard.present || !isVisibleInViewport(uploadCard)) {
+      reasons.push(
+        "upload fixture requires a visible upload card in the viewport"
+      );
+    }
   }
 
   if (lastMessage.present) {
@@ -224,8 +623,62 @@
   if (state === "empty" && lastMessage.present) {
     reasons.push("empty state must not present lastMessage");
   }
-  if (!atBottom) {
-    reasons.push("transcript not at bottom");
+  if (shouldScrollToBottom && !ownerAtBottom) {
+    reasons.push("active scroll owner is not at bottom");
+  }
+  if (!shouldScrollToBottom && !shouldLandOnCases && !ownerAtTop) {
+    reasons.push("empty landing top fixture is not at top");
+  }
+  if (ownerScrollWidth > ownerClientWidth) {
+    reasons.push(
+      `content stack overflow scrollWidth=${ownerScrollWidth} > clientWidth=${ownerClientWidth}`
+    );
+  }
+
+  const historyRecoveryState =
+    historyState === "loading" ||
+    historyState === "empty" ||
+    historyState === "error";
+
+  if (state === "empty" && !historyRecoveryState) {
+    if (caseRegions.length !== 1 || caseLinks.length !== 8) {
+      reasons.push(
+        `empty state requires one Cases region with eight links; found regions=${caseRegions.length} links=${caseLinks.length}`
+      );
+    }
+    const expectedQuickSelectCount =
+      state === "empty" && chatMode === "expert" ? 1 : 0;
+    if (quickSelectNodes.length !== expectedQuickSelectCount) {
+      reasons.push(
+        `state=${state} mode=${chatMode} requires ${expectedQuickSelectCount} quick selection regions; found ${quickSelectNodes.length}`
+      );
+    }
+    if (emptyScrollPosition === "cases" && !isVisibleInViewport(lastCaseRect)) {
+      reasons.push("empty Cases fixture final case is not visible");
+    }
+  } else if (state === "populated" || historyRecoveryState) {
+    if (caseRegions.length !== 0 || caseLinks.length !== 0) {
+      reasons.push(
+        historyRecoveryState
+          ? "history recovery state must not render Cases"
+          : "populated state must not render Cases"
+      );
+    }
+    if (quickSelectNodes.length !== 0) {
+      reasons.push(
+        historyRecoveryState
+          ? "history recovery state must not render quick selection"
+          : "populated state must not render quick selection"
+      );
+    }
+  }
+
+  if (preferenceNodes.length !== 1) {
+    reasons.push(
+      `expected one Chat header preference group; found ${preferenceNodes.length}`
+    );
+  } else if (!openMobile && !isVisibleInViewport(headerPreferences)) {
+    reasons.push("Chat header preferences escape the viewport");
   }
 
   if (isMobileViewport && !closedMobile && !openMobile) {
@@ -276,6 +729,13 @@
     reasons.push(`sidebar trigger count ${triggerNodes.length}`);
   }
 
+  if (attachmentGeometry) {
+    attachmentGeometry.pass = attachmentReasons.length === 0;
+    if (attachmentReasons.length > 0) {
+      attachmentGeometry.reasons = attachmentReasons;
+    }
+  }
+
   const result = {
     viewport: { width: innerWidth, height: innerHeight },
     document: {
@@ -294,14 +754,54 @@
       atBottom,
       ...transcriptRect,
     },
+    contentStack: measureRect(contentStackEl),
+    scrollOwner: {
+      kind: state === "empty" ? "content-stack" : "transcript",
+      scrollTop: ownerScrollTop,
+      scrollHeight: ownerScrollHeight,
+      clientHeight: ownerClientHeight,
+      clientWidth: ownerClientWidth,
+      scrollWidth: ownerScrollWidth,
+      atTop: ownerAtTop,
+      atBottom: ownerAtBottom,
+    },
+    emptyScrollPosition,
+    headerPreferences,
+    quickSelectCount: quickSelectNodes.length,
+    caseRegionCount: caseRegions.length,
+    caseLinkCount: caseLinks.length,
+    lastCase: lastCaseRect,
     primaryAction,
     navigationTrigger,
     composer,
+    uploadStatus,
+    uploadCard,
+    attachmentGeometry,
+    evidence: captureEvidence(),
     mainSurfaceHidden: mainSurface?.getAttribute("aria-hidden") === "true",
     drawerSurface: measureRect(drawerSurface),
     drawerScrim: measureRect(drawerScrim),
     lastMessage,
+    historyState,
+    welcomePresent: welcomeNodes.length > 0,
+    historyNodes: {
+      loading: historyLoadingNodes.length,
+      empty: historyEmptyNodes.length,
+      error: historyErrorNodes.length,
+      retry: historyRetryNodes.length,
+    },
+    agentPreview: {
+      dialog: previewDialog,
+      media: previewMedia,
+    },
+    compactDisclosure: {
+      open: compactDisclosureOpen,
+      sidebar: sidebarRect,
+      optionCount: compactOptionNodes.length,
+      options: compactOptions,
+    },
     state,
+    chatMode,
     drawerState,
     pass: reasons.length === 0,
     ...(reasons.length ? { reasons } : {}),

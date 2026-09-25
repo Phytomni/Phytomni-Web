@@ -15,18 +15,14 @@
 <style scoped>
 .phy-data-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--phy-space-16);
+  gap: var(--phy-space-12);
   width: 100%;
   min-width: 0;
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
-}
-
-.phy-data-toolbar.is-wrappable,
-.phy-data-toolbar--wrap {
-  flex-wrap: wrap;
 }
 
 .phy-data-toolbar__filters,

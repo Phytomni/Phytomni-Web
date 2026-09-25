@@ -1,26 +1,24 @@
 {
   "include": [
-    "vite.config.*",
-    "vitest.config.*",
+    "vite.config.mts",
+    "vite/**/*.ts",
+    "vitest.config.mts",
     "cypress.config.*"
   ],
   "compilerOptions": {
     "composite": true,
+    "incremental": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
     "jsx": "preserve",
     "noImplicitThis": true,
     "strict": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true,
     "target": "esnext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   }
 }

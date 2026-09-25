@@ -1,0 +1,7 @@
+{
+  "run_id": "run-b5-cancelled",
+  "agent": "analyst",
+  "status": "cancelled",
+  "task_ids": ["child-b5-cancelled"],
+  "result": {}
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mountWithApp } from "../../helpers/test-app-context";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import PhyDocLayout from "@/components/shell/PhyDocLayout.vue";
@@ -11,7 +11,7 @@ const SOURCE = readFileSync(
 
 describe("PhyDocLayout", () => {
   it("wraps body with phy-reading and optional toc slot", () => {
-    const wrapper = mount(PhyDocLayout, {
+    const wrapper = mountWithApp(PhyDocLayout, {
       slots: {
         header: '<div data-test="header">H</div>',
         toc: '<nav data-test="toc">TOC</nav>',
@@ -26,14 +26,22 @@ describe("PhyDocLayout", () => {
     expect(wrapper.find("[data-test=body]").exists()).toBe(true);
   });
 
-  it("owns a fixed narrative measure without becoming a scroll container", () => {
-    expect(SOURCE).toMatch(/\.phy-doc-body\s*\{[\s\S]*max-width:\s*760px/);
+  it("owns a fluid readable measure without becoming a scroll container", () => {
+    expect(SOURCE).toMatch(
+      /\.phy-doc-body\s*\{[\s\S]*width:\s*min\(100%,\s*var\(--phy-layout-reading-max-width\)\);[\s\S]*max-width:\s*var\(--phy-layout-reading-max-width\)/
+    );
     expect(SOURCE).not.toMatch(/\b(?:min-)?height\s*:/);
     expect(SOURCE).not.toMatch(/\boverflow(?:-x|-y)?\s*:/);
   });
 
+  it("keeps the document content within the shared readable measure", () => {
+    expect(SOURCE).toContain(
+      "width: min(100%, var(--phy-layout-document-max-width));"
+    );
+  });
+
   it("keeps an optional footer in the document scroll flow", () => {
-    const wrapper = mount(PhyDocLayout, {
+    const wrapper = mountWithApp(PhyDocLayout, {
       slots: {
         footer: '<div data-test="footer">Footer</div>',
       },

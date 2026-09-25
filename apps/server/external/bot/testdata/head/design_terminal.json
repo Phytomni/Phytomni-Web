@@ -1,16 +1,92 @@
 {
-  "fixture_id": "rc-web-004-design-terminal",
-  "run_id": "run-rc-web-004-design-1",
+  "a2a_context_id": null,
+  "a2a_message_id": null,
+  "a2a_task_id": null,
   "agent": "design",
-  "status": "succeeded",
+  "answer": "# Synthetic Design Result\n\nArchive ready.",
+  "created_at": "2026-08-05T00:00:00+00:00",
+  "dialogue_id": null,
+  "error": null,
+  "expires_at": "2026-08-12T01:00:00+00:00",
+  "model": null,
+  "origin": "remote",
+  "query": null,
+  "request_id": null,
   "result": {
-    "report_stage": "final",
-    "report_completeness": "complete",
-    "report_revision": 1,
-    "report_updated_at": "2026-07-18T00:01:00Z",
-    "formatted": {
-      "answer": "# Design terminal answer"
+    "execution": {
+      "artifacts": [
+        {
+          "download_ref": "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-design/children/part-001/design-summary.md",
+          "downloadable": true,
+          "media_type": "text/markdown",
+          "name": "design-summary.md",
+          "report_context_eligible": true,
+          "role": "scientific_report",
+          "size_bytes": 1024
+        }
+      ],
+      "delivery": {
+        "archive": {
+          "download_ref": "result-archive:sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "downloadable": true,
+          "media_type": "application/zip",
+          "name": "design-results.zip",
+          "report_context_eligible": false,
+          "role": "result_archive",
+          "size_bytes": 4099
+        },
+        "error_code": null,
+        "inventory_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "required": true,
+        "retryable": false,
+        "revision": 1,
+        "schema_version": 1,
+        "status": "ready"
+      },
+      "diagnostics": [],
+      "output_dirs": [
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-design"
+      ],
+      "report": {
+        "degraded": false,
+        "source_artifact_count": 1,
+        "state": "final"
+      },
+      "tasks": [
+        {
+          "accepted": true,
+          "id": "task-synthetic-design-001",
+          "status": "succeeded"
+        }
+      ],
+      "tracking": {
+        "degraded": false
+      },
+      "warnings": []
     },
-    "artifacts": []
-  }
+    "formatted": {
+      "answer": "# Synthetic Design Result\n\nArchive ready.",
+      "follow_up_questions": [],
+      "metadata": {
+        "report": {
+          "degraded": false,
+          "source_artifact_count": 1,
+          "state": "final"
+        }
+      },
+      "output_dirs": [
+        "/obs/synthetic-bucket/agent_data/user_data/synthetic@example.invalid/runs/run-synthetic-design"
+      ],
+      "references": [],
+      "tabular": null
+    }
+  },
+  "run_id": "run-synthetic-design",
+  "status": "succeeded",
+  "task_ids": [
+    "task-synthetic-design-001"
+  ],
+  "tool_name": null,
+  "updated_at": "2026-08-05T01:00:00+00:00",
+  "user_id": "synthetic@example.invalid"
 }

@@ -2,8 +2,11 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -30,6 +33,106 @@ func TestRouteQuery_PostsToRouteEndpoint(t *testing.T) {
 	}
 	if resp.Agent != "knowledge" || resp.Status != "succeeded" {
 		t.Errorf("decoded resp wrong: %+v", resp)
+	}
+}
+
+func TestRouteQuery_LegacyPayloadOmitsZeroValues(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"forced_tool": null
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery: "Compare drought candidates",
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
+func TestRouteQuery_PostsOrderedToolConstraints(t *testing.T) {
+	forcedTool := "DataAgent"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"history": [{"role": "user", "content": "Earlier drought evidence"}],
+			"attachments": [{"asset_id": "file_drought"}],
+			"owner_subject": "alice@example.com",
+			"dialogue_id": "dialogue-1",
+			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
+			"forced_tool": "DataAgent"
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery:    "Compare drought candidates",
+		History:      []ChatMessage{{Role: "user", Content: "Earlier drought evidence"}},
+		Attachments:  []AssetAttachmentRef{{AssetID: "file_drought"}},
+		OwnerSubject: "alice@example.com",
+		DialogueID:   "dialogue-1",
+		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
+		ForcedTool:   &forcedTool,
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
+func TestRouteQuery_AutonomousToolConstraintsSerializeNullForcedTool(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		assertJSONEqual(t, `{
+			"user_query": "Compare drought candidates",
+			"dialogue_id": "dialogue-1",
+			"allowed_tools": ["ChatAgent", "DataAgent", "AnalystAgent"],
+			"forced_tool": null
+		}`, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"run-1","agent":"data","status":"succeeded","task_ids":[],"result":{}}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery:    "Compare drought candidates",
+		History:      []ChatMessage{},
+		DialogueID:   "dialogue-1",
+		AllowedTools: []string{"ChatAgent", "DataAgent", "AnalystAgent"},
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+}
+
+func assertJSONEqual(t *testing.T, want string, got []byte) {
+	t.Helper()
+	var wantValue, gotValue interface{}
+	if err := json.Unmarshal([]byte(want), &wantValue); err != nil {
+		t.Fatalf("decode expected JSON: %v", err)
+	}
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatalf("decode request JSON: %v", err)
+	}
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Errorf("request JSON mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 }
 
@@ -82,5 +185,45 @@ func TestDoJSON_RetainsLastValueBehaviorOutsideRouteQuery(t *testing.T) {
 	}
 	if out.Agent != "research" {
 		t.Fatalf("ordinary doJSON decoded agent=%q, want last value research", out.Agent)
+	}
+}
+
+func TestRouteQueryV1ReturnsValidatedContextMetadata(t *testing.T) {
+	envelope := validConversationEnvelope()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request RouteQueryRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode route request: %v", err)
+			return
+		}
+		if request.Conversation == nil || request.Conversation.TurnID != envelope.TurnID {
+			t.Errorf("conversation envelope=%#v", request.Conversation)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"run-v1","run_id":"run-v1","object":"agent.run",
+			"agent":"data","status":"succeeded","task_ids":[],
+			"result":{"formatted":{"answer":"ok"}},
+			"conversation_context":{
+				"schema_version":1,"turn_id":"7","selected_agent_id":"DataAgent",
+				"route_source":"explicit_selection","route_reason_code":"EXPLICIT_SELECTION",
+				"base_business_context_version":2,"proposed_business_context_version":3,
+				"last_applied_ledger_cursor":6,"context_truncated":false,
+				"context_rebuilt":false,"context_degraded":false
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	response, err := newTestClient(srv.URL).RouteQuery(context.Background(), RouteQueryRequest{
+		UserQuery: "next", AllowedTools: []string{"ChatAgent", "DataAgent"},
+		ForcedTool: envelope.RequestedAgentID, Conversation: &envelope,
+	})
+	if err != nil {
+		t.Fatalf("RouteQuery: %v", err)
+	}
+	if response.ConversationContext == nil ||
+		response.ConversationContext.SelectedAgentID != "DataAgent" {
+		t.Fatalf("context metadata=%#v", response.ConversationContext)
 	}
 }

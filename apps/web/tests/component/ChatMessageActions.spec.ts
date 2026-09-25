@@ -1,29 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageActions from "@/views/chat/components/ChatMessageActions.vue";
-import {
-  messageActionCapabilities,
-} from "@/views/chat/utils/message-action-capabilities";
+import { messageActionCapabilities } from "@/views/chat/utils/message-action-capabilities";
 import type { ChatMessage } from "@/views/chat/types";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const ACTIONS_SOURCE = readFileSync(
-  resolve(
-    __dirname,
-    "../../src/views/chat/components/ChatMessageActions.vue"
-  ),
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageActions.vue"),
   "utf8"
 );
 const INDEX_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const CONTENT_SOURCE = readFileSync(
-  resolve(
-    __dirname,
-    "../../src/views/chat/components/ChatMessageContent.vue"
-  ),
+  resolve(__dirname, "../../src/views/chat/components/ChatMessageContent.vue"),
   "utf8"
 );
 
@@ -31,7 +23,7 @@ const styleBlocks = (source: string) =>
   [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
 
 const mountActions = (props: Record<string, unknown> = {}) =>
-  mount(ChatMessageActions, {
+  mountWithApp(ChatMessageActions, {
     props: {
       role: "assistant",
       copied: false,
@@ -144,12 +136,12 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).not.toMatch(/getReactionTooltip/);
 
     const idle = mountActions({ reactionActive: 0 });
-    expect(idle.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
-      "chat.actions.like"
-    );
+    expect(
+      idle.find('[data-testid="action-like"]').attributes("aria-label")
+    ).toBe("Like");
     expect(
       idle.find('[data-testid="action-dislike"]').attributes("aria-label")
-    ).toBe("chat.actions.dislike");
+    ).toBe("Dislike");
     expect(
       idle.find('[data-testid="action-like"]').attributes("aria-pressed")
     ).toBe("false");
@@ -158,9 +150,9 @@ describe("ChatMessageActions", () => {
     expect(liked.find('[data-testid="action-like"]').classes()).toContain(
       "active"
     );
-    expect(liked.find('[data-testid="action-like"]').attributes("aria-label")).toBe(
-      "chat.actions.undoLike"
-    );
+    expect(
+      liked.find('[data-testid="action-like"]').attributes("aria-label")
+    ).toBe("Undo like");
     expect(
       liked.find('[data-testid="action-like"]').attributes("aria-pressed")
     ).toBe("true");
@@ -171,7 +163,7 @@ describe("ChatMessageActions", () => {
     );
     expect(
       disliked.find('[data-testid="action-dislike"]').attributes("aria-label")
-    ).toBe("chat.actions.undoDislike");
+    ).toBe("Undo dislike");
     expect(
       disliked.find('[data-testid="action-dislike"]').attributes("aria-pressed")
     ).toBe("true");
@@ -194,10 +186,9 @@ describe("ChatMessageActions", () => {
       wrapper.find('[data-testid="direct-download-obs://file"]').exists()
     ).toBe(true);
 
-    await wrapper.findComponent({ name: "ElDropdown" }).vm.$emit(
-      "command",
-      "obs://upload"
-    );
+    await wrapper
+      .findComponent({ name: "ElDropdown" })
+      .vm.$emit("command", "obs://upload");
     expect(wrapper.emitted("direct-download")?.[0]).toEqual(["obs://upload"]);
   });
 
@@ -208,12 +199,8 @@ describe("ChatMessageActions", () => {
     });
     const direct = wrapper.find('[data-testid="action-direct-downloads"]');
     const generated = wrapper.find('[data-testid="action-generated-download"]');
-    expect(direct.attributes("aria-label")).toBe(
-      "chat.actions.downloadAttachments"
-    );
-    expect(generated.attributes("aria-label")).toBe(
-      "chat.actions.downloadFormats"
-    );
+    expect(direct.attributes("aria-label")).toBe("Download attachments");
+    expect(generated.attributes("aria-label")).toBe("Download as format");
     expect(direct.attributes("aria-label")).not.toBe(
       generated.attributes("aria-label")
     );
@@ -300,7 +287,7 @@ describe("ChatMessageActions", () => {
     expect(INDEX_SOURCE).toMatch(/#actions|name=["']actions["']/);
     // Reply Markdown surface lives in ChatMessageContent (not index).
     expect(CONTENT_SOURCE).toMatch(
-      /<MarkdownViewer[\s\S]*surface=["']chat["']/
+      /<ScientificMarkdown[\s\S]*surface=["']chat["']/
     );
     // Analyst execution log folds into #activity via ChatActivity + ChatAnalystLog.
     expect(INDEX_SOURCE).toMatch(/#activity|name=["']activity["']/);
@@ -409,7 +396,7 @@ describe("ChatMessageActions", () => {
       /:can-refresh="\s*messageActionCapabilities\(message\)\.canRefresh\s*"/
     );
     expect(INDEX_SOURCE).toMatch(
-      /:can-react="messageActionCapabilities\(message\)\.canReact"/
+      /:can-react="\s*messageActionCapabilities\(message\)\.canReact\s*"/
     );
     expect(INDEX_SOURCE).toMatch(
       /messageActionCapabilities\(message\)\.generatedFormats/
@@ -420,7 +407,7 @@ describe("ChatMessageActions", () => {
     // Analyst log mounts only when deriveAnalystLogRowId(message) is a valid
     // positive-decimal id; its existing boundary remains independent.
     expect(INDEX_SOURCE).toMatch(/if \(message\.id\) handleReaction/);
-    expect(INDEX_SOURCE).toMatch(/if \(message\.id\) getFileDownUrl/);
+    expect(INDEX_SOURCE).toMatch(/if \(message\.id\)\s*getFileDownUrl/);
     expect(INDEX_SOURCE).toMatch(
       /AnalystAgent[\s\S]*!!deriveAnalystLogRowId\(message\)/
     );

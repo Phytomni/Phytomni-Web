@@ -6,6 +6,15 @@ import (
 	"os"
 )
 
+const RegistrationEnabledKey = "auth.registration_enabled"
+
+func RegistrationEnabled() bool {
+	if !viper.IsSet(RegistrationEnabledKey) {
+		return true
+	}
+	return viper.GetBool(RegistrationEnabledKey)
+}
+
 func LoadConfigInFile(filename string) error {
 
 	// When a file is specified, read from it; otherwise load by the default rule.

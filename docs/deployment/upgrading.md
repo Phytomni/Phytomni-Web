@@ -16,6 +16,16 @@ grant permission to change Phytomni-Bot or production operations code.
 > owner review, Bot CI, staging/live smoke evidence, and operations sign-off
 > remain `External Pending` until their owners return an acceptance packet.
 
+> **Already running `0.1.3`?** Use the focused
+> [0.1.3 → 0.1.4 upgrade addendum](history/upgrade-0.1.3-to-0.1.4.md).
+> This document remains the complete `0.1.2` → `0.1.3` procedure. Do not
+> assume an intermediate schema or deployment state; verify the running SHA and
+> required projection columns before selecting a procedure.
+
+The `0.1.4` frontend rebuild prerequisite is Node 26.x/npm 11.x with a clean
+`npm ci` in `apps/web`; publish the resulting complete `dist/` atomically so
+the new HTML and hashed assets cannot be mixed with an older release.
+
 ## 0. Conventions and contents
 
 - Secrets are placeholders (`<JWT_SECRET>`, `<REDIS_PASSWORD>`, …). Substitute
@@ -40,17 +50,17 @@ grant permission to change Phytomni-Bot or production operations code.
 
 ## 1. What changed vs `0.1.2`
 
-| Area | `0.1.2` | `0.1.3` | Operator action |
-|---|---|---|---|
-| Bot run identity | Legacy/task-compatible identity | Umbrella `run_id` stored as `bot_run_id` | Apply the additive projection migration before new traffic (§4.2) |
-| Bot reports | Legacy answer/status columns | Sanitized revisioned projection with CAS persistence | Apply projection columns and index; keep legacy columns (§4.2) |
-| History | Legacy Web rows | Projection-first read with legacy fallback; dual-read is optional | Keep `history_dual_read=false` until external evidence (§8.4) |
-| A2UI actions | No production action uplink | Typed, owner-scoped action relay | Keep `bot.a2ui_actions_enabled=false`; enable only after acceptance (§8.1) |
-| Remote product surfaces | Core Web agents only | Research, Design, and Network compatibility surfaces | Keep each remote flag false until resolver/attachment/permission evidence (§8.2) |
-| Interop | No browser-facing capability discovery | Allowlisted capability/provenance discovery | Keep `bot.interop_enabled=false` until security and external review (§8.3) |
-| Expert and AG-UI streaming | Dark in `0.1.2` | Compatibility and lifecycle hardening | Keep both flags false unless their existing acceptance rows are complete |
-| Frontend | Existing chat/workspace experience | Responsive, visual, accessibility, localization, and legal convergence | Deploy the matching Web frontend with the Go service |
-| Local release evidence | G13 baseline | G13, G14 visual, G15 A2UI, G16 compatibility, G17 activation evidence | Record local output; do not treat it as external acceptance |
+| Area                       | `0.1.2`                                | `0.1.3`                                                                | Operator action                                                                  |
+| -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Bot run identity           | Legacy/task-compatible identity        | Umbrella `run_id` stored as `bot_run_id`                               | Apply the additive projection migration before new traffic (§4.2)                |
+| Bot reports                | Legacy answer/status columns           | Sanitized revisioned projection with CAS persistence                   | Apply projection columns and index; keep legacy columns (§4.2)                   |
+| History                    | Legacy Web rows                        | Projection-first read with legacy fallback; dual-read is optional      | Keep `history_dual_read=false` until external evidence (§8.4)                    |
+| A2UI actions               | No production action uplink            | Typed, owner-scoped action relay                                       | Keep `bot.a2ui_actions_enabled=false`; enable only after acceptance (§8.1)       |
+| Remote product surfaces    | Core Web agents only                   | Research, Design, and Network compatibility surfaces                   | Keep each remote flag false until resolver/attachment/permission evidence (§8.2) |
+| Interop                    | No browser-facing capability discovery | Allowlisted capability/provenance discovery                            | Keep `bot.interop_enabled=false` until security and external review (§8.3)       |
+| Expert and AG-UI streaming | Dark in `0.1.2`                        | Compatibility and lifecycle hardening                                  | Keep both flags false unless their existing acceptance rows are complete         |
+| Frontend                   | Existing chat/workspace experience     | Responsive, visual, accessibility, localization, and legal convergence | Deploy the matching Web frontend with the Go service                             |
+| Local release evidence     | G13 baseline                           | G13, G14 visual, G15 A2UI, G16 compatibility, G17 activation evidence  | Record local output; do not treat it as external acceptance                      |
 
 The release is additive when every new flag remains false. Existing blocking
 chat, legacy history, ownership checks, and rollback columns remain available.
@@ -64,7 +74,11 @@ stopping the service. A failed check is a stop condition.
 
 ```bash
 git rev-parse --verify HEAD
-./phytomni-server --version 2>/dev/null || true
+if ./phytomni-server --version >/dev/null 2>&1; then
+    ./phytomni-server --version
+else
+    printf '%s\n' "Version flag unavailable; verify the artifact checksum instead."
+fi
 ss -ltnp | grep ':8080'
 mysql -e "SHOW DATABASES LIKE 'phytomni';"
 mysql phytomni -e "SHOW TABLES LIKE 'question_agent_logs';"
@@ -95,13 +109,6 @@ following Bot switches must remain false for the initial 0.1.3 deployment:
 
 ```yaml
 bot:
-  expert_enabled: false
-  stream_enabled: false
-  a2ui_actions_enabled: false
-  interop_enabled: false
-  research_enabled: false
-  design_enabled: false
-  network_enabled: false
   history_dual_read: false
 ```
 
@@ -191,6 +198,20 @@ If the merged binary does not expose `add-mode`, stop and use the operator's
 approved equivalent additive DDL; do not invent a destructive migration. Repeat
 §4.1 after the command and keep `bot.expert_enabled=false`.
 
+### 4.4 Research input storage and proxy precondition
+
+When the selected release includes extended Research input, the
+`question_agent_logs` `query` and `answer` columns must both be `MEDIUMTEXT`
+before Web receives traffic. Inspect both column types and the effective
+reverse-proxy request-body allowance during preflight. The allowance must cover
+the configured query limit plus bounded history, attachment metadata, and
+multipart framing; it does not authorize file-body relay through Web Go.
+
+Production DDL and reverse-proxy changes are operator-owned and follow the
+separately transferred operator handoff. Do not paste live configuration into
+the repository, run AutoMigrate against production, or infer readiness from the
+fresh-schema model tags. Record the sanitized inspection result before rollout.
+
 ## 5. Deploy sequence
 
 1. Confirm the backup and rollback artifacts from §2.
@@ -207,6 +228,13 @@ approved equivalent additive DDL; do not invent a destructive migration. Repeat
 
 Do not flip a feature flag during the deploy window. A flag change is a separate
 operator action that requires the evidence gates in §8.
+
+For the extended Research input contract, complete the §4.4 database/proxy
+preflight, deploy the compatible Bot resolver and
+`research_input_resolution_v1` version `1`, and only then deploy Web. This
+contract adds no post-deploy flag or user cohort. A missing or incompatible Bot
+capability fails Research submission closed instead of falling back to a lower
+limit or truncating the query.
 
 ## 6. Verification and smoke
 
@@ -276,34 +304,23 @@ If `/readyz`, core smoke, or data correctness fails:
 Do not drop the projection columns or restore a pre-migration schema as part of
 rollback. A later forward deployment can reuse the additive schema.
 
+Rollback keeps `query` and `answer` widened as `MEDIUMTEXT`; narrowing either
+column can truncate rows already accepted by the extended contract. The larger
+proxy allowance may also remain because application limits continue to bound
+accepted requests.
+
 ## 8. Dark-launch activation gates
 
 All rows below remain **External Pending** until an authorized acceptance packet
 is returned and reviewed. Local Web gates and endpoint presence are necessary
 but not sufficient.
 
-### 8.1 A2UI actions (`bot.a2ui_actions_enabled`)
+### 8.1 A2UI, Expert, streaming, interop, and remote products
 
-Prerequisites: Web G15 pass; Bot emit and action-accept evidence; owner review;
-staging/live action, expiry, ownership, and retry checks. Operator change:
-enable the Web flag only after those records are linked. Smoke: submit a
-synthetic valid action and verify the same `dialogue_id`, owner, and `run_id`.
-Rollback: set the flag false and restart; the blocking path remains unchanged.
-
-### 8.2 Remote product surfaces
-
-`research_enabled`, `design_enabled`, and `network_enabled` each require
-resolver, attachment, permission, bounded-result, and Bot/operations smoke
-evidence. Enable one surface at a time, record its owner and release SHAs, and
-set only that flag. Roll back by setting the individual flag false; do not
-enable all three as a proxy for acceptance.
-
-### 8.3 Interop (`bot.interop_enabled`)
-
-Prerequisites: security review of allowlists, owner scoping, capability and
-provenance redaction, Bot owner acceptance, and staging/live evidence. Keep the
-endpoint hidden/off otherwise. Never expose raw Bot envelopes, provider
-diagnostics, private paths, credentials, or unredacted provenance.
+These surfaces are locally always enabled. Admission still requires the Bot
+contract, the caller's role grant, and ownership checks. There is no Web-side
+flag to flip. Dedicated product pages remain behind the frontend `live`
+registry.
 
 ### 8.4 History dual-read (`bot.history_dual_read`)
 
@@ -313,12 +330,80 @@ history results for owner-scoped synthetic rows; record no data loss, no older
 revision overwrite, and a tested flag rollback. Keep false until RC-WEB-007 and
 RC-LIVE-001 evidence is reviewed.
 
-### 8.5 Existing Expert and streaming gates
+### 8.6 Resumable biological upload negotiation (Bot `obs-multipart-v2`)
 
-`expert_enabled` and `stream_enabled` retain their previous acceptance process.
-`stream_enabled` requires Bot real-answer persistence and the matching frontend
-flag; with it false, the blocking path must remain byte-compatible. Do not turn
-either flag on as part of the 0.1.3 deploy.
+This is a breaking Web ↔ Bot data-plane cutover, not an additive fallback for
+the legacy multipart body relay. There is no Web-side upload feature flag:
+attachment channels are copied from the Bot descriptor, and the browser
+upload contract is enabled only when Bot advertises `obs-multipart-v2` v2
+and `upload_public_origin` is a valid browser-reachable origin.
+
+The release contract has one Attach action and server-side classification:
+Web Go derives `dataset` or `document` from bounded filename metadata (archives
+always default to `dataset`) and rejects unsupported or ambiguous names before
+Bot/OBS allocation. No browser request or new recovery record carries a
+user-selected purpose or dataset description. A legacy recovery purpose may be
+read only for compatibility/cleanup/migration and is ignored for new
+classification.
+
+The browser-to-Go boundary is `/api/v1/files` JSON control traffic for create
+and capability renewal only. Go never receives file parts, Huawei credentials,
+OBS upload ids, object keys, or signed storage URLs. The browser uses the
+short-lived opaque capability at Bot's upload origin for `HEAD`, part uploads,
+completion, and abort; these data-plane calls do not pass through Web Go. The
+trusted Go-to-Bot create coordination carries the server-derived class and
+owner scope; Bot owns durable state, owner resolution, and final native mapping.
+Conversation attachment submission carries the raw query and completed
+`asset_id` references only, not purpose, descriptions, paths, capabilities, or
+`data_list`/`obs_file_list` values.
+
+Bot maps resolved assets according to the selected Agent's declared channels:
+dual-channel Agents split documents to `obs_file_list` and datasets to
+`data_list`; document-only or dataset-only Agents receive every asset through
+their sole channel; zero-channel Agents reject attachments. A single-channel
+placement does not rewrite the persisted class, and Web-side compatibility
+checks never replace Bot authorization or resolution.
+
+The shared `AttachmentChipStrip` contract applies to Chat, Research, and
+Digital Design: one contained horizontal strip, on-demand detail within the
+strip, bounded layout at `320px`/`390px`, full accessible names for ellipsized
+filenames, `+N more`, keyboard-visible focus, default-sized touch targets,
+polite live announcements, reduced-motion, and forced-colors support.
+
+Before an operator points browsers at the Bot upload origin, record all of the following:
+
+1. the exact clean Web and Bot SHAs, with the Bot receipt's protocol,
+   persistence, cleanup, owner-isolation, AssetResolver, Agent wiring, and
+   credential-redaction evidence;
+2. a valid browser-reachable `upload_public_origin` that is distinct from the
+   internal Bot `base_url` and contains no credentials, query, fragment, or
+   path;
+3. Web `validate_web_local.sh` plus the 80-image synthetic visual matrix and
+   per-image review ledger; these prove UI/state coverage only;
+4. development evidence for small files, biological formats, interruption and
+   restart resume, capability renewal, cancel, cross-user denial, and Agent
+   byte fidelity; the 10 GiB procedure must state `Needs Verification` when it
+   was not run against the accepted Bot SHA;
+5. an explicit confirmation that the browser and Web Go hold no Huawei AK/SK,
+   account password, OBS upload ID, object key, or full file body.
+
+Activation is ordered: Bot data plane → Web with a valid
+`upload_public_origin` → capability manifest/origin smoke → small and
+biological fixture smokes → interruption/resume and owner-denial checks. If
+any result fails, unset the origin or stop advertising the protocol and
+restart Web. Do not restore the old body relay as an implicit fallback after
+the breaking cutover; handle a full release rollback with the owner and retain
+additive Bot persistence.
+
+Label acceptance explicitly: local Web classifier, request-shape, recovery,
+chip, accessibility, and visual checks are `ACCEPTED_WITH_GAPS (WEB-ONLY)`;
+they do not establish Bot storage or native Agent mapping. A paired-runtime
+result is `External Pending`/`Needs Verification` until the Bot receipt and a
+development Web → Go → Bot run prove storage, owner isolation, credential
+redaction, and dual/single/zero-channel behavior. This runbook keeps
+`upload.enabled` false unless Bot advertises the protocol and the public
+origin is valid; it neither activates nor authorizes a production
+configuration change.
 
 ## 9. Evidence and ownership
 

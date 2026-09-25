@@ -1,8 +1,42 @@
 import type { A2uiActionTransport } from "./streaming/a2uiAction";
-import type { A2uiSurfaceRuntime } from "./streaming/a2uiContract";
 import type { BotInteropPayload, BotRunProjection } from "./botProjection";
 import type { BotLifecycleState } from "./streaming/botLifecycleReducer";
+import type { AuthorizedScientificResource } from "@/utils/scientific-markdown/types";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
+import type {
+  AnalystAgentLog,
+  AgentResultDelivery,
+  AssetAttachmentRef,
+  ConversationArtifactLink,
+  ConversationContextNotice,
+} from "@/api/types";
+import type {
+  AgentStep,
+  ChatContent,
+  CitationDocument,
+  StreamContentBlock,
+} from "./messageTypes";
+import type { AgentTaskLifecycle } from "@/api/types";
+import type { ResumableUploadItem } from "./upload/types";
+import type { ChatAttachmentDisplay } from "./utils/asset-attachments";
+import type {
+  DeepGenomeMaterialDetailState,
+  DeepGenomeReferenceMaterial,
+} from "@/components/research/deep-genome-report";
+
+export type { ResumableUploadItem, UploadStatus } from "./upload/types";
+
+export type {
+  AgentStep,
+  ChatContent,
+  CitationDocument,
+  AgentSurfaceContentBlock,
+  MarkdownContentBlock,
+  ReasoningContentBlock,
+  StepContentBlock,
+  StreamContentBlock,
+  ToolContentBlock,
+} from "./messageTypes";
 
 export interface Chat {
   id: number;
@@ -14,8 +48,9 @@ export interface Chat {
   tool_name?: string;
   isSending?: boolean; // per-conversation sending state
   messageInput?: string; // per-conversation input content
-  fileList?: UploadFile[]; // per-conversation file list
+  fileList?: ResumableUploadItem[]; // per-conversation upload queue
   isFavorite: boolean; // favorite state
+  isPending?: boolean; // local first turn remains selectable until reconciliation
 }
 
 /**
@@ -42,63 +77,109 @@ export type ArtifactKind = "deep-genome" | "research" | "cited-report" | null;
 
 export type ArtifactTab = "content" | "evidence" | "activity" | "downloads";
 
+export type StreamTerminalFailure = "run-error" | "interrupted" | "cancelled";
+
 export interface ChatMessage {
   role: string;
-  content: any;
+  content: ChatContent;
   id?: string;
-  steps?: any[];
-  doc_list?: any[];
+  steps?: readonly AgentStep[];
+  doc_list?: readonly CitationDocument[];
   tableHeaders?: Array<{
     prop: string;
     label: string;
   }>;
+  /** Optional Bot-provided table caption; row-count fallback is rendered in UI. */
+  tableCaption?: string;
   instantMessage?: boolean;
+  /** Persisted row created_at; wait-card elapsed uses this after reload. */
+  created_at?: string;
   status?: string;
   upload_path?: string;
   download_path?: string; // download path
   original?: string;
   tool_name?: string;
+  /** Expert routing reason from Bot conversation_context. */
+  route_reason_code?: string;
   followUpQuestions?: string[]; // follow-up questions list
   showFollowUpQuestions?: boolean; // whether to show follow-up questions
   showLog?: boolean;
-  attachedFiles?: UploadFile[]; // attached files list
+  /** Structured completed assets used by new turns and hydrated history. */
+  attachments?: readonly ChatAttachmentDisplay[];
+  /** Legacy marker metadata retained only for pre-structured history rows. */
+  attachedFiles?: readonly (ChatAttachment | ResumableUploadItem)[];
   compute_resource?: string; // compute resource info
   task_id?: string; // task ID
   server_file_path?: string; // server file path
   streaming?: boolean; // true while AG-UI stream is in flight (renderer shows cursor)
-  blocks?: ContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
+  /** Last painted SSE `id:` (positive integer string) for resume Last-Event-ID. */
+  streamSeq?: string;
+  blocks?: StreamContentBlock[]; // typed content blocks (streaming path); content stays for the axios path
   /**
    * Runtime-only UI identity for Activity disclosure while a stream placeholder
    * has no server `id`. Stamped from the send request key; never written to
    * FormData, reactions, Artifact eligibility, or A2UI run identity.
    */
   streamPresentationKey?: string;
+  /** Runtime-only static Case identity; never a persisted row or Bot run. */
+  casePresentationKey?: string;
+  /** Runtime-only reason that stream-origin content is terminal UI copy. */
+  streamTerminalFailure?: StreamTerminalFailure;
   /** Runtime-only A2UI context sourced exclusively from stream response headers. */
   a2uiRuntime?: A2uiRuntimeContext;
   /** Sanitized Bot lifecycle snapshot; raw API envelopes never enter message state. */
   botProjection?: BotRunProjection;
   /** Monotonic report state derived from the sanitized Bot projection. */
   botLifecycle?: BotLifecycleState;
+  artifacts?: readonly ConversationArtifactLink[];
+  /** Preauthorized report figures; demo tapes set this, live Chat signs artifacts. */
+  resources?: readonly AuthorizedScientificResource[];
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
+  delivery?: AgentResultDelivery;
+  /** Bounded, localized semantic-context status from the gateway. */
+  contextNotice?: ChatContextNotice;
 }
 
-// ContentBlock is one typed unit in a streaming assistant message. authority
-// marks who composed it ("web" = Web renders structured data; "agent" =
-// agent-surface blocks). interactive flags user-interactive blocks.
-// The registry (blockRegistry.ts) maps `type` to a Vue renderer.
-export interface ContentBlock {
-  type: "markdown" | "tool" | "step" | "reasoning" | "agent-surface" | string;
-  authority: "web" | "agent";
-  interactive?: boolean;
-  text?: string; // markdown/reasoning accumulated text
-  toolName?: string; // tool block: structured tool identifier (Web maps to copy)
-  label?: string; // step block: structured step identifier
-  count?: number; // tool_result hit count
-  // agent-surface (phyto.a2ui):
-  a2ui?: A2uiSurfaceRuntime;
-  sourceActionId?: string;
+export interface ChatContextNotice {
+  rebuilt: boolean;
+  degraded: boolean;
 }
 
-export interface ChatResponse {
+/** Convert only the public snake_case context fields into message state. */
+export function normalizeChatContextNotice(
+  value: unknown
+): ChatContextNotice | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const hasRebuilt = Object.prototype.hasOwnProperty.call(
+    record,
+    "context_rebuilt"
+  );
+  const hasDegraded = Object.prototype.hasOwnProperty.call(
+    record,
+    "context_degraded"
+  );
+  if (!hasRebuilt && !hasDegraded) return undefined;
+  if (
+    (hasRebuilt && typeof record.context_rebuilt !== "boolean") ||
+    (hasDegraded && typeof record.context_degraded !== "boolean")
+  ) {
+    return undefined;
+  }
+  const notice = {
+    rebuilt: record.context_rebuilt === true,
+    degraded: record.context_degraded === true,
+  };
+  return notice.rebuilt || notice.degraded ? notice : undefined;
+}
+
+/** Backward-compatible name for the bounded stream-block union. */
+export type ContentBlock = StreamContentBlock;
+
+export interface ChatResponse extends ConversationContextNotice {
+  projection?: BotRunProjection;
   query: string;
   answer: string;
   id?: string;
@@ -107,7 +188,7 @@ export interface ChatResponse {
   status?: string;
   upload_path?: string;
   download_path?: string; // download path
-  steps?: any[];
+  steps?: readonly AgentStep[];
   reaction_type?: string; // reaction (like/dislike) state field
   compute_resource?: string; // compute resource info
   follow_up_questions?: string | string[]; // follow-up questions list
@@ -121,9 +202,21 @@ export interface ChatResponse {
   interop?: BotInteropPayload | null;
   report_revision?: number;
   request_id?: string | null;
+  context_rebuilt?: boolean;
+  context_degraded?: boolean;
+  route_reason_code?: string;
   /** Bounded input-required surface from the Web Go gateway. */
   a2ui?: unknown;
+  artifacts?: ConversationArtifactLink[];
+  result_archive_v1?: boolean;
+  delivery?: AgentResultDelivery;
+  attachments?: AssetAttachmentRef[];
 }
+
+export type ChatHistoryHydrationStatus =
+  "new" | "loading" | "ready" | "history-empty" | "error";
+
+export type ChatHistoryErrorKind = "request" | "decode";
 
 export interface UploadFile {
   name: string;
@@ -131,6 +224,16 @@ export interface UploadFile {
   type: string;
   file: File;
 }
+
+/** Persisted history attachment metadata has no live browser File object. */
+export interface HistoricalUploadFile {
+  name: string;
+  size: number;
+  type: string;
+  file: null;
+}
+
+export type ChatAttachment = UploadFile | HistoricalUploadFile;
 
 export interface ChatComposerHandle {
   openHeader: () => void;
@@ -145,13 +248,25 @@ export interface ChatComposerHandle {
 export interface ChatUIState {
   isSending: boolean;
   messageInput: string;
-  fileList: UploadFile[];
-  historyQuestion: any;
+  fileList: ResumableUploadItem[];
+  /** Runtime-only duplicate attachment focus target for this dialogue. */
+  focusedUploadLocalId?: string;
+  /** Localized duplicate attachment announcement for this dialogue. */
+  attachmentAnnouncement?: string;
+  /** Revision for repeated duplicate/rejection announcements in this dialogue. */
+  attachmentAnnouncementNonce: number;
+  historyQuestion: readonly ChatMessage[] | null;
+  /** Lifecycle of this dialogue's persisted-history reconstruction. */
+  historyHydration: ChatHistoryHydrationStatus;
+  /** Bounded reason for a recoverable history hydration failure. */
+  historyErrorKind: ChatHistoryErrorKind | null;
   copyVisible: number;
   copyTimeRef: ReturnType<typeof setTimeout> | undefined;
-  logData: Record<string, any>;
+  logData: Record<string, AnalystAgentLog | undefined>;
   loadingLog: Record<string, boolean>;
   refreshingMessages: Record<string, boolean>;
+  /** Last sanitized lifecycle snapshot for each positive Web task-row id. */
+  agentRunLifecycles: Record<string, AgentTaskLifecycle>;
   reactions: Record<string, number>;
   updatingLog: Record<string, boolean>;
   /** Stable enum for analyst-log errors; translate at render time. */
@@ -170,6 +285,12 @@ export interface ChatUIState {
   activeRequestId: string;
   /** True after Stop aborted the dialogue's in-flight request. */
   generationStopped: boolean;
+  /** Opaque logical turn identity retained across uncertain send retries. */
+  pendingTurnId: string | null;
+  /** Browser-local fingerprint paired with pendingTurnId. */
+  pendingTurnFingerprint: string | null;
+  /** Opaque refresh identities keyed by the durable target message ID. */
+  refreshTurnIds: Record<string, string>;
   /**
    * Per-message Activity disclosure map keyed by
    * `stream:<messageKey>:activity-<startIndex>`. Owned by chatStates so A→B→A
@@ -177,10 +298,14 @@ export interface ChatUIState {
    */
   activityExpandedByMessage: Record<string, boolean>;
   artifactOpen: boolean;
-  activeArtifactMessageId: string | null;
+  activeArtifactIdentity: string | null;
   artifactTab: ArtifactTab;
-  /** Runtime-only server IDs already considered for automatic artifact opening. */
-  autoOpenedArtifactMessageIds: string[];
+  /** Runtime-only report identities already considered for automatic opening. */
+  handledArtifactIdentities: string[];
+  /** Retry state remains isolated to the owning dialogue and message. */
+  archiveRetryingByMessageId: Record<string, boolean>;
+  /** Transient material detail data, never persisted as message/history content. */
+  materialDetailsByArtifact: Record<string, DeepGenomeMaterialDetailState>;
 }
 
 /** Atomic chatStates key move — neither record mutates on target-collision. */

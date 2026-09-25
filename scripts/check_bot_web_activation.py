@@ -10,17 +10,76 @@ not inspect a sibling checkout, handoff/evidence trees, or live endpoints.
 from __future__ import annotations
 
 import argparse
+import ast
+import base64
+import binascii
+import hashlib
 import json
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.bounded_input import (
+    MAX_CONTRACT_MANIFEST_BYTES,
+    InputChangedError,
+    InputTooLargeError,
+    RootedDirectory,
+    UnsafeInputPathError,
+)
+from scripts.strict_json import StrictJsonError, loads_strict_json
 
 ROOT = Path(__file__).resolve().parents[1]
+ACTIVATION_SOURCE_BOT_COMMIT = "0ddeb22894c266b6af537ff0a1b28a42a213ae32"
+RESEARCH_FIXTURE_BOT_COMMIT = "737ab4f386789cad0ea134c9248bb7c1d2cd454c"
 MATRIX_REL = Path("docs/reference/bot-web-activation-matrix.md")
+BOT_CONTRACT_MANIFEST_REL = Path(
+    "apps/web/tests/fixtures/bot-head/contract-manifest.json"
+)
 MATRIX_JSON_START = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_START -->"
 MATRIX_JSON_END = "<!-- BOT_WEB_ACTIVATION_MATRIX_JSON_END -->"
+RESEARCH_INPUT_FIXTURE_REL = Path(
+    "apps/server/external/bot/testdata/head/research_input_resolution_v1.json"
+)
+RESEARCH_FORMAT_SOURCE_REL = Path(
+    "apps/server/service/api_service/attachment_classifier.go"
+)
+RESEARCH_LIMIT_SOURCE_REL = Path("apps/server/external/bot/input_limits.go")
+RESEARCH_CONTRACT_SOURCE_REL = Path(
+    "apps/server/external/bot/research_input_contract.go"
+)
+AGENT_CANONICAL_SOURCE_REL = Path("apps/server/external/bot/agent_canonical.go")
+AGENT_MAP_SOURCE_REL = Path("apps/server/external/bot/agent_map.go")
+UPLOAD_CONTRACT_SOURCE_REL = Path("apps/server/external/bot/upload_contract.go")
+_RESEARCH_INPUT_LIMIT_DECLARATIONS = {
+    "max_user_query_chars": (
+        "DefaultMaxUserQueryChars",
+        "HardMaxUserQueryChars",
+    ),
+    "max_attachments_per_request": (
+        "DefaultMaxAssetAttachmentRefs",
+        "HardMaxAssetAttachmentRefs",
+    ),
+    "max_research_dataset_paths": (
+        "DefaultMaxResearchDatasetPaths",
+        "HardMaxResearchDatasetPaths",
+    ),
+    "max_research_input_references": (
+        "DefaultMaxResearchInputReferences",
+        "HardMaxResearchInputReferences",
+    ),
+}
+_RESEARCH_CONTRACT_DECLARATIONS = (
+    "ResearchInputProtocol",
+    "ResearchInputProtocolVersion",
+    "maxResearchDatasetFormats",
+    "maxResearchDatasetFormatSize",
+    "acceptedResearchInputFixtureSHA256",
+)
 
 ROW_IDS = (
     "RC-WEB-001",
@@ -70,16 +129,11 @@ ROLLBACK_MARKERS = [
 DEFAULT_CHECK_FILES: dict[Path, str] = {
     Path("apps/server/config/app.yml.example"): (
         "bot:\n"
-        "  expert_enabled: false\n"
-        "  stream_enabled: false\n"
-        "  a2ui_actions_enabled: false\n"
-        "  research_enabled: false\n"
-        "  design_enabled: false\n"
-        "  network_enabled: false\n"
+        "  proxy_enabled: true\n"
     ),
-    Path("apps/web/src/stores/user.ts"): "expertEnabled: false\n",
+    Path("apps/web/src/stores/user.ts"): "expertEnabled: true\n",
     Path("apps/web/src/views/chat/composables/useSendMessage.ts"): (
-        'import.meta.env.VITE_STREAM_ENABLED === "true"\n'
+        "shouldStream(capturedActiveAgentName, capturedMode, {\n"
     ),
     Path("apps/server/service/api_service/bot_capabilities.go"): (
         "func HistoryReadModeFromConfig() HistoryReadMode {\n"
@@ -91,27 +145,12 @@ DEFAULT_CHECK_FILES: dict[Path, str] = {
     ),
 }
 
-PRODUCT_FIXTURE_IDS = (
-    "rc-web-004-research-terminal",
-    "rc-web-004-design-terminal",
-    "rc-web-004-network-terminal",
-)
+PRODUCT_FIXTURE_IDS = ("analyst", "research", "network", "design")
 PRODUCT_FIXTURE_PATHS: dict[str, Path] = {
-    "rc-web-004-research-terminal": Path(
-        "apps/server/external/bot/testdata/head/research_terminal.json"
-    ),
-    "rc-web-004-design-terminal": Path(
-        "apps/server/external/bot/testdata/head/design_terminal.json"
-    ),
-    "rc-web-004-network-terminal": Path(
-        "apps/server/external/bot/testdata/head/network_terminal.json"
-    ),
+    agent: Path(f"apps/server/external/bot/testdata/head/{agent}_terminal.json")
+    for agent in PRODUCT_FIXTURE_IDS
 }
-PRODUCT_FIXTURE_AGENTS = {
-    "rc-web-004-research-terminal": "research",
-    "rc-web-004-design-terminal": "design",
-    "rc-web-004-network-terminal": "network",
-}
+PRODUCT_FIXTURE_AGENTS = {agent: agent for agent in PRODUCT_FIXTURE_IDS}
 SHARED_REPORT_SURFACE_TEST = Path(
     "apps/web/tests/component/BotRemoteAgentSurfaces.spec.ts"
 )
@@ -123,6 +162,100 @@ MAX_FAILURE_LINES = 32
 MAX_FAILURE_LENGTH = 240
 MAX_MATRIX_JSON_BYTES = 256 * 1024
 MAX_MATRIX_JSON_DEPTH = 256
+MAX_RESEARCH_INPUT_FIXTURE_BYTES = 256 * 1024
+MAX_BOT_CONTRACT_MANIFEST_BYTES = MAX_CONTRACT_MANIFEST_BYTES
+MAX_BOT_SOURCE_BYTES = 512 * 1024
+
+BOT_SOURCE_PATHS = {
+    "agent_identities": "src/mcp_server_phytomni/api/app.py",
+    "research_contract": ("docs/contracts/research-input-resolution/catalog.json"),
+    "upload_capability": ("docs/contracts/resumable-upload/capability.json"),
+    "resumable_upload_packet": ("docs/contracts/resumable-upload/manifest.json"),
+}
+
+RESEARCH_FIXTURE_SOURCE_PATHS = {
+    "project_definition": "pyproject.toml",
+    "dependency_lock": "environment.yml",
+    "agent_identities": "src/mcp_server_phytomni/api/app.py",
+    "agent_catalog_route": "src/mcp_server_phytomni/api/routes/agents.py",
+    "agent_capability_serializer": (
+        "src/mcp_server_phytomni/api/agent_capabilities.py"
+    ),
+    "upload_runtime": "src/mcp_server_phytomni/runtime/resumable_uploads.py",
+    "upload_runtime_wrapper": "src/mcp_server_phytomni/api/upload_runtime.py",
+    "advertised_protocols": ("src/mcp_server_phytomni/api/advertised_protocols.py"),
+    "conversation_context": (
+        "src/mcp_server_phytomni/runtime/conversation_context/models.py"
+    ),
+    "api_config": "src/mcp_server_phytomni/config/models/api.py",
+    "api_limits_config": "src/mcp_server_phytomni/config/api_limits.py",
+    "config_defaults": "src/mcp_server_phytomni/config/defaults.py",
+    "research_formats": (
+        "src/mcp_server_phytomni/agents/research/scientific_formats.py"
+    ),
+    "research_readiness": "src/mcp_server_phytomni/api/research_input.py",
+    "research_runtime_capability": (
+        "src/mcp_server_phytomni/api/research_capabilities.py"
+    ),
+    "relay_mode": "src/mcp_server_phytomni/config/relay_mode.py",
+}
+RESEARCH_FIXTURE_EXECUTION = {
+    "profile": "full_readiness_offline_v1",
+    "method": "GET",
+    "path": "/v1/agents",
+    "authenticated": True,
+    "network_allowed": False,
+    "offline_enforcement": "seccomp_socket_deny_v1",
+    "environment": {
+        "installer": "pinned_bot_interpreter_v1",
+        "project_source": "pyproject.toml",
+        "lock_source": "environment.yml",
+    },
+    "bot_commit": RESEARCH_FIXTURE_BOT_COMMIT,
+}
+
+
+class _ResearchGoContract(NamedTuple):
+    protocol: str
+    protocol_version: int
+    limit_bounds: dict[str, tuple[int, int]]
+    archive_formats: frozenset[str]
+    max_dataset_formats: int
+    max_dataset_format_size: int
+    accepted_fixture_sha256: str
+    canonical_agent_tools: dict[str, str]
+    max_agent_descriptors: int
+    max_dataset_file_bytes: int
+
+
+class _PinnedBotContract(NamedTuple):
+    canonical_agent_tools: dict[str, str]
+    research_protocol: str
+    research_protocol_version: int
+    research_limit_bounds: dict[str, tuple[int, int]]
+    research_formats: tuple[str, ...]
+    upload_protocol: str
+    upload_protocol_version: int
+    upload_route_family: str
+    upload_routes: tuple[dict[str, str], ...]
+    upload_ceiling_bytes: int
+
+
+class _BotSourceBinding(NamedTuple):
+    contract: _PinnedBotContract
+    fixture_sha256: str
+    fixture_contract_sha256: str
+
+
+class _AuthenticatedBotSources(NamedTuple):
+    values: dict[str, bytes]
+    digests: dict[str, str]
+
+
+class _GoLexicalView(NamedTuple):
+    masked: str
+    brace_depth: tuple[int, ...]
+
 
 _MATRIX_FIELDS = {
     "schema_version",
@@ -136,12 +269,14 @@ _LOCAL_READINESS_FIELDS = {"rc_web_004"}
 _RC_WEB_004_READINESS_FIELDS = {"fixture_ids", "shared_report_surface_test"}
 _SAFE_FIXTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_RESEARCH_FORMAT_RE = re.compile(r"^[a-z0-9][a-z0-9.+_-]*$")
+_RESEARCH_PROTOCOL_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+_PROTOCOL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _EXPERT_DEFAULT_RE = re.compile(
     r"(?m)^[ \t]*expertEnabled[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _CONFIG_FLAG_RE = re.compile(
-    r"(?m)^[ \t]*(?P<key>expert_enabled|stream_enabled|a2ui_actions_enabled|"
-    r"research_enabled|design_enabled|network_enabled)"
+    r"(?m)^[ \t]*(?P<key>history_dual_read)"
     r"[ \t]*:[ \t]*(?P<value>true|false)\b"
 )
 _HISTORY_FUNCTION_RE = re.compile(
@@ -164,76 +299,1424 @@ _FORBIDDEN_PARTS = frozenset(
     }
 )
 
-_FORBIDDEN_FIXTURE_FIELDS = frozenset(
+_PRIVATE_DELIVERY_FIELDS = frozenset(
     {
-        "created_at",
-        "dialogue_id",
-        "error",
-        "expires_at",
-        "model",
-        "origin",
-        "payload",
-        "private",
-        "private_payload",
-        "query",
-        "raw",
-        "raw_payload",
-        "request_id",
-        "stack_trace",
-        "task_id",
-        "task_ids",
-        "traceback",
-        "updated_at",
-        "user_id",
+        "delivery_internal",
+        "inventory",
+        "object_ref",
+        "private_delivery",
+        "retry_attempts",
     }
 )
 _FIXTURE_DEPTH_LIMIT_MARKER = "__fixture_depth_limit__"
+_RESULT_ARCHIVE_REF_RE = re.compile(r"^result-archive:sha256:[0-9a-f]{64}$")
+_RESULT_ARCHIVE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _has_forbidden_part(path: Path) -> bool:
     return any(part.casefold() in _FORBIDDEN_PARTS for part in path.parts)
 
 
-def _resolve(path: Path) -> Path | None:
-    try:
-        return path.resolve()
-    except (OSError, RuntimeError):
-        return None
-
-
-def _safe_relative_path(root: Path, relative: Path) -> Path | None:
-    candidate = root / relative
-    resolved_root = _resolve(root)
-    resolved_candidate = _resolve(candidate)
-    if resolved_root is None or resolved_candidate is None:
-        return None
-    try:
-        resolved_candidate.relative_to(resolved_root)
-    except ValueError:
-        return None
-    if _has_forbidden_part(resolved_candidate):
-        return None
-    return candidate
-
-
-def _read_text(root: Path, relative: Path, violations: list[str]) -> str | None:
-    candidate = _safe_relative_path(root, relative)
-    if candidate is None:
+def _read_bytes(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+    max_bytes: int = MAX_BOT_SOURCE_BYTES,
+) -> bytes | None:
+    if _has_forbidden_part(relative):
         violations.append("refusing to read out-of-scope activation path")
         return None
     try:
-        raw = candidate.read_bytes()
+        return root.read_bytes(relative, max_bytes)
+    except InputTooLargeError:
+        violations.append("Web activation source is oversized")
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
     except FileNotFoundError:
         violations.append("missing Web activation source")
-        return None
     except OSError:
         violations.append("cannot read Web activation source")
+
+    return None
+
+
+def _read_text(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> str | None:
+    raw = _read_bytes(root, relative, violations)
+    if raw is None:
         return None
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
         violations.append("Web activation source is not UTF-8")
         return None
+
+
+def _json_object(raw: bytes) -> dict[str, Any] | None:
+    try:
+        value = loads_strict_json(raw)
+    except StrictJsonError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _python_assignments(source: str) -> tuple[ast.Module, dict[str, ast.expr]] | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    assignments: dict[str, ast.expr] = {}
+    for statement in tree.body:
+        name: str | None = None
+        value: ast.expr | None = None
+        if (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+        ):
+            name = statement.targets[0].id
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            name = statement.target.id
+            value = statement.value
+        if name is None or value is None:
+            continue
+        if name in assignments:
+            return None
+        assignments[name] = value
+    return tree, assignments
+
+
+def _parse_bot_agent_tools(source: str) -> dict[str, str] | None:
+    parsed = _python_assignments(source)
+    if parsed is None:
+        return None
+    node = parsed[1].get("_AGENT_SLUG_TO_TOOL")
+    if node is None:
+        return None
+    try:
+        value = ast.literal_eval(node)
+    except (TypeError, ValueError):
+        return None
+    if (
+        not isinstance(value, dict)
+        or not value
+        or any(
+            not isinstance(key, str) or not key or not isinstance(item, str) or not item
+            for key, item in value.items()
+        )
+    ):
+        return None
+    return value
+
+
+def _parse_bot_research_catalog(
+    raw: bytes,
+) -> tuple[str, int, dict[str, tuple[int, int]], tuple[str, ...]] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {
+        "descriptor",
+        "formats",
+        "grammars",
+        "limits",
+        "protocol",
+        "stages",
+        "version",
+    }:
+        return None
+    protocol = value.get("protocol")
+    version = value.get("version")
+    descriptor = value.get("descriptor")
+    formats = value.get("formats")
+    limits = value.get("limits")
+    if (
+        not isinstance(protocol, str)
+        or _PROTOCOL_NAME_RE.fullmatch(protocol) is None
+        or not isinstance(version, int)
+        or isinstance(version, bool)
+        or version < 1
+        or not isinstance(descriptor, dict)
+        or set(descriptor)
+        != {
+            "dataset_formats",
+            "max_attachments_per_request",
+            "max_research_dataset_paths",
+            "max_research_input_references",
+            "max_user_query_chars",
+        }
+        or not isinstance(formats, list)
+        or not formats
+        or len(formats) > 512
+        or any(
+            not isinstance(item, str) or _RESEARCH_FORMAT_RE.fullmatch(item) is None
+            for item in formats
+        )
+        or formats != sorted(set(formats))
+        or descriptor.get("dataset_formats") != formats
+        or not isinstance(limits, dict)
+        or set(limits)
+        != {
+            "combined_references",
+            "document_conversion",
+            "managed_references",
+            "pasted_references",
+            "user_query_chars",
+        }
+    ):
+        return None
+    limit_sources = {
+        "max_user_query_chars": "user_query_chars",
+        "max_attachments_per_request": "managed_references",
+        "max_research_dataset_paths": "pasted_references",
+        "max_research_input_references": "combined_references",
+    }
+    bounds: dict[str, tuple[int, int]] = {}
+    for field, source_name in limit_sources.items():
+        source = limits.get(source_name)
+        if not isinstance(source, dict) or set(source) != {"default", "hard"}:
+            return None
+        default = source.get("default")
+        hard = source.get("hard")
+        if (
+            not isinstance(default, int)
+            or isinstance(default, bool)
+            or not isinstance(hard, int)
+            or isinstance(hard, bool)
+            or default < 1
+            or hard < default
+            or descriptor.get(field) != default
+        ):
+            return None
+        bounds[field] = (default, hard)
+    document_limits = limits.get("document_conversion")
+    if (
+        not isinstance(document_limits, dict)
+        or set(document_limits) != {"max_file_bytes", "max_total_bytes"}
+        or any(
+            not isinstance(item, int) or isinstance(item, bool) or item < 1
+            for item in document_limits.values()
+        )
+    ):
+        return None
+    return protocol, version, bounds, tuple(formats)
+
+
+def _parse_bot_upload_capability(
+    raw: bytes,
+) -> tuple[str, tuple[dict[str, str], ...], int] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {"route_family", "routes", "limits"}:
+        return None
+    routes = value.get("routes")
+    limits = value.get("limits")
+    if (
+        not isinstance(value.get("route_family"), str)
+        or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value["route_family"]) is None
+        or not isinstance(routes, list)
+        or not routes
+        or len(routes) > 16
+        or any(
+            not isinstance(route, dict)
+            or set(route) != {"method", "path", "plane", "auth"}
+            or any(not isinstance(item, str) or not item for item in route.values())
+            or re.fullmatch(r"[A-Z]{3,8}", route["method"]) is None
+            or not route["path"].startswith("/")
+            or len(route["path"]) > 256
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", route["plane"]) is None
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", route["auth"]) is None
+            for route in routes
+        )
+        or not isinstance(limits, dict)
+        or set(limits)
+        != {
+            "max_file_bytes",
+            "part_size_bytes",
+            "max_parallel_parts",
+            "max_active_assets",
+            "capability_ttl_seconds",
+            "session_ttl_seconds",
+        }
+        or any(
+            not isinstance(item, int) or isinstance(item, bool) or item < 1
+            for item in limits.values()
+        )
+    ):
+        return None
+    route_pairs = [(route["method"], route["path"]) for route in routes]
+    if len(route_pairs) != len(set(route_pairs)):
+        return None
+    return value["route_family"], tuple(routes), limits["max_file_bytes"]
+
+
+def _pinned_bot_contract_value(contract: _PinnedBotContract) -> dict[str, Any]:
+    return {
+        "canonical_agent_tools": contract.canonical_agent_tools,
+        "research_input": {
+            "protocol": contract.research_protocol,
+            "protocol_version": contract.research_protocol_version,
+            "limits": {
+                field: {"default": bounds[0], "hard": bounds[1]}
+                for field, bounds in contract.research_limit_bounds.items()
+            },
+            "formats": list(contract.research_formats),
+        },
+        "resumable_upload": {
+            "protocol": contract.upload_protocol,
+            "protocol_version": contract.upload_protocol_version,
+            "route_family": contract.upload_route_family,
+            "routes": list(contract.upload_routes),
+            "max_file_bytes": contract.upload_ceiling_bytes,
+        },
+    }
+
+
+def _parse_pinned_bot_contract(
+    sources: Mapping[str, bytes],
+) -> _PinnedBotContract | None:
+    try:
+        agent_source = sources["agent_identities"].decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    except KeyError:
+        return None
+    agent_tools = _parse_bot_agent_tools(agent_source)
+    research = _parse_bot_research_catalog(sources.get("research_contract", b""))
+    upload_ceiling = _parse_bot_upload_capability(sources.get("upload_capability", b""))
+    packet = _json_object(sources.get("resumable_upload_packet", b""))
+    protocol = packet.get("protocol") if packet is not None else None
+    files = packet.get("files") if packet is not None else None
+    version_match = (
+        re.search(r"-v(?P<version>[1-9][0-9]*)$", protocol)
+        if isinstance(protocol, str)
+        else None
+    )
+    if (
+        agent_tools is None
+        or research is None
+        or upload_ceiling is None
+        or not isinstance(files, dict)
+        or files.get("capability.json")
+        != hashlib.sha256(sources.get("upload_capability", b"")).hexdigest()
+        or version_match is None
+    ):
+        return None
+    assert agent_tools is not None
+    assert research is not None
+    assert isinstance(protocol, str)
+    assert version_match is not None
+    return _PinnedBotContract(
+        canonical_agent_tools=agent_tools,
+        research_protocol=research[0],
+        research_protocol_version=research[1],
+        research_limit_bounds=research[2],
+        research_formats=research[3],
+        upload_protocol=protocol,
+        upload_protocol_version=int(version_match.group("version")),
+        upload_route_family=upload_ceiling[0],
+        upload_routes=upload_ceiling[1],
+        upload_ceiling_bytes=upload_ceiling[2],
+    )
+
+
+def _canonical_json_sha256(value: object) -> str:
+    payload = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _expected_fixture_contract(contract: _PinnedBotContract) -> dict[str, Any]:
+    return {
+        "canonical_agent_tools": contract.canonical_agent_tools,
+        "protocols": {
+            contract.research_protocol: [contract.research_protocol_version],
+            contract.upload_protocol: [contract.upload_protocol_version],
+        },
+        "research_input_resolution": {
+            **{
+                field: bounds[0]
+                for field, bounds in contract.research_limit_bounds.items()
+            },
+            "dataset_formats": list(contract.research_formats),
+        },
+        "research_agent_dataset_formats": list(contract.research_formats),
+        "upload_capability": {
+            "route_family": contract.upload_route_family,
+            "routes": list(contract.upload_routes),
+            "max_file_bytes": contract.upload_ceiling_bytes,
+        },
+    }
+
+
+def _fixture_contract_value(
+    value: Mapping[str, Any], contract: _PinnedBotContract
+) -> dict[str, Any] | None:
+    data = value.get("data")
+    if not isinstance(data, list):
+        return None
+    tools: dict[str, str] = {}
+    research_rows: list[Mapping[str, Any]] = []
+    for row in data:
+        if not isinstance(row, Mapping):
+            return None
+        slug = row.get("slug")
+        tool = row.get("tool")
+        if not isinstance(slug, str) or not isinstance(tool, str) or slug in tools:
+            return None
+        tools[slug] = tool
+        if slug == "research":
+            research_rows.append(row)
+    if len(research_rows) != 1:
+        return None
+    protocols = value.get("protocols")
+    descriptor = value.get("research_input_resolution")
+    file_upload = value.get("file_upload")
+    if not (
+        isinstance(protocols, Mapping)
+        and isinstance(descriptor, Mapping)
+        and isinstance(file_upload, Mapping)
+    ):
+        return None
+    attachments = research_rows[0].get("capabilities")
+    attachments = (
+        attachments.get("attachments") if isinstance(attachments, Mapping) else None
+    )
+    datasets = attachments.get("datasets") if isinstance(attachments, Mapping) else None
+    limits = file_upload.get("limits")
+    upload_routes = file_upload.get("routes")
+    if (
+        not isinstance(datasets, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(upload_routes, list)
+    ):
+        return None
+    descriptor_fields = tuple(_RESEARCH_INPUT_LIMIT_DECLARATIONS)
+    descriptor_formats = descriptor.get("dataset_formats")
+    research_formats = datasets.get("formats")
+    if not isinstance(descriptor_formats, list) or not isinstance(
+        research_formats, list
+    ):
+        return None
+    return {
+        "canonical_agent_tools": tools,
+        "protocols": {
+            key: protocols.get(key)
+            for key in protocols
+            if key in {contract.research_protocol, contract.upload_protocol}
+        },
+        "research_input_resolution": {
+            **{field: descriptor.get(field) for field in descriptor_fields},
+            "dataset_formats": descriptor_formats,
+        },
+        "research_agent_dataset_formats": research_formats,
+        "upload_capability": {
+            "route_family": file_upload.get("route_family"),
+            "routes": upload_routes,
+            "max_file_bytes": limits.get("max_file_bytes"),
+        },
+    }
+
+
+def _safe_git_path(value: str) -> bool:
+    parts = value.split("/")
+    return (
+        bool(value)
+        and not value.startswith("/")
+        and "\\" not in value
+        and all(part not in {"", ".", ".."} for part in parts)
+    )
+
+
+def _decode_object_payload(value: Any, limit: int) -> bytes | None:
+    if not isinstance(value, str) or len(value) > (limit * 4 // 3) + 8:
+        return None
+    try:
+        payload = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return payload if len(payload) <= limit else None
+
+
+def _git_object_oid(kind: str, payload: bytes) -> str:
+    framed = f"{kind} {len(payload)}\0".encode("ascii") + payload
+    return hashlib.sha1(framed, usedforsecurity=False).hexdigest()
+
+
+def _parse_git_tree(payload: bytes) -> dict[str, tuple[str, str]] | None:
+    entries: dict[str, tuple[str, str]] = {}
+    position = 0
+    while position < len(payload):
+        space = payload.find(b" ", position)
+        nul = payload.find(b"\0", space + 1)
+        if space <= position or nul <= space or nul + 21 > len(payload):
+            return None
+        try:
+            mode = payload[position:space].decode("ascii")
+            name = payload[space + 1 : nul].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        if (
+            not re.fullmatch(r"[0-7]{5,6}", mode)
+            or not name
+            or "/" in name
+            or name in entries
+        ):
+            return None
+        oid = payload[nul + 1 : nul + 21].hex()
+        entries[name] = (mode, oid)
+        position = nul + 21
+    return entries if entries else None
+
+
+def _resolve_git_blob(
+    root_tree: str,
+    path: str,
+    trees: Mapping[str, bytes],
+) -> tuple[str, set[str]] | None:
+    current = root_tree
+    used: set[str] = set()
+    parts = path.split("/")
+    for index, part in enumerate(parts):
+        payload = trees.get(current)
+        parsed = _parse_git_tree(payload) if payload is not None else None
+        if parsed is None or part not in parsed:
+            return None
+        used.add(current)
+        mode, oid = parsed[part]
+        if index == len(parts) - 1:
+            if mode not in {"100644", "100755"}:
+                return None
+            return oid, used
+        if mode not in {"40000", "040000"}:
+            return None
+        current = oid
+    return None
+
+
+def _resumable_packet_metadata(raw: bytes, source_sha256: str) -> dict[str, Any] | None:
+    value = _json_object(raw)
+    if value is None or set(value) != {"protocol", "fixture_version", "files"}:
+        return None
+    protocol = value.get("protocol")
+    fixture_version = value.get("fixture_version")
+    files = value.get("files")
+    if (
+        not isinstance(protocol, str)
+        or _PROTOCOL_NAME_RE.fullmatch(protocol) is None
+        or not isinstance(fixture_version, str)
+        or not fixture_version
+        or not isinstance(files, dict)
+        or not files
+    ):
+        return None
+    entries: list[dict[str, str]] = []
+    for path, digest in sorted(files.items()):
+        if (
+            not isinstance(path, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{0,126}\.json", path)
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            return None
+        entries.append({"path": path, "sha256": digest})
+    required_prefixes = (
+        "capability",
+        "create_",
+        "renew_",
+        "head_",
+        "part_",
+        "complete_",
+        "abort_",
+    )
+    if any(
+        not any(item["path"].startswith(prefix) for item in entries)
+        for prefix in required_prefixes
+    ):
+        return None
+    return {
+        "manifest_path": BOT_SOURCE_PATHS["resumable_upload_packet"],
+        "manifest_sha256": source_sha256,
+        "protocol": protocol,
+        "fixture_version": fixture_version,
+        "files": entries,
+    }
+
+
+def _authenticate_bot_sources(
+    bot_commit: Any,
+    proof: Any,
+    source_entries: Any,
+    expected_commit: str,
+    source_paths: Mapping[str, str],
+    violations: list[str],
+    label: str,
+) -> _AuthenticatedBotSources | None:
+    if (
+        not isinstance(bot_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    if bot_commit != expected_commit:
+        violations.append(f"{label} does not use the accepted Bot commit")
+        return None
+    if not isinstance(proof, dict) or set(proof) != {"commit", "trees"}:
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_entry = proof.get("commit")
+    tree_entries = proof.get("trees")
+    if (
+        not isinstance(commit_entry, dict)
+        or set(commit_entry) != {"oid", "content_base64"}
+        or commit_entry.get("oid") != bot_commit
+        or not isinstance(tree_entries, list)
+    ):
+        violations.append(f"{label} manifest is malformed or drifted")
+        return None
+    commit_payload = _decode_object_payload(
+        commit_entry.get("content_base64"), 64 * 1024
+    )
+    if (
+        commit_payload is None
+        or _git_object_oid("commit", commit_payload) != bot_commit
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    tree_headers = [
+        line
+        for line in commit_payload.split(b"\n\n", 1)[0].splitlines()
+        if line.startswith(b"tree ")
+    ]
+    if (
+        len(tree_headers) != 1
+        or re.fullmatch(rb"tree [0-9a-f]{40}", tree_headers[0]) is None
+    ):
+        violations.append(f"{label} Git commit proof is invalid")
+        return None
+    root_tree = tree_headers[0][5:].decode("ascii")
+
+    trees: dict[str, bytes] = {}
+    for entry in tree_entries:
+        if not isinstance(entry, dict) or set(entry) != {"oid", "content_base64"}:
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        oid = entry.get("oid")
+        payload = _decode_object_payload(entry.get("content_base64"), 512 * 1024)
+        if (
+            not isinstance(oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", oid) is None
+            or payload is None
+            or _git_object_oid("tree", payload) != oid
+            or oid in trees
+        ):
+            violations.append(f"{label} Git tree proof is invalid")
+            return None
+        trees[oid] = payload
+
+    if not isinstance(source_entries, list) or len(source_entries) != len(source_paths):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    sources: dict[str, bytes] = {}
+    source_digests: dict[str, str] = {}
+    used_trees: set[str] = set()
+    for entry in source_entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "role",
+            "path",
+            "git_blob_oid",
+            "sha256",
+            "content_base64",
+        }:
+            violations.append(f"{label} source inventory is malformed")
+            return None
+        role = entry.get("role")
+        path = entry.get("path")
+        blob_oid = entry.get("git_blob_oid")
+        digest = entry.get("sha256")
+        payload = _decode_object_payload(
+            entry.get("content_base64"), MAX_BOT_SOURCE_BYTES
+        )
+        if (
+            not isinstance(role, str)
+            or role not in source_paths
+            or role in sources
+            or path != source_paths[role]
+            or not isinstance(path, str)
+            or not _safe_git_path(path)
+            or not isinstance(blob_oid, str)
+            or re.fullmatch(r"[0-9a-f]{40}", blob_oid) is None
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or payload is None
+            or _git_object_oid("blob", payload) != blob_oid
+            or hashlib.sha256(payload).hexdigest() != digest
+        ):
+            violations.append(f"{label} source inventory is malformed or drifted")
+            return None
+        resolved = _resolve_git_blob(root_tree, path, trees)
+        if resolved is None or resolved[0] != blob_oid:
+            violations.append(f"{label} source is not in the pinned Git commit")
+            return None
+        used_trees.update(resolved[1])
+        sources[role] = payload
+        source_digests[role] = digest
+    if set(sources) != set(source_paths) or used_trees != set(trees):
+        violations.append(f"{label} source inventory is incomplete")
+        return None
+    return _AuthenticatedBotSources(sources, source_digests)
+
+
+def _load_bot_source_binding(
+    root: RootedDirectory, violations: list[str]
+) -> _BotSourceBinding | None:
+    try:
+        raw = root.read_bytes(
+            BOT_CONTRACT_MANIFEST_REL,
+            MAX_BOT_CONTRACT_MANIFEST_BYTES,
+        )
+    except InputTooLargeError:
+        violations.append("Bot source binding manifest is oversized")
+        return None
+    except (InputChangedError, UnsafeInputPathError):
+        violations.append("refusing to read out-of-scope activation path")
+        return None
+    except FileNotFoundError:
+        violations.append("missing Web activation source")
+        return None
+    except OSError:
+        violations.append("cannot read Web activation source")
+        return None
+    manifest = _json_object(raw)
+    binding = (
+        manifest.get("activation_source_binding") if manifest is not None else None
+    )
+    if (
+        not isinstance(binding, dict)
+        or set(binding)
+        != {
+            "schema_version",
+            "bot_commit",
+            "object_format",
+            "git_object_proof",
+            "sources",
+            "contract",
+            "research_fixture",
+            "resumable_upload_packet",
+        }
+        or binding.get("schema_version") != 1
+        or binding.get("object_format") != "sha1"
+    ):
+        violations.append("Bot source binding manifest is malformed or drifted")
+        return None
+    authenticated = _authenticate_bot_sources(
+        binding.get("bot_commit"),
+        binding.get("git_object_proof"),
+        binding.get("sources"),
+        ACTIVATION_SOURCE_BOT_COMMIT,
+        BOT_SOURCE_PATHS,
+        violations,
+        "Bot source binding",
+    )
+    if authenticated is None:
+        return None
+    sources = authenticated.values
+    source_digests = authenticated.digests
+
+    contract = _parse_pinned_bot_contract(sources)
+    if contract is None or binding.get("contract") != _pinned_bot_contract_value(
+        contract
+    ):
+        violations.append("Bot source binding contract does not match pinned sources")
+        return None
+    packet = _resumable_packet_metadata(
+        sources["resumable_upload_packet"],
+        source_digests["resumable_upload_packet"],
+    )
+    if (
+        packet is None
+        or packet.get("protocol") != contract.upload_protocol
+        or binding.get("resumable_upload_packet") != packet
+    ):
+        violations.append("Bot source binding resumable packet is malformed or drifted")
+        return None
+
+    fixture = binding.get("research_fixture")
+    expected_contract_sha256 = _canonical_json_sha256(
+        _expected_fixture_contract(contract)
+    )
+    if (
+        not isinstance(fixture, dict)
+        or set(fixture)
+        != {"path", "sha256", "contract_sha256", "execution", "authority"}
+        or fixture.get("path") != RESEARCH_INPUT_FIXTURE_REL.as_posix()
+        or not isinstance(fixture.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", fixture["sha256"]) is None
+        or fixture.get("contract_sha256") != expected_contract_sha256
+        or fixture.get("execution") != RESEARCH_FIXTURE_EXECUTION
+    ):
+        violations.append("Bot source binding Research fixture is malformed or drifted")
+        return None
+    authority = fixture.get("authority")
+    if (
+        not isinstance(authority, dict)
+        or set(authority)
+        != {
+            "schema_version",
+            "bot_commit",
+            "object_format",
+            "git_object_proof",
+            "sources",
+        }
+        or authority.get("schema_version") != 1
+        or authority.get("object_format") != "sha1"
+    ):
+        violations.append("Research fixture authority is malformed or drifted")
+        return None
+    fixture_sources = _authenticate_bot_sources(
+        authority.get("bot_commit"),
+        authority.get("git_object_proof"),
+        authority.get("sources"),
+        RESEARCH_FIXTURE_BOT_COMMIT,
+        RESEARCH_FIXTURE_SOURCE_PATHS,
+        violations,
+        "Research fixture authority",
+    )
+    if fixture_sources is None:
+        return None
+    return _BotSourceBinding(
+        contract=contract,
+        fixture_sha256=fixture["sha256"],
+        fixture_contract_sha256=expected_contract_sha256,
+    )
+
+
+def _go_top_level_const_bodies(
+    source: str,
+) -> list[tuple[str, str]] | None:
+    """Return source/masked bodies for finite package-level const declarations."""
+
+    lexical = _scan_go_source(source)
+    if lexical is None:
+        return None
+    masked = lexical.masked
+    bodies: list[tuple[str, str]] = []
+    for match in re.finditer(r"\bconst\b", masked):
+        if lexical.brace_depth[match.start()] != 0:
+            continue
+        cursor = match.end()
+        while cursor < len(masked) and masked[cursor] in " \t":
+            cursor += 1
+        if cursor < len(masked) and masked[cursor] == "(":
+            opening = cursor
+            depth = 0
+            closing = None
+            for index in range(opening, len(masked)):
+                if masked[index] == "(":
+                    depth += 1
+                elif masked[index] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        closing = index
+                        break
+            if closing is None:
+                return None
+            bodies.append(
+                (
+                    source[opening + 1 : closing],
+                    masked[opening + 1 : closing],
+                )
+            )
+            continue
+
+        line_end = masked.find("\n", cursor)
+        if line_end < 0:
+            line_end = len(masked)
+        bodies.append((source[cursor:line_end], masked[cursor:line_end]))
+    return bodies
+
+
+def _parse_go_finite_literal(
+    literal: str, declared_type: str | None
+) -> str | int | None:
+    if re.fullmatch(r'"(?:\\.|[^"\\])*"', literal):
+        if declared_type not in (None, "string"):
+            return None
+        try:
+            value = json.loads(literal)
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, str) else None
+
+    decimal = r"[0-9](?:_?[0-9])*"
+    integer = re.fullmatch(
+        rf"(?P<base>{decimal})(?:[ \t]*<<[ \t]*(?P<shift>{decimal}))?",
+        literal,
+    )
+    if integer is None or declared_type not in (None, "int", "int64"):
+        return None
+    base = int(integer.group("base").replace("_", ""))
+    shift_text = integer.group("shift")
+    shift = int(shift_text.replace("_", "")) if shift_text else 0
+    if shift > 62:
+        return None
+    value = base << shift
+    return value if value <= (1 << 63) - 1 else None
+
+
+def _parse_go_named_const_literals(
+    source: str, expected_names: tuple[str, ...]
+) -> dict[str, str | int] | None:
+    """Extract only guarded const symbols and reject ambiguous declarations."""
+
+    bodies = _go_top_level_const_bodies(source)
+    if bodies is None:
+        return None
+    expected = set(expected_names)
+    values: dict[str, str | int] = {}
+    for body, masked_body in bodies:
+        starts = [0]
+        starts.extend(match.end() for match in re.finditer(r"[;\r\n]", masked_body))
+        ends = [match.start() for match in re.finditer(r"[;\r\n]", masked_body)]
+        ends.append(len(masked_body))
+        for start, end in zip(starts, ends, strict=True):
+            masked_spec = masked_body[start:end]
+            source_spec = _strip_go_comments(body[start:end]).strip()
+            equals = masked_spec.find("=")
+            lhs = masked_spec if equals < 0 else masked_spec[:equals]
+            identifiers = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", lhs)
+            guarded = [name for name in identifiers if name in expected]
+            if not guarded:
+                continue
+            if len(guarded) != 1 or identifiers[0] != guarded[0]:
+                return None
+            name = guarded[0]
+            if name in values:
+                return None
+            declaration = re.fullmatch(
+                rf"{re.escape(name)}"
+                r"(?:[ \t]+(?P<type>[A-Za-z_][A-Za-z0-9_]*))?"
+                r"[ \t]*=[ \t]*(?P<literal>.+?)",
+                source_spec,
+            )
+            if declaration is None:
+                return None
+            value = _parse_go_finite_literal(
+                declaration.group("literal").strip(), declaration.group("type")
+            )
+            if value is None:
+                return None
+            values[name] = value
+    return values if set(values) == expected else None
+
+
+def _parse_go_string_map(source: str, name: str) -> dict[str, str] | None:
+    lexical = _scan_go_source(source)
+    if lexical is None:
+        return None
+    masked = lexical.masked
+    guarded = list(
+        match
+        for match in re.finditer(rf"\bvar[ \t]+{re.escape(name)}\b", masked)
+        if lexical.brace_depth[match.start()] == 0
+    )
+    declaration = re.compile(
+        rf"\bvar[ \t]+{re.escape(name)}[ \t]*=[ \t]*"
+        r"map[ \t]*\[[ \t]*string[ \t]*\][ \t]*string[ \t]*\{"
+    )
+    matches = [
+        match
+        for match in declaration.finditer(masked)
+        if lexical.brace_depth[match.start()] == 0
+    ]
+    if (
+        len(guarded) != 1
+        or len(matches) != 1
+        or guarded[0].start() != matches[0].start()
+    ):
+        return None
+    opening = matches[0].end() - 1
+    depth = 0
+    closing = None
+    for index in range(opening, len(masked)):
+        if masked[index] == "{":
+            depth += 1
+        elif masked[index] == "}":
+            depth -= 1
+            if depth == 0:
+                closing = index
+                break
+    if closing is None:
+        return None
+
+    body = _strip_go_comments(source[opening + 1 : closing])
+    entry = re.compile(
+        r'\s*(?P<key>"(?:\\.|[^"\\])*")[ \t]*:[ \t]*'
+        r'(?P<value>"(?:\\.|[^"\\])*")[ \t]*,?'
+    )
+    values: dict[str, str] = {}
+    position = 0
+    while position < len(body):
+        if not body[position:].strip():
+            break
+        match = entry.match(body, position)
+        if match is None:
+            return None
+        try:
+            key = json.loads(match.group("key"))
+            value = json.loads(match.group("value"))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(key, str) or not isinstance(value, str) or key in values:
+            return None
+        values[key] = value
+        position = match.end()
+    return values or None
+
+
+def _parse_go_string_set_map(source: str, name: str) -> set[str] | None:
+    lexical = _scan_go_source(source)
+    if lexical is None:
+        return None
+    masked = lexical.masked
+    guarded = [
+        match
+        for match in re.finditer(rf"\bvar\s+{re.escape(name)}\b", masked)
+        if lexical.brace_depth[match.start()] == 0
+    ]
+    declaration = re.compile(
+        rf"\bvar\s+{re.escape(name)}\s*=\s*"
+        r"map\s*\[\s*string\s*\]\s*struct\s*\{\s*\}\s*\{"
+    )
+    matches = [
+        match
+        for match in declaration.finditer(masked)
+        if lexical.brace_depth[match.start()] == 0
+    ]
+    if (
+        len(guarded) != 1
+        or len(matches) != 1
+        or guarded[0].start() != matches[0].start()
+    ):
+        return None
+    opening = matches[0].end() - 1
+    depth = 0
+    closing = None
+    for index in range(opening, len(masked)):
+        if masked[index] == "{":
+            depth += 1
+        elif masked[index] == "}":
+            depth -= 1
+            if depth == 0:
+                closing = index
+                break
+    if closing is None:
+        return None
+
+    body = _strip_go_comments(source[opening + 1 : closing])
+    entry = re.compile(r'\s*"(?P<key>\.?[a-z0-9][a-z0-9.]*)"\s*:\s*\{\s*\}\s*,?')
+    values: set[str] = set()
+    position = 0
+    while position < len(body):
+        if not body[position:].strip():
+            break
+        match = entry.match(body, position)
+        if match is None:
+            return None
+        token = match.group("key")
+        if token in values:
+            return None
+        values.add(token)
+        position = match.end()
+    return values or None
+
+
+def _parse_go_suffix_map(source: str, name: str) -> set[str] | None:
+    values = _parse_go_string_set_map(source, name)
+    if values is None or any(not value.startswith(".") for value in values):
+        return None
+    return {value.removeprefix(".") for value in values}
+
+
+def _load_research_go_contract(
+    limit_source: str | None,
+    contract_source: str | None,
+    agent_canonical_source: str | None,
+    agent_map_source: str | None,
+    upload_contract_source: str | None,
+    violations: list[str],
+) -> _ResearchGoContract | None:
+    if any(
+        source is None
+        for source in (
+            limit_source,
+            contract_source,
+            agent_canonical_source,
+            agent_map_source,
+            upload_contract_source,
+        )
+    ):
+        violations.append("Web Research Go contract sources are missing")
+        return None
+
+    assert limit_source is not None
+    assert contract_source is not None
+    assert agent_canonical_source is not None
+    assert agent_map_source is not None
+    assert upload_contract_source is not None
+
+    limit_names = tuple(
+        name
+        for declaration_names in _RESEARCH_INPUT_LIMIT_DECLARATIONS.values()
+        for name in declaration_names
+    )
+    limit_values = _parse_go_named_const_literals(limit_source, limit_names)
+    contract_values = _parse_go_named_const_literals(
+        contract_source, _RESEARCH_CONTRACT_DECLARATIONS
+    )
+    agent_tools = _parse_go_string_map(agent_canonical_source, "CanonicalAgentTool")
+    descriptor_values = _parse_go_named_const_literals(
+        agent_map_source, ("maxBotAgentDescriptors",)
+    )
+    upload_values = _parse_go_named_const_literals(
+        upload_contract_source, ("maxResumableUploadFileBytes",)
+    )
+    archive_formats = _parse_go_string_set_map(
+        contract_source, "acceptedResearchArchiveFormats"
+    )
+    accepted_digest = (
+        contract_values.get("acceptedResearchInputFixtureSHA256")
+        if contract_values is not None
+        else None
+    )
+    max_agent_descriptors = (
+        descriptor_values.get("maxBotAgentDescriptors")
+        if descriptor_values is not None
+        else None
+    )
+    max_dataset_file_bytes = (
+        upload_values.get("maxResumableUploadFileBytes")
+        if upload_values is not None
+        else None
+    )
+    if limit_values is None or contract_values is None:
+        violations.append("Web Research Go contract sources are malformed or drifted")
+        return None
+
+    limit_bounds: dict[str, tuple[int, int]] = {}
+    for field, (
+        default_name,
+        hard_name,
+    ) in _RESEARCH_INPUT_LIMIT_DECLARATIONS.items():
+        default_value = limit_values.get(default_name)
+        hard_value = limit_values.get(hard_name)
+        if (
+            not isinstance(default_value, int)
+            or not isinstance(hard_value, int)
+            or default_value < 1
+            or hard_value < default_value
+        ):
+            violations.append(
+                "Web Research Go contract sources are malformed or drifted"
+            )
+            return None
+        limit_bounds[field] = (default_value, hard_value)
+
+    reference_bounds = limit_bounds["max_research_input_references"]
+    attachment_bounds = limit_bounds["max_attachments_per_request"]
+    dataset_bounds = limit_bounds["max_research_dataset_paths"]
+    protocol = contract_values.get("ResearchInputProtocol")
+    protocol_version = contract_values.get("ResearchInputProtocolVersion")
+    max_dataset_formats = contract_values.get("maxResearchDatasetFormats")
+    max_dataset_format_size = contract_values.get("maxResearchDatasetFormatSize")
+    if (
+        not isinstance(protocol, str)
+        or _RESEARCH_PROTOCOL_RE.fullmatch(protocol) is None
+        or not isinstance(protocol_version, int)
+        or protocol_version < 1
+        or not isinstance(max_dataset_formats, int)
+        or max_dataset_formats < 1
+        or not isinstance(max_dataset_format_size, int)
+        or max_dataset_format_size < 1
+        or not isinstance(accepted_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", accepted_digest) is None
+        or agent_tools is None
+        or not isinstance(max_agent_descriptors, int)
+        or max_agent_descriptors < 1
+        or not isinstance(max_dataset_file_bytes, int)
+        or max_dataset_file_bytes < 1
+        or archive_formats is None
+        or len(archive_formats) > max_dataset_formats
+        or any(
+            len(value) > max_dataset_format_size
+            or _RESEARCH_FORMAT_RE.fullmatch(value) is None
+            for value in archive_formats
+        )
+        or any(
+            reference_bounds[index]
+            < max(attachment_bounds[index], dataset_bounds[index])
+            for index in (0, 1)
+        )
+    ):
+        violations.append("Web Research Go contract sources are malformed or drifted")
+        return None
+
+    return _ResearchGoContract(
+        protocol=protocol,
+        protocol_version=protocol_version,
+        limit_bounds=limit_bounds,
+        archive_formats=frozenset(archive_formats),
+        max_dataset_formats=max_dataset_formats,
+        max_dataset_format_size=max_dataset_format_size,
+        accepted_fixture_sha256=accepted_digest,
+        canonical_agent_tools=agent_tools,
+        max_agent_descriptors=max_agent_descriptors,
+        max_dataset_file_bytes=max_dataset_file_bytes,
+    )
+
+
+def _parse_research_input_fixture(text: str) -> Mapping[str, Any] | None:
+    if len(text.encode("utf-8")) > MAX_RESEARCH_INPUT_FIXTURE_BYTES:
+        return None
+    try:
+        value = loads_strict_json(text)
+    except StrictJsonError:
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def _normalized_research_formats(
+    value: Any, max_formats: int, max_format_size: int
+) -> set[str] | None:
+    if not isinstance(value, list) or not 1 <= len(value) <= max_formats:
+        return None
+    normalized: set[str] = set()
+    for item in value:
+        if (
+            not isinstance(item, str)
+            or item != item.strip().lower()
+            or len(item) > max_format_size
+            or _RESEARCH_FORMAT_RE.fullmatch(item) is None
+            or item in normalized
+        ):
+            return None
+        normalized.add(item)
+    return normalized
+
+
+def _bounded_integer(value: Any, floor: int, ceiling: int) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and floor <= value <= ceiling
+    )
+
+
+def _check_research_input_contract(
+    root: RootedDirectory,
+    source_binding: _BotSourceBinding | None,
+    format_source: str | None,
+    limit_source: str | None,
+    contract_source: str | None,
+    agent_canonical_source: str | None,
+    agent_map_source: str | None,
+    upload_contract_source: str | None,
+    violations: list[str],
+) -> None:
+    go_contract = _load_research_go_contract(
+        limit_source,
+        contract_source,
+        agent_canonical_source,
+        agent_map_source,
+        upload_contract_source,
+        violations,
+    )
+    fixture_raw = _read_bytes(
+        root,
+        RESEARCH_INPUT_FIXTURE_REL,
+        violations,
+        MAX_RESEARCH_INPUT_FIXTURE_BYTES,
+    )
+    if fixture_raw is None:
+        violations.append("research_input_resolution_v1.json is missing")
+        return
+    fixture_digest = hashlib.sha256(fixture_raw).hexdigest()
+    if (
+        go_contract is not None
+        and fixture_digest != go_contract.accepted_fixture_sha256
+    ):
+        violations.append("Research fixture SHA-256 differs from accepted bytes")
+    if source_binding is not None and fixture_digest != source_binding.fixture_sha256:
+        violations.append("Research fixture SHA-256 differs from pinned Bot evidence")
+    try:
+        fixture_text = fixture_raw.decode("utf-8")
+    except UnicodeDecodeError:
+        violations.append("research_input_resolution_v1.json is not UTF-8")
+        return
+    fixture = _parse_research_input_fixture(fixture_text)
+    if fixture is None:
+        violations.append("research_input_resolution_v1.json is malformed")
+        return
+    if source_binding is not None:
+        pinned = source_binding.contract
+        fixture_contract = _fixture_contract_value(fixture, pinned)
+        if (
+            fixture_contract is None
+            or _canonical_json_sha256(fixture_contract)
+            != source_binding.fixture_contract_sha256
+        ):
+            violations.append(
+                "Research fixture contract differs from pinned Bot sources"
+            )
+    if go_contract is None:
+        return
+    if source_binding is not None:
+        pinned = source_binding.contract
+        if go_contract.canonical_agent_tools != pinned.canonical_agent_tools:
+            violations.append(
+                "Web agent identities differ from pinned Bot agent identities"
+            )
+        if (
+            go_contract.protocol != pinned.research_protocol
+            or go_contract.protocol_version != pinned.research_protocol_version
+            or go_contract.limit_bounds != pinned.research_limit_bounds
+            or not go_contract.archive_formats.issubset(pinned.research_formats)
+            or go_contract.max_dataset_file_bytes != pinned.upload_ceiling_bytes
+        ):
+            violations.append("Web Research contract differs from pinned Bot sources")
+        if go_contract.accepted_fixture_sha256 != source_binding.fixture_sha256:
+            violations.append(
+                "Web Research fixture digest differs from pinned Bot evidence"
+            )
+
+    protocols = fixture.get("protocols")
+    versions = (
+        protocols.get(go_contract.protocol) if isinstance(protocols, Mapping) else None
+    )
+    if versions != [go_contract.protocol_version]:
+        violations.append("research input protocol is incompatible")
+
+    descriptor = fixture.get("research_input_resolution")
+    if not isinstance(descriptor, Mapping):
+        violations.append("research_input_resolution descriptor is missing")
+    else:
+        valid_limits: dict[str, int] = {}
+        for field, (floor, ceiling) in go_contract.limit_bounds.items():
+            value = descriptor.get(field)
+            if not _bounded_integer(value, floor, ceiling):
+                violations.append(
+                    f"research_input_resolution.{field} is outside Web bounds"
+                )
+            else:
+                valid_limits[field] = value
+        references = valid_limits.get("max_research_input_references")
+        attachments_limit = valid_limits.get("max_attachments_per_request")
+        dataset_paths = valid_limits.get("max_research_dataset_paths")
+        if references is not None and (
+            (attachments_limit is not None and references < attachments_limit)
+            or (dataset_paths is not None and references < dataset_paths)
+        ):
+            violations.append("research input reference limit is below an input lane")
+
+    data = fixture.get("data")
+    if not isinstance(data, list) or len(data) > go_contract.max_agent_descriptors:
+        violations.append("agent descriptor catalog is malformed")
+        return
+    research_rows: list[Mapping[str, Any]] = []
+    seen_slugs: set[str] = set()
+    for row in data:
+        if not isinstance(row, Mapping):
+            violations.append("agent descriptor catalog is malformed")
+            continue
+        slug = row.get("slug")
+        tool = row.get("tool")
+        if (
+            not isinstance(slug, str)
+            or not isinstance(tool, str)
+            or slug != slug.strip()
+            or tool != tool.strip()
+            or go_contract.canonical_agent_tools.get(slug) != tool
+            or slug in seen_slugs
+        ):
+            violations.append("agent descriptor catalog is malformed")
+        else:
+            seen_slugs.add(slug)
+        if slug == "research":
+            research_rows.append(row)
+    if len(research_rows) != 1:
+        violations.append("research capability row count must be one")
+        return
+    capabilities = research_rows[0].get("capabilities")
+    attachments = (
+        capabilities.get("attachments") if isinstance(capabilities, Mapping) else None
+    )
+    document_context = (
+        attachments.get("document_context")
+        if isinstance(attachments, Mapping)
+        else None
+    )
+    datasets = attachments.get("datasets") if isinstance(attachments, Mapping) else None
+    attachment_floor, attachment_ceiling = go_contract.limit_bounds[
+        "max_attachments_per_request"
+    ]
+    if not isinstance(document_context, Mapping) or not _bounded_integer(
+        document_context.get("max_files"), attachment_floor, attachment_ceiling
+    ):
+        violations.append("research document_context.max_files is outside Web bounds")
+    if not isinstance(datasets, Mapping) or not _bounded_integer(
+        datasets.get("max_files"), attachment_floor, attachment_ceiling
+    ):
+        violations.append("research datasets.max_files is outside Web bounds")
+        return
+
+    max_files = datasets["max_files"]
+    max_file_bytes = datasets.get("max_file_bytes")
+    max_total_bytes = datasets.get("max_total_bytes")
+    if not _bounded_integer(max_file_bytes, 1, go_contract.max_dataset_file_bytes):
+        violations.append("research datasets.max_file_bytes is outside Web bounds")
+    max_total_bytes_ceiling = go_contract.max_dataset_file_bytes * attachment_ceiling
+    if (
+        not isinstance(max_total_bytes, int)
+        or isinstance(max_total_bytes, bool)
+        or not isinstance(max_file_bytes, int)
+        or isinstance(max_file_bytes, bool)
+        or max_total_bytes < max_file_bytes
+        or max_total_bytes > max_total_bytes_ceiling
+        or max_total_bytes > max_file_bytes * max_files
+    ):
+        violations.append("research datasets.max_total_bytes is outside Web bounds")
+
+    advertised_formats = _normalized_research_formats(
+        datasets.get("formats"),
+        go_contract.max_dataset_formats,
+        go_contract.max_dataset_format_size,
+    )
+    archive_formats = (
+        _parse_go_suffix_map(format_source, "archiveAttachmentSuffixes")
+        if format_source is not None
+        else None
+    )
+    dataset_formats = (
+        _parse_go_suffix_map(format_source, "datasetAttachmentSuffixes")
+        if format_source is not None
+        else None
+    )
+    if (
+        archive_formats is None
+        or not archive_formats
+        or not archive_formats.issubset(go_contract.archive_formats)
+        or dataset_formats is None
+        or "mtx" not in dataset_formats
+    ):
+        violations.append("attachment_classifier.go Research format maps are malformed")
+        return
+    required_formats = archive_formats | dataset_formats
+    if advertised_formats is None or not required_formats.issubset(advertised_formats):
+        violations.append("research datasets.formats do not cover Web formats")
 
 
 def _extract_json_block(text: str) -> str | None:
@@ -287,8 +1770,8 @@ def parse_matrix(text: str) -> Any | None:
     if in_string or depth != 0:
         return None
     try:
-        return json.loads(block)
-    except (RecursionError, TypeError, ValueError):
+        return loads_strict_json(block, max_depth=MAX_MATRIX_JSON_DEPTH)
+    except StrictJsonError:
         return None
 
 
@@ -313,7 +1796,6 @@ def _row_statuses(rows: Any) -> dict[str, str]:
 
 
 def _requirement_label(flag: str) -> str:
-    required = FEATURE_REQUIREMENTS[flag]
     if flag == "stream":
         return "RC-WEB-001 through RC-WEB-006"
     if flag == "expert":
@@ -357,7 +1839,10 @@ def activation_errors(
         if requested is not True:
             continue
         accepted = FEATURE_ACCEPTED_STATUSES[flag]
-        if any(statuses.get(row_id) not in accepted for row_id in FEATURE_REQUIREMENTS[flag]):
+        if any(
+            statuses.get(row_id) not in accepted
+            for row_id in FEATURE_REQUIREMENTS[flag]
+        ):
             errors.append(f"{flag} requires {_requirement_label(flag)} reviewed")
     return errors
 
@@ -432,14 +1917,18 @@ def validate_local_readiness(value: Any) -> list[str]:
         for item in fixture_ids
     ):
         errors.append("RC-WEB-004 local fixture ids must be bounded metadata")
-    elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(fixture_ids):
-        errors.append("RC-WEB-004 requires three distinct product fixture ids")
+    elif len(fixture_ids) != len(PRODUCT_FIXTURE_IDS) or len(set(fixture_ids)) != len(
+        fixture_ids
+    ):
+        errors.append("RC-WEB-004 requires four distinct product fixture ids")
     elif set(fixture_ids) != set(PRODUCT_FIXTURE_IDS):
         errors.append("RC-WEB-004 product fixture ids are incomplete")
 
     shared_test = entry.get("shared_report_surface_test")
     if shared_test != SHARED_REPORT_SURFACE_TEST.as_posix():
-        errors.append("RC-WEB-004 shared report-surface test is not the Web contract test")
+        errors.append(
+            "RC-WEB-004 shared report-surface test is not the Web contract test"
+        )
     return errors
 
 
@@ -463,66 +1952,116 @@ def _fixture_field_names(value: Any, depth: int = 0) -> set[str]:
     return set()
 
 
-def _load_fixture_json(root: Path, relative: Path, violations: list[str]) -> Any | None:
+def _load_fixture_json(
+    root: RootedDirectory,
+    relative: Path,
+    violations: list[str],
+) -> Any | None:
     text = _read_text(root, relative, violations)
     if text is None:
         return None
     try:
-        return json.loads(text)
-    except (RecursionError, TypeError, ValueError):
+        return loads_strict_json(text)
+    except StrictJsonError:
         violations.append("RC-WEB-004 product fixture JSON is malformed")
         return None
 
 
-def _check_product_fixture(root: Path, fixture_id: str, violations: list[str]) -> None:
+def _check_product_fixture(
+    root: RootedDirectory,
+    fixture_id: str,
+    violations: list[str],
+) -> None:
     payload = _load_fixture_json(root, PRODUCT_FIXTURE_PATHS[fixture_id], violations)
     if not isinstance(payload, dict):
         if payload is not None:
             violations.append("RC-WEB-004 product fixture must be an object")
         return
 
-    if payload.get("fixture_id") != fixture_id:
-        violations.append("RC-WEB-004 product fixture id does not match its allowlist")
     if payload.get("agent") != PRODUCT_FIXTURE_AGENTS[fixture_id]:
         violations.append("RC-WEB-004 product fixture agent slug is not canonical")
     field_names = _fixture_field_names(payload)
     if _FIXTURE_DEPTH_LIMIT_MARKER in field_names:
         violations.append("RC-WEB-004 product fixture nesting exceeds scanner bound")
-    if field_names & _FORBIDDEN_FIXTURE_FIELDS:
-        violations.append("RC-WEB-004 product fixture contains raw or private fields")
+    if field_names & _PRIVATE_DELIVERY_FIELDS:
+        violations.append("RC-WEB-004 product fixture contains private delivery fields")
 
     result = payload.get("result")
     if not isinstance(result, dict):
         violations.append("RC-WEB-004 product fixture result must be an object")
         return
-    final_report = result.get("final_report")
     formatted = result.get("formatted")
     formatted_answer = formatted.get("answer") if isinstance(formatted, dict) else ""
-    if not (
-        isinstance(final_report, str)
-        and final_report.strip()
-        or isinstance(formatted_answer, str)
-        and formatted_answer.strip()
-    ):
-        violations.append("RC-WEB-004 product fixture needs a final report or formatted answer")
-
-    artifacts = result.get("artifacts")
-    if not isinstance(artifacts, list):
-        violations.append("RC-WEB-004 product fixture artifacts must be an explicit list")
+    if not isinstance(formatted_answer, str) or not formatted_answer.strip():
+        violations.append("RC-WEB-004 product fixture needs a formatted answer")
+    if "artifacts" in result:
+        violations.append("RC-WEB-004 product fixture contains legacy artifacts")
         return
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            violations.append("RC-WEB-004 product fixture artifact must be an object")
-            continue
-        if not isinstance(artifact.get("output_dir"), str):
-            violations.append("RC-WEB-004 product fixture artifact directory is missing")
-        paths = artifact.get("paths")
-        if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
-            violations.append("RC-WEB-004 product fixture artifact paths must be a list")
+    execution = result.get("execution")
+    if not isinstance(execution, dict):
+        violations.append("RC-WEB-004 product fixture execution must be an object")
+        return
+    delivery = execution.get("delivery")
+    if not isinstance(delivery, dict):
+        violations.append(
+            "RC-WEB-004 product fixture execution delivery must be an object"
+        )
+        return
+    if delivery.get("schema_version") != 1:
+        violations.append(
+            "RC-WEB-004 product fixture delivery protocol_version must be 1"
+        )
+    if delivery.get("required") is not True or delivery.get("status") != "ready":
+        violations.append(
+            "RC-WEB-004 product fixture delivery must be required and ready"
+        )
+    archive = delivery.get("archive")
+    if not isinstance(archive, dict):
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive must be an object"
+        )
+        return
+    if (
+        archive.get("role") != "result_archive"
+        or archive.get("name") != f"{fixture_id}-results.zip"
+    ):
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive identity is invalid"
+        )
+    if not isinstance(archive.get("size_bytes"), int) or archive["size_bytes"] <= 0:
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive size_bytes is invalid"
+        )
+    download_ref = archive.get("download_ref")
+    if not isinstance(download_ref, str) or not _RESULT_ARCHIVE_REF_RE.fullmatch(
+        download_ref
+    ):
+        violations.append(
+            "RC-WEB-004 product fixture delivery archive download_ref is unsafe"
+        )
+    digest = delivery.get("inventory_digest")
+    if not isinstance(digest, str) or not _RESULT_ARCHIVE_DIGEST_RE.fullmatch(digest):
+        violations.append("RC-WEB-004 product fixture delivery digest is invalid")
+    artifacts = execution.get("artifacts")
+    if not isinstance(artifacts, list):
+        violations.append(
+            "RC-WEB-004 product fixture execution artifacts must be a list"
+        )
+    elif (
+        sum(
+            isinstance(item, dict) and item.get("role") == "result_archive"
+            for item in artifacts
+        )
+        != 0
+    ):
+        violations.append("RC-WEB-004 product fixture must contain exactly one archive")
 
 
 def _check_rc_web_004_local_readiness(
-    root: Path, readiness: Any, rows: Any, violations: list[str]
+    root: RootedDirectory,
+    readiness: Any,
+    rows: Any,
+    violations: list[str],
 ) -> None:
     if not isinstance(readiness, dict):
         return
@@ -541,13 +2080,17 @@ def _check_rc_web_004_local_readiness(
                 violations.append("RC-WEB-004 shared report-surface test is missing")
             for fixture_id in PRODUCT_FIXTURE_IDS:
                 if fixture_id not in source:
-                    violations.append("RC-WEB-004 shared report-surface test lacks product fixture coverage")
+                    violations.append(
+                        "RC-WEB-004 shared report-surface test lacks product fixture coverage"
+                    )
 
     if isinstance(rows, list):
         for row in rows:
             if isinstance(row, dict) and row.get("id") == "RC-WEB-004":
                 if row.get("status") != "External Pending":
-                    violations.append("RC-WEB-004 external status must remain External Pending")
+                    violations.append(
+                        "RC-WEB-004 external status must remain External Pending"
+                    )
                 break
 
 
@@ -640,9 +2183,7 @@ def _mask_yaml_block_scalars(text: str) -> str:
             ):
                 if required is None:
                     block_content_indent = indent
-                output.append(
-                    "".join(char if char in "\r\n" else " " for char in line)
-                )
+                output.append("".join(char if char in "\r\n" else " " for char in line))
                 continue
             block_parent_indent = None
             block_content_indent = None
@@ -662,13 +2203,16 @@ def _mask_yaml_block_scalars(text: str) -> str:
     return "".join(output)
 
 
-def _mask_go_non_code(text: str) -> str:
-    """Mask Go comments and literals while preserving byte offsets and lines."""
+def _scan_go_source(text: str) -> _GoLexicalView | None:
+    """Return a fail-closed lexical mask and brace depth for Go source."""
 
     output = list(text)
+    brace_depths = [0] * (len(text) + 1)
+    brace_depth = 0
     state = "code"
     index = 0
     while index < len(text):
+        brace_depths[index] = brace_depth
         char = text[index]
         if state == "code":
             if text.startswith("//", index):
@@ -684,6 +2228,12 @@ def _mask_go_non_code(text: str) -> str:
             if char in {'"', "'", "`"}:
                 output[index] = " "
                 state = char
+            elif char == "{":
+                brace_depth += 1
+            elif char == "}":
+                if brace_depth == 0:
+                    return None
+                brace_depth -= 1
             index += 1
             continue
 
@@ -706,20 +2256,41 @@ def _mask_go_non_code(text: str) -> str:
             index += 1
             continue
 
-        if state in {'"', "'"} and char == "\\":
+        if state == "`":
+            if char == "`":
+                output[index] = " "
+                state = "code"
+            elif char not in "\r\n":
+                output[index] = " "
+            index += 1
+            continue
+
+        if char == "\\":
             output[index] = " "
-            if index + 1 < len(text):
-                if text[index + 1] not in "\r\n":
-                    output[index + 1] = " "
-                index += 2
-                continue
+            if index + 1 >= len(text) or text[index + 1] in "\r\n":
+                return None
+            brace_depths[index + 1] = brace_depth
+            output[index + 1] = " "
+            index += 2
+            continue
         elif char == state:
             output[index] = " "
             state = "code"
-        elif char not in "\r\n":
+        elif char in "\r\n":
+            return None
+        else:
             output[index] = " "
         index += 1
-    return "".join(output)
+
+    if state not in {"code", "line_comment"} or brace_depth != 0:
+        return None
+    brace_depths[len(text)] = brace_depth
+    return _GoLexicalView("".join(output), tuple(brace_depths))
+
+
+def _mask_go_non_code(text: str) -> str | None:
+    lexical = _scan_go_source(text)
+    return lexical.masked if lexical is not None else None
 
 
 def _strip_go_comments(text: str) -> str:
@@ -767,6 +2338,8 @@ def _strip_go_comments(text: str) -> str:
 
 def _history_function_body(source: str) -> str | None:
     masked = _mask_go_non_code(source)
+    if masked is None:
+        return None
     matches = list(_HISTORY_FUNCTION_RE.finditer(masked))
     if len(matches) != 1:
         return None
@@ -797,37 +2370,17 @@ def _history_default_is_legacy(source: str) -> bool:
 def _check_defaults(source: Mapping[Path, str], violations: list[str]) -> None:
     config = source.get(Path("apps/server/config/app.yml.example"), "")
     config = _mask_yaml_block_scalars(config)
-    matches = list(_CONFIG_FLAG_RE.finditer(config))
-    for key in (
-        "expert_enabled",
-        "stream_enabled",
-        "a2ui_actions_enabled",
-        "research_enabled",
-        "design_enabled",
-        "network_enabled",
-    ):
-        key_matches = [match for match in matches if match.group("key") == key]
-        if len(key_matches) != 1 or key_matches[0].group("value") != "false":
-            violations.append(f"{key} default must be false")
-
     user_store = source.get(Path("apps/web/src/stores/user.ts"), "")
     user_store = _mask_javascript_non_code(user_store)
     expert_matches = list(_EXPERT_DEFAULT_RE.finditer(user_store))
-    if len(expert_matches) != 1 or expert_matches[0].group("value") != "false":
-        violations.append("Web expertEnabled default must be false")
+    if len(expert_matches) != 1 or expert_matches[0].group("value") != "true":
+        violations.append("Web expertEnabled default must be true")
 
     stream_source = source.get(
         Path("apps/web/src/views/chat/composables/useSendMessage.ts"), ""
     )
-    stream_refs = stream_source.count("import.meta.env.VITE_STREAM_ENABLED")
-    explicit_true = len(
-        re.findall(
-            r'import\.meta\.env\.VITE_STREAM_ENABLED\s*===\s*["\']true["\']',
-            stream_source,
-        )
-    )
-    if stream_refs == 0 or stream_refs != explicit_true:
-        violations.append("Web VITE_STREAM_ENABLED must use an explicit true opt-in")
+    if "VITE_STREAM_ENABLED" in stream_source:
+        violations.append("Web VITE_STREAM_ENABLED switch must be removed")
 
     history_source = source.get(
         Path("apps/server/service/api_service/bot_capabilities.go"), ""
@@ -867,7 +2420,9 @@ def validate_matrix(value: Any) -> list[str]:
     errors.extend(validate_local_readiness(local_readiness))
 
     rollback = value.get("rollback")
-    if not isinstance(rollback, list) or any(not isinstance(item, str) for item in rollback):
+    if not isinstance(rollback, list) or any(
+        not isinstance(item, str) for item in rollback
+    ):
         errors.append("activation matrix rollback markers must be a list")
     else:
         if set(ROLLBACK_MARKERS) - set(rollback):
@@ -890,16 +2445,9 @@ def _sanitize_failure(message: str) -> str:
     return compact
 
 
-def check(root: Path) -> list[str]:
-    """Return deterministic, bounded activation violations for ``root``."""
-
-    requested_root = Path(root)
-    if _has_forbidden_part(requested_root):
-        return ["refusing to read out-of-scope activation root"]
-    root = _resolve(requested_root)
-    if root is None or _has_forbidden_part(root):
-        return ["refusing to read out-of-scope activation root"]
+def _check_open_root(root: RootedDirectory) -> list[str]:
     violations: list[str] = []
+    source_binding = _load_bot_source_binding(root, violations)
     matrix_text = _read_text(root, MATRIX_REL, violations)
     if matrix_text is None:
         return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
@@ -921,8 +2469,41 @@ def check(root: Path) -> list[str]:
         text = _read_text(root, relative, violations)
         if text is not None:
             source[relative] = text
+    format_source = _read_text(root, RESEARCH_FORMAT_SOURCE_REL, violations)
+    limit_source = _read_text(root, RESEARCH_LIMIT_SOURCE_REL, violations)
+    contract_source = _read_text(root, RESEARCH_CONTRACT_SOURCE_REL, violations)
+    agent_canonical_source = _read_text(root, AGENT_CANONICAL_SOURCE_REL, violations)
+    agent_map_source = _read_text(root, AGENT_MAP_SOURCE_REL, violations)
+    upload_contract_source = _read_text(root, UPLOAD_CONTRACT_SOURCE_REL, violations)
+    _check_research_input_contract(
+        root,
+        source_binding,
+        format_source,
+        limit_source,
+        contract_source,
+        agent_canonical_source,
+        agent_map_source,
+        upload_contract_source,
+        violations,
+    )
     _check_defaults(source, violations)
     return [_sanitize_failure(item) for item in violations[:MAX_FAILURE_LINES]]
+
+
+def check(root: Path) -> list[str]:
+    """Return deterministic, bounded activation violations for ``root``."""
+
+    requested_root = Path(root)
+    if _has_forbidden_part(requested_root):
+        return ["refusing to read out-of-scope activation root"]
+    try:
+        opened_root = RootedDirectory(requested_root)
+    except OSError:
+        return ["refusing to read out-of-scope activation root"]
+    with opened_root:
+        if _has_forbidden_part(opened_root.path):
+            return ["refusing to read out-of-scope activation root"]
+        return _check_open_root(opened_root)
 
 
 def main(argv: list[str] | None = None) -> int:

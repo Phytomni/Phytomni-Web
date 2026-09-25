@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"phytomni-server/utils"
+
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -115,6 +117,14 @@ func Logger() *zap.Logger {
 	return logger
 }
 
+// ReplaceLoggerForTest swaps the process logger for a test observer.
+// The caller must restore via the returned function.
+func ReplaceLoggerForTest(next *zap.Logger) func() {
+	previous := logger
+	logger = next
+	return func() { logger = previous }
+}
+
 func Flush() {
 	_ = logger.Sync()
 }
@@ -124,5 +134,6 @@ func Sugar() *zap.SugaredLogger {
 }
 
 func SugarContext(ctx context.Context) *zap.SugaredLogger {
-	return logger.Sugar().With("request_id", ctx.Value("x-request-id"))
+	requestID, _ := utils.RequestID(ctx)
+	return logger.Sugar().With("request_id", requestID)
 }

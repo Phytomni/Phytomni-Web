@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { mount } from "@vue/test-utils";
 import { ref } from "vue";
 import { guardEnterSubmit } from "@/views/chat/utils/guardEnterSubmit";
+import { mountWithApp } from "../../../helpers/test-app-context";
 
 const mentionExpose = {
   openHeader: vi.fn(),
@@ -23,7 +23,6 @@ vi.mock("vue-element-plus-x", () => ({
       return {};
     },
   },
-  FilesCard: { name: "FilesCard", template: "<div />" },
 }));
 
 import ChatComposer from "@/views/chat/components/ChatComposer.vue";
@@ -32,20 +31,30 @@ const baseProps = () => ({
   modelValue: "",
   isSending: false,
   chatMode: "instant" as const,
+  instantModeEnabled: true,
   expertModeEnabled: true,
+  modeUsable: true,
   showModeSelector: false,
   fileList: [],
-  rolesTool: ["RAG"],
+  hasBlockingUploads: false,
+  attachmentTargetAvailable: true,
+  attachmentTargetBlocked: false,
   rolesLoading: false,
   hasMessages: false,
-  activeButton: "",
-  getAgentTooltip: (item: string) => item,
+  selectedAgent: "",
+  pickerOptions: [
+    {
+      tool: "ChatAgent",
+      label: "Chat Agent",
+      labelKey: "chat.agents.chatAgent",
+    },
+  ],
 });
 
 describe("guardEnterSubmit at ChatComposer boundary", () => {
   it("swallows Enter in capture phase while mention dropdown is open", async () => {
     mentionExpose.popoverVisible.value = true;
-    const wrapper = mount(ChatComposer, {
+    const wrapper = mountWithApp(ChatComposer, {
       props: baseProps(),
       global: {
         stubs: {

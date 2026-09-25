@@ -4,15 +4,29 @@
     :class="`phy-async-state--${state}`"
     :aria-busy="state === 'loading' ? 'true' : 'false'"
   >
-    <div v-if="state === 'loading'" class="phy-async-state__loading" role="status" aria-live="polite">
+    <div
+      v-if="state === 'loading'"
+      class="phy-async-state__loading"
+      role="status"
+      aria-live="polite"
+    >
       <slot name="loading" />
     </div>
 
-    <div v-else-if="state === 'empty'" class="phy-async-state__empty" role="status" aria-live="polite">
+    <div
+      v-else-if="state === 'empty'"
+      class="phy-async-state__empty"
+      role="status"
+      aria-live="polite"
+    >
       <slot name="empty" />
     </div>
 
-    <div v-else-if="state === 'error'" class="phy-async-state__error" role="alert">
+    <div
+      v-else-if="state === 'error'"
+      class="phy-async-state__error"
+      role="alert"
+    >
       <slot name="error" />
     </div>
 

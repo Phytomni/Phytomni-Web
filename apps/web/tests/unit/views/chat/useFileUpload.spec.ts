@@ -1,92 +1,281 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ref, nextTick } from "vue";
+import {
+  computed,
+  ref,
+  nextTick,
+  type Ref,
+  type WritableComputedRef,
+} from "vue";
+import type {
+  UploadFile as ElementUploadFile,
+  UploadRawFile,
+} from "element-plus";
 import { useFileUpload } from "@/views/chat/composables/useFileUpload";
-import type { ChatComposerHandle } from "@/views/chat/types";
+import type { BotUploadCapability } from "@/api/types";
+import type {
+  ChatComposerHandle,
+  ChatUIState,
+  ResumableUploadItem,
+} from "@/views/chat/types";
+import { buildChatState } from "../../../helpers/chatBuilders";
+import { mustGet } from "../../../helpers/mockFactories";
 
 describe("useFileUpload", () => {
-  let chatState: { fileList: any[] };
-  let fileList: ReturnType<typeof ref<any[]>>;
-  let currentChatId: ReturnType<typeof ref<string>>;
-  let getChatState: (dialogueId: string) => any;
-  let composerRef: ReturnType<typeof ref<ChatComposerHandle | null>>;
-  let scrollToBottom: ReturnType<typeof vi.fn>;
+  let chatState: ChatUIState;
+  let fileList: Ref<ResumableUploadItem[]>;
+  let currentChatId: Ref<string>;
+  let getChatState: (dialogueId: string) => ChatUIState;
+  let composerRef: Ref<ChatComposerHandle | null>;
+  let scrollToBottom: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let onValidationError: ReturnType<typeof vi.fn>;
+  let uploadCapability: Ref<BotUploadCapability>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatState = { fileList: [] };
-    fileList = ref([]);
+    chatState = buildChatState();
+    fileList = ref<ResumableUploadItem[]>([]);
     currentChatId = ref("d1");
-    getChatState = (_dialogueId: string) => chatState;
+    getChatState = () => chatState;
     composerRef = ref({
       openHeader: vi.fn(),
       closeHeader: vi.fn(),
       popoverVisible: false,
     });
-    scrollToBottom = vi.fn();
+    scrollToBottom = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    onValidationError = vi.fn();
+    uploadCapability = ref({
+      enabled: true,
+      protocol: "obs-multipart-v2",
+      upload_origin: "https://upload.example",
+      max_file_bytes: 10 * 1024 ** 3,
+      max_attachments: 64,
+    });
   });
 
-  function makeComposable() {
+  function writableRef<T>(source: Ref<T>): WritableComputedRef<T> {
+    return computed({
+      get: () => source.value,
+      set: (value: T) => {
+        source.value = value;
+      },
+    });
+  }
+
+  function rawFile(name: string, content = "content"): UploadRawFile {
+    return Object.assign(new File([content], name, { type: "text/plain" }), {
+      uid: 1,
+    });
+  }
+
+  function elementFile(
+    name: string,
+    raw: UploadRawFile | undefined,
+    size = raw?.size
+  ): ElementUploadFile {
+    return {
+      name,
+      status: "ready",
+      uid: 1,
+      size,
+      raw,
+    };
+  }
+
+  function uploadItem(
+    file: File,
+    localId = "upload-fixture"
+  ): ResumableUploadItem {
+    return {
+      localId,
+      file,
+      assetId: null,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified,
+      status: "queued",
+      partSize: 0,
+      partCount: 0,
+      receivedParts: [],
+      loadedBytes: 0,
+      speedBytesPerSecond: 0,
+      etaSeconds: null,
+      retryCount: 0,
+      errorCode: null,
+    };
+  }
+
+  function makeComposable(
+    overrides: Partial<Parameters<typeof useFileUpload>[0]> = {}
+  ) {
     return useFileUpload({
-      fileList: fileList as any,
+      fileList: writableRef(fileList),
       currentChatId,
       getChatState,
       composerRef,
       scrollToBottom,
+      uploadCapability,
+      onValidationError,
+      ...overrides,
     });
   }
 
-  it("handleFileChange adds a file to chatState.fileList and calls openHeader", async () => {
-    const { handleFileChange } = makeComposable();
+  function sizedFile(
+    name: string,
+    size: number,
+    type = "application/octet-stream"
+  ): File {
+    const file = new File(["x"], name, { type });
+    Object.defineProperty(file, "size", { value: size });
+    return file;
+  }
 
-    const rawFile = new File(["content"], "a.txt", { type: "text/plain" });
-    handleFileChange({ name: "a.txt", size: 10, type: "text/plain", raw: rawFile });
+  it("adapts picker files into the resumable queue item shape", async () => {
+    const { handleFileChange } = makeComposable();
+    const browserFile = rawFile("a.txt");
+
+    handleFileChange(elementFile("a.txt", browserFile));
 
     expect(chatState.fileList).toHaveLength(1);
-    expect(chatState.fileList[0].name).toBe("a.txt");
-    expect(chatState.fileList[0].size).toBe(10);
-    expect(chatState.fileList[0].type).toBe("text/plain");
-    expect(chatState.fileList[0].file).toBe(rawFile);
-
+    expect(chatState.fileList[0]).toEqual(
+      expect.objectContaining({
+        name: "a.txt",
+        size: browserFile.size,
+        type: "text/plain",
+        file: browserFile,
+        status: "queued",
+      })
+    );
+    expect(chatState.fileList[0]).not.toHaveProperty("purpose");
     await nextTick();
-    expect(composerRef.value!.openHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
-  it("removeFile removes a file from chatState.fileList and calls closeHeader when empty", async () => {
-    const { removeFile } = makeComposable();
+  it("forwards accepted files to the queue without applying an extension allowlist", () => {
+    const queueFiles = vi.fn();
+    const { handlePastedFiles } = makeComposable({ queueFiles });
+    const pasted = sizedFile("reads.fastq.gz", 128, "application/gzip");
 
-    chatState.fileList = [{ name: "b.txt", size: 5, type: "text/plain", file: null }];
+    handlePastedFiles([pasted]);
+
+    expect(queueFiles).toHaveBeenCalledWith([pasted]);
+    expect(chatState.fileList).toHaveLength(0);
+    expect(onValidationError).not.toHaveBeenCalled();
+  });
+
+  it("accepts the inclusive negotiated byte limit and rejects only larger files", () => {
+    const { handlePastedFiles } = makeComposable();
+    uploadCapability.value = {
+      ...uploadCapability.value,
+      max_file_bytes: 2,
+    };
+    const max = uploadCapability.value.max_file_bytes;
+
+    handlePastedFiles([
+      sizedFile("sample.bam", max, "application/octet-stream"),
+    ]);
+    expect(chatState.fileList).toHaveLength(1);
+    expect(onValidationError).not.toHaveBeenCalled();
+
+    chatState.fileList = [];
+    onValidationError.mockClear();
+    handlePastedFiles([sizedFile("sample.bam", max + 1)]);
+    expect(chatState.fileList).toHaveLength(0);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "invalid_size", fileName: "sample.bam" })
+    );
+  });
+
+  it("accepts attachment 64 and rejects attachment 65 for the legacy queue", () => {
+    const { handlePastedFiles } = makeComposable();
+    chatState.fileList = Array.from({ length: 63 }, (_, index) =>
+      uploadItem(sizedFile(`existing-${index}.txt`, 1), `existing-${index}`)
+    );
+
+    handlePastedFiles([sizedFile("attachment-64.txt", 1)]);
+    expect(chatState.fileList).toHaveLength(64);
+    expect(onValidationError).not.toHaveBeenCalled();
+
+    handlePastedFiles([sizedFile("attachment-65.txt", 1)]);
+
+    expect(chatState.fileList).toHaveLength(64);
+    expect(onValidationError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "too_many_files" })
+    );
+  });
+
+  it("lets the resumable queue deduplicate a full draft before count validation", () => {
+    const queueFiles = vi.fn();
+    const duplicate = sizedFile("existing-4.bam", 1, "application/x-bam");
+    chatState.fileList = Array.from(
+      { length: uploadCapability.value.max_attachments },
+      (_, index) =>
+        uploadItem(sizedFile(`existing-${index}.bam`, 1), `existing-${index}`)
+    );
+    const { handlePastedFiles } = makeComposable({ queueFiles });
+
+    handlePastedFiles([duplicate]);
+
+    expect(queueFiles).toHaveBeenCalledWith([duplicate]);
+    expect(onValidationError).not.toHaveBeenCalled();
+  });
+
+  it("removes a queued item and closes the composer when the queue becomes empty", async () => {
+    const { removeFile } = makeComposable();
+    chatState.fileList = [uploadItem(rawFile("b.txt", "12345"))];
 
     removeFile(0);
 
     expect(chatState.fileList).toHaveLength(0);
-
     await nextTick();
-    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").closeHeader
+    ).toHaveBeenCalled();
     expect(scrollToBottom).toHaveBeenCalled();
   });
 
-  it("watch: openHeader when fileList becomes non-empty", async () => {
-    makeComposable();
+  it("uses the supplied remove callback for an engine-owned item", async () => {
+    const removeUpload = vi.fn();
+    const item = uploadItem(rawFile("c.txt"));
+    chatState.fileList = [item];
+    const { removeFile } = makeComposable({ removeUpload });
 
-    fileList.value = [{ name: "c.txt", size: 3, type: "text/plain", file: null }];
-    await nextTick();
+    removeFile(0);
+    await Promise.resolve();
 
-    expect(composerRef.value!.openHeader).toHaveBeenCalled();
+    expect(removeUpload).toHaveBeenCalledWith(item);
+    expect(chatState.fileList).toEqual([item]);
   });
 
-  it("watch: closeHeader when fileList becomes empty", async () => {
-    makeComposable();
+  it("ignores an Element Plus file without a raw browser File", async () => {
+    const { handleFileChange } = makeComposable();
 
-    // First make it non-empty to trigger openHeader
-    fileList.value = [{ name: "d.txt", size: 3, type: "text/plain", file: null }];
+    handleFileChange(elementFile("invalid.txt", undefined, 10));
+
+    expect(chatState.fileList).toHaveLength(0);
     await nextTick();
-    vi.clearAllMocks();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).not.toHaveBeenCalled();
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
 
-    // Now clear it
+  it("keeps the header synchronized with the queue", async () => {
+    makeComposable();
+    fileList.value = [uploadItem(rawFile("d.txt", "123"))];
+    await nextTick();
+    expect(
+      mustGet(composerRef.value, "composer").openHeader
+    ).toHaveBeenCalled();
+
+    vi.clearAllMocks();
     fileList.value = [];
     await nextTick();
-
-    expect(composerRef.value!.closeHeader).toHaveBeenCalled();
+    expect(
+      mustGet(composerRef.value, "composer").closeHeader
+    ).toHaveBeenCalled();
   });
 });

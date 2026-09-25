@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type VueWrapper } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// Real MarkdownViewer / DeepGenome import graphs pull vue-element-plus-x CSS.
+// Real scientific Markdown / DeepGenome import graphs pull vue-element-plus-x CSS.
 vi.mock("vue-element-plus-x", () => ({
+  XMarkdown: { name: "XMarkdown", template: "<div><slot /></div>" },
   Typewriter: { name: "Typewriter", template: "<div></div>" },
   FilesCard: { name: "FilesCard", template: "<div></div>" },
   Prompts: { name: "Prompts", template: "<div></div>" },
@@ -12,7 +13,9 @@ vi.mock("vue-element-plus-x", () => ({
 
 import ChatMessageContent from "@/views/chat/components/ChatMessageContent.vue";
 import type { ChatMessage, ContentBlock } from "@/views/chat/types";
+import type { AgentTaskLifecycle } from "@/api/types";
 import type { A2uiSurfaceActionEvent } from "@/views/chat/composables/useA2uiInteraction";
+import type { ScientificCitationActivation } from "@/utils/scientific-markdown/types";
 import {
   MESSAGE_SHORT_GENERIC,
   MESSAGE_LONG_GENERIC,
@@ -32,9 +35,14 @@ import {
   FIXTURE_REFERENCE_DOC,
 } from "../fixtures/chat";
 import { getSharedMessageFixture } from "../visual/chat/fixture-data";
+import { mountWithApp } from "../helpers/test-app-context";
+import { isCompletedDeepGenomeMessage } from "@/views/chat/utils/artifact-policy";
+import { resetProgressStartedAtForTests } from "@/views/chat/utils/agentProgress";
+import { initBotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import { parseBotProjection } from "@/views/chat/botProjection";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 
@@ -55,7 +63,9 @@ type Branch =
 /** Mirror of the live truthiness gate (empty arrays are truthy). */
 function expectedBranch(message: ChatMessage): Branch {
   const entersBubble =
-    message.role === "user" || (!message.steps && !message.tableHeaders);
+    message.role === "user" ||
+    (message.role === "assistant" && message.tool_name === "DeepGenomeAgent") ||
+    (!message.steps && !message.tableHeaders);
   if (entersBubble) {
     if (
       message.role === "assistant" &&
@@ -75,13 +85,7 @@ function expectedBranch(message: ChatMessage): Branch {
     ) {
       return "digital-design";
     }
-    if (
-      message.role === "assistant" &&
-      message.tool_name === "DeepGenomeAgent" &&
-      message.id &&
-      typeof message.content === "string" &&
-      message.content.trim()
-    ) {
+    if (isCompletedDeepGenomeMessage(message)) {
       return "artifact-preview";
     }
     if (
@@ -118,7 +122,7 @@ function detectBranch(wrapper: VueWrapper): Branch {
   }
   if (wrapper.find(".table-response").exists()) return "table";
   if (wrapper.find(".ai-response").exists()) return "legacy";
-  if (wrapper.find('[data-testid="markdown-viewer"]').exists())
+  if (wrapper.find('[data-testid="scientific-markdown"]').exists())
     return "markdown";
   throw new Error(`Unable to detect branch from: ${wrapper.html()}`);
 }
@@ -127,23 +131,19 @@ const mountContent = (
   message: ChatMessage,
   overrides: Record<string, unknown> = {}
 ) =>
-  mount(ChatMessageContent, {
+  mountWithApp(ChatMessageContent, {
     props: {
       message,
       index: 0,
       isLastMessage: true,
-      artifactPreview:
-        message.tool_name === "DeepGenomeAgent" &&
-        message.id &&
-        typeof message.content === "string" &&
-        message.content.trim()
-          ? {
-              title: "Finished",
-              kind: "Deep Genome Agent",
-              summary: "Deep genome analysis",
-              openLabel: "View",
-            }
-          : null,
+      artifactPreview: isCompletedDeepGenomeMessage(message)
+        ? {
+            title: "Finished",
+            kind: "Deep Genome Agent",
+            summary: "Deep genome analysis",
+            openLabel: "View",
+          }
+        : null,
       geneNetworkImages: EMPTY_IMAGES,
       geneNetworkImagesLoading: EMPTY_LOADING,
       digitalDesignImages: EMPTY_IMAGES,
@@ -155,20 +155,23 @@ const mountContent = (
         StreamMessage: {
           name: "StreamMessage",
           props: ["blocks", "ns", "references"],
-          emits: ["a2ui-action", "a2ui-retry"],
+          emits: ["a2ui-action", "a2ui-retry", "citation-activate"],
           template:
-            '<div data-testid="stream-message" :data-ns="ns === undefined || ns === \'\' ? \'__absent__\' : ns" :data-ref-count="Array.isArray(references) && references.length ? String(references.length) : \'0\'" />',
+            "<div data-testid=\"stream-message\" :data-ns=\"ns === undefined || ns === '' ? '__absent__' : ns\" :data-ref-count=\"Array.isArray(references) && references.length ? String(references.length) : '0'\" />",
         },
         DeepGenomeResultViewer: {
           name: "DeepGenomeResultViewer",
           props: {
             markdown: String,
             references: Array,
+            resources: Array,
             ns: String,
             embedded: Boolean,
+            showActions: Boolean,
+            showReferences: Boolean,
           },
           template:
-            '<div data-testid="deep-genome" :data-ns="ns === undefined ? \'__absent__\' : ns" :data-embedded="embedded ? \'true\' : \'false\'" />',
+            "<div data-testid=\"deep-genome\" :data-ns=\"ns === undefined ? '__absent__' : ns\" :data-embedded=\"embedded ? 'true' : 'false'\" :data-show-actions=\"showActions ? 'true' : 'false'\" :data-show-references=\"showReferences ? 'true' : 'false'\" :data-resource-count=\"Array.isArray(resources) ? String(resources.length) : '0'\" />",
         },
         CitedAnswer: {
           name: "CitedAnswer",
@@ -176,11 +179,18 @@ const mountContent = (
           template:
             '<div data-testid="cited-answer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
         },
-        MarkdownViewer: {
-          name: "MarkdownViewer",
-          props: ["content", "instantMessage", "ns"],
+        ScientificMarkdown: {
+          name: "ScientificMarkdown",
+          props: ["source", "citationNamespace"],
           template:
-            '<div data-testid="markdown-viewer" :data-ns="ns === undefined ? \'__absent__\' : ns" />',
+            '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : citationNamespace">{{ source }}</div>',
+        },
+        ScientificMarkdownTypewriter: {
+          name: "ScientificMarkdownTypewriter",
+          props: ["source", "citationNamespace"],
+          emits: ["finish"],
+          template:
+            '<div data-testid="scientific-markdown" :data-ns="citationNamespace === undefined ? \'__absent__\' : citationNamespace">{{ source }}</div>',
         },
         ElTable: {
           name: "ElTable",
@@ -191,7 +201,17 @@ const mountContent = (
         Loading: true,
       },
       mocks: {
-        $t: (key: string) => key,
+        $t: (key: string) =>
+          ({
+            "chat.lifecycle.preparing": "Preparing",
+            "chat.lifecycle.running": "Running",
+            "chat.lifecycle.succeeded": "Succeeded",
+            "chat.lifecycle.failed": "Failed",
+            "chat.lifecycle.timed_out": "Timed out",
+            "chat.lifecycle.cancelled": "Cancelled",
+            "chat.lifecycle.resultUnavailable":
+              "The task finished, but the report is not yet available.",
+          })[key] || key,
       },
     },
   });
@@ -203,6 +223,408 @@ const block = (text = "hi"): ContentBlock => ({
 });
 
 describe("ChatMessageContent branch selection (truthiness gate)", () => {
+  it("opens a partial projection report despite an empty body and cached running lifecycle", async () => {
+    const wrapper = mountContent(
+      {
+        role: "assistant",
+        id: "42",
+        tool_name: "DeepGenomeAgent",
+        status: "FAILED",
+        content: "",
+        botLifecycle: initBotLifecycleState(),
+        botProjection: parseBotProjection({
+          agent: "DeepGenomeAgent",
+          status: "FAILED",
+          report_revision: 3,
+          final_report: "Server task created: synthetic",
+          intermediate_report: "# Retained science [1]",
+          report: {
+            state: "degraded",
+            degraded: true,
+            source_artifact_count: 2,
+          },
+          report_warning_codes: ["report_synthesis_failed"],
+        }),
+      },
+      {
+        artifactPreview: {
+          title: "Partial report available",
+          kind: "Deep Genome",
+          summary: "",
+          openLabel: "View",
+        },
+      }
+    );
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Partial report available");
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    await wrapper.get(".research-artifact-preview button").trigger("click");
+    expect(wrapper.emitted("open-artifact")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("mounts and downloads a ready archive with no scientific body or View card", async () => {
+    const artifact = {
+      id: "archive-synthetic",
+      name: "design-results.zip",
+      kind: "archive" as const,
+    };
+    const wrapper = mountContent({
+      role: "assistant",
+      id: "43",
+      tool_name: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      content: "",
+      artifacts: [artifact],
+      botProjection: parseBotProjection({
+        agent: "DigitalDesignAgent",
+        status: "SUCCEEDED",
+        report: { state: "degraded", degraded: true, source_artifact_count: 2 },
+        report_warning_codes: ["report_synthesis_failed"],
+        result_archive_v1: true,
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "ready",
+          revision: 1,
+          name: artifact.name,
+          size_bytes: 24,
+          error_code: null,
+          retryable: false,
+        },
+      }),
+    });
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
+      false
+    );
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    await wrapper.get('[data-test="result-archive-download"]').trigger("click");
+    expect(wrapper.emitted("download-result-archive")).toEqual([[artifact]]);
+    expect(wrapper.text()).toContain("Scientific report unavailable");
+    wrapper.unmount();
+  });
+
+  it.each([
+    {
+      error_code: "artifact_listing_failed" as const,
+      retryable: true,
+      retryVisible: true,
+    },
+    {
+      error_code: "archive_inventory_limit_exceeded" as const,
+      retryable: false,
+      retryVisible: true,
+    },
+  ])(
+    "keeps the report visible while archive delivery is $error_code",
+    ({ error_code, retryable, retryVisible }) => {
+      const wrapper = mountContent({
+        role: "assistant",
+        id: `archive-failure-${error_code}`,
+        tool_name: "AnalystAgent",
+        status: "SUCCEEDED",
+        content: "# Valid analysis report\n\nThe report remains available.",
+        delivery: {
+          schema_version: 1,
+          required: true,
+          status: "failed",
+          revision: 2,
+          name: null,
+          size_bytes: null,
+          error_code,
+          retryable,
+        },
+      });
+
+      expect(
+        wrapper.get('[data-testid="scientific-markdown"]').text()
+      ).toContain("Valid analysis report");
+      expect(
+        wrapper.find('[data-test="result-archive-download"]').exists()
+      ).toBe(false);
+      expect(wrapper.find('[data-test="result-archive-retry"]').exists()).toBe(
+        retryVisible
+      );
+      wrapper.unmount();
+    }
+  );
+  const lifecycle = (
+    phase: AgentTaskLifecycle["phase"]
+  ): AgentTaskLifecycle => ({
+    id: 1,
+    phase,
+    terminal: ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(phase),
+    child_task_count: 0,
+    child_work_accepted: false,
+    report_revision: 0,
+    artifact_summary: {
+      image_count: 0,
+      output_directory_count: 0,
+      has_report: false,
+    },
+    reconciliation: "FRESH",
+    tracking_degraded: false,
+    error_code: null,
+  });
+
+  it("uses persisted message status before lifecycle polling attaches", () => {
+    for (const tool_name of [
+      "GeneNetworkAgent",
+      "DigitalDesignAgent",
+    ] as const) {
+      const running = mountContent({
+        role: "assistant",
+        content: "",
+        id: `${tool_name}-status-running`,
+        tool_name,
+        status: "RUNNING",
+      });
+      expect(running.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(running.text()).not.toContain("common.noData");
+
+      const failed = mountContent({
+        role: "assistant",
+        content: "",
+        id: `${tool_name}-status-failed`,
+        tool_name,
+        status: "FAILED",
+      });
+      expect(failed.text()).toContain("Failed");
+      expect(failed.text()).not.toContain("common.noData");
+    }
+  });
+
+  it.each(["TIMEOUT", "TIMED_OUT"])(
+    "renders a Research %s row as timed out without mounting an artifact",
+    (status) => {
+      const wrapper = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `research-${status.toLowerCase()}`,
+          tool_name: "InSilicoResearchAgent",
+          status,
+          doc_list: [],
+        },
+        {
+          artifactPreview: {
+            title: "Finished",
+            kind: "In Silico Research Agent",
+            summary: "Research result",
+            openLabel: "View",
+          },
+        }
+      );
+
+      expect(wrapper.get('[data-test="lifecycle-phase"]').text()).toBe(
+        "Timed out"
+      );
+      expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+      expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain("No references available.");
+      expect(wrapper.text()).not.toContain("Finished");
+      expect(wrapper.text()).not.toContain("Failed");
+    }
+  );
+
+  it("renders lifecycle before specialized-agent artifact emptiness", () => {
+    for (const tool_name of [
+      "GeneNetworkAgent",
+      "DigitalDesignAgent",
+    ] as const) {
+      const preparing = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-preparing`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("PREPARING") }
+      );
+      expect(preparing.text()).toContain("Preparing");
+      expect(preparing.text()).not.toContain("common.noData");
+
+      const failed = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-failed`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("FAILED") }
+      );
+      expect(failed.text()).toContain("Failed");
+      expect(failed.text()).not.toContain("common.noData");
+
+      const cancelled = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-cancelled`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("CANCELLED") }
+      );
+      expect(cancelled.text()).toContain("Cancelled");
+      expect(cancelled.text()).not.toContain("common.noData");
+
+      const report = mountContent(
+        {
+          role: "assistant",
+          content: "partial report",
+          id: `${tool_name}-report`,
+          tool_name,
+        },
+        { lifecycle: lifecycle("RUNNING") }
+      );
+      expect(report.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(
+        report.findComponent({ name: "ScientificMarkdown" }).props("source")
+      ).toBe("partial report");
+
+      const pendingImage = mountContent(
+        { role: "assistant", content: "", id: `${tool_name}-image`, tool_name },
+        {
+          lifecycle: {
+            ...lifecycle("RUNNING"),
+            artifact_summary: {
+              image_count: 1,
+              output_directory_count: 0,
+              has_report: false,
+            },
+          },
+        }
+      );
+      expect(pendingImage.find('[data-test="send-progress"]').exists()).toBe(
+        true
+      );
+      expect(pendingImage.text()).not.toContain("common.noData");
+
+      const imageId = `${tool_name}-success`;
+      const successfulImage = mountContent(
+        { role: "assistant", content: "", id: imageId, tool_name },
+        {
+          lifecycle: lifecycle("SUCCEEDED"),
+          ...(tool_name === "GeneNetworkAgent"
+            ? {
+                geneNetworkImages: {
+                  [imageId]: ["data:image/svg+xml,%3Csvg/%3E"],
+                },
+              }
+            : {
+                digitalDesignImages: {
+                  [imageId]: ["data:image/svg+xml,%3Csvg/%3E"],
+                },
+              }),
+        }
+      );
+      expect(successfulImage.find("img.result-image").exists()).toBe(true);
+
+      const empty = mountContent(
+        { role: "assistant", content: "", id: `${tool_name}-empty`, tool_name },
+        { lifecycle: lifecycle("SUCCEEDED") }
+      );
+      expect(empty.text()).toContain("common.noData");
+
+      const downloadOnly = mountContent(
+        {
+          role: "assistant",
+          content: "",
+          id: `${tool_name}-download`,
+          tool_name,
+        },
+        {
+          lifecycle: {
+            ...lifecycle("SUCCEEDED"),
+            artifact_summary: {
+              image_count: 0,
+              output_directory_count: 1,
+              has_report: false,
+            },
+          },
+        }
+      );
+      expect(downloadOnly.text()).not.toContain("common.noData");
+    }
+  });
+  it("renders a non-blocking degraded context status without replacing the answer", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "Answer remains visible",
+      contextNotice: { rebuilt: false, degraded: true },
+    });
+
+    expect(wrapper.get('[role="status"]').text()).toBe("chat.contextDegraded");
+    expect(
+      wrapper.findComponent({ name: "ScientificMarkdown" }).props("source")
+    ).toBe("Answer remains visible");
+  });
+
+  it("shows a chat-fallback routing notice", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "plain chat answer",
+      tool_name: "ChatAgent",
+      route_reason_code: "CHAT_FALLBACK",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toMatch(
+      /routingFallbackChat|fell back to Chat/
+    );
+  });
+
+  it("shows the selected agent after a successful Expert route", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "knowledge answer",
+      tool_name: "KnowledgeAgent",
+      route_reason_code: "ROUTER_SELECTED",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
+      "Knowledge Agent"
+    );
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).not.toContain(
+      "This turn was answered by"
+    );
+  });
+
+  it("labels the wait card with the known agent before the official answer", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      tool_name: "ReviewAgent",
+      status: "RUNNING",
+    });
+
+    expect(wrapper.get('[data-testid="routing-notice"]').text()).toBe(
+      "Review Agent"
+    );
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+  });
+
+  it("hides routing notices for instant chat", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "instant answer",
+      tool_name: "ChatAgent",
+      route_reason_code: "INSTANT_LOCK",
+    });
+
+    expect(wrapper.find('[data-testid="routing-notice"]').exists()).toBe(false);
+  });
+
+  it("keeps rebuilt-only context notices silent", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "Answer remains visible",
+      contextNotice: { rebuilt: true, degraded: false },
+    });
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+  });
+
   const cases: Array<{ name: string; message: ChatMessage }> = [
     {
       name: "user bubble → markdown",
@@ -211,6 +633,14 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
     {
       name: "assistant plain → markdown",
       message: { role: "assistant", content: "answer", tool_name: "ChatAgent" },
+    },
+    {
+      name: "legacy object content → markdown",
+      message: {
+        role: "assistant",
+        content: { final_answer: "legacy answer", steps: ["retrieve"] },
+        tool_name: "ChatAgent",
+      },
     },
     {
       name: "assistant streaming → stream",
@@ -250,7 +680,7 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
       },
     },
     {
-      name: "DeepGenomeAgent with docs → artifact preview",
+      name: "legacy DeepGenomeAgent with docs → embedded report",
       message: {
         role: "assistant",
         content: "md",
@@ -265,6 +695,15 @@ describe("ChatMessageContent branch selection (truthiness gate)", () => {
         content: "cited body",
         tool_name: "KnowledgeAgent",
         doc_list: [{ title: "Doc" }],
+      },
+    },
+    {
+      name: "ReviewAgent referenced assistant → cited",
+      message: {
+        role: "assistant",
+        content: "review body",
+        tool_name: "ReviewAgent",
+        doc_list: [{ title: "Review source" }],
       },
     },
     {
@@ -401,8 +840,24 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
     });
     expect(detectBranch(wrapper)).toBe("artifact-preview");
     expect(wrapper.find('[data-testid="cited-answer"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
       false
+    );
+  });
+
+  it("formats InSilico artifact labels only on the Chat preview path", () => {
+    const artifactPreview = {
+      title: "Finished",
+      kind: "In Silico Research Agent",
+      summary: "Research report",
+      openLabel: "View",
+    };
+    const wrapper = mountContent(
+      { ...MESSAGE_DEEP_GENOME, tool_name: "InSilicoResearchAgent" },
+      { artifactPreview }
+    );
+    expect(wrapper.get(".research-artifact-preview__kind em").text()).toBe(
+      "In Silico"
     );
   });
 
@@ -420,7 +875,7 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
       const branch = detectBranch(wrapper);
       // Bubble-path generic Markdown must not win over specialized families.
       expect(branch).not.toBe("markdown");
-      // Bubble specialized renderers (not legacy, which embeds MarkdownViewer).
+      // Bubble specialized renderers do not mount the generic renderer.
       if (
         branch === "cited" ||
         branch === "deep-genome" ||
@@ -430,9 +885,9 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
         branch === "digital-design" ||
         branch === "table"
       ) {
-        expect(wrapper.find('[data-testid="markdown-viewer"]').exists()).toBe(
-          false
-        );
+        expect(
+          wrapper.find('[data-testid="scientific-markdown"]').exists()
+        ).toBe(false);
       }
     }
   });
@@ -458,6 +913,193 @@ describe("ChatMessageContent shared Phase 3B fixtures (branch order)", () => {
   });
 });
 
+describe("ChatMessageContent DeepGenome lifecycle presentation", () => {
+  const deepGenomeMessage = (
+    overrides: Partial<ChatMessage> = {}
+  ): ChatMessage => ({
+    role: "assistant",
+    content: "",
+    id: "42",
+    tool_name: "DeepGenomeAgent",
+    ...overrides,
+  });
+
+  it("passes DeepGenome Markdown newlines and literal backslashes unchanged", () => {
+    const content = String.raw`line1
+line2\nline3`;
+    const wrapper = mountContent(deepGenomeMessage({ content }), {
+      artifactPreview: null,
+    });
+
+    expect(
+      wrapper
+        .findComponent({ name: "DeepGenomeResultViewer" })
+        .props("markdown")
+    ).toBe(content);
+  });
+
+  it("renders an anchored task placeholder as preparing without raw content", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ content: "Server task created: child-task-123" })
+    );
+
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
+    expect(wrapper.text()).not.toContain("Server task created");
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
+      false
+    );
+  });
+
+  it("renders a running empty result without viewer or reference fallback", () => {
+    const wrapper = mountContent(deepGenomeMessage({ status: "RUNNING" }));
+
+    expect(wrapper.find('[data-test="progress-label"]').text()).toBe(
+      "Writing the gene background"
+    );
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("No references available.");
+  });
+
+  it("keeps a running cached file report wait-only instead of opening View", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({
+        status: "RUNNING",
+        content: "# Partial report",
+      })
+    );
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Partial report");
+  });
+
+  it("does not promote a running cached file report even when references exist", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({
+        status: "RUNNING",
+        content: "# Partial report",
+        doc_list: [{ title: "Partial source" }],
+      })
+    );
+
+    expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Partial report");
+  });
+
+  it.each([
+    ["FAILED", "Failed"],
+    ["CANCELLED", "Cancelled"],
+  ])("renders a %s partial report as a View candidate", (status, label) => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ status, content: "# Partial report" })
+    );
+
+    expect(wrapper.text()).toContain(label);
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
+
+  it.each([
+    ["FAILED", "Failed"],
+    ["CANCELLED", "Cancelled"],
+  ])(
+    "renders a %s empty result as the terminal label only",
+    (status, label) => {
+      const wrapper = mountContent(deepGenomeMessage({ status }));
+
+      expect(wrapper.text()).toContain(label);
+      expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
+        false
+      );
+    }
+  );
+
+  it("renders a succeeded meaningful report as an artifact preview", () => {
+    const wrapper = mountContent(
+      deepGenomeMessage({ status: "SUCCEEDED", content: "# Final report" })
+    );
+
+    expect(wrapper.find(".research-artifact-preview").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
+
+  it("renders bounded unavailable copy for a succeeded result without a report", () => {
+    const wrapper = mountContent(deepGenomeMessage({ status: "SUCCEEDED" }));
+
+    expect(wrapper.text()).toContain(
+      "The task finished, but the report is not yet available."
+    );
+    expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "active row with steps",
+      status: "RUNNING",
+      label: "Writing the gene background",
+      content: "Server task created: child-task-steps",
+      structure: { steps: ["internal active step"] },
+      hasViewer: false,
+    },
+    {
+      name: "active row with table headers",
+      status: "RUNNING",
+      label: "Writing the gene background",
+      content: "# Partial active report",
+      structure: {
+        tableHeaders: [{ prop: "gene", label: "Gene" }],
+      },
+      hasViewer: false,
+    },
+    {
+      name: "terminal row with steps",
+      status: "FAILED",
+      label: "Failed",
+      content: "# Partial failed report",
+      structure: { steps: ["internal terminal step"] },
+      hasViewer: false,
+    },
+    {
+      name: "terminal row with table headers",
+      status: "CANCELLED",
+      label: "Cancelled",
+      content: "",
+      structure: {
+        tableHeaders: [{ prop: "gene", label: "Gene" }],
+      },
+      hasViewer: false,
+    },
+  ])(
+    "keeps DeepGenome lifecycle precedence for a $name",
+    ({ status, label, content, structure, hasViewer }) => {
+      const wrapper = mountContent(
+        deepGenomeMessage({ status, content, ...structure })
+      );
+
+      expect(wrapper.text()).toContain(label);
+      expect(wrapper.find('[data-testid="deep-genome"]').exists()).toBe(
+        hasViewer
+      );
+      expect(wrapper.find(".table-response").exists()).toBe(false);
+      expect(wrapper.find(".ai-response").exists()).toBe(false);
+      expect(wrapper.find('[data-testid="scientific-markdown"]').exists()).toBe(
+        false
+      );
+      expect(wrapper.text()).not.toContain("Server task created");
+      expect(wrapper.text()).not.toContain("internal active step");
+      expect(wrapper.text()).not.toContain("internal terminal step");
+    }
+  );
+});
+
 describe("ChatMessageContent namespace and message-owned stream context", () => {
   it("does not forward runtime transport props to StreamMessage", () => {
     const transport = async () => undefined;
@@ -473,7 +1115,7 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
           messageId: "142",
           runId: "run-42",
           transport,
-      },
+        },
       },
       { index: 4 }
     );
@@ -517,6 +1159,19 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
     expect(wrapper.emitted("a2ui-retry")).toEqual([["surface-1"]]);
   });
 
+  it("relays streamed citation activation to the owning chat surface", async () => {
+    const wrapper = mountContent(MESSAGE_STREAM_REFS_CAPTURED, { index: 2 });
+    const stream = wrapper.findComponent({ name: "StreamMessage" });
+    const activation: ScientificCitationActivation = {
+      namespace: "m2",
+      indices: [1],
+    };
+
+    await stream.vm.$emit("citation-activate", activation);
+
+    expect(wrapper.emitted("citation-activate")).toEqual([[activation]]);
+  });
+
   it("reference-free streaming fixtures invent no namespace", () => {
     for (const message of [MESSAGE_STREAMING, MESSAGE_INTERLEAVED_STREAMING]) {
       const wrapper = mountContent(message, { index: 5 });
@@ -525,6 +1180,37 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
         wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
       ).toBe("__absent__");
     }
+  });
+
+  it("forwards demo case resources to the inline Deep Genome viewer", () => {
+    const resources = [
+      {
+        id: "tree",
+        name: "Tree Image",
+        kind: "image" as const,
+        markdownHref: "./.out/Os01g0177400/Os01g0177400_tree.png",
+        displayUrl: "/attachments/Os01g0177400/Os01g0177400_tree.png",
+      },
+    ];
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "# Deep Genome Analysis of Os01g0177400\n\nBody",
+      tool_name: "DeepGenomeAgent",
+      doc_list: [{ title: "One" }],
+      resources,
+    });
+
+    expect(detectBranch(wrapper)).toBe("deep-genome");
+    expect(
+      wrapper
+        .find('[data-testid="deep-genome"]')
+        .attributes("data-resource-count")
+    ).toBe("1");
+    expect(
+      wrapper
+        .findComponent({ name: "DeepGenomeResultViewer" })
+        .props("resources")
+    ).toEqual(resources);
   });
 
   it("keeps the DeepGenome full source out of the Chat preview", () => {
@@ -547,18 +1233,97 @@ describe("ChatMessageContent namespace and message-owned stream context", () => 
 
     const plain = mountContent(MESSAGE_SHORT_GENERIC, { index: 9 });
     expect(
-      plain.find('[data-testid="markdown-viewer"]').attributes("data-ns")
-    ).toBe("__absent__");
+      plain.find('[data-testid="scientific-markdown"]').attributes("data-ns")
+    ).toBe("m9");
   });
 
-  it("emits finish from CitedAnswer and MarkdownViewer paths", async () => {
+  it("emits finish from CitedAnswer and ScientificMarkdownTypewriter paths", async () => {
     const cited = mountContent(MESSAGE_CITED);
     await cited.findComponent({ name: "CitedAnswer" }).vm.$emit("finish");
     expect(cited.emitted("finish")).toBeTruthy();
 
-    const md = mountContent(MESSAGE_SHORT_GENERIC);
-    await md.findComponent({ name: "MarkdownViewer" }).vm.$emit("finish");
+    const md = mountContent({ ...MESSAGE_SHORT_GENERIC, instantMessage: true });
+    await md
+      .findComponent({ name: "ScientificMarkdownTypewriter" })
+      .vm.$emit("finish");
     expect(md.emitted("finish")).toBeTruthy();
+  });
+});
+
+describe("ChatMessageContent long-wait stream SendProgress", () => {
+  afterEach(() => {
+    resetProgressStartedAtForTests();
+  });
+
+  it.each(["KnowledgeAgent", "BriefGeneAgent"] as const)(
+    "shows SendProgress for an empty %s stream and hides StreamMessage",
+    (toolName) => {
+      const wrapper = mountContent({
+        role: "assistant",
+        content: "",
+        streaming: true,
+        blocks: [],
+        tool_name: toolName,
+      });
+
+      expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="agent-wait"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(
+        false
+      );
+    }
+  );
+
+  it("keeps SendProgress while a Knowledge stream only has activity steps", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      tool_name: "KnowledgeAgent",
+      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(false);
+  });
+
+  it("hides SendProgress once Knowledge markdown arrives", async () => {
+    const message: ChatMessage = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      tool_name: "KnowledgeAgent",
+      blocks: [{ type: "step", authority: "web", label: "retrieve" }],
+    };
+    const wrapper = mountContent(message);
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(true);
+
+    await wrapper.setProps({
+      message: {
+        ...message,
+        blocks: [
+          { type: "step", authority: "web", label: "retrieve" },
+          block("Leaves senesce in autumn."),
+        ],
+      },
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
+  });
+
+  it("does not put SendProgress on an empty ChatAgent stream", () => {
+    const wrapper = mountContent({
+      role: "assistant",
+      content: "",
+      streaming: true,
+      blocks: [],
+      tool_name: "ChatAgent",
+    });
+
+    expect(wrapper.find('[data-test="send-progress"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="stream-message"]').exists()).toBe(true);
   });
 });
 
@@ -622,9 +1387,10 @@ describe("ChatMessageContent live streaming citations", () => {
   });
 
   /**
-   * Live-session limitation: the Go accumulator does not persist a dedicated
-   * streaming-reference field. After history reload, blocks-bearing messages
-   * without doc_list have no safe citation targets — do not invent rows here.
+   * Live-session limitation: the Go accumulator persists phyto.references into
+   * cited answer JSON {content, doc_list}. After history reload, blocks-bearing
+   * messages without doc_list still have no safe citation targets — do not
+   * invent rows here.
    */
   it("documents history-refresh fixtures as references-unavailable", () => {
     // MESSAGE_STREAMING / interleaved fixtures mimic a reloaded stream without
@@ -637,19 +1403,21 @@ describe("ChatMessageContent live streaming citations", () => {
         wrapper.find('[data-testid="stream-message"]').attributes("data-ns")
       ).toBe("__absent__");
       expect(
-        wrapper.find('[data-testid="stream-message"]').attributes("data-ref-count")
+        wrapper
+          .find('[data-testid="stream-message"]')
+          .attributes("data-ref-count")
       ).toBe("0");
     }
   });
 });
 
 describe("ChatMessageContent integration in chat index", () => {
-  it("is mounted from index.vue and index no longer inlines StreamMessage/CitedAnswer branches", () => {
+  it("is mounted from ChatView.vue and ChatView no longer inlines StreamMessage/CitedAnswer branches", () => {
     expect(CHAT_SOURCE).toContain("<ChatMessageContent");
     expect(CHAT_SOURCE).toMatch(
       /import ChatMessageContent from ["']\.\/components\/ChatMessageContent\.vue["']/
     );
-    // Content renderers live in ChatMessageContent; index keeps log MarkdownViewer only.
+    // Content renderers live in ChatMessageContent; index keeps its log surface only.
     expect(CHAT_SOURCE).not.toMatch(
       /<StreamMessage[\s\S]*:blocks="message\.blocks/
     );
@@ -674,11 +1442,50 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     .map((m) => m[1])
     .join("\n");
 
+  it("hands a persisted DeepGenome row id to the inline viewer for PDF export", () => {
+    expect(CONTENT_SOURCE).toContain(':rendering-file-id="message.id"');
+  });
+
   it("owns internal overflow so wide table/code/image children stay in transcript", () => {
     expect(contentStyles).toMatch(/min-width:\s*0/);
     expect(contentStyles).toMatch(/overflow-x:\s*auto/);
     // Table branch and bubble body both need an overflow owner.
     expect(contentStyles).toMatch(/\.table-response|\.message-text/);
+    expect(contentStyles).toMatch(
+      /\.phy-bubble-user\s*\{[\s\S]*white-space:\s*pre-wrap/
+    );
+    expect(contentStyles).toMatch(
+      /\.phy-bubble-assistant\s*\{[\s\S]*white-space:\s*normal/
+    );
+  });
+
+  it("frames Data Agent tables with a distinct header row", () => {
+    const wrapper = mountContent(MESSAGE_TABLE);
+
+    expect(wrapper.find(".table-response .phy-table-frame").exists()).toBe(
+      true
+    );
+    expect(CONTENT_SOURCE).toContain("humanizeTableHeaderLabel");
+    expect(CONTENT_SOURCE).toContain("chat-table-header-cell");
+    expect(CONTENT_SOURCE).toContain('max-height="min(24rem, 55vh)"');
+    expect(contentStyles).toContain("--el-table-header-bg-color");
+    expect(contentStyles).toContain("font-weight: 650");
+    expect(contentStyles).toContain(
+      "box-shadow: inset 0 -1px 0 var(--phy-color-border-control)"
+    );
+  });
+
+  it("captions Data Agent tables from title or row count", () => {
+    const titled = mountContent({
+      ...MESSAGE_TABLE,
+      tableCaption: "Proteins interacting with Os04g0269100",
+    });
+    expect(titled.get("figcaption").text()).toBe(
+      "Proteins interacting with Os04g0269100"
+    );
+
+    const counted = mountContent({ ...MESSAGE_TABLE, tableCaption: "" });
+    expect(counted.get("figcaption").text()).toBe("2 rows");
   });
 
   it("uses locale-reactive result image alt with one-based index", () => {
@@ -734,10 +1541,8 @@ describe("ChatMessageContent overflow and agent image presentation", () => {
     expect(contentStyles).not.toMatch(
       /box-shadow:\s*0\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.1\)/
     );
-    // Gene image chrome left index.vue — styles live on Content now.
-    expect(CHAT_SOURCE).not.toMatch(
-      /\.gene-network-images\s*\{[\s\S]*#909399/
-    );
+    // Gene image chrome left ChatView.vue — styles live on Content now.
+    expect(CHAT_SOURCE).not.toMatch(/\.gene-network-images\s*\{[\s\S]*#909399/);
   });
 
   it("does not change GeneNetwork image map keys or loading gates", () => {

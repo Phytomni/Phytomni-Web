@@ -11,10 +11,10 @@ policy. It intentionally does **not** duplicate the [README](README.md)
 A polyglot monorepo with **two independently-runnable subprojects** and no
 top-level build. Always `cd` into the subproject first.
 
-| Path          | Stack                                        | Role                                   |
-| ------------- | -------------------------------------------- | -------------------------------------- |
-| `apps/web/`   | Vue 3 + Vite + TypeScript + Element Plus     | Frontend SPA                           |
-| `apps/server/`| Go 1.23 + Gin + GORM (MySQL) + Viper         | Business API + chat relay to Bot       |
+| Path           | Stack                                    | Role                             |
+| -------------- | ---------------------------------------- | -------------------------------- |
+| `apps/web/`    | Vue 3 + Vite + TypeScript + Element Plus | Frontend SPA                     |
+| `apps/server/` | Go 1.23 + Gin + GORM (MySQL) + Viper     | Business API + chat relay to Bot |
 
 ## Setup
 
@@ -39,43 +39,105 @@ See the [README](README.md) for ports, the dev proxy, and troubleshooting.
 
 ## The local gate
 
-Run the full gate before pushing. The pre-commit hook runs the same script, so
-a local pass matches CI (`.github/workflows/ci.yml`):
+Use the entrypoint that matches the scope of the change. The full gate remains
+the CI-equivalent release check; staged and range-scoped gates are intended for
+fast local feedback:
 
 ```bash
 ./scripts/install_git_hooks.sh   # first-time: install the pre-commit hook
-./scripts/validate_web_local.sh  # run the full gate manually
+make precommit                    # staged index; used by pre-commit
+make scoped                       # changed range; local iteration
+make prepush                      # changed range; explicit pre-push opt-in
+make full                         # complete repository gate
+make push                         # git push wrapper; hooks still run
 ```
+
+The hooks are fail-closed. `pre-commit` scans staged files for secrets and
+then runs `make precommit`. `pre-push` runs `make full` by default; setting
+`PHYTOMNI_SCOPED_GATE=1` explicitly opts into `make prepush`, and any other
+value is rejected. The direct equivalent of `make full` is
+`./scripts/validate_web_local.sh`.
+
+These local checks cover the repository-owned gates. They do not prove
+external GitHub required checks, branch-protection policy, CODEOWNERS review,
+Bot-owner acceptance, staging/live smoke evidence, or operations sign-off.
+This quality-toolchain work does not modify Bot, operations, or deployment
+code.
 
 `validate_web_local.sh` runs these G-checks (no G8–G10; the numbering is
 historical):
 
-| Check  | What it enforces                                             |
-| ------ | ----------------------------------------------------------- |
-| `G-1`  | staged/unstaged secret scan                                 |
-| `G0`   | `git diff` whitespace check                                 |
-| `G1`   | `apps/web` `vue-tsc --noEmit` (there is no plain `tsc`)      |
-| `G2`   | `apps/web` eslint (read-only, **no** `--fix`)               |
-| `G3`   | `apps/web` vite build                                       |
-| `G4`   | `apps/server` `go mod tidy`                                 |
-| `G5`   | `apps/server` `gofmt -l` (must be empty)                    |
-| `G6`   | `apps/server` `go vet`                                      |
-| `G7`   | `apps/server` `go build`                                    |
-| `G7.5` | `apps/server` `go test ./...`                               |
-| `G11`  | `apps/web` `SET_LOGIN_STATUS` invariant                     |
-| `G12`  | `apps/web` vitest run + coverage threshold                  |
-| `G13`  | i18n hardcoded-copy scanner (strict mode)                   |
-| `G14`  | frontend visual contract and modality evidence              |
-| `G15`  | A2UI activation-readiness contract                          |
-| `G16`  | Bot/Web compatibility contract                              |
-| `G17`  | activation evidence and external-acceptance boundary        |
+| Check  | What it enforces                                                       |
+| ------ | ---------------------------------------------------------------------- |
+| `G-1`  | staged/unstaged secret scan                                            |
+| `G0`   | `git diff` whitespace check                                            |
+| `G-0`  | exact static-analysis registry and ledger reconciliation               |
+| `G1`   | `apps/web` TypeScript diagnostics through exact reconciliation         |
+| `G2`   | `apps/web` ESLint diagnostics through exact reconciliation (read-only) |
+| `G3`   | `apps/web` vite build                                                  |
+| `G4`   | `apps/server` `go mod tidy`                                            |
+| `G5`   | `apps/server` `gofmt -l` (must be empty)                               |
+| `G6`   | `apps/server` `go vet`                                                 |
+| `G7`   | `apps/server` `go build`                                               |
+| `G7.5` | `apps/server` `go test ./...`                                          |
+| `G11`  | `apps/web` `SET_LOGIN_STATUS` invariant                                |
+| `G12`  | `apps/web` vitest run + coverage threshold                             |
+| `G13`  | i18n hardcoded-copy scanner (strict mode)                              |
+| `G14`  | frontend visual contract and modality evidence                         |
+| `G15`  | A2UI activation-readiness contract                                     |
+| `G16`  | Bot/Web compatibility contract                                         |
+| `G17`  | activation evidence and external-acceptance boundary                   |
 
-> **`npm run lint` is a footgun** — it runs `eslint --fix` over the whole tree
-> and auto-mutates ~80 files. The gate's baseline is `type-check` + `build`; lint
-> a single file with `npx eslint <file> --no-fix`.
+> **Frontend lint commands are explicit:** `npm run lint` performs the exact
+> read-only ESLint reconciliation; `npm run lint:raw` emits diagnostic JSON only;
+> `npm run format:write` is the only broad formatter write command.
 
 G15–G17 are local readiness checks. They do not authorize a production flag
 change or replace Bot-owner, CI, staging/live, or operations acceptance.
+
+### CI job names and required-check recommendation
+
+The workflow publishes six status names, each backed by one shared gate group:
+
+| Job status         | Gate group                                                  |
+| ------------------ | ----------------------------------------------------------- |
+| `hygiene`          | repository hygiene and secret scanning                      |
+| `frontend-static`  | TypeScript, formatting, and ESLint reconciliation           |
+| `frontend-runtime` | frontend build, tests, and coverage                         |
+| `server-static`    | Go module, format, vet, and build checks                    |
+| `server-runtime`   | Go tests, including the race-enabled path                   |
+| `contracts`        | repository, i18n, visual, A2UI, and compatibility contracts |
+
+When branch protection is configured, the recommended required checks are all
+six exact status names above. This checkout does not assert that GitHub branch
+protection, required-check settings, or CODEOWNERS rules are currently active;
+verify those external settings separately.
+
+### Tool versions, cache, and rollback
+
+The supported local and CI baselines are Python 3.12, Node 26, and Go 1.23.
+Frontend dependencies are installed with `npm ci`; Go dependencies are verified
+by the server gate. Repository-downloaded quality tools are pinned and checksum
+verified: ShellCheck `0.10.0`, shfmt `v3.10.0`, actionlint `v1.7.4`, and
+Staticcheck `2025.1.1`.
+
+The runner cache defaults to `.cache/phytomni/<tool>-<version>/<platform>` and
+can be relocated with `QUALITY_RUNNER_CACHE_ROOT`. `QUALITY_RUNNER_OFFLINE=1`
+fails closed when an exact PATH or cache binary is unavailable; a mismatched
+PATH or cached version is never silently accepted. A tool upgrade must change
+the pinned metadata, asset checksum, contract tests, and this documentation in
+one review. If the upgraded gate is not acceptable, restore the prior pinned
+runner metadata and cache key instead of substituting an unpinned binary.
+
+The normal static-analysis gate is the exact reconciliation check. The dormant
+final-audit mode is opt-in and intentionally stricter:
+`python3 scripts/check_static_analysis_exemptions.py --closure`. It evaluates
+all six candidate collectors, requires an explicitly disabled temporary-policy
+flag, and accepts only non-empty exact structural authorizations with no stale,
+unregistered, duplicate, expired, or pending candidate records. When present,
+`.codex/specs/static-analysis-approval-candidates.md` is treated as pending
+evidence until its decisions are resolved; this mode is expected to remain
+blocked while the current approval packet and temporary records are open.
 
 ## Testing
 

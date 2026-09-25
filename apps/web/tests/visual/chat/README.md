@@ -12,9 +12,11 @@ Harness URL shape:
 
 Accepted dimensions:
 
-- `state`: `empty` | `populated` | `attachment` | `sending` | `picker-open` |
+- `state`: `empty` | `empty-cases` | `populated` | `attachment` | `sending` | `picker-open` |
   `picker-search` | `picker-selected` | `sidebar-expanded` | `sidebar-compact` |
-  `sidebar-mobile-closed` | `sidebar-mobile-open`
+  `sidebar-mobile-closed` | `sidebar-mobile-open` | `agent-preview` |
+  `sidebar-compact-explore-open` | `history-title-only` | `history-loading` |
+  `history-empty` | `history-error`
 - `locale`: `en-US` | `zh-CN`
 - `theme`: `light` | `dark`
 
@@ -22,7 +24,7 @@ Unknown state/locale/theme render a fixture error and make evidence invalid —
 there is no silent default.
 
 Harness evidence label: `fixture_source=tests/visual/chat`  
-Authenticated evidence label: `fixture_source=authenticated-route`  
+Authenticated evidence label: `fixture_source=authenticated-route`
 
 Never label harness captures end-to-end. jsdom/Vitest never substitutes for the
 browser geometry check below.
@@ -32,7 +34,8 @@ browser geometry check below.
 `agent-browser eval` cannot both preserve a returned JSON object and throw with
 that same stdout. Always:
 
-1. `measure-geometry.js` — scrolls the transcript owner, awaits two animation
+1. `measure-geometry.js` — selects and scrolls the state-appropriate owner,
+   awaits two animation
    frames, stores `window.__PHY_CHAT_GEOMETRY_RESULT__`, returns the object, and
    does **not** throw solely for `pass=false`.
 2. Save that JSON (`tee` + `test -s`).
@@ -42,12 +45,17 @@ that same stdout. Always:
 
 ### Expected geometry JSON top-level fields
 
-`viewport`, `document`, `root`, `transcript`, `primaryAction`,
-`navigationTrigger`, `composer`, `lastMessage`, `state`, `pass`
+`viewport`, `document`, `root`, `transcript`, `contentStack`, `scrollOwner`,
+`emptyScrollPosition`, `primaryAction`, `navigationTrigger`, `composer`,
+`headerPreferences`, `quickSelectCount`, `caseRegionCount`, `caseLinkCount`, `lastCase`,
+`lastMessage`, `state`, `chatMode`, `pass`
 
 `transcript` includes `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
-`scrollWidth`, and `atBottom`. Rect records include measured edges.
-`lastMessage.present=false` is permitted only when `state="empty"`.
+`scrollWidth`, and `atBottom`. `scrollOwner` reports the state-selected owner,
+including `kind`, `scrollTop`, `scrollHeight`, `clientHeight`, `clientWidth`,
+`scrollWidth`, `atTop`, and `atBottom`. Rect records include measured edges.
+`lastMessage.present=false` is permitted only when `state="empty"`. `chatMode`
+reports the fixture mode (`instant` or `expert`).
 
 ### Safe script return shapes
 
@@ -64,10 +72,51 @@ For each evidence row record at least: viewport, locale, theme, state key,
 path. Harness rows do not need live identity redaction when the visible identity
 is already exact `Synthetic user`.
 
-## Canonical viewports
+## Responsive continuity capture matrix
 
-Repeat capture for each pair: `1440 900`, `1024 768`, `768 1024`, `390 844`.
-Repeat URL/media/evidence names for both locales and both themes.
+| Category                     | CSS viewport | Review identity                               |
+| ---------------------------- | -----------: | --------------------------------------------- |
+| Compact phone                |    `320x568` | iPhone SE / older Android lower bound         |
+| Modern phone                 |    `390x844` | current iPhone / Android                      |
+| Large phone or small tablet  |    `480x800` | unfolded phone / small tablet                 |
+| Tablet                       |   `768x1024` | iPad-class portrait                           |
+| Small desktop boundary below |    `899x768` | compact/mobile boundary below 900px           |
+| Small desktop boundary above |    `900x768` | compact desktop boundary                      |
+| Compact laptop               |   `1024x768` | compact desktop rail                          |
+| Large compact boundary below |   `1199x768` | fluid compact desktop                         |
+| Large compact boundary above |   `1279x768` | compact desktop boundary below 1280px         |
+| Expanded desktop boundary    |   `1280x768` | expanded desktop rail                         |
+| Mainstream laptop            |   `1366x768` | office notebook                               |
+| Large desktop                |  `1920x1080` | full-HD monitor                               |
+| 4K at 150% scaling           |  `2560x1440` | 4K physical display represented in CSS pixels |
+
+The synthetic responsive-continuity matrix is exact and uses only the fixture
+URL above:
+
+- `empty` and `empty-cases`: all 13 listed viewports × 2 locales × 2 themes =
+  104 PNGs and 104 geometry JSON files.
+- `populated`: `320x568`, `768x1024`, `1024x768`, `1440x900`, and `2560x1440`
+  × 2 locales × 2 themes = 20 PNGs and 20 geometry JSON files.
+- `sidebar-mobile-closed` and `sidebar-mobile-open`: `390x844` × 2 locales ×
+  2 themes = 8 PNGs and 8 geometry JSON files.
+- `agent-preview`: `390x844`, `1440x900`, and `2560x1440` × 2 locales × 2
+  themes = 12 PNGs and 12 geometry JSON files.
+- `sidebar-compact-explore-open`: `1024x768` and `1279x768` × 2 locales × 2
+  themes = 8 PNGs and 8 geometry JSON files.
+- `history-title-only`, `history-loading`, `history-empty`, and
+  `history-error`: `390x844`, `768x1024`, `1024x768`, `1920x1080`, and
+  `2560x1440` × 2 locales × 2 themes × 4 states = 80 PNGs and 80 geometry JSON
+  files.
+- Total synthetic review set: exactly 232 PNG files and 232 matching geometry
+  JSON files.
+
+`2560x1440` is the agreed 4K-at-150%-scaling review in CSS pixels; do not
+substitute a `3840x2160` CSS viewport. `empty` proves the top composition and
+visible Composer. `empty-cases` runs the same page at the bottom of the
+empty-state scroll owner and proves the eighth case is reachable. A screenshot
+is invalid unless its geometry JSON passes before capture. The capture script
+cleans the current evidence directory before each run and fails unless both
+exact file counts and every PNG/geometry pair are present.
 
 Evidence filename matrix:
 
@@ -78,6 +127,144 @@ chat__<state>__<W>x<H>__<locale>__<theme>.geometry.json
 
 Closed and open mobile are different exact states — never infer one from the other
 (`sidebar-mobile-closed` / `sidebar-mobile-open`).
+
+The complete matrix can be captured in one deterministic run. Outputs are
+ignored under `.codex/evidence/frontend-v2/responsive-continuity/` and retain
+the evidence label `fixture_source=tests/visual/chat`:
+
+```bash
+./tests/visual/chat/capture-home-matrix.sh
+```
+
+## Focused interaction refinement matrix
+
+The focused capture script in tests/visual/chat remains an additional interaction
+refinement set; it is separate from the 232-file responsive-continuity matrix.
+
+The focused set is 390x844, 1440x900, and 2560x1440 × light/dark × Start New
+selected, Explore Agents selected, Instant selected, autonomous Expert, and
+selected-Agent Expert = 30 PNGs. Every PNG requires matching passing
+geometry/refinement JSON first.
+
+Inspect all 232 responsive-continuity PNGs individually and record
+one filename/result row in the ignored `visual-review-ledger.md`. Check locale,
+theme, one title/header, controls inside the viewport, Footer clearance, Cases
+reachability, Agent order/labels, available workflow media and intentional text-only previews, no horizontal overflow,
+compact disclosure containment, and each history title-only/loading/empty/error
+state. Use `Needs Verification` for unsupported browser modalities; never claim
+authenticated or production acceptance from synthetic captures.
+
+## Unified attachment visual matrix
+
+The attachment harness uses the production `AttachmentChipStrip` component with
+sanitized, non-uploading `ResumableUploadItem` records. It captures these five
+states: `empty` (no attachment), `uploading-detail-open`,
+`mixed-ready-failed-expired`, `ten-files-overflow`, and
+`incompatible-agent-blocked`. Each state is captured at exactly these CSS
+viewport widths in both light and dark themes:
+
+```text
+320 390 480 768 1024 1366 1920 2560 CSS px
+```
+
+The `2560x1440` case is the agreed 4K physical display represented at 150%
+browser scaling in CSS pixels; do not substitute a `3840x2160` CSS viewport.
+The matrix therefore produces exactly 80 PNGs and matching automated geometry
+and attachment-style records.
+
+Start the fixed-port Vite server from Terminal A, then run from `apps/web/`:
+
+```bash
+./tests/visual/chat/capture-upload-matrix.sh
+```
+
+The capture exits before opening a browser if any tracked attachment-audit
+source is dirty or staged; ignored `.codex/evidence` output does not block it.
+The script writes only to the ignored
+`.codex/evidence/frontend-v2/unified-attachments/` directory. Before every
+`screenshot`, `measure-geometry.js` writes an independent geometry record and
+`assert-geometry.js` gates it. `assert-upload-styles.js` then checks page
+overflow, the non-wrapping chip strip, visible editor, detail/editor
+containment and separation, bounded controls, effective focus-ring semantics,
+real (non-fake) progress, and the incompatible-Agent blocked send state.
+Stable selectors are the shared
+`attachment-chip-strip` / `attachment-chip` / `attachment-chip-detail`
+test IDs plus the Composer editor surface (`.chat-composer-body` or its
+textarea/contenteditable child). The script returns automated evidence only; it
+does not claim visual approval. Inspect each PNG individually before adding a
+human review row. The synthetic matrix is not evidence of a live Bot upload or
+10 GiB behavior.
+
+Each geometry record also carries `fixtureSource=tests/visual/chat`, the current
+Git `sourceSha`, the geometry/style script SHA-256 values, and the
+`unified-attachments-v1` `contractSha256`. This provenance makes a geometry
+record auditable against the source that produced it and prevents an upload-style
+JSON copy from masquerading as geometry evidence.
+
+## Agent lifecycle acceptance matrix
+
+The lifecycle harness registers 15 finite, sanitized states separately from the
+long-lived base fixture list: `agent-preparing`, `agent-running-partial`,
+`agent-succeeded-artifacts`, `agent-succeeded-empty`, `agent-failed`,
+`agent-delivery-pending`, `agent-delivery-ready`,
+`agent-delivery-retryable`, `agent-delivery-nonretryable`,
+`review-confirm-fallback`, `analyst-log-pending`, `analyst-log-available`,
+`deep-genome-preparing`, `deep-genome-running-partial`, and
+`deep-genome-succeeded`. They render the production `ChatMessageContent`,
+`ChatActivity`, `ChatAnalystLog`, `ResultArchiveDelivery`, and `ConfirmWidget`
+paths without a network or real task data.
+
+Start the fixed-port Vite server, then run from `apps/web/`:
+
+```bash
+./tests/visual/chat/capture-agent-lifecycle-matrix.sh
+```
+
+The script captures all 15 states at `390x844` and `1440x900` in light and dark
+themes: exactly 60 PNGs, 60 geometry records, and 60 lifecycle-style
+records under the ignored
+`.codex/evidence/frontend-v2/agent-lifecycle/` directory. Geometry and semantic
+style assertions must pass before each screenshot. The style contract checks
+horizontal containment, unclipped controls, visible status or log semantics,
+terminal-only empty copy, and a 24 CSS pixel minimum control target without
+locking exact colors. For the artifact fixture, the capture script also waits
+for at least one successfully decoded artifact image; other states may contain
+no images.
+
+After a successful 60/60/60 capture, the script deterministically regenerates
+the ignored `visual-review-ledger.md` with one schema-complete row per PNG.
+Its geometry result is `PASS` because the script asserted it, while every
+`manual_review` starts as `Pending`; rerunning the matrix deliberately resets
+those human findings. Inspect every final PNG individually before offering any
+human review packet, then update each row to PASS, FAIL, or Needs Verification
+with a concise note. Any FAIL requires a fixture or production-style fix and a
+complete recapture; file counts and automated assertions alone are not visual
+acceptance.
+
+## Accessibility modality evidence
+
+Keyboard, zoom, reduced-motion, and forced-colors checks belong in the
+ignored `modality-review-ledger.md` beside the responsive-continuity captures.
+Use synthetic fixture URLs only; an authenticated row requires the redaction
+protocol above before every snapshot or evaluation. Every row includes the
+fixture, CSS viewport, modality, locale/theme, result (`PASS`, `FAIL`, or
+`Needs Verification`), and an evidence path or exact unsupported boundary.
+
+The focus contract distinguishes keyboard dismissal from pointer dismissal:
+
+- Focusing an Agent preview trigger opens its non-modal dialog. `Escape` and the
+  dialog close button close it and restore focus to that trigger.
+- A pointer outside the trigger and panel closes the preview without stealing
+  focus from the control the user clicked.
+- Opening the mobile drawer moves focus into the drawer. `Escape` or the scrim
+  emits close; once the owner closes the drawer, focus returns to the opener.
+
+For 200% zoom and forced-colors, report `Needs Verification` when the browser
+does not expose a supported zoom or media-emulation API. CSS source inspection
+alone is not a browser pass. Reduced-motion may record a browser `PASS` only
+when the synthetic fixture was loaded with the emulated media preference and
+the capture shows no new layout dependency; otherwise record the boundary as
+`Needs Verification`.
 
 ## Terminal A — fixed Vite (hard stop on strict-port failure)
 
@@ -231,18 +418,18 @@ primary-action visibility, viewport escape, and last-message clearance.
 
 Required viewport pairs (plus the four canonical viewports above):
 
-| Viewport | Route / fixture | Expectation |
-|---|---|---|
-| `599x900` | auth `/chat` + harness when transient | mobile: closed trigger visible; open drawer primary visible |
-| `600x900` | auth `/chat` + harness when transient | same as 599 (still `< 900`) |
-| `899x900` | auth `/chat` + harness when transient | mobile boundary below 900 |
-| `900x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
-| `1279x900` | auth `/chat` + harness when transient | compact desktop; primary action visible |
-| `1280x900` | auth `/chat` + harness when transient | expanded desktop; primary action visible |
-| `1440x900` | canonical | desktop |
-| `1024x768` | canonical | compact |
-| `768x1024` | canonical | mobile pair (closed + open) |
-| `390x844` | canonical | mobile pair (closed + open) |
+| Viewport   | Route / fixture                       | Expectation                                                 |
+| ---------- | ------------------------------------- | ----------------------------------------------------------- |
+| `599x900`  | auth `/chat` + harness when transient | mobile: closed trigger visible; open drawer primary visible |
+| `600x900`  | auth `/chat` + harness when transient | same as 599 (still `< 900`)                                 |
+| `899x900`  | auth `/chat` + harness when transient | mobile boundary below 900                                   |
+| `900x900`  | auth `/chat` + harness when transient | compact desktop; primary action visible                     |
+| `1279x900` | auth `/chat` + harness when transient | compact desktop; primary action visible                     |
+| `1280x900` | auth `/chat` + harness when transient | expanded desktop; primary action visible                    |
+| `1440x900` | canonical                             | desktop                                                     |
+| `1024x768` | canonical                             | compact                                                     |
+| `768x1024` | canonical                             | mobile pair (closed + open)                                 |
+| `390x844`  | canonical                             | mobile pair (closed + open)                                 |
 
 Every PASS row must prove:
 
@@ -276,30 +463,30 @@ Record one row per capture. Geometry PASS requires saved measurement JSON plus
 `assert-geometry.js` exit 0; Blocked/Not Captured leave the wave FAIL (never a
 waiver).
 
-| viewport | locale | theme | state | fixture_source | geometry | identity_redaction | screenshot | notes |
-|---|---|---|---|---|---|---|---|---|
-| 599x900 | en-US | light | empty | authenticated-route / tests/visual/chat | PASS / FAIL / Blocked / Not Captured | dom-only / not-needed-synthetic | path or — | |
-| 600x900 | … | … | … | … | … | … | … | |
-| 899x900 | … | … | … | … | … | … | … | |
-| 900x900 | … | … | … | … | … | … | … | |
-| 1279x900 | … | … | … | … | … | … | … | |
-| 1280x900 | … | … | … | … | … | … | … | |
-| 1440x900 | … | … | … | … | … | … | … | |
-| 1024x768 | … | … | … | … | … | … | … | |
-| 768x1024 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
-| 390x844 | … | … | sidebar-mobile-closed / open | … | … | … | … | pair required |
+| viewport | locale | theme | state                        | fixture_source                          | geometry                             | identity_redaction              | screenshot | notes         |
+| -------- | ------ | ----- | ---------------------------- | --------------------------------------- | ------------------------------------ | ------------------------------- | ---------- | ------------- |
+| 599x900  | en-US  | light | empty                        | authenticated-route / tests/visual/chat | PASS / FAIL / Blocked / Not Captured | dom-only / not-needed-synthetic | path or —  |               |
+| 600x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 899x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 900x900  | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1279x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1280x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1440x900 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 1024x768 | …      | …     | …                            | …                                       | …                                    | …                               | …          |               |
+| 768x1024 | …      | …     | sidebar-mobile-closed / open | …                                       | …                                    | …                               | …          | pair required |
+| 390x844  | …      | …     | sidebar-mobile-closed / open | …                                       | …                                    | …                               | …          | pair required |
 
 Manual assistive / zoom / touch rows (human):
 
-| check | result | notes |
-|---|---|---|
-| 200% zoom | PASS / FAIL / Not Captured | |
-| prefers-reduced-motion | PASS / FAIL / Not Captured | |
-| forced colors | PASS / FAIL / Not Captured | |
-| keyboard-only operation | PASS / FAIL / Not Captured | |
-| screen-reader announcements | PASS / FAIL / Not Captured | |
-| touch actions | PASS / FAIL / Not Captured | |
-| mobile soft-keyboard safe area | PASS / FAIL / Not Captured | |
+| check                          | result                     | notes |
+| ------------------------------ | -------------------------- | ----- |
+| 200% zoom                      | PASS / FAIL / Not Captured |       |
+| prefers-reduced-motion         | PASS / FAIL / Not Captured |       |
+| forced colors                  | PASS / FAIL / Not Captured |       |
+| keyboard-only operation        | PASS / FAIL / Not Captured |       |
+| screen-reader announcements    | PASS / FAIL / Not Captured |       |
+| touch actions                  | PASS / FAIL / Not Captured |       |
+| mobile soft-keyboard safe area | PASS / FAIL / Not Captured |       |
 
 When Vite/Go/Bot are unavailable, mark live geometry and authenticated rows
 `Blocked: services unavailable` / `Not Captured`. Do not invent PASS.

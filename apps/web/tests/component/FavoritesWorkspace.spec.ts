@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
-import { datetimeFormats } from "@/locales/datetime-formats";
-import { formatDisplayDate } from "@/locales/format-display-date";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createTestAppContext } from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   getCollectHistory: vi.fn(),
@@ -22,24 +20,34 @@ vi.mock("@/api/chat", () => ({
   collectHistory: mocks.collectHistory,
 }));
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: mocks.push }) }));
-vi.mock("element-plus", () => ({
-  ElMessage: { success: mocks.success, error: mocks.error },
-}));
+vi.mock("element-plus", async () => {
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
+  return {
+    ...actual,
+    ElMessage: { success: mocks.success, error: mocks.error },
+  };
+});
 
-import FavoritesWorkspace from "@/views/favorites/index.vue";
+import FavoritesWorkspace from "@/views/favorites/FavoritesView.vue";
+
+const FAVORITES_SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/favorites/FavoritesView.vue"),
+  "utf8"
+);
 
 const favoriteRows = [
   {
     id: 17,
     dialogue_id: "rice-dialogue",
     title_query: "Map a long rice flowering-time conversation title",
-    created_at: "2026-07-10T15:30:45.000Z",
+    created_at: "2026-07-10T15:30:45",
   },
   {
     id: 18,
     dialogue_id: "wheat-dialogue",
     title: "Review wheat disease resistance evidence",
-    date: "2026-07-09T15:30:45.000Z",
+    date: "2026-07-09T15:30:45",
   },
 ];
 
@@ -160,22 +168,11 @@ const stubs = {
   ElIcon: { template: "<span><slot /></span>" },
 };
 
-config.global.plugins = [];
-
-const makeI18n = () =>
-  createI18n({
-    legacy: false,
-    locale: "en-US",
-    fallbackLocale: "en-US",
-    messages: { "en-US": enUS, "zh-CN": zhCN },
-    datetimeFormats,
-  });
-
 const mountView = () => {
-  const i18n = makeI18n();
+  const context = createTestAppContext();
   return {
-    i18n,
-    wrapper: mount(FavoritesWorkspace, { global: { plugins: [i18n], stubs } }),
+    i18n: context.i18n,
+    wrapper: context.mount(FavoritesWorkspace, { global: { stubs } }),
   };
 };
 
@@ -194,6 +191,18 @@ describe("Favorites workspace", () => {
     mocks.renameHistory.mockResolvedValue({ code: 200 });
     mocks.collectHistory.mockResolvedValue({ code: 200 });
     vi.spyOn(console, "log").mockImplementation(() => undefined);
+  });
+
+  it("keeps the route shell and rename dialog fluid", () => {
+    expect(FAVORITES_SOURCE).toContain("PhyWorkspaceShell");
+    expect(FAVORITES_SOURCE).toContain("min-width: 0;");
+    expect(FAVORITES_SOURCE).toContain(
+      'width="min(640px, calc(100vw - 24px))"'
+    );
+    expect(FAVORITES_SOURCE).toContain(
+      "max-height: min(720px, calc(100dvh - 32px));"
+    );
+    expect(FAVORITES_SOURCE).toContain("overflow: auto;");
   });
 
   afterEach(() => {
@@ -385,14 +394,10 @@ describe("Favorites workspace", () => {
     const { i18n, wrapper } = mountView();
     await flushPromises();
     const englishDate = wrapper.get(".favorite-date").text();
-    expect(englishDate).toBe(
-      formatDisplayDate(i18n.global.d, favoriteRows[0].created_at, "datetime")
-    );
+    expect(englishDate).toBe("7/10/2026, 3:30 PM");
     i18n.global.locale.value = "zh-CN";
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".favorite-date").text()).toBe(
-      formatDisplayDate(i18n.global.d, favoriteRows[0].created_at, "datetime")
-    );
+    expect(wrapper.get(".favorite-date").text()).toBe("2026/7/10 15:30");
     expect(wrapper.get(".favorite-date").text()).not.toBe(englishDate);
 
     mocks.getCollectHistory.mockResolvedValueOnce({

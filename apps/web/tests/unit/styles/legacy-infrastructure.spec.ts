@@ -6,8 +6,9 @@ const WEB_ROOT = resolve(__dirname, "../../..");
 const SOURCE_ROOT = resolve(WEB_ROOT, "src");
 const SHELL_EXPORTS = resolve(SOURCE_ROOT, "components/shell/index.ts");
 const MAIN_SOURCE = readFileSync(resolve(SOURCE_ROOT, "main.ts"), "utf8");
+const VITE_SOURCE = readFileSync(resolve(WEB_ROOT, "vite.config.mts"), "utf8");
 const VITEST_SOURCE = readFileSync(
-  resolve(WEB_ROOT, "vitest.config.ts"),
+  resolve(WEB_ROOT, "vitest.config.mts"),
   "utf8"
 );
 
@@ -69,5 +70,30 @@ describe("superseded visual infrastructure", () => {
     expect(MAIN_SOURCE).not.toContain("theme.css");
     expect(VITEST_SOURCE).not.toContain("useAgentsPanel.ts");
     expect(VITEST_SOURCE).not.toContain("useSidebarAgents.ts");
+  });
+
+  it("mounts even when the initial locale promise rejects", () => {
+    expect(MAIN_SOURCE).toMatch(
+      /setLanguage\(currentLang\)\.then\([\s\S]*?Failed to initialize the application locale:[\s\S]*?app\.mount\("#app"\)/
+    );
+  });
+
+  it("does not configure the removed Sass JavaScript API", () => {
+    expect(VITE_SOURCE).not.toContain("preprocessorOptions");
+    expect(VITE_SOURCE).not.toContain('api: "modern"');
+  });
+
+  it("keeps the standalone Vitest config on supported APIs", () => {
+    expect(VITEST_SOURCE).not.toMatch(/\bpoolMatchGlobs\b/);
+    expect(VITEST_SOURCE).not.toMatch(/\benvironmentMatchGlobs\b/);
+    expect(VITEST_SOURCE).not.toMatch(
+      /\bdeps\s*:\s*\{\s*(?:inline|external)\b/
+    );
+    expect(VITEST_SOURCE).toContain("plugins: [vue(), vueJsx()]");
+    expect(VITEST_SOURCE).toContain('environment: "happy-dom"');
+    expect(VITEST_SOURCE).toContain('setupFiles: ["./tests/setup.ts"]');
+    expect(VITEST_SOURCE).toContain(
+      '"@": fileURLToPath(new URL("./src", import.meta.url))'
+    );
   });
 });

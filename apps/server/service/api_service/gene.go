@@ -2,14 +2,17 @@ package api_service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
+	"phytomni-server/common"
 	"phytomni-server/common/document_format"
 	rxBot "phytomni-server/external/bot"
 	rxLog "phytomni-server/log"
@@ -19,13 +22,25 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 // gene-example OBS/obsfs layout: md/<GENE>_result.md and img/<GENE>/<file>.
 const (
 	geneObsSubMd  = "md/"
 	geneRelayRoot = "gene-examples/"
+
+	maxConversationArtifactLinks     = 50
+	maxConversationArtifactIDBytes   = 128
+	maxConversationArtifactNameBytes = 255
 )
+
+type ConversationArtifactLink struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	MediaType string `json:"media_type,omitempty"`
+}
 
 // geneObsfsDir returns the configured obsfs mount root if it is a readable
 // directory, else "" (→ caller uses the relay fallback).
@@ -111,14 +126,24 @@ func (ps *Service) fetchGeneFiles(ctx context.Context, title string) ([]*model.G
 		if item == nil {
 			continue
 		}
-		if title != "" {
-			if !strings.Contains(item.SpeciesCode, title) && !strings.Contains(item.GeneId, title) {
-				continue
-			}
+		if !geneMatchesQuery(item, title) {
+			continue
 		}
 		list = append(list, item)
 	}
 	return list, nil
+}
+
+// geneMatchesQuery reports whether a listed gene matches the search box.
+// Comparison is a case-insensitive substring on species code or gene id.
+// An empty query matches every row (the unfiltered list).
+func geneMatchesQuery(item *model.GeneExample, query string) bool {
+	if query == "" {
+		return true
+	}
+	needle := strings.ToLower(query)
+	return strings.Contains(strings.ToLower(item.SpeciesCode), needle) ||
+		strings.Contains(strings.ToLower(item.GeneId), needle)
 }
 
 func parseGeneFile(filename string) *model.GeneExample {
@@ -150,7 +175,18 @@ func parseGeneFile(filename string) *model.GeneExample {
 		// Id, CreatedAt, UpdatedAt, Content, DeleteAt are intentionally omitted.
 	}
 }
-func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.GeneExample, error) {
+func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*common.GeneDetailResponse, error) {
+	bundle, err := loadGeneReportBundle(ctx, fileName)
+	if err != nil {
+		return nil, err
+	}
+	return bundle.report, nil
+}
+
+func loadGeneReportBundle(ctx context.Context, fileName string) (*geneReportBundle, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	safeName, err := utils.CleanUploadFilename(fileName)
 	if err != nil {
 		return nil, err
@@ -161,42 +197,34 @@ func (ps *Service) GeneDetails(ctx context.Context, fileName string) (*model.Gen
 		return nil, errors.New("invalid gene file format")
 	}
 
-	var content []byte
-	if mount := geneObsfsDir(); mount != "" {
-		content, err = os.ReadFile(filepath.Join(mount, geneObsSubMd, safeName))
-		if err != nil {
-			return nil, err
+	bundle := &geneReportBundle{source: geneObjectSource{mount: geneObsfsDir()}}
+	reader, size, err := bundle.source.open(ctx, "md", safeName, geneCuratedID.MatchString(item.GeneId))
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
-	} else {
-		rc, _, rerr := rxBot.NewClient().GetObsObjectStream(ctx, geneRelayRoot+geneObsSubMd+safeName)
-		if rerr != nil {
-			return nil, friendlyRelayErr(rerr)
+		if errors.Is(err, ErrGeneResourceNotFound) {
+			return nil, ErrGeneResourceNotFound
 		}
-		defer rc.Close()
-		content, err = io.ReadAll(rc)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errGeneReportUnavailable
+	}
+	defer reader.Close()
+	content, err := readGeneReportText(ctx, reader, size)
+	if err != nil {
+		return nil, err
 	}
 
-	// The md already carries /api/v1/gene-images/<GENE>/<file> URLs, which the
-	// frontend pipeline passes through untouched — no backend image rewrite.
-	item.Content = string(content)
-	return item, nil
-}
-
-// findObsKeyBySuffix returns the first key (case-insensitive) in the Bot-relayed
-// listing that matches the given suffix.
-func findObsKeyBySuffix(keys []string, suffix string) string {
-	for _, k := range keys {
-		if rxBot.ValidateProjectionOBSPath(k) != nil && !isSafeRelayObjectKey(k) {
-			continue
-		}
-		if strings.HasSuffix(strings.ToLower(k), suffix) {
-			return k
-		}
+	bundle.report, err = buildGeneReport(item, content)
+	if err != nil {
+		return nil, err
 	}
-	return ""
+	if err := bundle.loadManifest(ctx); err != nil {
+		return nil, err
+	}
+	if len(bundle.report.Resources) > maxGeneReferenceIndex {
+		return nil, ErrGeneManifestConflict
+	}
+	return bundle, nil
 }
 
 // friendlyRelayErr translates a Bot relay rejection for an out-of-prefix or
@@ -352,7 +380,251 @@ func relayDownloadURL(obsKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "/api/v1/downloads/relay-file?t=" + url.QueryEscape(token), nil
+	return "/api/v1/downloads/relay-file?token=" + url.QueryEscape(token), nil
+}
+
+func conversationArtifactKind(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".pdf", ".md", ".doc", ".docx", ".html", ".htm":
+		return "report"
+	case ".csv", ".tsv", ".xls", ".xlsx", ".parquet":
+		return "table"
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
+		return "image"
+	case ".cif", ".mmcif", ".pdb":
+		return "cif"
+	case ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz":
+		return "archive"
+	default:
+		return "file"
+	}
+}
+
+func conversationArtifactMediaType(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".pdf":
+		return "application/pdf"
+	case ".md":
+		return "text/markdown"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".html", ".htm":
+		return "text/html"
+	case ".csv":
+		return "text/csv"
+	case ".tsv":
+		return "text/tab-separated-values"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".parquet":
+		return "application/vnd.apache.parquet"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".cif", ".mmcif":
+		return "chemical/x-cif"
+	case ".pdb":
+		return "chemical/x-pdb"
+	case ".zip":
+		return "application/zip"
+	case ".tar":
+		return "application/x-tar"
+	case ".gz", ".tgz":
+		return "application/gzip"
+	case ".bz2":
+		return "application/x-bzip2"
+	case ".xz":
+		return "application/x-xz"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func conversationArtifactID(rowID int64, artifactPath string) string {
+	sum := sha256.Sum256([]byte(strconv.FormatInt(rowID, 10) + "\x00" + artifactPath))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+type conversationArtifact struct {
+	link ConversationArtifactLink
+	path string
+}
+
+func isOpaqueConversationArtifactID(value string) bool {
+	if value == "" || len([]byte(value)) > maxConversationArtifactIDBytes {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			(index > 0 && (char == '.' || char == '_' || char == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func conversationArtifactPathContained(projection BotRunProjection, artifactPath string) bool {
+	if rxBot.ValidateProjectionOBSPath(artifactPath) != nil {
+		return false
+	}
+	directories := append([]string(nil), projection.Artifacts.Directories...)
+	directories = append(directories, projection.Artifacts.OutputDirs...)
+	for _, directory := range directories {
+		if artifactPathWithinPrefix(directory, artifactPath) {
+			return true
+		}
+		if root := rxBot.ResultArchiveRunRoot(directory); root != directory &&
+			artifactPathWithinPrefix(root, artifactPath) {
+			return true
+		}
+	}
+	return false
+}
+
+// conversationArtifacts returns only opaque identity and display metadata for
+// the authenticated owner/dialogue/message row, including failed and
+// historical statuses. It deliberately does not sign or serialize any
+// storage path.
+func (ps *Service) conversationArtifacts(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+) ([]conversationArtifact, error) {
+	var row model.QuestionAgentLog
+	result := model.DB(ctx).Model(&model.QuestionAgentLog{}).
+		Select("id, user_name, dialogue_id, status, bot_projection_json, bot_report_revision").
+		Where(
+			"id = ? AND user_name = ? AND dialogue_id = ? AND delete_at IS NULL",
+			rowID,
+			username,
+			dialogueID,
+		).
+		Take(&row)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+		return nil, ErrConversationArtifactOwnership
+	}
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	projection, err := LoadBotRunProjection(ctx, username, rowID)
+	if err != nil {
+		return nil, err
+	}
+	if projection.ResultArchiveV1 {
+		return resultArchiveConversationArtifact(rowID, projection)
+	}
+	artifacts := make([]conversationArtifact, 0)
+	seen := make(map[string]struct{})
+	for _, artifactPath := range projection.Artifacts.Paths {
+		if len(artifacts) == maxConversationArtifactLinks {
+			break
+		}
+		if _, duplicate := seen[artifactPath]; duplicate {
+			continue
+		}
+		if !conversationArtifactPathContained(projection, artifactPath) {
+			return nil, ErrConversationArtifactOwnership
+		}
+		name := path.Base(artifactPath)
+		if name == "." || name == "/" || name == "" ||
+			len([]byte(name)) > maxConversationArtifactNameBytes {
+			return nil, ErrConversationArtifactOwnership
+		}
+		artifacts = append(artifacts, conversationArtifact{
+			link: ConversationArtifactLink{
+				ID:        conversationArtifactID(rowID, artifactPath),
+				Name:      name,
+				Kind:      conversationArtifactKind(name),
+				MediaType: conversationArtifactMediaType(name),
+			},
+			path: artifactPath,
+		})
+		seen[artifactPath] = struct{}{}
+	}
+	return artifacts, nil
+}
+
+func resultArchiveConversationArtifact(rowID int64, projection BotRunProjection) ([]conversationArtifact, error) {
+	delivery := projection.Delivery
+	if delivery == nil || delivery.Status != "ready" {
+		return []conversationArtifact{}, nil
+	}
+	archiveRef := rxBot.CanonicalResultArchiveRef(delivery.ArchiveRef)
+	if delivery.SchemaVersion != rxBot.ResultArchiveProtocolVersion || !delivery.Required ||
+		delivery.ArchiveSize <= 0 || delivery.ArchiveName == "" || archiveRef == "" ||
+		path.Base(archiveRef) != delivery.ArchiveName ||
+		len([]byte(delivery.ArchiveName)) > maxConversationArtifactNameBytes ||
+		conversationArtifactKind(delivery.ArchiveName) != "archive" ||
+		!conversationArtifactPathContained(projection, archiveRef) {
+		return []conversationArtifact{}, nil
+	}
+	return []conversationArtifact{{
+		link: ConversationArtifactLink{
+			ID:        conversationArtifactID(rowID, archiveRef),
+			Name:      delivery.ArchiveName,
+			Kind:      "archive",
+			MediaType: conversationArtifactMediaType(delivery.ArchiveName),
+		},
+		path: archiveRef,
+	}}, nil
+}
+
+func (ps *Service) conversationArtifactLinks(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+) ([]ConversationArtifactLink, error) {
+	artifacts, err := ps.conversationArtifacts(ctx, username, dialogueID, rowID)
+	if err != nil {
+		return nil, err
+	}
+	links := make([]ConversationArtifactLink, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		links = append(links, artifact.link)
+	}
+	return links, nil
+}
+
+// ConversationArtifactDownloadURL authorizes a browser click against the
+// current owner/dialogue/message row and mints a fresh relay URL only after
+// resolving the exact opaque artifact ID to a contained projection path.
+func (ps *Service) ConversationArtifactDownloadURL(
+	ctx context.Context,
+	username string,
+	dialogueID string,
+	rowID int64,
+	artifactID string,
+) (string, error) {
+	if !isOpaqueConversationArtifactID(artifactID) {
+		return "", ErrConversationArtifactOwnership
+	}
+	artifacts, err := ps.conversationArtifacts(ctx, username, dialogueID, rowID)
+	if err != nil {
+		return "", err
+	}
+	for _, artifact := range artifacts {
+		if artifact.link.ID == artifactID {
+			return relayDownloadURL(artifact.path)
+		}
+	}
+	return "", ErrConversationArtifactOwnership
 }
 
 func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, obsPath string) (string, error) {
@@ -370,18 +642,43 @@ func (ps *Service) DownloadAnalystAgentObsFile(ctx context.Context, username, ob
 	if err != nil {
 		return "", friendlyRelayErr(err)
 	}
-	zipKey := ""
+	downloadKey := pickAnalystDownloadKey(obsPath, keys)
+	if downloadKey == "" {
+		return "", errors.New("no downloadable file found in the specified directory")
+	}
+	return relayDownloadURL(downloadKey)
+}
+
+func pickAnalystDownloadKey(obsPath string, keys []string) string {
+	var zipKey, reportKey, fallback string
 	for _, candidate := range keys {
-		if !strings.HasSuffix(strings.ToLower(candidate), ".zip") || !artifactPathWithinPrefix(obsPath, candidate) {
+		if !artifactPathWithinPrefix(obsPath, candidate) {
 			continue
 		}
-		zipKey = candidate
-		break
+		name := strings.ToLower(path.Base(candidate))
+		if name == "" || name == "." || name == "/" || strings.HasSuffix(candidate, "/") {
+			continue
+		}
+		if name == ".phytomni-artifacts.json" {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(name, ".zip") && zipKey == "":
+			zipKey = candidate
+		case reportKey == "" && (name == "final_report.txt" || strings.HasSuffix(name, ".md")):
+			reportKey = candidate
+		}
+		if fallback == "" {
+			fallback = candidate
+		}
 	}
-	if zipKey == "" {
-		return "", errors.New("no zip file found in the specified directory")
+	if zipKey != "" {
+		return zipKey
 	}
-	return relayDownloadURL(zipKey)
+	if reportKey != "" {
+		return reportKey
+	}
+	return fallback
 }
 
 func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, obsPath string) ([]string, error) {
@@ -408,11 +705,16 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 		}
 	}
 	if len(keys) == 0 {
-		// Legacy row or empty image_paths: fall back to prefix enumeration (preserves current behaviour).
+		// Legacy row or empty image_paths: fall back to prefix enumeration.
+		// Chat auto-fetches this gallery; a relay 400/403 (unservable or
+		// unallocated test dump) is "no images", not a user-facing 500.
 		var err error
 		client := rxBot.NewClient()
 		keys, err = listObsKeysCached(ctx, client, obsPath, row.Status == statusSucceeded)
 		if err != nil {
+			if rxBot.IsLegacyPathErr(err) {
+				return []string{}, nil
+			}
 			return nil, friendlyRelayErr(err)
 		}
 	}
@@ -444,21 +746,60 @@ func (ps *Service) DownloadAnalystAgentObsImages(ctx context.Context, username, 
 	}
 
 	if len(imageUrls) == 0 {
-		return nil, errors.New("no png image file found in the specified directory")
+		return []string{}, nil
 	}
 
 	return imageUrls, nil
 }
 
-func (ps *Service) DownloadObsRenderingFile(ctx context.Context, id int, format string) ([]byte, string, error) {
+var (
+	ErrRenderingDownloadUnauthorized = errors.New("rendering download requires an authenticated owner")
+	ErrRenderingDownloadNotFound     = errors.New("rendering download not found")
+)
+
+func (ps *Service) DownloadObsRenderingFile(ctx context.Context, username string, id int, format string) ([]byte, string, error) {
+	if strings.TrimSpace(username) == "" {
+		return nil, "", ErrRenderingDownloadUnauthorized
+	}
+	if id <= 0 {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
 
 	var questionAgentLog *model.QuestionAgentLog
 	db := model.DB(ctx).Model(&model.QuestionAgentLog{})
 
-	if err := db.Where("id = ?", id).First(&questionAgentLog).Error; err != nil {
+	// Conversation deletion tombstones only the root, so a live child must
+	// still belong to a live root owned by the same user and dialogue.
+	err := db.Where("id = ? AND user_name = ? AND delete_at IS NULL", id, username).
+		Where(`(f_id = 0 OR EXISTS (
+			SELECT 1 FROM question_agent_logs AS conversation_root
+			WHERE conversation_root.id = question_agent_logs.f_id
+				AND conversation_root.f_id = 0
+				AND conversation_root.user_name = question_agent_logs.user_name
+				AND conversation_root.dialogue_id = question_agent_logs.dialogue_id
+				AND conversation_root.delete_at IS NULL
+		))`).First(&questionAgentLog).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", ErrRenderingDownloadNotFound
+	}
+	if err != nil {
 		return nil, "", err
 	}
-	agent, err := document_format.NewAgent(questionAgentLog.ToolName)
+	if strings.TrimSpace(questionAgentLog.BotRunId) != "" {
+		projection, err := LoadBotRunProjection(ctx, username, questionAgentLog.Id)
+		if err != nil {
+			return nil, "", err
+		}
+		if projection.RunID == questionAgentLog.BotRunId {
+			if _, err := applyBotProjectionToHistoryRow(questionAgentLog, projection); err != nil {
+				return nil, "", err
+			}
+		}
+	}
+	agent, err := document_format.NewAgentWithOptions(questionAgentLog.ToolName, document_format.AgentOptions{
+		FetchImage: newDocumentImageFetcher(ctx, questionAgentLog),
+		FontDir:    viper.GetString("document_export.font_dir"),
+	})
 	if err != nil {
 		return nil, "", err
 	}

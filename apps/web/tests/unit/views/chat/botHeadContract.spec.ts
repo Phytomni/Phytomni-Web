@@ -10,7 +10,7 @@ const manifestPath = resolve(
   "tests/fixtures/bot-head/contract-manifest.json"
 );
 
-const releaseSha = "e0c296e6773f6638bac57a181bc727fd97c8a9fb";
+const releaseSha = "38349aab1f6e2d65c286723beb3e5a426027e77a";
 const releaseSlugs = [
   "chat",
   "knowledge",
@@ -40,13 +40,36 @@ const fixtureIds = [
   "degraded_tracking",
   "deep_genome_revision",
   "review_input_required",
+  "conversation_context_v1",
 ];
+const archiveFixtures = {
+  analyst: {
+    path: "apps/server/external/bot/testdata/head/analyst_terminal.json",
+    sha256: "b82b7809bdea88f023e90132a4a361386a3134f01b2b0766356209bdaf379ad8",
+  },
+  research: {
+    path: "apps/server/external/bot/testdata/head/research_terminal.json",
+    sha256: "9655b1e1b677b36b75a46ced3169456f2ef0db0a457205896803b1a9da5d8d26",
+  },
+  network: {
+    path: "apps/server/external/bot/testdata/head/network_terminal.json",
+    sha256: "ce1cda9d84b7f730715fb9f500c6bc71127ab1fc94aa34b03ed0c36340999f53",
+  },
+  design: {
+    path: "apps/server/external/bot/testdata/head/design_terminal.json",
+    sha256: "43c9628ec27920b52f416c0d6b6056417e28ef0a48910fb810bc18b7c0e1bda2",
+  },
+};
 
 type ContractManifest = {
   schema_version: number;
   bot_commit: string;
   required_agents: string[];
   fixtures: string[];
+  result_archive_v1: {
+    protocol_version: number;
+    fixtures: typeof archiveFixtures;
+  };
 };
 
 function readManifest(): ContractManifest {
@@ -54,14 +77,16 @@ function readManifest(): ContractManifest {
 }
 
 describe("Bot HEAD compatibility contract", () => {
-  it("pins the release SHA, exact ten slugs, and required fixture IDs", () => {
+  it("pins the release SHA, ten slugs, fixture IDs, and archive hashes", () => {
     const manifest = readManifest();
-    expect(manifest.schema_version).toBe(1);
+    expect(manifest.schema_version).toBe(2);
     expect(manifest.bot_commit).toBe(releaseSha);
     expect(manifest.required_agents).toEqual(releaseSlugs);
     expect(new Set(manifest.required_agents).size).toBe(releaseSlugs.length);
     expect(manifest.fixtures).toEqual(fixtureIds);
     expect(new Set(manifest.fixtures).size).toBe(fixtureIds.length);
+    expect(manifest.result_archive_v1.protocol_version).toBe(1);
+    expect(manifest.result_archive_v1.fixtures).toEqual(archiveFixtures);
   });
 
   it("keeps the Web canonical tool map aligned with the ten release agents", () => {
@@ -72,14 +97,16 @@ describe("Bot HEAD compatibility contract", () => {
   it("keeps fixture entries as IDs rather than raw provider payloads", () => {
     const manifest = readManifest();
     expect(Object.keys(manifest).sort()).toEqual([
+      "activation_source_binding",
       "bot_commit",
       "fixtures",
       "required_agents",
+      "result_archive_v1",
       "schema_version",
     ]);
-    expect(manifest.fixtures.every((fixtureId) => typeof fixtureId === "string")).toBe(
-      true
-    );
+    expect(
+      manifest.fixtures.every((fixtureId) => typeof fixtureId === "string")
+    ).toBe(true);
     expect(JSON.stringify(manifest)).not.toContain("payload");
     expect(JSON.stringify(manifest)).not.toContain("traceback");
   });
@@ -94,21 +121,22 @@ describe("Bot HEAD compatibility contract", () => {
       "stream_enabled",
       "a2ui_actions_enabled",
     ]) {
-      expect(config).toMatch(new RegExp(`^\\s*${key}: false\\b`, "m"));
+      expect(config).not.toMatch(new RegExp(`^\\s*${key}:`, "m"));
     }
 
     const userStore = readFileSync(
       resolve(repoRoot, "apps/web/src/stores/user.ts"),
       "utf8"
     );
-    expect(userStore).toMatch(/^\s*expertEnabled: false\b/m);
+    expect(userStore).toMatch(/^\s*expertEnabled: true\b/m);
 
     const sendMessage = readFileSync(
-      resolve(repoRoot, "apps/web/src/views/chat/composables/useSendMessage.ts"),
+      resolve(
+        repoRoot,
+        "apps/web/src/views/chat/composables/useSendMessage.ts"
+      ),
       "utf8"
     );
-    expect(sendMessage).toContain(
-      'import.meta.env.VITE_STREAM_ENABLED === "true"'
-    );
+    expect(sendMessage).not.toContain("VITE_STREAM_ENABLED");
   });
 });

@@ -8,11 +8,127 @@ import {
   MAX_BOT_FAILURES,
   MAX_BOT_FAILURE_LENGTH,
   MAX_BOT_REPORT_LENGTH,
+  MAX_BOT_WORK_STAGE_LENGTH,
   parseBotProjection,
   visibleBotReport,
 } from "@/views/chat/botProjection";
 
 describe("parseBotProjection", () => {
+  it("does not classify an answer as final from SUCCEEDED alone", () => {
+    const projection = parseBotProjection({
+      agent: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      answer: "# Retained science",
+    });
+    expect(projection.finalReport).toBe("");
+    expect(visibleBotReport(projection)).toBe("# Retained science");
+  });
+  it("retains bounded report facts and only recognized warning codes", () => {
+    const parsed = parseBotProjection({
+      report: {
+        state: "degraded",
+        degraded: true,
+        source_artifact_count: 1e9,
+        private: "secret",
+      },
+      report_warning_codes: [
+        "report_synthesis_failed",
+        "private provider text",
+        "report_synthesis_failed",
+      ],
+    });
+    expect(parsed.report).toEqual({
+      state: "degraded",
+      degraded: true,
+      sourceArtifactCount: 1e9,
+    });
+    expect(parsed.reportWarningCodes).toEqual(["report_synthesis_failed"]);
+    expect(JSON.stringify(parsed)).not.toContain("private");
+    expect(parseBotProjection(parsed).report).toEqual(parsed.report);
+    expect(parseBotProjection({}).reportWarningCodes).toBeUndefined();
+    expect(
+      parseBotProjection({ report_warning_codes: [] }).reportWarningCodes
+    ).toEqual([]);
+  });
+
+  it.each([
+    { state: "complete", degraded: false, source_artifact_count: 0 },
+    { state: "final", degraded: "false", source_artifact_count: 0 },
+    { state: "final", degraded: false, source_artifact_count: -1 },
+    { state: "final", degraded: false, source_artifact_count: 1e9 + 1 },
+    { state: "final", degraded: false, source_artifact_count: 1.5 },
+  ])("rejects malformed report descriptor %j", (report) => {
+    expect(() => parseBotProjection({ report })).toThrow(/report/);
+  });
+
+  it("rejects malformed or excessive warning lists", () => {
+    for (const report_warning_codes of [
+      "report_synthesis_failed",
+      [3],
+      Array(65).fill("report_synthesis_failed"),
+    ]) {
+      expect(() => parseBotProjection({ report_warning_codes })).toThrow(
+        /report_warning_codes/
+      );
+    }
+  });
+  it.each([
+    "input_resolution",
+    "planning",
+    "execution",
+    "report_assembly",
+  ] as const)("accepts the finite work stage %s", (workStage) => {
+    expect(
+      parseBotProjection({ status: "RUNNING", work_stage: workStage }).workStage
+    ).toBe(workStage);
+  });
+
+  it("rejects unknown and overlong work stages", () => {
+    expect(() =>
+      parseBotProjection({ status: "RUNNING", work_stage: "unknown" })
+    ).toThrow(/work_stage/);
+    expect(() =>
+      parseBotProjection({
+        status: "RUNNING",
+        work_stage: "x".repeat(MAX_BOT_WORK_STAGE_LENGTH + 1),
+      })
+    ).toThrow(/work_stage/);
+  });
+
+  it("keeps a legacy RUNNING projection generic when work stage is absent", () => {
+    const projection = parseBotProjection({ status: "RUNNING" });
+    expect(projection.status).toBe("RUNNING");
+    expect(projection.workStage).toBeNull();
+  });
+
+  it("reads current Bot formatted.metadata.deep_genome when top-level report fields are absent", () => {
+    const projection = parseBotProjection({
+      status: "RUNNING",
+      agent: "deep_genome",
+      answer: "# BriefGene",
+      result: {
+        formatted: {
+          answer: "# BriefGene",
+          metadata: {
+            deep_genome: {
+              stage: "intermediate",
+              completeness: "partial",
+              revision: 23,
+              updated_at: "2026-08-16T13:55:24Z",
+              progress: { brief_gene_status: "succeeded", total: 12 },
+              degraded: false,
+            },
+          },
+        },
+      },
+    });
+
+    expect(projection.reportStage).toBe("intermediate");
+    expect(projection.reportCompleteness).toBe("partial");
+    expect(projection.reportRevision).toBe(23);
+    expect(visibleBotReport(projection)).toBe("# BriefGene");
+  });
+
   it("prefers final report and keeps revision metadata", () => {
     const projection = parseBotProjection(intermediateFixture);
 
@@ -190,6 +306,84 @@ describe("parseBotProjection", () => {
     ).toThrow(/artifact/);
   });
 
+  it("keeps browser-authorized links out of the legacy OBS projection", () => {
+    const projection = parseBotProjection({
+      status: "SUCCEEDED",
+      answer: "saved",
+      artifacts: [
+        {
+          id: "artifact-1",
+          name: "report.pdf",
+          kind: "report",
+          download_url: "/api/v1/downloads/relay-file?token=signed-token",
+        },
+      ],
+    });
+
+    expect(projection.artifacts).toEqual([]);
+    expect(JSON.stringify(projection)).not.toContain("signed-token");
+  });
+
+  it("retains bounded v1 delivery but drops raw artifact paths", () => {
+    const projection = parseBotProjection({
+      agent: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      result_archive_v1: true,
+      delivery: {
+        schema_version: 1,
+        required: true,
+        status: "ready",
+        revision: 1,
+        name: "research-results.zip",
+        size_bytes: 1024,
+        error_code: null,
+        retryable: false,
+      },
+      artifacts: [
+        {
+          output_dir: "/obs/private/research",
+          paths: ["/obs/private/research/results.tsv"],
+        },
+      ],
+    });
+
+    expect(projection.resultArchiveV1).toBe(true);
+    expect(projection.delivery?.name).toBe("research-results.zip");
+    expect(projection.artifacts).toEqual([]);
+    expect(JSON.stringify(projection)).not.toContain("/obs/private");
+  });
+
+  it("reads the query/history archive contract without treating conversation links as OBS paths", () => {
+    const projection = parseBotProjection({
+      tool_name: "DigitalDesignAgent",
+      status: "SUCCEEDED",
+      answer: "design answer",
+      result_archive_v1: true,
+      delivery: {
+        schema_version: 1,
+        required: true,
+        status: "ready",
+        revision: 1,
+        name: "design-results.zip",
+        size_bytes: 4097,
+        error_code: null,
+        retryable: false,
+      },
+      artifacts: [
+        {
+          id: "opaque-archive",
+          name: "design-results.zip",
+          kind: "archive",
+          media_type: "application/zip",
+        },
+      ],
+    });
+
+    expect(projection.resultArchiveV1).toBe(true);
+    expect(projection.delivery?.name).toBe("design-results.zip");
+    expect(projection.artifacts).toEqual([]);
+  });
+
   it("rejects non-objects and oversized bounded values", () => {
     expect(() => parseBotProjection(null)).toThrow(/object/);
     expect(() => parseBotProjection([])).toThrow(/object/);
@@ -211,6 +405,7 @@ describe("parseBotProjection", () => {
   it("does not retain unknown raw payload fields", () => {
     const projection = parseBotProjection({
       bot_run_id: "run-safe",
+      agent: "InSilicoResearchAgent",
       status: "succeeded",
       answer: "# Safe",
       raw: { phytomni_state: "secret" },
@@ -220,16 +415,55 @@ describe("parseBotProjection", () => {
     expect(projection).toEqual(
       expect.objectContaining({
         runId: "run-safe",
-        finalReport: "# Safe",
-        intermediateReport: "",
+        finalReport: "",
+        intermediateReport: "# Safe",
       })
     );
     expect(JSON.stringify(projection)).not.toContain("phytomni_state");
     expect(JSON.stringify(projection)).not.toContain("provider_trace");
   });
 
-  it("falls back to answer when reports contain only whitespace", () => {
+  it("does not promote a cited Knowledge answer into a report", () => {
+    const raw = '{"content":"No matching evidence was found.","doc_list":[]}';
     const projection = parseBotProjection({
+      agent: "KnowledgeAgent",
+      status: "SUCCEEDED",
+      answer: raw,
+    });
+
+    expect(projection.reportPresentation).toBe(false);
+    expect(projection.intermediateReport).toBe("");
+    expect(projection.finalReport).toBe("");
+    expect(visibleBotReport(projection)).toBe("");
+  });
+
+  it("preserves unclassified analyst-class answer text without claiming a final report", () => {
+    const projection = parseBotProjection({
+      agent: "InSilicoResearchAgent",
+      status: "SUCCEEDED",
+      answer: "# Compatibility report",
+    });
+
+    expect(projection.reportPresentation).toBe(true);
+    expect(projection.finalReport).toBe("");
+    expect(projection.intermediateReport).toBe("# Compatibility report");
+  });
+
+  it("treats an explicit final report as report presentation", () => {
+    const projection = parseBotProjection({
+      agent: "ReviewAgent",
+      status: "SUCCEEDED",
+      answer: "Compact answer",
+      final_report: "# Explicit report",
+    });
+
+    expect(projection.reportPresentation).toBe(true);
+    expect(projection.finalReport).toBe("# Explicit report");
+  });
+
+  it("falls back to an analyst-class answer when reports contain only whitespace", () => {
+    const projection = parseBotProjection({
+      agent: "AnalystAgent",
       status: "SUCCEEDED",
       answer: "# Answer fallback",
       intermediate_report: "\n  ",

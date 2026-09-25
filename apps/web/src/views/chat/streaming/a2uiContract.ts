@@ -45,8 +45,8 @@ type A2uiOpenConfirmSurface = A2uiSurfaceIdentity & {
   props: {
     title: string;
     body?: string;
-    confirm_label: string;
-    cancel_label: string;
+    confirm_label?: string;
+    cancel_label?: string;
   };
 };
 
@@ -68,9 +68,7 @@ type A2uiOpenChoiceSurface = A2uiSurfaceIdentity & {
 };
 
 export type A2uiOpenSurface =
-  | A2uiOpenConfirmSurface
-  | A2uiOpenFormSurface
-  | A2uiOpenChoiceSurface;
+  A2uiOpenConfirmSurface | A2uiOpenFormSurface | A2uiOpenChoiceSurface;
 
 type A2uiSubmitted = {
   status: "submitted";
@@ -114,6 +112,8 @@ export type A2uiTerminalSurface =
 
 export interface A2uiFormattedResult {
   answer?: string;
+  references?: Record<string, unknown>[];
+  follow_up_questions?: string[];
 }
 
 /**
@@ -151,7 +151,8 @@ export type A2uiActionIntent =
       payload: { selected: string | string[] } | { cancelled: true };
     };
 
-export type A2uiResolution = "submitted" | "cancelled" | "rejected" | "advanced";
+export type A2uiResolution =
+  "submitted" | "cancelled" | "rejected" | "advanced";
 
 export type A2uiSurfaceState =
   | { status: "ready"; round: A2uiRound; lastError?: "not_sent" }

@@ -192,10 +192,10 @@ The secondary structure analysis of the 370-residue polypeptide (Chain A) reveal
 
 #### 8.1. Promoter Design
 
-![Promoter Design]({{Promoter_PATH}})
-{{Promoter FigureLegend}}
+![Promoter Design](./.out/Os01g0177400/promoter_design.png)
+**Figure 12. Aggregate score profile across the genomic locus of *PNN* (LOC_Os01g08220).** The plot illustrates the distribution of a composite score along the genomic coordinates of the *PNN* gene on chromosome 1 (Chr1). The y-axis shows the normalized score, and the x-axis represents the genomic position. Each point corresponds to the score calculated for a 10-bp window. The dashed line indicates a significance threshold of 0.2, and the shaded area highlights regions exceeding this value. Prominent peaks in the profile suggest putative regions of functional importance within the gene.
 
-{{Promoter Results}}
+Bioinformatic analysis of the genomic locus for the *PNN* gene (*LOC_Os01g08220*) on chromosome 1 revealed significant variation in the aggregate score across the region from position 4,004,888 to 4,006,888. The analysis identified multiple distinct regions with scores exceeding a significance threshold of 0.2. Two prominent peaks were observed: the first reached a score of 0.946 at position 4,005,088, while the second, and highest, peak achieved a maximal score of 1.0 at position 4,005,238. A third significant peak was identified with a score of 0.959 at position 4,006,338. These high-scoring regions were interspersed with segments where the score fell below the 0.2 threshold, indicating localized areas of potential functional importance within the gene locus.
 
 #### 8.2. Protein Design
 

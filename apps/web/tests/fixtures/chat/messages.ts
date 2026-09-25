@@ -19,7 +19,7 @@ export const PHASE_3B_MESSAGE_KEYS = [
   "interleaved-streaming",
 ] as const;
 
-export type Phase3BMessageKey = typeof PHASE_3B_MESSAGE_KEYS[number];
+export type Phase3BMessageKey = (typeof PHASE_3B_MESSAGE_KEYS)[number];
 
 export function isPhase3BMessageKey(
   value: string | null | undefined
@@ -32,6 +32,7 @@ export function isPhase3BMessageKey(
 
 /** Shared synthetic reference row — reused by cited + DeepGenome fixtures. */
 export const FIXTURE_REFERENCE_DOC = {
+  citation: null,
   title: "Synthetic reference paper",
   au: "Synthetic Author",
   ti: "Plant genomics overview",
@@ -140,11 +141,27 @@ export const MESSAGE_DEEP_GENOME: ChatMessage = {
 export const MESSAGE_TABLE: ChatMessage = {
   id: "fixture-msg-table",
   role: "assistant",
-  content: [{ gene: "Os01g01010", trait: "yield" }],
-  tableHeaders: [
-    { prop: "gene", label: "Gene" },
-    { prop: "trait", label: "Trait" },
+  content: [
+    {
+      query_gene_id_t1: "Os04g0269100",
+      query_protein_t1: "A0A0N7KIR0",
+      interact_gene_id_t1: "Os01g0899425",
+      interact_protein_t1: "A0A0P0VBL9",
+    },
+    {
+      query_gene_id_t1: "Os04g0269100",
+      query_protein_t1: "A0A0N7KIR0",
+      interact_gene_id_t1: "Os07g0639100",
+      interact_protein_t1: "Q8GVF9",
+    },
   ],
+  tableHeaders: [
+    { prop: "query_gene_id_t1", label: "query_gene_id_t1" },
+    { prop: "query_protein_t1", label: "query_protein_t1" },
+    { prop: "interact_gene_id_t1", label: "interact_gene_id_t1" },
+    { prop: "interact_protein_t1", label: "interact_protein_t1" },
+  ],
+  tableCaption: "Proteins interacting with Os04g0269100",
   tool_name: "DataAgent",
 };
 

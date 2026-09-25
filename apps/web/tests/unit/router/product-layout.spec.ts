@@ -19,7 +19,7 @@ function flattenLeafRoutes(records: RouteRecord[]): RouteRecord[] {
       ? flattenLeafRoutes(record.children)
       : record.component
         ? [record]
-        : [],
+        : []
   );
 }
 
@@ -40,18 +40,22 @@ describe("product route metadata", () => {
       "/401",
       "/:pathMatch(.*)*",
       "/analyst-agent",
-      "/brief-gene-agent",
+      "/cases/analyst-agent",
+      "/cases/brief-gene-agent",
+      "/cases/data-agent",
+      "/cases/deep-genome-agent",
+      "/cases/digital-design-agent",
+      "/cases/gene-network-agent",
+      "/cases/knowledge-agent",
+      "/cases/review-agent",
       "/change-password",
       "/chat",
-      "/data-agent",
-      "/deep-genome-agent",
       "/design",
       "/digital-design-agent",
       "/forgot-password",
       "/gene-display/detail",
       "/gene-network-agent",
       "/help",
-      "/knowledge-agent",
       "/login",
       "/privacy",
       "/register",
@@ -65,7 +69,7 @@ describe("product route metadata", () => {
 
     expect(routerSource?.component).toBeDefined();
     expect(leafRoutes.map((route) => route.path)).not.toContain(
-      "/system/user-auth",
+      "/system/user-auth"
     );
   });
 });

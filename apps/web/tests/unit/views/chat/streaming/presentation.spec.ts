@@ -15,6 +15,7 @@ import {
   resolveMessagePresentationKey,
   type PresentationItem,
 } from "@/views/chat/streaming/presentation";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 function md(text: string): ContentBlock {
   return { type: "markdown", authority: "web", text };
@@ -259,12 +260,14 @@ describe("buildPresentationItems", () => {
   });
 
   it("does not use a shared surface key when the surface ID is missing", () => {
+    const baseSurface = agentSurface("surface-missing");
+    const baseA2ui = mustGet(baseSurface.a2ui, "missing-surface A2UI block");
     const missingSurface: ContentBlock = {
-      ...agentSurface("surface-missing"),
+      ...baseSurface,
       a2ui: {
-        ...agentSurface("surface-missing").a2ui!,
+        ...baseA2ui,
         surface: {
-          ...agentSurface("surface-missing").a2ui!.surface,
+          ...baseA2ui.surface,
           surface_id: "",
         },
       },
@@ -298,10 +301,7 @@ describe("buildPresentationItems", () => {
       widget: "confirm",
       props: { status: "submitted", accepted: true },
     };
-    const response: Extract<
-      A2uiActionResponse,
-      { status: "succeeded" }
-    > = {
+    const response: Extract<A2uiActionResponse, { status: "succeeded" }> = {
       status: "succeeded",
       run_id: envelope.run_id,
       result: {
@@ -358,7 +358,9 @@ describe("activity disclosure identity helpers", () => {
 
   it("returns null when neither key exists (missing-key contract)", () => {
     expect(resolveMessagePresentationKey({})).toBeNull();
-    expect(resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })).toBeNull();
+    expect(
+      resolveMessagePresentationKey({ id: "", streamPresentationKey: "" })
+    ).toBeNull();
   });
 
   it("composes state key as stream:<messageKey>:activity-<startIndex>", () => {
@@ -377,14 +379,20 @@ describe("activity disclosure identity helpers", () => {
   it("keeps the same Activity state key before and after server id arrives", () => {
     const requestKey = "chat-request-abc";
     const duringStream = activityDisclosureStateKey(
-      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      mustGet(
+        resolveMessagePresentationKey({ streamPresentationKey: requestKey }),
+        "stream presentation key"
+      ),
       0
     );
     // After completion the placeholder still carries streamPresentationKey; if a
     // server id is later assigned, that becomes the key — until then the request
     // key keeps disclosure state stable across stream cleanup.
     const afterCleanup = activityDisclosureStateKey(
-      resolveMessagePresentationKey({ streamPresentationKey: requestKey })!,
+      mustGet(
+        resolveMessagePresentationKey({ streamPresentationKey: requestKey }),
+        "stream presentation key after cleanup"
+      ),
       0
     );
     expect(duringStream).toBe(afterCleanup);

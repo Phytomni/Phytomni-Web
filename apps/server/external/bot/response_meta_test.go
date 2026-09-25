@@ -56,28 +56,6 @@ func TestResponseMetaPrefersHeaderRequestIDForJSONErrors(t *testing.T) {
 	}
 }
 
-func TestUploadFileWithMetaReadsBotRequestID(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/files" {
-			t.Errorf("request=%s %s, want POST /v1/files", r.Method, r.URL.Path)
-		}
-		w.Header().Set("X-Request-Id", "bot-upload-3")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"file-1","path":"obs://bucket/file-1"}`)
-	}))
-	defer srv.Close()
-
-	response, meta, err := newTestClient(srv.URL).UploadFileWithMeta(
-		context.Background(), "sample.txt", "assistants", strings.NewReader("hello"),
-	)
-	if err != nil || response == nil || response.ID != "file-1" || meta.BotRequestID != "bot-upload-3" {
-		t.Fatalf("response=%#v meta=%#v err=%v", response, meta, err)
-	}
-	if meta.StatusCode != http.StatusOK {
-		t.Fatalf("status=%d, want %d", meta.StatusCode, http.StatusOK)
-	}
-}
-
 func TestPostA2uiActionCapturesBotRequestID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Request-Id", "bot-action-5")
@@ -93,6 +71,31 @@ func TestPostA2uiActionCapturesBotRequestID(t *testing.T) {
 	}
 	if result.Status != http.StatusAccepted {
 		t.Fatalf("status=%d, want %d", result.Status, http.StatusAccepted)
+	}
+}
+
+func TestRunStreamWithMetaReadsSetupHeader(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/runs/run-keep/stream" {
+			t.Fatalf("method=%s path=%s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("after") != "2" {
+			t.Fatalf("after=%q, want 2", r.URL.Query().Get("after"))
+		}
+		w.Header().Set("X-Request-Id", "bot-run-stream-1")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: RunFinished\ndata: {\"type\":\"RunFinished\"}\n\n")
+	}))
+	defer srv.Close()
+
+	stream, meta, err := newTestClient(srv.URL).RunStreamWithMeta(context.Background(), "run-keep", 2)
+	if err != nil || stream == nil || meta.BotRequestID != "bot-run-stream-1" {
+		t.Fatalf("stream=%v meta=%#v err=%v", stream, meta, err)
+	}
+	defer stream.Close()
+	body, readErr := io.ReadAll(stream)
+	if readErr != nil || !strings.Contains(string(body), "RunFinished") {
+		t.Fatalf("stream body=%q err=%v", body, readErr)
 	}
 }
 

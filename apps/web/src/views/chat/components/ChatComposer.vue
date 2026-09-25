@@ -1,44 +1,57 @@
 <template>
-  <div data-testid="chat-composer" class="chat-composer">
+  <div data-testid="chat-composer" class="chat-composer" @paste="onPaste">
     <div :ref="bindTourInputTarget" class="chat-composer-surface">
       <div class="phy-composer-frame">
         <div
-          v-if="fileList.length > 0 && !isSending"
-          class="phy-composer-frame__attachments composer-attachments file-list-container"
+          v-if="permissionUnavailable"
+          class="composer-permission-status"
+          data-testid="chat-permission-status"
+          role="status"
         >
-          <div class="file-list">
-            <div
-              v-for="(file, index) in fileList"
-              :key="index"
-              class="file-item"
-            >
-              <FilesCard
-                :uid="index"
-                :name="file.name"
-                :file-size="file.size"
-                :show-del-icon="true"
-                @delete="emit('remove-file', index)"
-              />
-            </div>
-          </div>
+          {{ t("chat.agentPicker.noAvailableAgents") }}
         </div>
+        <div
+          class="phy-composer-frame__attachments composer-attachments"
+          :class="{ 'composer-attachments--empty': fileList.length === 0 }"
+        >
+          <AttachmentChipStrip
+            :items="fileList"
+            :disabled="isSending"
+            :announcement="attachmentAnnouncement"
+            :announcement-nonce="attachmentAnnouncementNonce"
+            @pause="emit('pause-upload', $event)"
+            @resume="emit('resume-upload', $event)"
+            @retry="emit('retry-upload', $event)"
+            @reselect="handleReselect"
+            @cancel="emit('cancel-upload', $event)"
+            @remove="emit('remove-upload', $event)"
+          />
+        </div>
+        <p
+          v-if="attachmentStatus"
+          class="composer-attachment-status"
+          data-testid="attachment-target-status"
+          role="status"
+        >
+          {{ attachmentStatus }}
+        </p>
 
         <div class="chat-composer-body">
           <MentionSender
             :model-value="modelValue"
             ref="senderRef"
             :loading="isSending"
-            :disabled="isSending"
+            :disabled="!canEdit"
             variant="updown"
             :auto-size="{ minRows: 1, maxRows: 5 }"
             :placeholder="t('chat.inputPlaceholder', { symbol: '@' })"
-            :options="rolesTool.map((x) => ({ value: x }))"
-            :trigger-strings="['@']"
+            :options="mentionOptions"
+            :trigger-strings="mentionTriggers"
             trigger-split=","
             :whole="true"
             submit-type="enter"
             @update:model-value="emit('update:modelValue', $event)"
-            @submit="emit('submit')"
+            @submit="onSubmit"
             @select="emit('select', $event)"
             @search="emit('search', $event)"
             @keydown.enter.capture="onComposerEnterCapture"
@@ -56,7 +69,8 @@
             <ChatModeSelector
               v-if="showModeSelector"
               :model-value="chatMode"
-              :expert-enabled="expertModeEnabled"
+              :instant-enabled="instantModeEnabled && !rolesLoading"
+              :expert-enabled="expertModeEnabled && !rolesLoading"
               class="composer-mode-selector"
               @update:model-value="emit('update:chatMode', $event)"
             />
@@ -65,7 +79,7 @@
               :options="pickerOptions"
               :roles-loading="rolesLoading"
               :selected-agent="selectedAgent"
-              :disabled="isSending"
+              :disabled="!canEdit"
               @select="emit('command', $event)"
               @clear="emit('clear-agent')"
             />
@@ -73,24 +87,26 @@
 
           <div class="composer-utility-actions">
             <el-upload
+              v-if="showUploadControl"
               ref="uploadRef"
               class="upload-demo"
-              :limit="10"
-              accept=".pdf,.doc,.xlsx,.ppt,.txt,.png"
+              data-testid="composer-attach"
+              :limit="maxAttachments"
               :show-file-list="false"
               :auto-upload="false"
-              :disabled="isSending"
-              :on-change="(file) => emit('file-change', file)"
+              :disabled="!canQueueFiles"
+              :on-change="onUploadChange"
+              :on-exceed="onUploadExceed"
               multiple
               action="#"
             >
               <template #trigger>
-                <el-tooltip :content="t('chat.uploadFile')" placement="top">
+                <el-tooltip :content="uploadActionLabel" placement="top">
                   <el-button
                     circle
                     class="composer-tool-button"
-                    :disabled="isSending"
-                    :aria-label="t('chat.uploadFile')"
+                    :disabled="!canQueueFiles"
+                    :aria-label="uploadActionLabel"
                   >
                     <el-icon><Paperclip /></el-icon>
                   </el-button>
@@ -98,16 +114,18 @@
               </template>
             </el-upload>
             <el-dropdown
-              v-if="hasMessages && rolesTool.length > 0"
+              v-if="
+                expertControlsEnabled && hasMessages && pickerOptions.length > 0
+              "
               placement="top-start"
               trigger="click"
-              :disabled="isSending"
+              :disabled="!canEdit"
               @command="emit('command', $event)"
             >
               <el-button
                 circle
                 class="composer-tool-button"
-                :disabled="isSending"
+                :disabled="!canEdit"
                 :aria-label="t('chat.agentPicker.label')"
               >
                 <el-icon><Menu /></el-icon>
@@ -115,11 +133,11 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item
-                    v-for="(item, index) in rolesTool"
-                    :key="index"
-                    :command="'@' + item + ','"
-                    >{{ item }}</el-dropdown-item
-                  >
+                    v-for="item in pickerOptions"
+                    :key="item.tool"
+                    :command="'@' + item.tool + ','"
+                    ><AgentDisplayName :label="item.label"
+                  /></el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -164,6 +182,14 @@
           </div>
         </div>
       </div>
+      <ChatAgentQuickSelect
+        v-if="showQuickSelect"
+        :options="pickerOptions"
+        :roles-loading="rolesLoading"
+        :selected-agent="selectedAgent"
+        :disabled="!canEdit"
+        @toggle="emit('toggle-agent', $event)"
+      />
     </div>
   </div>
 </template>
@@ -172,41 +198,64 @@
 import { computed, ref, unref } from "vue";
 import type { VNodeRef } from "vue";
 import { useI18n } from "vue-i18n";
-import { MentionSender, FilesCard } from "vue-element-plus-x";
+import { MentionSender } from "vue-element-plus-x";
+import type { MentionOption } from "vue-element-plus-x/types/MentionSender";
+import AgentDisplayName from "@/components/AgentDisplayName.vue";
 import ChatModeSelector from "@/components/ChatModeSelector.vue";
 import ChatAgentPicker, {
   type ChatAgentPickerOption,
 } from "./ChatAgentPicker.vue";
+import ChatAgentQuickSelect from "./ChatAgentQuickSelect.vue";
+import AttachmentChipStrip from "./AttachmentChipStrip.vue";
 import { Paperclip, Promotion, Menu } from "@element-plus/icons-vue";
-import type { ChatComposerHandle, UploadFile } from "../types";
+import type { ChatComposerHandle, ResumableUploadItem } from "../types";
 import { guardEnterSubmit } from "../utils/guardEnterSubmit";
 
-const props = defineProps<{
-  modelValue: string;
-  isSending: boolean;
-  chatMode: "instant" | "expert";
-  expertModeEnabled: boolean;
-  showModeSelector: boolean;
-  fileList: UploadFile[];
-  rolesTool: string[];
-  rolesLoading: boolean;
-  hasMessages: boolean;
-  selectedAgent: string;
-  pickerOptions: ChatAgentPickerOption[];
-  setTourInputTarget?: (el: HTMLElement | null) => void;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    isSending: boolean;
+    chatMode: "instant" | "expert";
+    instantModeEnabled: boolean;
+    expertModeEnabled: boolean;
+    modeUsable: boolean;
+    showModeSelector: boolean;
+    maxAttachments?: number;
+    fileList: ResumableUploadItem[];
+    attachmentAnnouncement?: string;
+    attachmentAnnouncementNonce?: number;
+    hasBlockingUploads: boolean;
+    uploadCapabilityEnabled?: boolean;
+    attachmentTargetAvailable: boolean;
+    attachmentTargetBlocked: boolean;
+    rolesLoading: boolean;
+    hasMessages: boolean;
+    selectedAgent: string;
+    pickerOptions: ChatAgentPickerOption[];
+    setTourInputTarget?: (el: HTMLElement | null) => void;
+  }>(),
+  { uploadCapabilityEnabled: true }
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
   "update:chatMode": [mode: "instant" | "expert"];
   submit: [];
   stop: [];
-  select: [option: unknown];
+  select: [option: MentionOption];
   search: [query: string];
   command: [cmd: string];
   "file-change": [file: unknown];
+  "paste-files": [files: File[]];
   "remove-file": [index: number];
+  "pause-upload": [localId: string];
+  "resume-upload": [localId: string];
+  "retry-upload": [localId: string];
+  "reselect-upload": [localId: string, file: File];
+  "cancel-upload": [localId: string];
+  "remove-upload": [localId: string];
   "clear-agent": [];
+  "toggle-agent": [tool: string];
 }>();
 
 const { t } = useI18n();
@@ -217,10 +266,65 @@ const senderRef = ref<{
 } | null>(null);
 const uploadRef = ref();
 
-const showAgentPicker = computed(() => props.chatMode === "instant");
-const canSubmit = computed(
-  () => Boolean(props.modelValue.trim()) && !props.isSending
+const expertControlsEnabled = computed(
+  () => props.chatMode === "expert" && props.modeUsable && !props.rolesLoading
 );
+const mentionOptions = computed(() =>
+  expertControlsEnabled.value
+    ? props.pickerOptions.map((option) => ({ value: option.tool }))
+    : []
+);
+const mentionTriggers = computed(() =>
+  expertControlsEnabled.value ? ["@"] : []
+);
+const canEdit = computed(
+  () => !props.isSending && !props.rolesLoading && props.modeUsable
+);
+const uploadCapabilityEnabled = computed(() => props.uploadCapabilityEnabled);
+const showUploadControl = computed(
+  () => uploadCapabilityEnabled.value || props.fileList.length > 0
+);
+const canQueueFiles = computed(
+  () => canEdit.value && props.attachmentTargetAvailable
+);
+const uploadActionLabel = computed(() => {
+  if (!props.attachmentTargetAvailable) {
+    return uploadCapabilityEnabled.value
+      ? t("chat.attachmentTargetUnsupported")
+      : t("chat.attachmentErrors.upload_disabled");
+  }
+  return t("chat.uploadFile", { maxFiles: props.maxAttachments ?? 10 });
+});
+const attachmentStatus = computed(() => {
+  if (props.isSending) return "";
+  if (props.attachmentTargetBlocked) {
+    return t("chat.attachmentTargetUnavailable");
+  }
+  if (!props.attachmentTargetAvailable && uploadCapabilityEnabled.value) {
+    return t("chat.attachmentTargetUnsupported");
+  }
+  return "";
+});
+const permissionUnavailable = computed(
+  () => !props.rolesLoading && !props.modeUsable
+);
+const showAgentPicker = computed(
+  () => expertControlsEnabled.value && !props.hasMessages
+);
+const showQuickSelect = computed(
+  () => !props.hasMessages && expertControlsEnabled.value
+);
+const canSubmit = computed(
+  () =>
+    Boolean(props.modelValue.trim()) &&
+    canEdit.value &&
+    !props.hasBlockingUploads &&
+    !props.attachmentTargetBlocked
+);
+
+const onSubmit = () => {
+  if (canSubmit.value) emit("submit");
+};
 
 const popoverVisible = computed(() =>
   unref(senderRef.value?.popoverVisible as boolean | undefined)
@@ -228,6 +332,28 @@ const popoverVisible = computed(() =>
 
 const onComposerEnterCapture = (e: KeyboardEvent) => {
   guardEnterSubmit(e, popoverVisible.value);
+};
+
+const onPaste = (event: ClipboardEvent) => {
+  if (!canQueueFiles.value) return;
+  const files = Array.from(event.clipboardData?.files ?? []);
+  if (files.length === 0) return;
+  event.preventDefault();
+  emit("paste-files", files);
+};
+
+const onUploadExceed = (files: File[]) => {
+  if (!canQueueFiles.value) return;
+  emit("paste-files", Array.from(files));
+};
+
+const onUploadChange = (file: unknown) => {
+  if (!canQueueFiles.value) return;
+  emit("file-change", file);
+};
+
+const handleReselect = (localId: string, file: File) => {
+  emit("reselect-upload", localId, file);
 };
 
 const bindTourInputTarget: VNodeRef = (ref) => {
@@ -258,23 +384,46 @@ defineExpose<ChatComposerHandle>({
   min-height: var(--phy-control-height-primary);
 }
 
+.composer-permission-status {
+  padding: var(--phy-space-8) var(--phy-space-12) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.composer-attachment-status {
+  margin: var(--phy-space-4) var(--phy-space-12) 0;
+  color: var(--phy-color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
 .phy-composer-frame {
   border: 1px solid var(--phy-color-border);
   border-radius: var(--phy-radius-lg);
   background: var(--phy-color-bg-elevated);
   box-shadow: var(--phy-shadow-soft);
   padding: 10px 12px;
-  transition: border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
+  transition:
+    border-color var(--phy-motion-fast) var(--phy-motion-ease-out),
     box-shadow var(--phy-motion-fast) var(--phy-motion-ease-out);
 }
 
 .phy-composer-frame:focus-within {
   border-color: var(--phy-color-focus);
-  box-shadow: var(--phy-shadow-soft), 0 0 0 2px var(--phy-color-focus);
+  box-shadow:
+    var(--phy-shadow-soft),
+    0 0 0 2px var(--phy-color-focus);
 }
 
 .phy-composer-frame__attachments {
   margin-bottom: 8px;
+}
+
+.composer-attachments--empty {
+  block-size: 0;
+  margin-bottom: 0;
+  padding: 0;
 }
 
 .phy-composer-frame__actions {
@@ -381,22 +530,6 @@ defineExpose<ChatComposerHandle>({
   height: 10px;
   border-radius: 2px;
   background: currentColor;
-}
-
-.file-list-container .file-list {
-  display: flex;
-  flex-direction: row;
-  gap: 3px;
-  flex-wrap: wrap;
-  padding: 4px;
-}
-
-.file-list-container .file-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 4px;
-  font-size: 12px;
 }
 
 .send-btn,

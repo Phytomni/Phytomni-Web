@@ -80,7 +80,9 @@ function persistPreference(value: boolean): void {
 }
 
 function getWindowWidth(): number {
-  return typeof window === "undefined" ? SIDEBAR_COMPACT_BREAKPOINT : window.innerWidth;
+  return typeof window === "undefined"
+    ? SIDEBAR_COMPACT_BREAKPOINT
+    : window.innerWidth;
 }
 
 /**
@@ -178,14 +180,11 @@ export function useSidebarResponsive(opts: SidebarResponsiveOptions) {
     setCollapsedPreference(true);
   };
 
-  watch(
-    sidebarCollapsed,
-    (value, previousValue) => {
-      if (value !== previousValue) {
-        opts.onCollapseChange(value);
-      }
+  watch(sidebarCollapsed, (value, previousValue) => {
+    if (value !== previousValue) {
+      opts.onCollapseChange(value);
     }
-  );
+  });
 
   watch(drawerOpen, emitDrawerState);
 

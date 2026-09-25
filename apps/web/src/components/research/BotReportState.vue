@@ -16,6 +16,8 @@
       </span>
     </div>
 
+    <BotReportWarnings :warning-keys="presentation.warningKeys" />
+
     <div
       v-if="progressVisible"
       class="bot-report-state__progress"
@@ -26,23 +28,42 @@
       <span>{{ progressSummary }}</span>
     </div>
 
-    <MarkdownViewer
-      v-if="reportText"
-      :content="reportText"
-      :ns="ns"
+    <ScientificMarkdown
+      v-if="reportText && !showWaitProgress"
+      :source="reportText"
+      :citation-namespace="ns"
+      :reference-count="referenceCount"
+      :resources="resources"
       surface="artifact"
       data-test="bot-report-content"
+      @citation-activate="emit('citation-activate', $event)"
+      @resource-activate="emit('resource-activate', $event)"
     />
-    <p v-else class="bot-report-state__empty" data-test="bot-report-empty">
+    <SendProgress
+      v-else-if="showWaitProgress"
+      :started-at="resolvedProgressStartedAt"
+      :agent-name="agentName"
+      :completing="false"
+      :stage-label="statusLabel"
+    />
+    <p
+      v-else-if="
+        state.status !== 'TIMED_OUT' &&
+        state.status !== 'CANCELLED' &&
+        !activeReportHidden
+      "
+      class="bot-report-state__empty"
+      data-test="bot-report-empty"
+    >
       {{ emptyReportLabel }}
     </p>
 
     <p
-      v-if="state.failures.length > 0"
+      v-if="state.failures.length > 0 && !presentation.warningKeys.length"
       class="bot-report-state__failure"
       data-test="bot-report-failure"
     >
-      {{ failureLabel }}
+      {{ resolvedFailureLabel }}
     </p>
   </section>
 </template>
@@ -50,10 +71,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import MarkdownViewer from "@/components/MarkdownViewer.vue";
+import ScientificMarkdown from "@/components/ScientificMarkdown.vue";
+import SendProgress from "@/views/chat/components/SendProgress.vue";
 import { formatDisplayDate } from "@/locales/format-display-date";
+import { progressStartedAtFor } from "@/views/chat/utils/agentProgress";
 import type { BotProgress } from "@/views/chat/botProjection";
 import type { BotLifecycleState } from "@/views/chat/streaming/botLifecycleReducer";
+import {
+  reportPresentationFor,
+  type ReportSource,
+} from "@/views/chat/utils/report-presentation";
+import BotReportWarnings from "./BotReportWarnings.vue";
+import type {
+  AuthorizedScientificResource,
+  ScientificCitationActivation,
+  ScientificResourceActivation,
+} from "@/utils/scientific-markdown/types";
 
 type BotReportStatus = "loading" | "degraded" | "complete" | "failed";
 
@@ -63,79 +96,94 @@ type LifecycleMetadata = BotLifecycleState & {
   progress?: BotProgress | null;
 };
 
-function reportStatusForLifecycle(
-  lifecycle: BotLifecycleState
-): BotReportStatus {
-  const state = lifecycle as LifecycleMetadata;
-  if (state.status === "FAILED") return "failed";
-  if (state.reportStage === "waiting_for_brief_gene") return "loading";
-  if (state.status === "INPUT_REQUIRED") return "loading";
-  if (state.degraded || state.reportStage === "intermediate") return "degraded";
-  if (
-    state.reportStage === "final" ||
-    state.status === "SUCCEEDED" ||
-    state.finalReport.trim() !== ""
-  ) {
-    return "complete";
-  }
-  return "loading";
-}
-
 const props = withDefaults(
   defineProps<{
     state: BotLifecycleState;
     progress?: BotProgress | null;
     updatedAt?: string | number | Date | null;
-    ns?: string;
+    /** Selected report text from the shared Chat artifact policy. */
+    report?: string | null;
+    reportSource?: ReportSource;
+    ns: string;
+    referenceCount?: number;
+    resources?: readonly AuthorizedScientificResource[];
     labels?: Partial<Record<BotReportStatus, string>>;
     emptyReportLabel?: string;
+    failureLabel?: string;
+    hideActiveReport?: boolean;
+    agentName?: string;
+    progressStartedAt?: number | null;
   }>(),
   {
     progress: null,
     updatedAt: null,
-    ns: "",
+    report: null,
+    referenceCount: 0,
+    resources: () => [],
     labels: () => ({}),
+    hideActiveReport: false,
+    agentName: "",
+    progressStartedAt: null,
   }
 );
 
+const emit = defineEmits<{
+  "citation-activate": [activation: ScientificCitationActivation];
+  "resource-activate": [activation: ScientificResourceActivation];
+}>();
+
 const { t, d } = useI18n();
 const lifecycleMetadata = computed(() => props.state as LifecycleMetadata);
-const reportStatus = computed(() => reportStatusForLifecycle(props.state));
+const presentation = computed(() =>
+  reportPresentationFor(
+    props.state,
+    typeof props.report === "string"
+      ? { report: props.report, source: props.reportSource ?? "message" }
+      : undefined,
+    props.agentName
+  )
+);
+const activeReportHidden = computed(
+  () =>
+    props.hideActiveReport &&
+    (props.state.status === "RUNNING" ||
+      props.state.status === "INPUT_REQUIRED")
+);
+const reportStatus = computed(() => {
+  const status = presentation.value.state;
+  return activeReportHidden.value && status === "complete" ? "loading" : status;
+});
 const reportText = computed(() => {
-  const state = props.state;
-  if (typeof state.visibleReport === "string" && state.visibleReport.trim()) {
-    return state.visibleReport;
-  }
-  if (typeof state.finalReport === "string" && state.finalReport.trim()) {
-    return state.finalReport;
-  }
-  return typeof state.intermediateReport === "string"
-    ? state.intermediateReport
-    : "";
+  if (activeReportHidden.value) return "";
+  return presentation.value.reportText;
 });
 
 const statusLabel = computed(() => {
-  const custom = props.labels[reportStatus.value];
-  if (custom) return custom;
-  switch (reportStatus.value) {
-    case "degraded":
-      return t("common.warning");
-    case "complete":
-      return t("common.finished");
-    case "failed":
-      return t("common.failed");
-    default:
-      return t("common.loading");
-  }
+  if (presentation.value.state === "loading" && props.labels.loading)
+    return props.labels.loading;
+  return t(presentation.value.labelKey);
 });
 
 const emptyReportLabel = computed(() => {
+  if (!presentation.value.active && presentation.value.state === "degraded")
+    return t(presentation.value.labelKey);
   if (props.emptyReportLabel) return props.emptyReportLabel;
+  if (props.state.status === "TIMED_OUT") {
+    return t("chat.lifecycle.timed_out");
+  }
   return reportStatus.value === "failed"
     ? t("common.failed")
     : t("common.loading");
 });
-const failureLabel = computed(() => t("common.failed"));
+const resolvedFailureLabel = computed(() => {
+  if (props.state.status === "CANCELLED") {
+    return t("chat.lifecycle.cancelled");
+  }
+  if (props.failureLabel) return props.failureLabel;
+  return props.state.status === "TIMED_OUT"
+    ? t("chat.lifecycle.timed_out")
+    : t("common.failed");
+});
 
 const effectiveUpdatedAt = computed(
   () => props.updatedAt ?? lifecycleMetadata.value.reportUpdatedAt ?? null
@@ -146,6 +194,15 @@ const updatedAtLabel = computed(() =>
     : ""
 );
 
+const resolvedProgressStartedAt = computed(() =>
+  progressStartedAtFor(
+    props.state.runId || "bot-report",
+    props.progressStartedAt
+  )
+);
+const showWaitProgress = computed(
+  () => presentation.value.active && !reportText.value
+);
 const progressVisible = computed(() => {
   const progress = props.progress ?? lifecycleMetadata.value.progress ?? null;
   if (!progress) return false;

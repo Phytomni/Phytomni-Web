@@ -7,7 +7,7 @@ is the local checker input for reviewed acceptance rows and dark-launch flags.
 `scripts/check_bot_web_activation.py` is a deterministic, offline Web evidence
 gate; it does not turn local tests into external acceptance.
 
-This document records the boundary consumed by `release/0.1.3` Web Go. The
+This document records the boundary consumed by `release/0.1.4` Web Go. The
 browser talks only to Web Go. Web Go owns user identity, row ownership, legacy
 history compatibility, response shaping, and the sanitized projection stored
 in MySQL. Bot remains the source of Bot-run content and lifecycle state.
@@ -33,48 +33,75 @@ The table separates Bot transport fields from the bounded public projection.
 Unknown additive fields may be received, but private/raw payloads are not
 persisted or returned to the browser.
 
-| JSON field | Source / owner | Web meaning and rule |
-| --- | --- | --- |
-| `id` | Bot transport | OpenAI completion id. Diagnostic only; never a run join key. |
-| `run_id` | Bot transport | Required umbrella identity for pollable runs; copied to `bot_run_id`. A null id is accepted only with `degraded_tracking=true` for a non-pollable successful answer. |
-| `agent` | Bot transport | Canonical Bot slug (`deep_genome`, `analyst`, etc.); mapped to the Web tool name. |
-| `status` | Bot transport / Web projection | Normalized lifecycle status. See [status values](#status-values). |
-| `task_ids` | Bot transport | Child ids for legacy task/log compatibility only; not lifecycle identity. |
-| `result.report_stage` | Bot result | `waiting_for_brief_gene`, `intermediate`, or `final`. |
-| `result.report_completeness` | Bot result | `none`, `partial`, or `complete`. |
-| `result.report_revision` | Bot result | Non-negative monotonic revision. Legacy rows use `-1`. |
-| `result.report_updated_at` | Bot result | RFC3339 timestamp normalized to UTC. |
-| `result.intermediate_report` | Bot result | Bounded, sanitized Markdown used when no non-empty final report exists. |
-| `result.final_report` | Bot result | Bounded, sanitized Markdown and the preferred visible report when non-empty. |
-| `result.formatted` | Bot result | Compact answer/references or tabular data for cited/data agents; shaped before reaching Web UI. |
-| `result.progress` | Bot result | Bounded counters (`completed`, `total`, `failed`, `pending`) and brief-gene status only. |
-| `result.degraded` / `degraded_reason` | Bot result | Safe partial-result marker and bounded reason; optional failure does not erase an intermediate report. |
-| `result.failures` | Bot result | Bounded safe failure messages; provider traces, SQL, credentials, and raw state are excluded. |
-| `result.artifacts` | Bot result | Validated output directories and OBS paths. Empty paths do not invent download URLs. |
-| `degraded_tracking` | Bot transport | Explicitly records that tracking is unavailable. Web never fabricates a run id. |
-| `request_id` | Web context | Web correlation id in response/error envelopes. Bot's response header id is diagnostic server metadata only. |
+| JSON field                            | Source / owner                 | Web meaning and rule                                                                                                                                                 |
+| ------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                  | Bot transport                  | OpenAI completion id. Diagnostic only; never a run join key.                                                                                                         |
+| `run_id`                              | Bot transport                  | Required umbrella identity for pollable runs; copied to `bot_run_id`. A null id is accepted only with `degraded_tracking=true` for a non-pollable successful answer. |
+| `agent`                               | Bot transport                  | Canonical Bot slug (`deep_genome`, `analyst`, etc.); mapped to the Web tool name.                                                                                    |
+| `status`                              | Bot transport / Web projection | Normalized lifecycle status. See [status values](#status-values).                                                                                                    |
+| `task_ids`                            | Bot transport                  | Child ids for legacy task/log compatibility only; not lifecycle identity.                                                                                            |
+| `result.report_stage`                 | Bot result                     | `waiting_for_brief_gene`, `intermediate`, or `final`.                                                                                                                |
+| `result.report_completeness`          | Bot result                     | `none`, `partial`, or `complete`.                                                                                                                                    |
+| `result.report_revision`              | Bot result                     | Non-negative monotonic revision. Legacy rows use `-1`.                                                                                                               |
+| `result.report_updated_at`            | Bot result                     | RFC3339 timestamp normalized to UTC.                                                                                                                                 |
+| `result.intermediate_report`          | Bot result                     | Bounded, sanitized Markdown used when no non-empty final report exists.                                                                                              |
+| `result.final_report`                 | Bot result                     | Bounded, sanitized Markdown and the preferred visible report when non-empty.                                                                                         |
+| `result.formatted`                    | Bot result                     | Compact answer/references or tabular data for cited/data agents; shaped before reaching Web UI.                                                                      |
+| `result.progress`                     | Bot result                     | Bounded counters (`completed`, `total`, `failed`, `pending`) and brief-gene status only.                                                                             |
+| `result.degraded` / `degraded_reason` | Bot result                     | Safe partial-result marker and bounded reason; optional failure does not erase an intermediate report.                                                               |
+| `result.failures`                     | Bot result                     | Bounded safe failure messages; provider traces, SQL, credentials, and raw state are excluded.                                                                        |
+| `result.artifacts`                    | Bot result                     | Validated output directories and OBS paths. Empty paths do not invent download URLs.                                                                                 |
+| `degraded_tracking`                   | Bot transport                  | Explicitly records that tracking is unavailable. Web never fabricates a run id.                                                                                      |
+| `request_id`                          | Web context                    | Web correlation id in response/error envelopes. Bot's response header id is diagnostic server metadata only.                                                         |
 
 The persisted `bot_projection_json` contains only the sanitized public
 projection fields. It does not contain `id`, `request_id`, raw Bot envelopes,
 provider diagnostics, child payloads, SQL, credentials, or private paths.
+
+## Constrained Expert routing
+
+The blocking Expert route is `POST /v1/query/route`. Instant requests do not
+use this endpoint; they execute `ChatAgent` through the normal Chat path. For
+Expert requests, Web/Go derives the authenticated user's effective tools and
+sends them as an ordered `allowed_tools` list. The browser never supplies that
+list as an authorization decision.
+
+`allowed_tools` is required, contains one to ten unique exact canonical tool
+names, and preserves the Web product order. `forced_tool` is either `null` for
+autonomous routing or one exact member of the allowlist. Bot filters its model
+tool schemas to that list and requires exactly one function selection. A
+no-choice, multi-choice, unknown, outside-allowlist, malformed, or forced-tool
+mismatch response is a sanitized `502` contract failure with no agent dispatch;
+there is no ChatAgent fallback on the constrained HTTP path.
+
+The response is the native `agent.run` envelope. `agent` contains the resolved
+Bot slug rather than `expert`; synchronous runs return `succeeded`, and accepted
+remote runs return `running` with `task_ids`. The selected agent's
+`result.formatted` block and umbrella run identity remain available for Web
+answer shaping and polling. Direct legacy A2A callers that omit the new
+constraint arguments retain their separate compatibility behavior.
+
+The route, selector, and failure matrix remain dark-launch compatible: Expert
+activation and cross-repository staging evidence are external acceptance
+requirements, not results of local Web tests.
 
 ## Old and new column mapping
 
 Projection persistence is additive and reversible. Existing Web fields remain
 readable while the new projection is observed.
 
-| Web column | Role during compatibility cutover | Ownership / precedence |
-| --- | --- | --- |
-| `bot_run_id` | New canonical umbrella run join key. | Web-owned association; must match the projection `run_id`. |
-| `bot_projection_json` | New sanitized versioned Bot snapshot. | Bot content snapshot persisted by Web with owner-scoped CAS. |
-| `bot_report_revision` | New indexed CAS revision; default `-1` means no projection/legacy row. | Bot report ordering; older/equal blank snapshots cannot erase visible text. |
-| `task_id` | Legacy child-task id used by old async/update-log surfaces. | Compatibility only; never a Bot polling id. |
-| `server_id` | Legacy DeepGenome server/task alias. | Compatibility only; not the umbrella identity. |
-| `answer` | Legacy Web answer column and shaped history value. | Web fallback when no valid projection/Bot run is available; otherwise mirrors the projection's visible report. |
-| `status` | Legacy row status. | Mirrors the normalized projection when a status is present; blank upstream status leaves it unchanged. |
-| `tool_name` | Web canonical tool display branch. | Derived from the canonical Bot slug; not taken from an arbitrary child payload. |
-| `download_path`, `image_paths` | Legacy artifact columns. | Updated only from validated non-empty projection artifacts; existing values survive empty artifact responses. |
-| `id`, `user_name`, `dialogue_id`, `f_id`, `reaction_type`, `collect_type`, `upload_path` | Web row identity and user-owned fields. | Never replaced by Bot content reconciliation; all reads remain owner-scoped. |
+| Web column                                                                               | Role during compatibility cutover                                      | Ownership / precedence                                                                                         |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `bot_run_id`                                                                             | New canonical umbrella run join key.                                   | Web-owned association; must match the projection `run_id`.                                                     |
+| `bot_projection_json`                                                                    | New sanitized versioned Bot snapshot.                                  | Bot content snapshot persisted by Web with owner-scoped CAS.                                                   |
+| `bot_report_revision`                                                                    | New indexed CAS revision; default `-1` means no projection/legacy row. | Bot report ordering; older/equal blank snapshots cannot erase visible text.                                    |
+| `task_id`                                                                                | Legacy child-task id used by old async/update-log surfaces.            | Compatibility only; never a Bot polling id.                                                                    |
+| `server_id`                                                                              | Legacy DeepGenome server/task alias.                                   | Compatibility only; not the umbrella identity.                                                                 |
+| `answer`                                                                                 | Legacy Web answer column and shaped history value.                     | Web fallback when no valid projection/Bot run is available; otherwise mirrors the projection's visible report. |
+| `status`                                                                                 | Legacy row status.                                                     | Mirrors the normalized projection when a status is present; blank upstream status leaves it unchanged.         |
+| `tool_name`                                                                              | Web canonical tool display branch.                                     | Derived from the canonical Bot slug; not taken from an arbitrary child payload.                                |
+| `download_path`, `image_paths`                                                           | Legacy artifact columns.                                               | Updated only from validated non-empty projection artifacts; existing values survive empty artifact responses.  |
+| `id`, `user_name`, `dialogue_id`, `f_id`, `reaction_type`, `collect_type`, `upload_path` | Web row identity and user-owned fields.                                | Never replaced by Bot content reconciliation; all reads remain owner-scoped.                                   |
 
 The exact additive production migration is operator-controlled. From the
 repository root, run:
@@ -164,19 +191,35 @@ They are not Bot or production acceptance evidence. The following rows remain
 **External Pending** until an authorized acceptance packet is returned and
 reviewed:
 
-| Row | Scope | Status |
-| --- | --- | --- |
-| RC-WEB-001 | Umbrella submission and run identity | External Pending |
-| RC-WEB-002 | Monotonic intermediate/final revisions | External Pending |
-| RC-WEB-003 | DeepGenome partial/degraded/failure matrix | External Pending |
-| RC-WEB-004 | Analyst/Design/Network reports and artifacts | External Pending |
-| RC-WEB-005 | Timeout and request-id behavior | External Pending |
-| RC-WEB-006 | A2UI and AG-UI pass-through | External Pending |
-| RC-WEB-007 | Expert/history dual-read and rollback | External Pending |
-| RC-LIVE-001 | Authorized live end-to-end run | External Pending |
+| Row         | Scope                                        | Status           |
+| ----------- | -------------------------------------------- | ---------------- |
+| RC-WEB-001  | Umbrella submission and run identity         | External Pending |
+| RC-WEB-002  | Monotonic intermediate/final revisions       | External Pending |
+| RC-WEB-003  | DeepGenome partial/degraded/failure matrix   | External Pending |
+| RC-WEB-004  | Analyst/Design/Network reports and artifacts | External Pending |
+| RC-WEB-005  | Timeout and request-id behavior              | External Pending |
+| RC-WEB-006  | A2UI and AG-UI pass-through                  | External Pending |
+| RC-WEB-007  | Expert/history dual-read and rollback        | External Pending |
+| RC-LIVE-001 | Authorized live end-to-end run               | External Pending |
 
-No row above is marked passed by this document. Feature gates remain dark by
-default (`expert_enabled`, `stream_enabled`, `a2ui_actions_enabled`,
-`interop_enabled`, `research_enabled`, `design_enabled`, `network_enabled`, and
-`history_dual_read` are false/off), and no Bot, operations, deployment, or
-live configuration change is part of this Web reference.
+No row above is marked passed by this document. The only remaining Web-owned
+dark-launch observation switch is `history_dual_read` (false/off). Expert,
+streaming, A2UI, interop, multiturn, Research, Analyst, Design, and Network
+are locally always enabled and still require the matching Bot contract. No
+Bot, operations, deployment, or live configuration change is part of this Web
+reference.
+
+## Current Web closure record (2026-07-26)
+
+- Commit under test: `1e210119` (`release/0.1.4`).
+- `./scripts/validate_web_local.sh` — PASS; 207 frontend test files / 2724
+  tests passed with the configured coverage thresholds, Go module/build/vet/
+  test checks passed, and G13, G14, G15, G16, and G17 passed.
+- The current record includes Bot identity normalization, pending-chat
+  continuity, typed upstream error mapping, server-derived Expert permissions,
+  dedicated product runs, and constrained Chat routing. It also includes the
+  final Vite 8 / Vitest 4 quality-contract reconciliation. No Bot or
+  operations code is included in this Web release.
+- This is repository-local evidence only. The matrix remains unchanged:
+  `RC-WEB-001` through `RC-WEB-007` and `RC-LIVE-001` are still
+  **External Pending**, and all capability flags remain dark by default.

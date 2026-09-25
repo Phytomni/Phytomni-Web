@@ -92,7 +92,7 @@ func RemoveDuplicates(slice []int64) []int64 {
 	result := []int64{}
 
 	for v := range slice {
-		if encountered[slice[v]] != true {
+		if !encountered[slice[v]] {
 			encountered[slice[v]] = true
 			result = append(result, slice[v])
 		}
@@ -108,8 +108,6 @@ func RegContent(matchContent string, sensitiveWords []string) string {
 	banWords := make([]string, 0)
 	regStr := strings.Join(sensitiveWords, "|")
 	wordReg := regexp.MustCompile(regStr)
-	//println("regStr -> ", regStr)
-
 	textBytes := wordReg.ReplaceAllFunc([]byte(matchContent), func(bytes []byte) []byte {
 		banWords = append(banWords, string(bytes))
 		textRunes := []rune(string(bytes))

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ChatMessageRow from "@/views/chat/components/ChatMessageRow.vue";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const CHAT_SOURCE = readFileSync(
-  resolve(__dirname, "../../src/views/chat/index.vue"),
+  resolve(__dirname, "../../src/views/chat/ChatView.vue"),
   "utf8"
 );
 const ROW_SOURCE = readFileSync(
@@ -32,7 +32,7 @@ const mountRow = (
   props: Record<string, unknown> = {},
   slots: Record<string, unknown> = {}
 ) =>
-  mount(ChatMessageRow, {
+  mountWithApp(ChatMessageRow, {
     props: {
       role: "assistant",
       ...props,
@@ -160,7 +160,7 @@ describe("ChatMessageRow", () => {
       /<ChatMessageRow[\s\S]*v-for="\(message, index\) in currentChat\.messages"/
     );
     expect(CHAT_SOURCE).toMatch(
-      /<ChatMessageRow[\s\S]*v-if="isSending && !getChatState\(currentChatId\)\.isStreaming"/
+      /<ChatMessageRow[\s\S]*v-if="\s*isSending &&\s*!getChatState\(currentChatId\)\.isStreaming &&\s*!hasActivePollableAssistantWait\s*"/
     );
     expect(CHAT_SOURCE).not.toContain('data-testid="chat-message-row"');
   });

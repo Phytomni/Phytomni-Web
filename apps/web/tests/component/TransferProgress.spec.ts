@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
-import { createI18n } from "vue-i18n";
 import TransferProgress from "@/components/TransferProgress.vue";
-import enUS from "@/locales/langs/en-US";
 import type { TransferSnapshot } from "@/utils/transfer-progress";
+import { mountWithApp } from "../helpers/test-app-context";
 
 const base: TransferSnapshot = {
   loaded: 512 * 1024,
@@ -15,18 +13,11 @@ const base: TransferSnapshot = {
   requestId: "req-1",
 };
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  messages: { "en-US": enUS },
-});
-
 describe("TransferProgress.vue", () => {
   it("renders percent and emits cancel with requestId", async () => {
-    const wrapper = mount(TransferProgress, {
+    const wrapper = mountWithApp(TransferProgress, {
       props: { snapshot: base },
       global: {
-        plugins: [i18n],
         stubs: {
           "el-progress": {
             props: ["percentage", "indeterminate"],
@@ -43,10 +34,9 @@ describe("TransferProgress.vue", () => {
   });
 
   it("hides ETA when etaSec is null", () => {
-    const wrapper = mount(TransferProgress, {
+    const wrapper = mountWithApp(TransferProgress, {
       props: { snapshot: { ...base, etaSec: null, indeterminate: true } },
       global: {
-        plugins: [i18n],
         stubs: {
           "el-progress": true,
         },
@@ -56,9 +46,9 @@ describe("TransferProgress.vue", () => {
   });
 
   it("exposes localized phase and determinate progress semantics", () => {
-    const wrapper = mount(TransferProgress, {
+    const wrapper = mountWithApp(TransferProgress, {
       props: { snapshot: base },
-      global: { plugins: [i18n], stubs: { "el-progress": true } },
+      global: { stubs: { "el-progress": true } },
     });
 
     const bar = wrapper.get('[role="progressbar"]');
@@ -76,11 +66,11 @@ describe("TransferProgress.vue", () => {
   });
 
   it("exposes an indeterminate transfer without a false percentage", () => {
-    const wrapper = mount(TransferProgress, {
+    const wrapper = mountWithApp(TransferProgress, {
       props: {
         snapshot: { ...base, phase: "download", indeterminate: true, total: 0 },
       },
-      global: { plugins: [i18n], stubs: { "el-progress": true } },
+      global: { stubs: { "el-progress": true } },
     });
 
     const bar = wrapper.get('[role="progressbar"]');

@@ -1,24 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { config, flushPromises, mount } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
-import { createI18n } from "vue-i18n";
-import ElementPlus from "element-plus";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import enUS from "@/locales/langs/en-US";
-import zhCN from "@/locales/langs/zh-CN";
+import {
+  createTestAppContext,
+  mountWithApp,
+} from "../helpers/test-app-context";
 
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   register: vi.fn(),
+  getAuthCapabilities: vi.fn(),
   setToken: vi.fn(),
   safeRedirect: vi.fn(() => "/chat"),
   redirectIfAuthed: vi.fn(),
-  push: vi.fn(),
+  push: vi.fn(() => Promise.resolve()),
   replace: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   notification: vi.fn(),
+  formValidateReject: false,
   route: { query: {} as Record<string, unknown> },
   store: {
     SET_USER_NAME: vi.fn(),
@@ -31,7 +33,10 @@ vi.mock("vue-router", () => ({
   useRoute: () => mocks.route,
 }));
 vi.mock("@/api/login", () => ({ login: mocks.login }));
-vi.mock("@/api/auth", () => ({ register: mocks.register }));
+vi.mock("@/api/auth", () => ({
+  register: mocks.register,
+  getAuthCapabilities: mocks.getAuthCapabilities,
+}));
 vi.mock("@/utils/auth", () => ({ setToken: mocks.setToken }));
 vi.mock("@/utils/auth-redirect", () => ({
   redirectIfAuthed: mocks.redirectIfAuthed,
@@ -39,9 +44,8 @@ vi.mock("@/utils/auth-redirect", () => ({
 }));
 vi.mock("@/stores", () => ({ userStore: () => mocks.store }));
 vi.mock("element-plus", async () => {
-  const actual = await vi.importActual<typeof import("element-plus")>(
-    "element-plus",
-  );
+  const actual =
+    await vi.importActual<typeof import("element-plus")>("element-plus");
   return {
     ...actual,
     ElMessage: {
@@ -52,7 +56,12 @@ vi.mock("element-plus", async () => {
   };
 });
 
-import Login from "@/views/login/index.vue";
+import Login from "@/views/login/LoginView.vue";
+
+const SOURCE = readFileSync(
+  resolve(__dirname, "../../src/views/login/LoginView.vue"),
+  "utf8"
+);
 
 type Rule = {
   required?: boolean;
@@ -70,10 +79,13 @@ const ElFormStub = defineComponent({
   },
   setup(props, { expose, slots }) {
     const validate = async (callback?: (valid: boolean) => void) => {
+      if (mocks.formValidateReject) {
+        throw new Error("validation unavailable");
+      }
       let valid = true;
       for (const [field, rawRules] of Object.entries(props.rules)) {
         const value = String(
-          (props.model as Record<string, unknown>)[field] ?? "",
+          (props.model as Record<string, unknown>)[field] ?? ""
         );
         for (const rule of rawRules as Rule[]) {
           if (rule.required && !value) {
@@ -147,19 +159,12 @@ const ElButtonStub = defineComponent({
           "aria-busy": props.loading ? "true" : "false",
           onClick: (event: MouseEvent) => emit("click", event),
         },
-        slots.default?.(),
+        slots.default?.()
       );
   },
 });
 
-const i18n = createI18n({
-  legacy: false,
-  locale: "en-US",
-  fallbackLocale: "en-US",
-  messages: { "en-US": enUS, "zh-CN": zhCN },
-});
-
-config.global.plugins = [i18n, ElementPlus];
+let context: ReturnType<typeof createTestAppContext>;
 
 const stubs = {
   ElForm: ElFormStub,
@@ -171,13 +176,13 @@ const stubs = {
 
 const mountView = (query: Record<string, unknown> = {}) => {
   mocks.route.query = query;
-  return mount(Login, { global: { stubs } });
+  return context.mount(Login, { global: { stubs } });
 };
 
 const fillCredentials = async (
-  wrapper: ReturnType<typeof mount>,
+  wrapper: ReturnType<typeof mountWithApp>,
   email = "researcher@example.test",
-  password = "Secure1!",
+  password = "Secure1!"
 ) => {
   const inputs = wrapper.findAll("input");
   await inputs[0].setValue(email);
@@ -187,8 +192,9 @@ const fillCredentials = async (
 describe("Login auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    i18n.global.locale.value = "en-US";
+    context = createTestAppContext({ locale: "en-US" });
     mocks.route.query = {};
+    mocks.formValidateReject = false;
     mocks.safeRedirect.mockReturnValue("/chat");
     mocks.login.mockResolvedValue({
       code: 200,
@@ -199,18 +205,54 @@ describe("Login auth surface", () => {
         password_warning: "Rotate your password soon",
       },
     });
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: true },
+    });
   });
 
   it("mounts one login form on the horizon auth shell with the production logo", () => {
     const wrapper = mountView();
 
     expect(wrapper.find(".phy-auth-layout").classes()).toContain(
-      "phy-auth-layout--horizon",
+      "phy-auth-layout--horizon"
     );
-    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(true);
+    expect(wrapper.find('.phy-auth-brand img[src="/logo.png"]').exists()).toBe(
+      true
+    );
     expect(wrapper.findAll(".el-form")).toHaveLength(1);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
     expect(wrapper.find(".login-button").attributes("type")).toBe("button");
+    expect(
+      wrapper.findAll('.phy-auth-brand img[src="/logo.png"]')
+    ).toHaveLength(1);
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get(".login-title").text()).toBe("Sign in");
+    expect(wrapper.get(".login-subtitle").text()).toBe(
+      "A multi-agent system for scientific discovery and plant design"
+    );
+  });
+
+  it("uses the active locale for the login title and description", async () => {
+    const wrapper = mountView();
+    context.i18n.global.locale.value = "zh-CN";
+    await nextTick();
+
+    expect(wrapper.get(".login-title").text()).toBe("登录");
+    expect(wrapper.get(".login-subtitle").text()).toBe(
+      "面向科学发现与植物设计的多智能体科研系统"
+    );
+  });
+
+  it("hides the login registration link when registration is closed", async () => {
+    mocks.getAuthCapabilities.mockResolvedValue({
+      code: 200,
+      data: { registration_enabled: false },
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find(".register-container").exists()).toBe(false);
   });
 
   it("runs the authenticated reverse guard on mount", () => {
@@ -218,7 +260,7 @@ describe("Login auth surface", () => {
     expect(mocks.redirectIfAuthed).toHaveBeenCalledTimes(1);
     expect(mocks.redirectIfAuthed).toHaveBeenCalledWith(
       mocks.route,
-      expect.objectContaining({ replace: mocks.replace }),
+      expect.objectContaining({ replace: mocks.replace })
     );
     wrapper.unmount();
   });
@@ -233,7 +275,7 @@ describe("Login auth surface", () => {
     expect(privacy.attributes("rel")).toBe("noopener noreferrer");
     expect(terms.text()).toBe("Terms of Service");
 
-    i18n.global.locale.value = "zh-CN";
+    context.i18n.global.locale.value = "zh-CN";
     await nextTick();
     expect(wrapper.get('a[href="/terms"]').text()).toBe("服务条款");
 
@@ -249,6 +291,18 @@ describe("Login auth surface", () => {
     await flushPromises();
     expect(mocks.login).not.toHaveBeenCalled();
     expect(mocks.setToken).not.toHaveBeenCalled();
+  });
+
+  it("keeps a rejected form validation from becoming an unhandled promise", async () => {
+    mocks.formValidateReject = true;
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.login).not.toHaveBeenCalled();
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
   });
 
   it("preserves FormData, token/store order, warning, and safe redirect on success", async () => {
@@ -272,14 +326,14 @@ describe("Login auth surface", () => {
       expect.objectContaining({
         title: "Password Security Notice",
         message: "Rotate your password soon",
-      }),
+      })
     );
-    expect(
-      mocks.setToken.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]);
-    expect(
-      mocks.store.SET_USER_NAME.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.store.SET_LOGIN_STATUS.mock.invocationCallOrder[0]);
+    expect(mocks.setToken.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]
+    );
+    expect(mocks.store.SET_USER_NAME.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.store.SET_LOGIN_STATUS.mock.invocationCallOrder[0]
+    );
   });
 
   it("notifies first-login users and replaces to password change before redirect", async () => {
@@ -298,10 +352,50 @@ describe("Login auth surface", () => {
 
     expect(mocks.store.SET_LOGIN_STATUS).toHaveBeenCalledTimes(1);
     expect(mocks.notification).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "First Login Notice" }),
+      expect.objectContaining({ title: "First Login Notice" })
     );
     expect(mocks.replace).toHaveBeenCalledWith("/change-password");
     expect(mocks.safeRedirect).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a rejected first-login navigation through the login error path", async () => {
+    mocks.login.mockResolvedValueOnce({
+      code: 200,
+      data: {
+        token: "first-login-token",
+        user_name: "new-user",
+        login_status: "0",
+      },
+    });
+    mocks.replace.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.error).toHaveBeenCalledWith("navigation unavailable");
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
+  });
+
+  it("surfaces a rejected post-login redirect through the login error path", async () => {
+    mocks.replace.mockRejectedValueOnce(new Error("redirect unavailable"));
+    const wrapper = mountView();
+    await fillCredentials(wrapper);
+    await wrapper.get(".login-button").trigger("click");
+    await flushPromises();
+
+    expect(mocks.error).toHaveBeenCalledWith("redirect unavailable");
+    expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
+  });
+
+  it("absorbs rejected auxiliary navigation without a global unhandled rejection", async () => {
+    mocks.push.mockRejectedValueOnce(new Error("navigation unavailable"));
+    const wrapper = mountView();
+
+    await wrapper.get('a[href="/forgot-password"]').trigger("click");
+    await flushPromises();
+
+    expect(mocks.push).toHaveBeenCalledWith("/forgot-password");
   });
 
   it("handles locked responses and rejected requests while resetting loading", async () => {
@@ -309,7 +403,7 @@ describe("Login auth surface", () => {
     mocks.login.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveLogin = resolve;
-      }),
+      })
     );
     const wrapper = mountView();
     await fillCredentials(wrapper);
@@ -319,7 +413,7 @@ describe("Login auth surface", () => {
     resolveLogin({ code: 401, data: { locked: true }, message: "Locked" });
     await flushPromises();
     expect(mocks.notification).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Account Locked", message: "Locked" }),
+      expect.objectContaining({ title: "Account Locked", message: "Locked" })
     );
     expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
 
@@ -329,13 +423,19 @@ describe("Login auth surface", () => {
     await wrapper.get(".login-button").trigger("click");
     await flushPromises();
     expect(mocks.notification).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: "Account Locked", message: "Rejected lock" }),
+      expect.objectContaining({
+        title: "Account Locked",
+        message: "Rejected lock",
+      })
     );
     expect(wrapper.get(".login-button").attributes("aria-busy")).toBe("false");
   });
 
   it("uses the normal error toast for non-locked responses and rejections", async () => {
-    mocks.login.mockResolvedValueOnce({ code: 401, message: "Invalid credentials" });
+    mocks.login.mockResolvedValueOnce({
+      code: 401,
+      message: "Invalid credentials",
+    });
     const wrapper = mountView();
     await fillCredentials(wrapper);
     await wrapper.get(".login-button").trigger("click");
@@ -352,14 +452,12 @@ describe("Login auth surface", () => {
     const wrapper = mountView();
     expect(wrapper.find(".register-container").exists()).toBe(true);
     expect(wrapper.findAll(".login-button")).toHaveLength(1);
-    const source = readFileSync(
-      resolve(__dirname, "../../src/views/login/index.vue"),
-      "utf8",
-    );
-    expect(source).toContain("isLogin");
-    expect(source).toContain("handleRegister");
-    expect(source).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
-    expect(source).not.toContain("height: 100vh");
-    expect(source).not.toContain("overflow-y:");
+    expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
+    expect(SOURCE.match(/<h1/g)).toHaveLength(1);
+    expect(SOURCE).toContain("isLogin");
+    expect(SOURCE).toContain("handleRegister");
+    expect(SOURCE).not.toMatch(/console\.(?:log|info|debug|warn|error)\s*\(/);
+    expect(SOURCE).not.toContain("height: 100vh");
+    expect(SOURCE).not.toContain("overflow-y:");
   });
 });

@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,10 +24,31 @@ type Client struct {
 	userKey string
 }
 
-// NewClient builds a Client from the loaded BotConfig.
+// NewClient builds a Client using the global fallback timeout.
 func NewClient() *Client {
+	return NewClientWithTimeout(
+		time.Duration(BotConfig.TimeoutSeconds) * time.Second,
+	)
+}
+
+// NewClientWithTimeout builds a Client for one explicitly bounded request
+// class without mutating the process-wide BotConfig.
+func NewClientWithTimeout(timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = time.Duration(BotConfig.TimeoutSeconds) * time.Second
+	}
 	return &Client{
-		http:    &http.Client{Timeout: time.Duration(BotConfig.TimeoutSeconds) * time.Second},
+		http:    &http.Client{Timeout: timeout},
+		baseURL: BotConfig.BaseURL,
+		userKey: BotConfig.UserAPIKey,
+	}
+}
+
+// NewStreamingClient builds a Client for long-lived SSE responses. The request
+// context still cancels the call; the http.Client has no whole-body deadline.
+func NewStreamingClient() *Client {
+	return &Client{
+		http:    &http.Client{},
 		baseURL: BotConfig.BaseURL,
 		userKey: BotConfig.UserAPIKey,
 	}
@@ -85,46 +107,45 @@ func preferBotRequestID(err error, requestID string) error {
 }
 
 // APIError is a non-2xx Bot response decoded into a typed error so callers can
-// distinguish a client-correctable status (surfaced to the Web app) from a 5xx or
-// transport failure (kept generic). Message is the Bot envelope message; body
-// is the raw payload kept for logs only.
+// distinguish a client-correctable status (surfaced to the Web app) from a 5xx
+// or transport failure (kept generic). Message stays out of Error() because it
+// can contain user input; SurfaceableMessage is the only user-facing accessor.
 type APIError struct {
 	Method    string
 	Path      string
 	Status    int
+	Code      string
 	Message   string
+	Stage     string
+	Retryable bool
 	RequestID string
-	body      string
 }
 
 func (e *APIError) Error() string {
-	if e.Message != "" {
-		return fmt.Sprintf("bot %s %s: %s (code=%d req=%s)", e.Method, e.Path, e.Message, e.Status, e.RequestID)
-	}
-	return fmt.Sprintf("bot %s %s: status %d body %s", e.Method, e.Path, e.Status, truncateForLog(e.body))
-}
-
-// maxBodyInError bounds how much of a non-envelope Bot response body is
-// embedded in the error string.
-const maxBodyInError = 256
-
-// truncateForLog caps the raw Bot body that gets stringified into the error.
-// The error reaches the logs, and a 5xx body may carry internal detail or user
-// data, so short payloads survive intact while oversized ones are truncated
-// rather than echoed in full. Truncation is on a rune boundary so a multibyte
-// (e.g. Chinese) body never lands as invalid UTF-8.
-func truncateForLog(s string) string {
-	r := []rune(s)
-	if len(r) <= maxBodyInError {
-		return s
-	}
-	return string(r[:maxBodyInError]) + "…(truncated)"
+	return fmt.Sprintf("bot request failed: status %d", e.Status)
 }
 
 // botError turns a non-2xx response into a typed *APIError, preferring the
-// uniform Bot error envelope and falling back to the raw body (logs only).
+// uniform Bot error envelope and otherwise retaining status metadata only.
 func botError(method, path string, status int, raw []byte) error {
-	e := &APIError{Method: method, Path: path, Status: status, body: string(raw)}
+	e := &APIError{Method: method, Path: path, Status: status}
+	var safe struct {
+		Error struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
+			Stage     string `json:"stage"`
+			Retryable bool   `json:"retryable"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &safe) == nil && safe.Error.Code != "" {
+		e.Code = safe.Error.Code
+		e.Message = safe.Error.Message
+		e.RequestID = safe.Error.RequestID
+		e.Stage = safe.Error.Stage
+		e.Retryable = safe.Error.Retryable
+		return e
+	}
 	var be BotError
 	if json.Unmarshal(raw, &be) == nil && be.Error.Message != "" {
 		e.Message = be.Error.Message
@@ -156,9 +177,13 @@ func (c *Client) doJSONWithMeta(ctx context.Context, method, path string, body, 
 // doJSONWithMetaOptions is the shared JSON transport with an opt-in strict
 // decoder for response envelopes whose identity controls a cross-service
 // write. Ordinary Bot responses keep encoding/json's existing behavior; the
-// Expert router response opts in so duplicate object keys cannot become a
+// Agent-run responses opt in so duplicate object keys cannot become a
 // last-value-wins agent/run identity.
 func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool) (ResponseMeta, error) {
+	return c.doJSONWithMetaOptionsAndIdempotency(ctx, method, path, body, out, rejectDuplicateKeys, "")
+}
+
+func (c *Client) doJSONWithMetaOptionsAndIdempotency(ctx context.Context, method, path string, body, out interface{}, rejectDuplicateKeys bool, idempotencyKey string) (ResponseMeta, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -175,6 +200,9 @@ func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string,
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.userKey)
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return ResponseMeta{}, wrapTransportError(err)
@@ -185,18 +213,23 @@ func (c *Client) doJSONWithMetaOptions(ctx context.Context, method, path string,
 	if readErr != nil {
 		return meta, wrapTransportError(readErr)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
-	}
-	if rejectDuplicateKeys {
+	if rejectDuplicateKeys && (resp.StatusCode >= 200 && resp.StatusCode < 300 || strictUploadControlErrorPath(method, path)) {
 		if err := rejectDuplicateJSONKeys(raw); err != nil {
 			return meta, err
 		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return meta, preferBotRequestID(botError(method, path, resp.StatusCode, raw), meta.BotRequestID)
 	}
 	if out != nil {
 		return meta, json.Unmarshal(raw, out)
 	}
 	return meta, nil
+}
+
+func strictUploadControlErrorPath(method, path string) bool {
+	return method == http.MethodPost && (path == "/v1/files" ||
+		strings.HasPrefix(path, "/v1/files/") && strings.HasSuffix(path, "/capability"))
 }
 
 var errDuplicateJSONKey = errors.New("duplicate JSON object key")
@@ -299,17 +332,10 @@ func (c *Client) ChatCompletionWithMeta(ctx context.Context, req ChatCompletionR
 	req.Stream = false
 	var out ChatCompletionResponse
 	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/chat/completions", req, &out)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
-}
-
-// ChatCompletionStream opens a streaming chat completion and returns the raw
-// SSE body for the caller to forward to the Web app unchanged. Precondition
-// failures (auth, unsupported model) surface as a decoded error here, before
-// any frame is forwarded, because Bot validates them up front. The caller
-// owns closing the returned ReadCloser.
-func (c *Client) ChatCompletionStream(ctx context.Context, req ChatCompletionRequest) (io.ReadCloser, error) {
-	stream, _, err := c.ChatCompletionStreamWithMeta(ctx, req)
-	return stream, err
 }
 
 // ChatCompletionStreamWithMeta opens a streaming chat completion and returns
@@ -342,6 +368,33 @@ func (c *Client) ChatCompletionStreamWithMeta(ctx context.Context, req ChatCompl
 	return resp.Body, meta, nil
 }
 
+// RunStreamWithMeta opens the owner-scoped AG-UI resume stream for one Bot run.
+func (c *Client) RunStreamWithMeta(ctx context.Context, runID string, after int64) (io.ReadCloser, ResponseMeta, error) {
+	path := "/v1/runs/" + url.PathEscape(runID) + "/stream"
+	if after > 0 {
+		path += "?after=" + strconv.FormatInt(after, 10)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.userKey)
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, ResponseMeta{}, wrapTransportError(err)
+	}
+	meta := responseMeta(resp)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, meta, wrapTransportError(readErr)
+		}
+		return nil, meta, preferBotRequestID(botError(http.MethodGet, path, resp.StatusCode, raw), meta.BotRequestID)
+	}
+	return resp.Body, meta, nil
+}
+
 // InvokeAgent submits a run to a remote/long-running agent by slug.
 func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, error) {
 	response, _, err := c.InvokeAgentWithMeta(ctx, slug, req)
@@ -354,7 +407,10 @@ func (c *Client) InvokeAgent(ctx context.Context, slug string, req AgentRunReque
 // InvokeAgentWithMeta submits a run and returns Bot response metadata.
 func (c *Client) InvokeAgentWithMeta(ctx context.Context, slug string, req AgentRunRequest) (*AgentRunResponse, ResponseMeta, error) {
 	var out AgentRunResponse
-	meta, err := c.doJSONWithMeta(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out)
+	meta, err := c.doJSONWithMetaOptionsAndIdempotency(ctx, http.MethodPost, "/v1/agents/"+url.PathEscape(slug)+"/runs", req, &out, true, req.IdempotencyKey)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
 }
 
@@ -373,6 +429,9 @@ func (c *Client) RouteQuery(ctx context.Context, req RouteQueryRequest) (*RouteQ
 func (c *Client) RouteQueryWithMeta(ctx context.Context, req RouteQueryRequest) (*RouteQueryResponse, ResponseMeta, error) {
 	var out RouteQueryResponse
 	meta, err := c.doJSONWithMetaOptions(ctx, http.MethodPost, "/v1/query/route", req, &out, true)
+	if err == nil && req.Conversation != nil {
+		err = validateResponseContext(out.ConversationContext, req.Conversation.TurnID)
+	}
 	return &out, meta, err
 }
 
@@ -403,6 +462,56 @@ func (c *Client) GetRunWithMeta(ctx context.Context, runID string) (*RunRecord, 
 	return &out, meta, err
 }
 
+// CancelRun asks Bot to cancel one owner-scoped run and last-claim jobs.
+func (c *Client) CancelRun(ctx context.Context, runID string) (*RunRecord, error) {
+	response, _, err := c.CancelRunWithMeta(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// CancelRunWithMeta cancels one owner-scoped run and returns Bot metadata.
+// The response identity is persisted, so the decoder rejects duplicate keys.
+func (c *Client) CancelRunWithMeta(ctx context.Context, runID string) (*RunRecord, ResponseMeta, error) {
+	var out RunRecord
+	meta, err := c.doJSONWithMetaOptions(
+		ctx,
+		http.MethodPost,
+		"/v1/runs/"+url.PathEscape(runID)+"/cancel",
+		nil,
+		&out,
+		true,
+	)
+	return &out, meta, err
+}
+
+// RetryRunDelivery starts or observes one idempotent archive-delivery retry.
+// Bot returns only the new pending delivery revision; scientific work is not
+// resubmitted by this command.
+func (c *Client) RetryRunDelivery(ctx context.Context, runID string) (*RunDelivery, error) {
+	var raw json.RawMessage
+	_, err := c.doJSONWithMetaOptions(
+		ctx,
+		http.MethodPost,
+		"/v1/runs/"+url.PathEscape(runID)+"/delivery/retry",
+		nil,
+		&raw,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+	delivery, err := DecodeRunDelivery(raw, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if delivery.Status != "pending" {
+		return nil, fmt.Errorf("delivery retry returned non-pending state")
+	}
+	return &delivery, nil
+}
+
 // GetRunLogs fetches the task logs for a run (used by the update-log path).
 func (c *Client) GetRunLogs(ctx context.Context, runID string) (*RunLogsResponse, error) {
 	var out RunLogsResponse
@@ -427,59 +536,4 @@ func (c *Client) GetAgentsWithMeta(ctx context.Context) (*AgentsListResponse, Re
 	var out AgentsListResponse
 	meta, err := c.doJSONWithMeta(ctx, http.MethodGet, "/v1/agents", nil, &out)
 	return &out, meta, err
-}
-
-// UploadFile streams one file to Bot OBS ingestion and returns its metadata.
-func (c *Client) UploadFile(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, error) {
-	response, _, err := c.UploadFileWithMeta(ctx, filename, purpose, r)
-	if err != nil {
-		return nil, err
-	}
-	return response, nil
-}
-
-// UploadFileWithMeta streams one file to Bot OBS ingestion and returns its
-// metadata together with the Bot response status and request id.
-func (c *Client) UploadFileWithMeta(ctx context.Context, filename, purpose string, r io.Reader) (*FileUploadResponse, ResponseMeta, error) {
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile("file", filename)
-	if err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	if _, err := io.Copy(part, r); err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	if purpose != "" {
-		if err := mw.WriteField("purpose", purpose); err != nil {
-			return nil, ResponseMeta{}, err
-		}
-	}
-	if err := mw.Close(); err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/files", &buf)
-	if err != nil {
-		return nil, ResponseMeta{}, err
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+c.userKey)
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, ResponseMeta{}, wrapTransportError(err)
-	}
-	defer resp.Body.Close()
-	meta := responseMeta(resp)
-	raw, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, meta, wrapTransportError(readErr)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, meta, preferBotRequestID(botError(http.MethodPost, "/v1/files", resp.StatusCode, raw), meta.BotRequestID)
-	}
-	var out FileUploadResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, meta, err
-	}
-	return &out, meta, nil
 }

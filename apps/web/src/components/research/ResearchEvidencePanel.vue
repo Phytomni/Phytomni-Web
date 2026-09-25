@@ -17,106 +17,127 @@
         v-for="ref in displayReferences"
         :id="ref.id"
         :key="ref.id"
-        class="research-evidence-panel__item"
+        :class="[
+          'research-evidence-panel__item',
+          {
+            'research-evidence-panel__item--active': activeReferenceIds.has(
+              ref.id
+            ),
+            'is-citation-target': activeReferenceIds.has(ref.id),
+          },
+        ]"
         role="listitem"
         tabindex="-1"
-        v-html="ref.html"
-      ></div>
+        :aria-current="currentReferenceId === ref.id ? 'true' : undefined"
+      >
+        <CitationReferenceRow :index="ref.index" :citation="ref.citation" />
+        <button
+          v-if="materialFor(ref.index)?.excerpt"
+          type="button"
+          class="research-evidence-panel__material"
+          data-testid="material-excerpt"
+          @click="
+            emit('material-activate', {
+              kind: 'excerpt',
+              referenceIndex: ref.index,
+            })
+          "
+        >
+          {{ $t("agents.deepGenome.material.excerpt") }}
+        </button>
+      </div>
     </div>
     <p v-else class="research-evidence-panel__empty">
       {{ $t("common.noData") }}
     </p>
+    <span
+      v-if="activeAnnouncement"
+      :key="announcementNonce"
+      class="sr-only"
+      aria-live="polite"
+      >{{ activeAnnouncement }}</span
+    >
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import CitationReferenceRow from "@/components/CitationReferenceRow.vue";
 import { buildDisplayReferences } from "@/utils/reference-renderer";
+import { focusReferenceRows } from "@/utils/scientific-markdown/reference-focus";
+import type {
+  DeepGenomeMaterialSelection,
+  DeepGenomeReferenceMaterial,
+} from "./deep-genome-report";
 
-// Agent-influenced references cross the v-html boundary only after the existing
-// canonical helper escapes text and sanitizes external URLs.
+// Parent rows own namespace, focus and grouped highlighting; content is typed.
 const props = defineProps<{
-  references?: unknown[];
+  references?: readonly unknown[];
   ns: string;
+  referenceMaterials?: readonly DeepGenomeReferenceMaterial[];
 }>();
-
 const emit = defineEmits<{
-  (event: "activate"): void;
+  "material-activate": [selection: DeepGenomeMaterialSelection];
 }>();
+function materialFor(index: number) {
+  return props.referenceMaterials?.find(
+    (material) => material.referenceIndex === index
+  );
+}
 
 const displayReferences = computed(() =>
   buildDisplayReferences(props.references || [], props.ns)
 );
 
+const { t } = useI18n();
 const panelRef = ref<HTMLElement | null>(null);
-let artifactRoot: HTMLElement | null = null;
+const activeReferenceIds = ref<ReadonlySet<string>>(new Set());
+const currentReferenceId = ref<string>();
+const activeAnnouncement = ref("");
+const announcementNonce = ref(0);
 
-function findEvidenceRow(href: string | null): HTMLElement | null {
-  if (!href || !href.startsWith("#") || href.length === 1 || !panelRef.value) {
-    return null;
+function focusReferences(indices: readonly number[]): boolean {
+  const ids = indices.map((index) => displayReferences.value[index - 1]?.id);
+  if (!panelRef.value || indices.length === 0 || ids.some((id) => !id)) {
+    return false;
   }
 
-  const targetId = href.slice(1);
-  if (!displayReferences.value.some((reference) => reference.id === targetId)) {
-    return null;
-  }
-
-  return (
-    Array.from(
-      panelRef.value.querySelectorAll<HTMLElement>(
-        ".research-evidence-panel__item"
-      )
-    ).find((row) => row.id === targetId) || null
-  );
-}
-
-async function handleArtifactClick(event: MouseEvent): Promise<void> {
-  const eventTarget = event.target;
   if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    event.altKey ||
-    !(eventTarget instanceof Element) ||
-    !artifactRoot
+    !focusReferenceRows({
+      root: panelRef.value,
+      namespace: props.ns,
+      indices,
+    })
   ) {
-    return;
+    return false;
   }
 
-  const citation = eventTarget.closest<HTMLAnchorElement>("a.citation-ref");
-  if (!citation || !artifactRoot.contains(citation)) return;
-  if (!findEvidenceRow(citation.getAttribute("href"))) return;
-
-  event.preventDefault();
-  emit("activate");
-  await nextTick();
-
-  const row = findEvidenceRow(citation.getAttribute("href"));
-  if (!row) return;
-  row.scrollIntoView({ block: "nearest" });
-  row.focus();
+  activeReferenceIds.value = new Set(
+    ids.filter((id): id is string => typeof id === "string")
+  );
+  currentReferenceId.value = ids[0];
+  activeAnnouncement.value = `${t("chat.relatedDocuments")}: ${indices.join(", ")}`;
+  announcementNonce.value += 1;
+  return true;
 }
 
-onMounted(() => {
-  const closestArtifact = panelRef.value?.closest(".research-artifact-shell");
-  artifactRoot =
-    closestArtifact instanceof HTMLElement ? closestArtifact : null;
-  artifactRoot?.addEventListener("click", handleArtifactClick);
+watch(displayReferences, () => {
+  activeReferenceIds.value = new Set();
+  currentReferenceId.value = undefined;
+  activeAnnouncement.value = "";
 });
 
-onUnmounted(() => {
-  artifactRoot?.removeEventListener("click", handleArtifactClick);
-  artifactRoot = null;
-});
+defineExpose({ focusReferences });
 </script>
 
 <style scoped>
 .research-evidence-panel {
   min-width: 0;
+  max-width: 100%;
   color: var(--phy-color-text);
   font-family: var(--phy-font-shell);
+  overflow-wrap: anywhere;
 }
 
 .research-evidence-panel__title {
@@ -141,6 +162,14 @@ onUnmounted(() => {
   scroll-margin-block: var(--phy-space-16);
 }
 
+.research-evidence-panel__item--active {
+  background: var(--phy-color-accent-soft);
+}
+
+.research-evidence-panel__item.is-citation-target {
+  background: var(--phy-color-accent-soft);
+}
+
 .research-evidence-panel__item:focus-visible,
 :deep(a:focus-visible) {
   outline: 2px solid var(--phy-color-focus);
@@ -153,12 +182,20 @@ onUnmounted(() => {
   color: var(--phy-color-text-muted);
 }
 
-:deep(.doc-citation) {
-  line-height: inherit;
+.research-evidence-panel__material {
+  min-height: var(--phy-control-height-default);
+  margin-block-start: var(--phy-space-8);
+  padding: var(--phy-space-8) var(--phy-space-12);
+  border: 1px solid var(--phy-color-border-subtle);
+  border-radius: var(--phy-radius-md);
+  background: var(--phy-color-bg-elevated);
+  color: var(--phy-color-action-text);
+  font: inherit;
+  cursor: pointer;
 }
-
-:deep(.doc-link-inline) {
-  overflow-wrap: anywhere;
+.research-evidence-panel__material:focus-visible {
+  outline: 2px solid var(--phy-color-focus);
+  outline-offset: 2px;
 }
 
 :deep(a) {

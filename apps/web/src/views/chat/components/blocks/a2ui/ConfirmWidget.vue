@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type {
   A2uiActionIntent,
   A2uiOpenSurface,
@@ -29,11 +30,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   action: [intent: Extract<A2uiActionIntent, { widget: "confirm" }>];
 }>();
+const { t } = useI18n();
 
 const title = computed(() => props.surface.title);
 const body = computed(() => props.surface.body ?? "");
-const confirmLabel = computed(() => props.surface.confirm_label);
-const cancelLabel = computed(() => props.surface.cancel_label);
+const confirmLabel = computed(
+  () => props.surface.confirm_label?.trim() || t("common.confirm")
+);
+const cancelLabel = computed(
+  () => props.surface.cancel_label?.trim() || t("common.cancel")
+);
 
 function emitSubmit(accepted: boolean) {
   if (props.disabled) return;

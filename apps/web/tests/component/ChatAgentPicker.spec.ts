@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ChatAgentPicker from "@/views/chat/components/ChatAgentPicker.vue";
-import { CANONICAL_AT_ABLE_TOOLS } from "@/constants/agents";
+import { CANONICAL_AGENT_TOOLS } from "@/constants/agents";
+import { mountWithApp } from "../helpers/test-app-context";
 
-const allTools = [...CANONICAL_AT_ABLE_TOOLS];
+const allTools = [...CANONICAL_AGENT_TOOLS];
 
 const makeOptions = (tools: string[]) =>
   tools.map((tool) => ({
@@ -14,18 +15,13 @@ const makeOptions = (tools: string[]) =>
   }));
 
 const mountPicker = (props: Record<string, unknown> = {}) =>
-  mount(ChatAgentPicker, {
+  mountWithApp(ChatAgentPicker, {
     props: {
       options: makeOptions(allTools),
       rolesLoading: false,
       selectedAgent: "",
       disabled: false,
       ...props,
-    },
-    global: {
-      mocks: {
-        $t: (key: string) => `t:${key}`,
-      },
     },
   });
 
@@ -34,10 +30,10 @@ describe("ChatAgentPicker", () => {
     const wrapper = mountPicker();
     const combobox = wrapper.find('[role="combobox"]');
     expect(combobox.exists()).toBe(true);
+    expect(combobox.attributes("id")).toBe("chat-agent-picker");
+    expect(combobox.attributes("name")).toBe("chat-agent");
     expect(combobox.attributes("aria-expanded")).toBe("false");
-    expect((combobox.element as HTMLInputElement).value).toContain(
-      "chat.agentPicker.auto"
-    );
+    expect((combobox.element as HTMLInputElement).value).toContain("Auto");
 
     await wrapper.find('[data-testid="agent-picker-trigger"]').trigger("click");
     await nextTick();
@@ -50,15 +46,52 @@ describe("ChatAgentPicker", () => {
     expect(options).toHaveLength(allTools.length);
   });
 
+  it("formats closed and list labels without changing combobox value", async () => {
+    const option = {
+      tool: "InSilicoResearchAgent",
+      label: "In Silico Research Agent",
+      labelKey: "chat.agentLabels.inSilicoResearchAgent",
+    };
+    const wrapper = mountPicker({
+      options: [option],
+      selectedAgent: "InSilicoResearchAgent",
+    });
+    const input = wrapper.get('[role="combobox"]');
+
+    expect((input.element as HTMLInputElement).value).toBe(
+      "In Silico Research Agent"
+    );
+    expect(input.classes()).toContain("has-display-label");
+    expect(wrapper.get(".picker-display-label em").text()).toBe("In Silico");
+
+    await input.trigger("click");
+    await nextTick();
+    expect(wrapper.find(".picker-display-label").exists()).toBe(false);
+    expect(input.classes()).not.toContain("has-display-label");
+    expect(wrapper.get('[role="option"] em').text()).toBe("In Silico");
+  });
+
+  it("keeps an explicit ChatAgent selection distinct from automatic routing", () => {
+    const automatic = mountPicker({ selectedAgent: "" });
+    expect(
+      (automatic.get('[role="combobox"]').element as HTMLInputElement).value
+    ).toContain("Auto");
+
+    const explicit = mountPicker({ selectedAgent: "ChatAgent" });
+    expect(
+      (explicit.get('[role="combobox"]').element as HTMLInputElement).value
+    ).toBe("ChatAgent");
+  });
+
   it("shows localized loading state while rolesLoading", () => {
     const wrapper = mountPicker({ rolesLoading: true, options: [] });
-    expect(wrapper.text()).toContain("chat.agentPicker.loading");
+    expect(wrapper.text()).toContain("Loading agent permissions...");
     expect(wrapper.find('[role="combobox"]').exists()).toBe(false);
   });
 
   it("shows localized empty state when the permitted intersection is empty", () => {
     const wrapper = mountPicker({ options: [] });
-    expect(wrapper.text()).toContain("chat.agentPicker.empty");
+    expect(wrapper.text()).toContain("No agents available for your account");
     expect(wrapper.find('[role="combobox"]').exists()).toBe(false);
   });
 
@@ -154,7 +187,7 @@ describe("ChatAgentPicker", () => {
 
     expect(combobox.attributes("aria-expanded")).toBe("true");
     expect(wrapper.findAll('[role="option"]')).toHaveLength(0);
-    expect(wrapper.text()).toContain("chat.agentPicker.noResults");
+    expect(wrapper.text()).toContain("No matching agents");
   });
 
   it("closes the listbox on blur", async () => {

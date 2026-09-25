@@ -43,14 +43,17 @@ defineProps<{
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .phy-empty-state__subtitle {
-  max-width: 600px;
+  width: min(100%, var(--phy-layout-reading-max-width));
   margin: var(--phy-space-8) 0 0;
   color: var(--phy-color-text-secondary);
   font-size: 0.9375rem;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .phy-empty-state__chips {

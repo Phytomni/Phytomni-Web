@@ -102,13 +102,13 @@ describe("useSidebarNavigation", () => {
   });
 
   // handleCommand — logout
-  it("handleCommand('logout') calls FedLogOut and then router.replace('/login') after it resolves", async () => {
+  it("handleCommand('logout') revokes the current token then replaces /login", async () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
     const { handleCommand } = useSidebarNavigation(makeOpts(router, userStore));
     handleCommand("logout");
-    expect(userStore.FedLogOut).toHaveBeenCalled();
-    // flush the promise so finally() fires
+    expect(userStore.FedLogOut).toHaveBeenCalledWith({ revoke: true });
+    // flush the promise so then() fires
     await Promise.resolve();
     expect(router.replace).toHaveBeenCalledWith("/login");
   });
@@ -145,7 +145,9 @@ describe("useSidebarNavigation", () => {
   it("openKnowledgeBase() navigates to /gene-display", () => {
     const router = makeRouter();
     const userStore = makeUserStore([]);
-    const { openKnowledgeBase } = useSidebarNavigation(makeOpts(router, userStore));
+    const { openKnowledgeBase } = useSidebarNavigation(
+      makeOpts(router, userStore)
+    );
     openKnowledgeBase();
     expect(router.push).toHaveBeenCalledWith("/gene-display");
   });

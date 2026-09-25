@@ -19,6 +19,7 @@ how to verify, and how to roll back.
 The headline change: **the legacy Python chat service is retired. The Go service becomes the sole `/query` gateway and relays chat traffic to the Bot.** The Bot is deployed and operated by a separate team — this manual covers only the **Web side** of that integration (URL, key, ports, boot check, relay routes) and links the Bot's own deployment doc where Bot bring-up is needed.
 
 > **⚠️ This release includes an API path reorganization (RESTful `/api/v1`):** the Go business API has been consolidated under the RESTful `/api/v1` prefix (both verbs and resource paths change); the authoritative mapping is in [`API_DOC.md`](../../../apps/server/API_DOC.md). Ops notes:
+>
 > - **The nginx reverse proxy must add an `/api/v1` location** pointing at the Go service; the frontend only calls `/api/v1`, and the old `/auth`, `/v1`, `/query` frontend surfaces are retired.
 > - **Cross-boundary legacy alias remains temporarily**: the Bot still calls `POST /query/analyst/update_log` — this old route stays served as an alias on the Go side, to be removed by ops after the Bot is backported. (The former `/v1/nky/server/*` external server entry point was removed — confirmed to have no real external caller; external server clients call Bot, not Go.)
 > - If the curl/nginx examples below still reference old paths, the new contract always takes `API_DOC.md`'s `/api/v1` as authoritative; a full operations-level path reconciliation lands together with this release at cutover.
@@ -27,6 +28,7 @@ The headline change: **the legacy Python chat service is retired. The Go service
 > release that retired the Python chat service, moved `/query` onto Go, and put
 > auth on bcrypt. **It is already live in production.** Two later releases layer on
 > top and are documented separately:
+>
 > - **`0.1.1`** (repo re-layout, `/api/v1`, Redis, auth hardening) →
 >   [`repo-reorg-cutover.md`](repo-reorg-cutover.md) §1–§11.
 > - **`0.1.2`** (i18n, Instant/Expert dark, streaming dark, gene obsfs, backend
@@ -49,10 +51,12 @@ The headline change: **the legacy Python chat service is retired. The Go service
 **Verify-on-server markers.** A few facts live only on the production server and are **not** in any repo. They are marked **(verify on-server)** below — confirm them in place rather than assuming.
 
 **Companion documents.**
+
 - [`operations.md`](../operations.md) — the detailed Bot key mint / 90-day rotation / staged-cutover / rollback procedure. This manual references it instead of duplicating it.
 - [`Phytomni-Bot/docs/deployment.md`](https://github.com/Phytomni/Phytomni-Bot/blob/main/docs/deployment.md) — how the Bot team brings the Bot up (out of scope here).
 
 **Contents.**
+
 1. [What changed](#1-what-changed-vs-the-current-production-stack)
 2. [Target topology & ports](#2-target-topology--ports)
 3. [Prerequisites & pre-flight](#3-prerequisites--pre-flight)
@@ -70,29 +74,29 @@ The headline change: **the legacy Python chat service is retired. The Go service
 
 ## 1. What changed vs the current production stack
 
-| Area | Currently in production | This release | Why it matters |
-|---|---|---|---|
-| Chat backend | A Python service (`nky_client_python`) serves `/query`, owns the MCP client, and holds Huawei OBS credentials | Removed. The Go service's `/query` handler relays to the Bot | A whole process is decommissioned; `/query` traffic moves to Go |
-| Bot dependency | None | Required. Go validates Bot agents at boot when the gateway is enabled | Bot must be up and complete before Go starts with the gateway on |
-| OBS credentials | Held by the Python/Web side; files fetched directly | Held by the Bot only; downloads go through a Bot relay | Web carries no Huawei OBS keys after cutover |
-| `app.yml` | Minimal | New `bot`, `jwt`, `email` blocks; DSN host/user change; `gene_obsfs_path` added | Several new required keys; missing them blocks boot or features |
-| DB schema | — | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover |
-| nginx | `/query` upstream is the Python service | `/query` upstream is Go `:8080` | One reverse-proxy line moves at cutover |
-| First-login flow | No server-side gate | Backend gate + matching frontend guard | Backend and frontend **must** ship together |
-| Auth | MD5 password hashes; audit logs unredacted | bcrypt (lazy upgrade); operation-log admin-only + body redaction | Set `bcrypt_cost`; **run the §5.6 operator preconditions** (inventory, column width, snapshot, canary) before deploy — the hash migration is forward-only |
+| Area             | Currently in production                                                                                       | This release                                                                                 | Why it matters                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat backend     | A Python service (`nky_client_python`) serves `/query`, owns the MCP client, and holds Huawei OBS credentials | Removed. The Go service's `/query` handler relays to the Bot                                 | A whole process is decommissioned; `/query` traffic moves to Go                                                                                           |
+| Bot dependency   | None                                                                                                          | Required. Go validates Bot agents at boot when the gateway is enabled                        | Bot must be up and complete before Go starts with the gateway on                                                                                          |
+| OBS credentials  | Held by the Python/Web side; files fetched directly                                                           | Held by the Bot only; downloads go through a Bot relay                                       | Web carries no Huawei OBS keys after cutover                                                                                                              |
+| `app.yml`        | Minimal                                                                                                       | New `bot`, `jwt`, `email` blocks; DSN host/user change; `gene_obsfs_path` added              | Several new required keys; missing them blocks boot or features                                                                                           |
+| DB schema        | —                                                                                                             | `+bot_run_id`, `+image_paths`, three enum tightenings; two legacy tables retained-but-unused | An additive migration is required before cutover                                                                                                          |
+| nginx            | `/query` upstream is the Python service                                                                       | `/query` upstream is Go `:8080`                                                              | One reverse-proxy line moves at cutover                                                                                                                   |
+| First-login flow | No server-side gate                                                                                           | Backend gate + matching frontend guard                                                       | Backend and frontend **must** ship together                                                                                                               |
+| Auth             | MD5 password hashes; audit logs unredacted                                                                    | bcrypt (lazy upgrade); operation-log admin-only + body redaction                             | Set `bcrypt_cost`; **run the §5.6 operator preconditions** (inventory, column width, snapshot, canary) before deploy — the hash migration is forward-only |
 
 ---
 
 ## 2. Target topology & ports
 
-| Component | Port | Role |
-|---|---|---|
-| nginx | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA |
-| Go service | `:8080` | Serves `/api/v1/*` (plus the retained back-compat alias `/query/analyst/update_log`). Sole MySQL writer |
-| Bot | `:8000` | **Internal only.** Go relays chat here; the browser never reaches it directly. Deployed by the Bot team |
-| MySQL | `:3306` | `phytomni` database |
-| Legacy Python chat service | **(verify on-server)** | Retired at cutover; remove from nginx once `/query` points at Go |
-| Satellite: `/aiquery/*`, `/oneauth/*` | separate | Redis cache + unified auth — unchanged, proxied independently |
+| Component                             | Port                        | Role                                                                                                    |
+| ------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| nginx                                 | `:443` (TLS, `phytomni.cn`) | TLS termination + reverse proxy by path + serves the SPA                                                |
+| Go service                            | `:8080`                     | Serves `/api/v1/*` (plus the retained back-compat alias `/query/analyst/update_log`). Sole MySQL writer |
+| Bot                                   | `:8000`                     | **Internal only.** Go relays chat here; the browser never reaches it directly. Deployed by the Bot team |
+| MySQL                                 | `:3306`                     | `phytomni` database                                                                                     |
+| Legacy Python chat service            | **(verify on-server)**      | Retired at cutover; remove from nginx once `/query` points at Go                                        |
+| Satellite: `/aiquery/*`, `/oneauth/*` | separate                    | Redis cache + unified auth — unchanged, proxied independently                                           |
 
 **Current data flow**
 
@@ -145,14 +149,14 @@ Copy `config/app.yml.example` to `config/app.yml` and fill in real values. `app.
 
 ```yaml
 bot:
-  base_url: "http://<BOT_HOST>:8000"   # Bot HTTP root (internal VPC URL in production)
-  user_api_key: "<PTM_WEB_KEY>"        # one ptm_… key for the whole Web app (see §7)
-  timeout_seconds: 900                 # gateway↔Bot HTTP timeout for SYNC agents
-  proxy_enabled: true                  # master switch; false ⇒ /query returns 503
-  key_audit_redact: true               # logs emit only the key prefix
-  max_upload_file_bytes: 26214400      # 25 MiB per file
+  base_url: "http://<BOT_HOST>:8000" # Bot HTTP root (internal VPC URL in production)
+  user_api_key: "<PTM_WEB_KEY>" # one ptm_… key for the whole Web app (see §7)
+  timeout_seconds: 900 # gateway↔Bot HTTP timeout for SYNC agents
+  proxy_enabled: true # master switch; false ⇒ /query returns 503
+  key_audit_redact: true # logs emit only the key prefix
+  max_upload_file_bytes: 26214400 # 25 MiB per file
   max_upload_file_count: 10
-  max_upload_total_bytes: 52428800     # 50 MiB per request
+  max_upload_total_bytes: 52428800 # 50 MiB per request
 ```
 
 - `proxy_enabled` **must be `true`** in any real deployment — after cutover the Go gateway is the only `/query` handler. With it `true`, the Go service performs a boot-time Bot agent check and **fails fast** if the Bot is unreachable (see §7).
@@ -171,7 +175,7 @@ writeback); OBS access is the Bot relay (`/v1/relay/obs/*`). Remove any
 
 ```yaml
 jwt:
-  secret_key: "<JWT_SECRET>"           # e.g. openssl rand -hex 32
+  secret_key: "<JWT_SECRET>" # e.g. openssl rand -hex 32
 ```
 
 While the Python service remains available as a rollback target (§11), keep `jwt.secret_key` equal to that service's `SECRET_KEY_CLIENT` so tokens stay valid across a rollback. After the Python service is decommissioned, the secret is Go-only.
@@ -216,11 +220,11 @@ Confirm whether the database is co-located (`localhost`) or stays on its externa
 As of `0.1.2`, three secrets can be injected from the environment instead of
 `app.yml`, for 12-factor / secret-manager delivery:
 
-| Env var | Overrides | Mechanism |
-|---|---|---|
-| `PHYTOMNI_JWT_SECRET` | `jwt.secret_key` | explicit non-empty `os.Getenv` |
-| `PHYTOMNI_DB_DSN` | the `db.<key>.dsn` | explicit `os.Getenv` |
-| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv` |
+| Env var                   | Overrides                       | Mechanism                      |
+| ------------------------- | ------------------------------- | ------------------------------ |
+| `PHYTOMNI_JWT_SECRET`     | `jwt.secret_key`                | explicit non-empty `os.Getenv` |
+| `PHYTOMNI_DB_DSN`         | the `db.<key>.dsn`              | explicit `os.Getenv`           |
+| `PHYTOMNI_REDIS_PASSWORD` | `redis.clients.<name>.password` | explicit `os.Getenv`           |
 
 **When the env var is unset, the `app.yml` value wins** — so leaving the
 environment untouched keeps the file-based config above byte-identical. Set these
@@ -384,12 +388,12 @@ Ensure the Bot exposes all seven before starting Go with the gateway on. (This i
 
 The handler maps service errors to HTTP status:
 
-| Condition | Status |
-|---|---|
-| Gateway disabled (`proxy_enabled` false / Bot config missing) | **503** |
-| Unknown tool/agent name | **400** |
-| Client-correctable Bot 4xx (excludes 401/403, all 5xx) | **400** (with the Bot message) |
-| Everything else | **500** |
+| Condition                                                     | Status                         |
+| ------------------------------------------------------------- | ------------------------------ |
+| Gateway disabled (`proxy_enabled` false / Bot config missing) | **503**                        |
+| Unknown tool/agent name                                       | **400**                        |
+| Client-correctable Bot 4xx (excludes 401/403, all 5xx)        | **400** (with the Bot message) |
+| Everything else                                               | **500**                        |
 
 ### 7.5 Real-user isolation stays in Web
 
@@ -509,11 +513,14 @@ Order (run inside a maintenance window; the C1→Go-deploy gap briefly 400s brie
 
 1. Backfill history (safe anytime, idempotent):
    go run main.go migrate backfill-agent-tool-names
+
    # or manual: UPDATE question_agent_logs SET tool_name='BriefGeneAgent' WHERE tool_name='BriefReviewAgent';
-   #            UPDATE question_agent_logs SET tool_name='ChatAgent'      WHERE tool_name='ChatAgents'; ...(5 plural→singular)
+
+   # UPDATE question_agent_logs SET tool_name='ChatAgent' WHERE tool_name='ChatAgents'; ...(5 plural→singular)
 
 2. Rename input tokens, then immediately deploy the new Go binary:
    go run main.go migrate rename-tool-names
+
    # or manual: UPDATE tool_names SET tool_name='ChatAgent' WHERE tool_name='ChatAgents'; ...(5 rows incl BriefReviewAgent→BriefGeneAgent)
 
 3. Deploy the new frontend (canonical render-switches, fixed chat compare, canonical fallback, BriefGene cosmetics).

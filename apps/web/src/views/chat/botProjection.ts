@@ -7,9 +7,16 @@
  * reactive state.
  */
 
+import {
+  decodeAgentResultDelivery,
+  type AgentResultDelivery,
+} from "@/api/types";
+import { isApprovedReportText } from "./utils/valid-report-ledger";
+
 export const MAX_BOT_RUN_ID_LENGTH = 128;
 export const MAX_BOT_AGENT_LENGTH = 64;
 export const MAX_BOT_STATUS_LENGTH = 32;
+export const MAX_BOT_WORK_STAGE_LENGTH = 64;
 export const MAX_BOT_REPORT_LENGTH = 1 << 20;
 export const MAX_BOT_DEGRADED_REASON_LENGTH = 256;
 export const MAX_BOT_FAILURES = 32;
@@ -25,6 +32,33 @@ export const MAX_BOT_INTEROP_STATUS_LENGTH = 16;
 export const MAX_BOT_INTEROP_TARGET_ID_LENGTH = 64;
 export const MAX_BOT_INTEROP_KIND_LENGTH = 8;
 export const MAX_BOT_INTEROP_CODE_LENGTH = 32;
+export const MAX_BOT_REPORT_WARNINGS = 64;
+
+export interface BotReport {
+  state: "none" | "intermediate" | "final" | "degraded";
+  degraded: boolean;
+  sourceArtifactCount: number;
+}
+
+export const BOT_REPORT_WARNING_CODES = [
+  "report_artifact_count_capped",
+  "report_context_truncated",
+  "report_artifact_size_exceeded",
+  "report_artifact_read_failed",
+  "report_artifact_empty",
+  "report_no_scientific_text",
+  "report_synthesis_failed",
+  "deep_genome_report_degraded",
+] as const;
+export type BotReportWarningCode = (typeof BOT_REPORT_WARNING_CODES)[number];
+export function isBotReportWarningCode(
+  value: unknown
+): value is BotReportWarningCode {
+  return (
+    typeof value === "string" &&
+    BOT_REPORT_WARNING_CODES.some((code) => code === value)
+  );
+}
 
 export type BotRunStatus =
   | "RUNNING"
@@ -35,6 +69,9 @@ export type BotRunStatus =
   | "QUEUED"
   | "CANCELLED"
   | "TIMED_OUT";
+
+export type BotWorkStage =
+  "input_resolution" | "planning" | "execution" | "report_assembly";
 
 export type BotInteropMode = "off" | "auto" | "required";
 export type BotInteropStatus = "local" | "delegated" | "degraded" | "failed";
@@ -70,10 +107,7 @@ export interface BotInteropPayload {
 }
 
 export type BotReportStage =
-  | "waiting_for_brief_gene"
-  | "intermediate"
-  | "final"
-  | null;
+  "waiting_for_brief_gene" | "intermediate" | "final" | null;
 
 export type BotReportCompleteness = "none" | "partial" | "complete" | null;
 
@@ -95,10 +129,14 @@ export interface BotRunProjection {
   runId: string | null;
   agent: string;
   status: BotRunStatus;
+  workStage: BotWorkStage | null;
+  reportPresentation: boolean;
   reportStage: BotReportStage;
   reportCompleteness: BotReportCompleteness;
   reportRevision: number;
   reportUpdatedAt: string | null;
+  report?: BotReport;
+  reportWarningCodes?: BotReportWarningCode[];
   intermediateReport: string;
   finalReport: string;
   progress: BotProgress;
@@ -106,6 +144,8 @@ export interface BotRunProjection {
   degradedReason: string | null;
   failures: string[];
   artifacts: BotArtifact[];
+  resultArchiveV1: boolean;
+  delivery?: AgentResultDelivery;
   requestId: string | null;
   trackingDegraded: boolean;
   /** True when the interop path degraded; never contains provider metadata. */
@@ -129,10 +169,30 @@ const STATUS_ALIASES: Record<string, BotRunStatus> = {
   TIMEOUT: "TIMED_OUT",
 };
 
+const ANSWER_REPORT_FALLBACK_AGENTS = new Set([
+  "AnalystAgent",
+  "analyst",
+  "DeepGenomeAgent",
+  "deep_genome",
+  "InSilicoResearchAgent",
+  "research",
+  "DigitalDesignAgent",
+  "design",
+  "GeneNetworkAgent",
+  "network",
+]);
+
 const REPORT_STAGES = new Set<Exclude<BotReportStage, null>>([
   "waiting_for_brief_gene",
   "intermediate",
   "final",
+]);
+
+const WORK_STAGES = new Set<BotWorkStage>([
+  "input_resolution",
+  "planning",
+  "execution",
+  "report_assembly",
 ]);
 
 const REPORT_COMPLETENESS = new Set<Exclude<BotReportCompleteness, null>>([
@@ -184,6 +244,10 @@ function isJsonRecord(value: unknown): value is JsonRecord {
   );
 }
 
+function isUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
 function projectionSources(input: JsonRecord): JsonRecord[] {
   const sources: JsonRecord[] = [input];
   const seen = new Set<JsonRecord>(sources);
@@ -195,7 +259,34 @@ function projectionSources(input: JsonRecord): JsonRecord[] {
       seen.add(value);
     }
   }
+  const remapped = remapDeepGenomeMetadata(sources);
+  if (remapped !== null && !seen.has(remapped)) {
+    sources.push(remapped);
+  }
   return sources;
+}
+
+function remapDeepGenomeMetadata(
+  sources: readonly JsonRecord[]
+): JsonRecord | null {
+  for (const source of sources) {
+    const formatted = source.formatted;
+    if (!isJsonRecord(formatted)) continue;
+    const metadata = formatted.metadata;
+    if (!isJsonRecord(metadata)) continue;
+    const deepGenome = metadata.deep_genome;
+    if (!isJsonRecord(deepGenome)) continue;
+    return {
+      report_stage: deepGenome.stage,
+      report_completeness: deepGenome.completeness,
+      report_revision: deepGenome.revision,
+      report_updated_at: deepGenome.updated_at,
+      progress: deepGenome.progress,
+      degraded: deepGenome.degraded,
+      answer: formatted.answer,
+    };
+  }
+  return null;
 }
 
 function readField(
@@ -367,6 +458,50 @@ function parseMarkdown(value: unknown, field: string): string {
       allowLineBreaks: true,
     }) ?? ""
   );
+}
+
+function parseReport(value: unknown): BotReport | undefined {
+  if (value === undefined) return undefined;
+  if (!isJsonRecord(value)) error("report", "must be an object");
+  const { state, degraded } = value;
+  if (
+    state !== "none" &&
+    state !== "intermediate" &&
+    state !== "final" &&
+    state !== "degraded"
+  ) {
+    error("report.state", "unsupported value");
+  }
+  if (typeof degraded !== "boolean")
+    error("report.degraded", "must be a boolean");
+  const count = readField(
+    [value],
+    ["source_artifact_count", "sourceArtifactCount"]
+  );
+  if (
+    typeof count !== "number" ||
+    !Number.isSafeInteger(count) ||
+    count < 0 ||
+    count > MAX_BOT_PROGRESS_COUNTER
+  ) {
+    error(
+      "report.source_artifact_count",
+      "must be a bounded non-negative integer"
+    );
+  }
+  return { state, degraded, sourceArtifactCount: count };
+}
+
+function parseReportWarningCodes(
+  value: unknown
+): BotReportWarningCode[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_BOT_REPORT_WARNINGS) {
+    error("report_warning_codes", "must be a bounded array");
+  }
+  if (value.some((entry) => typeof entry !== "string"))
+    error("report_warning_codes", "must contain strings");
+  return [...new Set(value.filter(isBotReportWarningCode))];
 }
 
 function parseUpdatedAt(value: unknown): string | null {
@@ -590,10 +725,7 @@ function parseRawArtifactArray(value: readonly unknown[]): BotArtifact[] {
         (path) => path !== outputDir && !path.startsWith(`${outputDir}/`)
       )
     ) {
-      error(
-        `artifacts[${index}].paths`,
-        "must remain within output_dir"
-      );
+      error(`artifacts[${index}].paths`, "must remain within output_dir");
     }
     pathCount += paths.length;
     if (pathCount > MAX_BOT_ARTIFACT_PATHS) {
@@ -610,7 +742,7 @@ function parseGoArtifactObject(value: JsonRecord): BotArtifact[] {
   for (const key of ["directories", "output_dirs"]) {
     const directoryValue = value[key];
     if (directoryValue === undefined || directoryValue === null) continue;
-    if (!Array.isArray(directoryValue)) {
+    if (!isUnknownArray(directoryValue)) {
       error(`artifacts.${key}`, "must be an array");
     }
     if (directoryValue.length > MAX_BOT_ARTIFACTS) {
@@ -666,7 +798,21 @@ function parseGoArtifactObject(value: JsonRecord): BotArtifact[] {
 
 function parseArtifacts(value: unknown): BotArtifact[] {
   if (value === undefined || value === null) return [];
-  if (Array.isArray(value)) return parseRawArtifactArray(value);
+  if (Array.isArray(value)) {
+    if (
+      value.every(
+        (item) =>
+          isJsonRecord(item) &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          typeof item.kind === "string" &&
+          typeof item.download_url === "string"
+      )
+    ) {
+      return [];
+    }
+    return parseRawArtifactArray(value);
+  }
   if (!isJsonRecord(value)) error("artifacts", "must be an array or object");
   if (own(value, "artifacts")) return parseArtifacts(value.artifacts);
   return parseGoArtifactObject(value);
@@ -685,36 +831,75 @@ export function parseBotProjection(input: unknown): BotRunProjection {
     "agent",
     MAX_BOT_AGENT_LENGTH
   );
-  const intermediateValue = parseMarkdown(
+  const intermediateCandidate = parseMarkdown(
     readField(sources, ["intermediate_report", "intermediateReport"]),
     "intermediate_report"
   );
-  const finalValue = parseMarkdown(
+  const finalCandidate = parseMarkdown(
     readField(sources, ["final_report", "finalReport"]),
     "final_report"
   );
   const status = parseStatus(readField(sources, ["status"]));
-  const answer = parseMarkdown(readField(sources, ["answer"]), "answer");
+  const report = parseReport(readField(sources, ["report"]));
+  const reportStage = parseEnum(
+    readField(sources, ["report_stage", "reportStage"]),
+    "report_stage",
+    REPORT_STAGES
+  );
+  const answerIsFinal = report
+    ? report.state === "final"
+    : reportStage === "final";
+  const valid = (value: string) =>
+    isApprovedReportText(agentValue ?? "", value) ? value : "";
+  const intermediateValue = valid(intermediateCandidate);
+  const finalValue = valid(finalCandidate);
+  const answer = valid(parseMarkdown(readField(sources, ["answer"]), "answer"));
   const hasExplicitReport =
     intermediateValue.trim() !== "" || finalValue.trim() !== "";
-  const intermediateReport =
-    hasExplicitReport || status === "SUCCEEDED" ? intermediateValue : answer;
+  const reportPresentation =
+    hasExplicitReport || ANSWER_REPORT_FALLBACK_AGENTS.has(agentValue ?? "");
+  const intermediateReport = hasExplicitReport
+    ? intermediateValue
+    : reportPresentation && !answerIsFinal
+      ? answer
+      : "";
   const finalReport = hasExplicitReport
     ? finalValue
-    : status === "SUCCEEDED"
-    ? answer
-    : finalValue;
+    : reportPresentation && answerIsFinal
+      ? answer
+      : "";
   const interopEnabled = INTEROP_AGENT_NAMES.has(agentValue ?? "");
+  const resultArchiveRaw = readField(sources, [
+    "result_archive_v1",
+    "resultArchiveV1",
+  ]);
+  if (resultArchiveRaw !== undefined && typeof resultArchiveRaw !== "boolean") {
+    error("result_archive_v1", "must be a boolean");
+  }
+  const resultArchiveV1 = resultArchiveRaw === true;
+  const deliveryRaw = readField(sources, ["delivery"]);
+  if (deliveryRaw !== undefined && !resultArchiveV1) {
+    error("delivery", "requires result_archive_v1");
+  }
+  const delivery = resultArchiveV1
+    ? decodeAgentResultDelivery(deliveryRaw)
+    : undefined;
 
   return {
     runId,
     agent: agentValue ?? "",
     status,
-    reportStage: parseEnum(
-      readField(sources, ["report_stage", "reportStage"]),
-      "report_stage",
-      REPORT_STAGES
+    workStage: parseEnum(
+      readField(sources, ["work_stage", "workStage"]),
+      "work_stage",
+      WORK_STAGES
     ),
+    reportPresentation,
+    report,
+    reportWarningCodes: parseReportWarningCodes(
+      readField(sources, ["report_warning_codes", "reportWarningCodes"])
+    ),
+    reportStage,
     reportCompleteness: parseEnum(
       readField(sources, ["report_completeness", "reportCompleteness"]),
       "report_completeness",
@@ -737,7 +922,11 @@ export function parseBotProjection(input: unknown): BotRunProjection {
       { nullable: true }
     ),
     failures: parseFailures(readField(sources, ["failures"])),
-    artifacts: parseArtifacts(readField(sources, ["artifacts"])),
+    artifacts: resultArchiveV1
+      ? []
+      : parseArtifacts(readField(sources, ["artifacts"])),
+    resultArchiveV1,
+    ...(delivery ? { delivery } : {}),
     requestId: boundedString(
       readField(sources, ["request_id", "requestId"]),
       "request_id",
@@ -762,7 +951,9 @@ export function parseBotProjection(input: unknown): BotRunProjection {
 
 /** Return final Markdown when present, otherwise the latest intermediate text. */
 export function visibleBotReport(projection: BotRunProjection): string {
-  return projection.finalReport.trim() !== ""
+  return isApprovedReportText(projection.agent, projection.finalReport)
     ? projection.finalReport
-    : projection.intermediateReport;
+    : isApprovedReportText(projection.agent, projection.intermediateReport)
+      ? projection.intermediateReport
+      : "";
 }

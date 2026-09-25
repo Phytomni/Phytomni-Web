@@ -1,14 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { parseAGUIFrame, splitSSEFrames } from "@/views/chat/streaming/aguiEvents";
+import {
+  parseAGUIFrame,
+  parseSSEFrameId,
+  splitSSEFrames,
+  type AguiEvent,
+} from "@/views/chat/streaming/aguiEvents";
+import { mustGet } from "../../../../helpers/mockFactories";
 
 describe("parseAGUIFrame", () => {
   it("parses a TextMessageContent frame", () => {
     const ev = parseAGUIFrame(
       'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"photosynthesis"}'
     );
-    expect(ev).not.toBeNull();
-    expect(ev!.type).toBe("TextMessageContent");
-    expect(ev!.data.delta).toBe("photosynthesis");
+    const event = mustGet(ev, "TextMessageContent event");
+    expect(event.type).toBe("TextMessageContent");
+    expect(event.data.delta).toBe("photosynthesis");
   });
 
   it("returns null for [DONE] and blank frames", () => {
@@ -18,8 +24,10 @@ describe("parseAGUIFrame", () => {
   });
 
   it("prefers the data.type field over the event: line", () => {
-    const ev = parseAGUIFrame('event: X\ndata: {"type":"RunFinished","run_id":"r1"}');
-    expect(ev!.type).toBe("RunFinished");
+    const ev = parseAGUIFrame(
+      'event: X\ndata: {"type":"RunFinished","run_id":"r1"}'
+    );
+    expect(mustGet(ev, "RunFinished event").type).toBe("RunFinished");
   });
 });
 
@@ -40,19 +48,23 @@ describe("splitSSEFrames", () => {
     expect(first.rest).toBe(firstChunk);
 
     const second = splitSSEFrames(
-      first.rest + '\ndata: [DONE]\r\n\r\n\r\n\r\npartial'
+      first.rest + "\ndata: [DONE]\r\n\r\n\r\n\r\npartial"
     );
     expect(second.frames).toEqual([
       'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"hi"}',
       "data: [DONE]",
     ]);
     expect(second.rest).toBe("partial");
-    expect(parseAGUIFrame(second.frames[0])?.data.delta).toBe("hi");
+    const textEvent = mustGet(
+      parseAGUIFrame(second.frames[0]),
+      "CRLF text event"
+    );
+    expect(textEvent.data.delta).toBe("hi");
     expect(parseAGUIFrame(second.frames[1])).toBeNull();
   });
 
   it("ignores empty LF and CRLF frames while consuming their separators", () => {
-    expect(splitSSEFrames("\n\n\r\n\r\ndata: {\"ok\":true}\n\n")).toEqual({
+    expect(splitSSEFrames('\n\n\r\n\r\ndata: {"ok":true}\n\n')).toEqual({
       frames: ['data: {"ok":true}'],
       rest: "",
     });
@@ -72,9 +84,52 @@ describe("parseAGUIFrame multi-line data", () => {
     expect(parseAGUIFrame("data: {bad json")).toBeNull();
   });
 
+  it("rejects unknown events and non-object or malformed event payloads", () => {
+    expect(
+      parseAGUIFrame('data: {"type":"FutureEvent","value":"ignored"}')
+    ).toBeNull();
+    expect(parseAGUIFrame("data: null")).toBeNull();
+    expect(
+      parseAGUIFrame("event: TextMessageContent\ndata: [1,2,3]")
+    ).toBeNull();
+    expect(
+      parseAGUIFrame(
+        'event: TextMessageContent\ndata: {"type":123,"delta":"x"}'
+      )
+    ).toBeNull();
+  });
+
   it("falls back to the event: line when data has no type", () => {
     const ev = parseAGUIFrame('event: RunFinished\ndata: {"run_id":"r1"}');
     expect(ev?.type).toBe("RunFinished");
+  });
+});
+
+describe("parseSSEFrameId", () => {
+  it("reads the SSE id field", () => {
+    expect(
+      parseSSEFrameId(
+        'id: 3\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}\n\n'
+      )
+    ).toBe("3");
+  });
+
+  it("keeps the last id field when it is a positive integer", () => {
+    expect(
+      parseSSEFrameId(
+        'id: 1\nid: 9\nevent: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}'
+      )
+    ).toBe("9");
+  });
+
+  it("rejects missing, zero, and non-integer id fields", () => {
+    expect(
+      parseSSEFrameId(
+        'event: TextMessageContent\ndata: {"type":"TextMessageContent","delta":"x"}'
+      )
+    ).toBeUndefined();
+    expect(parseSSEFrameId("id: 0\ndata: {}\n\n")).toBeUndefined();
+    expect(parseSSEFrameId("id: abc\ndata: {}\n\n")).toBeUndefined();
   });
 });
 
@@ -88,7 +143,7 @@ describe("combined gated compatibility fixture", () => {
       '\nevent: FutureEvent\ndata: {"type":"FutureEvent","value":"ignored"}\n\n',
       'event: TextMessageContent\r\ndata: {"type":"TextMessageContent","delta":"synthetic"}\r\n\r\n',
       'event: RunError\ndata: {"type":"RunError","code":"fixture_failure","message":"synthetic failure"}\n\n',
-      'data: [DONE]\r\n\r\npartial',
+      "data: [DONE]\r\n\r\npartial",
     ];
     let buffer = "";
     const frames: string[] = [];
@@ -105,27 +160,27 @@ describe("combined gated compatibility fixture", () => {
     expect(frames[3]).toContain("\n");
     expect(buffer).toBe("partial");
 
-    const allowed = new Set([
-      "RunStarted",
-      "TextMessageContent",
-      "RunError",
-    ]);
-    const observed = frames
+    const allowed = new Set(["RunStarted", "TextMessageContent", "RunError"]);
+    const observed: AguiEvent[] = frames
       .map((frame) => parseAGUIFrame(frame))
       .filter((event): event is NonNullable<typeof event> => event !== null);
     expect(observed.map((event) => event.type)).toEqual([
       "RunStarted",
-      "FutureEvent",
       "TextMessageContent",
       "RunError",
     ]);
-    expect(observed.filter((event) => allowed.has(event.type)).map((event) => event.type)).toEqual([
-      "RunStarted",
-      "TextMessageContent",
-      "RunError",
-    ]);
-    expect(observed[0].data.run_id).toBe("run-task27");
-    expect(observed[3].data.message).toBe("synthetic failure");
+    expect(
+      observed
+        .filter((event) => allowed.has(event.type))
+        .map((event) => event.type)
+    ).toEqual(["RunStarted", "TextMessageContent", "RunError"]);
+    expect(observed).toHaveLength(3);
+    expect(mustGet(observed[0], "RunStarted observed event").data.run_id).toBe(
+      "run-task27"
+    );
+    expect(mustGet(observed[2], "RunError observed event").data.message).toBe(
+      "synthetic failure"
+    );
     expect(parseAGUIFrame(frames[4])).toBeNull();
   });
 });

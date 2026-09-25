@@ -3,6 +3,7 @@ package api_service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -43,6 +44,44 @@ func TestDecodeRunProjectionKeepsIntermediateWhenFinalIsMissing(t *testing.T) {
 	}
 }
 
+func TestDecodeRunProjectionCompletesReviewPauseWithFormattedAnswer(t *testing.T) {
+	tests := []struct {
+		name       string
+		answer     string
+		wantAnswer string
+		wantStatus string
+	}{
+		{name: "completed answer", answer: "# Complete review\n\nFinal evidence-backed answer.", wantAnswer: "# Complete review\n\nFinal evidence-backed answer.", wantStatus: "SUCCEEDED"},
+		{name: "blank answer remains paused", answer: "  \n\t", wantStatus: "INPUT_REQUIRED"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			formatted, err := json.Marshal(map[string]string{"answer": tc.answer})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := json.Marshal(map[string]json.RawMessage{"formatted": formatted})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := DecodeRunProjection(rxBot.RunRecord{
+				RunID:  "run-review-poll",
+				Agent:  "review",
+				Status: "input_required",
+				Result: result,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != tc.wantStatus || got.VisibleReport() != tc.wantAnswer {
+				t.Fatalf("projection=%#v want status=%q answer=%q", got, tc.wantStatus, tc.wantAnswer)
+			}
+		})
+	}
+}
+
 func TestDecodeRunProjectionPrefersFinalAndRejectsPrivatePayload(t *testing.T) {
 	got, err := DecodeRunProjection(loadRunRecordFixture(t, "deep_genome_final.json"))
 	if err != nil {
@@ -53,6 +92,335 @@ func TestDecodeRunProjectionPrefersFinalAndRejectsPrivatePayload(t *testing.T) {
 	}
 	if got.ReportUpdatedAt == nil || got.ReportUpdatedAt.IsZero() || got.Progress.Completed != 2 || got.Progress.Total != 2 {
 		t.Fatalf("final metadata=%#v", got)
+	}
+}
+
+func TestDecodeRunProjectionPrefersCanonicalArchiveDelivery(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	record := rxBot.RunRecord{
+		RunID:  "run-archive-ready",
+		Agent:  "research",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"# Canonical report"},
+			"artifacts":[{"output_dir":"obs://bucket/legacy","paths":["obs://bucket/legacy/old.txt"]}],
+			"execution":{
+				"output_dirs":["obs://bucket/owner/run"],
+				"artifacts":[{"download_ref":"obs://bucket/owner/run/private.tsv"}],
+				"delivery":{
+					"schema_version":1,"required":true,"status":"ready","revision":1,
+					"inventory_digest":"` + digest + `",
+					"archive":{"role":"result_archive","name":"research-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+					"error_code":null,"retryable":false
+				}
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ResultArchiveV1 || got.Delivery == nil || got.Delivery.Status != "ready" {
+		t.Fatalf("delivery projection = %#v", got)
+	}
+	if got.VisibleReport() != "# Canonical report" || !reflect.DeepEqual(got.Artifacts.OutputDirs, []string{"obs://bucket/owner/run"}) {
+		t.Fatalf("canonical projection = %#v", got)
+	}
+	expectedArchiveRef := "obs://bucket/owner/run/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/research-results.zip"
+	if len(got.Artifacts.Paths) != 0 || got.Delivery.ArchiveRef != expectedArchiveRef {
+		t.Fatalf("canonical artifacts = %#v delivery=%#v", got.Artifacts, got.Delivery)
+	}
+	browserJSON, err := json.Marshal(struct {
+		Delivery *ProjectionDelivery `json:"delivery"`
+	}{Delivery: got.Delivery})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(browserJSON), "download_ref") ||
+		strings.Contains(string(browserJSON), "result-archive:") ||
+		strings.Contains(string(browserJSON), digest) ||
+		strings.Contains(string(browserJSON), expectedArchiveRef) {
+		t.Fatalf("server-only archive reference leaked: %s", browserJSON)
+	}
+}
+
+func TestDecodeRunProjectionAcceptsReadyArchiveUnderSiblingChildParts(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	record := rxBot.RunRecord{
+		RunID:  "run-design-two-parts",
+		Agent:  "design",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"# Design report"},
+			"execution":{
+				"output_dirs":[
+					"/obs/bucket/owner/run/children/part-002",
+					"/obs/bucket/owner/run/children/part-001"
+				],
+				"delivery":{
+					"schema_version":1,"required":true,"status":"ready","revision":1,
+					"inventory_digest":"` + digest + `",
+					"archive":{"role":"result_archive","name":"design-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+					"error_code":null,"retryable":false
+				}
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "SUCCEEDED" || !got.ResultArchiveV1 || got.Delivery == nil || got.Delivery.Status != "ready" {
+		t.Fatalf("delivery projection = %#v", got)
+	}
+	expectedArchiveRef := "/obs/bucket/owner/run/children/delivery/" + strings.TrimPrefix(digest, "sha256:") + "/design-results.zip"
+	if got.Delivery.ArchiveRef != expectedArchiveRef {
+		t.Fatalf("archive ref = %q, want %q", got.Delivery.ArchiveRef, expectedArchiveRef)
+	}
+	if got.VisibleReport() != "# Design report" {
+		t.Fatalf("report = %q", got.VisibleReport())
+	}
+}
+
+func TestDecodeRunProjectionReadySiblingPartCountBoundary(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("2", 64)
+	dirs := func(count int) string {
+		items := make([]string, count)
+		for i := range items {
+			items[i] = fmt.Sprintf(`"/obs/bucket/owner/run/children/part-%03d"`, i+1)
+		}
+		return strings.Join(items, ",")
+	}
+	record := func(count int) rxBot.RunRecord {
+		return rxBot.RunRecord{
+			RunID:  "run-research-parts",
+			Agent:  "research",
+			Status: "succeeded",
+			Result: json.RawMessage(`{
+				"formatted":{"answer":"# Research report"},
+				"execution":{
+					"output_dirs":[` + dirs(count) + `],
+					"delivery":{
+						"schema_version":1,"required":true,"status":"ready","revision":1,
+						"inventory_digest":"` + digest + `",
+						"archive":{"role":"result_archive","name":"research-results.zip","media_type":"application/zip","size_bytes":4097,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},
+						"error_code":null,"retryable":false
+					}
+				}
+			}`),
+		}
+	}
+
+	for _, count := range []int{8, 9, 20} {
+		got, err := DecodeRunProjection(record(count))
+		if err != nil {
+			t.Fatalf("%d sibling parts rejected: %v", count, err)
+		}
+		if got.Status != "SUCCEEDED" || got.Delivery == nil || got.Delivery.Status != "ready" {
+			t.Fatalf("%d-part projection = %#v", count, got)
+		}
+	}
+
+	if _, err := DecodeRunProjection(record(rxBot.MaxProjectionArtifactCount + 1)); err == nil {
+		t.Fatal("too many sibling parts accepted")
+	}
+}
+
+func TestDecodeRunProjectionRetainsLegacyArtifactsWithoutDeliveryMarker(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:  "run-legacy-artifacts",
+		Agent:  "research",
+		Status: "succeeded",
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"legacy report"},
+			"execution":{"output_dirs":["obs://bucket/canonical-without-marker"],"delivery":null},
+			"artifacts":[{"output_dir":"obs://bucket/legacy","paths":["obs://bucket/legacy/result.txt"]}]
+		}`),
+	}
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ResultArchiveV1 || got.Delivery != nil {
+		t.Fatalf("legacy record activated v1: %#v", got)
+	}
+	if !reflect.DeepEqual(got.Artifacts.Paths, []string{"obs://bucket/legacy/result.txt"}) {
+		t.Fatalf("legacy artifacts = %#v", got.Artifacts)
+	}
+	if !reflect.DeepEqual(got.Artifacts.OutputDirs, []string{"obs://bucket/canonical-without-marker", "obs://bucket/legacy"}) {
+		t.Fatalf("merged output roots = %#v", got.Artifacts.OutputDirs)
+	}
+	if got.OutputDirectoryCount != 2 {
+		t.Fatalf("merged output root count = %d", got.OutputDirectoryCount)
+	}
+}
+
+func TestDecodeRunProjectionRetainsCurrentExecutionState(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:            "run-current-execution",
+		Agent:            "research",
+		Status:           "succeeded",
+		DegradedTracking: true,
+		Result: json.RawMessage(`{
+			"formatted":{"answer":"complete report"},
+			"execution":{
+				"tracking":{"degraded":true},
+				"output_dirs":["internal/runs/synthetic"],
+				"delivery":null
+			}
+		}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.TrackingDegraded || got.OutputDirectoryCount != 1 || len(got.Artifacts.OutputDirs) != 0 {
+		t.Fatalf("current run projection = %#v", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "internal/runs/synthetic") {
+		t.Fatalf("internal output directory leaked: %s", encoded)
+	}
+}
+
+func TestDecodeRunProjectionRejectsMalformedCanonicalDelivery(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("3", 64)
+	results := []json.RawMessage{
+		json.RawMessage(`{"execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"ready","revision":1,"inventory_digest":"` + digest + `","archive":{"role":"result_archive","name":"analyst-results.zip","media_type":"application/zip","size_bytes":1,"downloadable":true,"report_context_eligible":false,"download_ref":"result-archive:` + digest + `"},"error_code":null,"retryable":false}}}`),
+		json.RawMessage(`{"execution":{"output_dirs":["obs://bucket/owner/run"],"delivery":{"schema_version":1,"required":true,"status":"pending","status":"ready","revision":1,"inventory_digest":"","archive":null,"error_code":null,"retryable":false}}}`),
+	}
+	for _, result := range results {
+		got, err := DecodeRunProjection(rxBot.RunRecord{RunID: "run-malformed-delivery", Agent: "research", Status: "succeeded", Result: result})
+		if err == nil {
+			t.Fatalf("malformed canonical delivery accepted: %#v", got)
+		}
+	}
+}
+
+func TestDecodeRunProjectionStoresOnlyBoundedChildCount(t *testing.T) {
+	privateChildren := []string{"private-child-a", "private-child-b"}
+	projection, err := DecodeRunProjection(&rxBot.RunRecord{
+		RunID: "run-child-count", Agent: "analyst", Status: "running", TaskIDs: privateChildren,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.ChildTaskCount != len(privateChildren) {
+		t.Fatalf("child task count=%d want %d", projection.ChildTaskCount, len(privateChildren))
+	}
+	persisted, err := marshalPersistedProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, privateChild := range privateChildren {
+		if strings.Contains(persisted, privateChild) {
+			t.Fatalf("persisted projection retained private child %q: %s", privateChild, persisted)
+		}
+	}
+}
+
+func TestDecodeRunProjectionProjectsChildrenWithoutIdentities(t *testing.T) {
+	record := rxBot.RunRecord{
+		RunID:   "run-children",
+		Agent:   "design",
+		Status:  "running",
+		TaskIDs: []string{"child-secret-1", "child-secret-2"},
+		Result: json.RawMessage(`{"execution":{"tasks":[
+			{"id":"child-secret-1","accepted":true,"status":"succeeded","kind":"protein_structure_analysis","error_code":null},
+			{"id":"child-secret-2","accepted":false,"status":"failed","kind":"promoter_analysis","error_code":"input_rejected"},
+			{"id":"child-secret-3","accepted":false,"status":"failed","kind":"Not A Kind","error_code":"Traceback: boom"}
+		]}}`),
+	}
+
+	got, err := DecodeRunProjection(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ChildTaskCount != 2 {
+		t.Fatalf("child_task_count=%d want 2 (prefer task_ids)", got.ChildTaskCount)
+	}
+	if len(got.Children) != 3 {
+		t.Fatalf("children=%v", got.Children)
+	}
+	if got.Children[0].Ordinal != 1 || got.Children[0].Phase != "SUCCEEDED" || got.Children[0].Kind != "protein_structure_analysis" {
+		t.Fatalf("child0=%v", got.Children[0])
+	}
+	if got.Children[1].Phase != "FAILED" || got.Children[1].ErrorCode == nil || *got.Children[1].ErrorCode != "input_rejected" {
+		t.Fatalf("child1=%v", got.Children[1])
+	}
+	if got.Children[2].Kind != "" || got.Children[2].ErrorCode != nil {
+		t.Fatalf("invalid kind/error_code retained: %v", got.Children[2])
+	}
+
+	persisted, err := marshalPersistedProjection(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"child-secret-1", "child-secret-2", "child-secret-3", "Traceback: boom"} {
+		if strings.Contains(persisted, secret) {
+			t.Fatalf("persisted projection retained %q: %s", secret, persisted)
+		}
+	}
+
+	loaded, _, err := unmarshalPersistedProjectionWithContext(persisted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Children) != 3 || loaded.Children[0].Kind != "protein_structure_analysis" {
+		t.Fatalf("loaded children=%v", loaded.Children)
+	}
+	if loaded.Children[1].ErrorCode == nil || *loaded.Children[1].ErrorCode != "input_rejected" {
+		t.Fatalf("loaded child1=%v", loaded.Children[1])
+	}
+}
+
+func TestDecodeRunProjectionAcceptsFiniteWorkStages(t *testing.T) {
+	for _, stage := range []string{"input_resolution", "planning", "execution", "report_assembly"} {
+		t.Run(stage, func(t *testing.T) {
+			projection, err := DecodeRunProjection(rxBot.RunRecord{
+				RunID: "run-stage", Agent: "research", Status: "running", Stage: stage,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if projection.WorkStage != stage {
+				t.Fatalf("work stage=%q want %q", projection.WorkStage, stage)
+			}
+		})
+	}
+}
+
+func TestDecodeRunProjectionDropsInvalidWorkStageWithoutChangingRunningStatus(t *testing.T) {
+	for _, stage := range []string{"unknown", strings.Repeat("x", 65)} {
+		projection, err := DecodeRunProjection(rxBot.RunRecord{
+			RunID: "run-legacy-stage", Agent: "research", Status: "running", Stage: stage,
+		})
+		if err != nil {
+			t.Fatalf("stage %q rejected otherwise valid legacy run: %v", stage, err)
+		}
+		if projection.WorkStage != "" || projection.Status != "RUNNING" {
+			t.Fatalf("projection=%#v, want sanitized generic RUNNING", projection)
+		}
+	}
+}
+
+func TestDecodeRunProjectionRejectsExcessChildCount(t *testing.T) {
+	_, err := DecodeRunProjection(rxBot.RunRecord{
+		RunID: "run-too-many-children", Agent: "analyst", Status: "running",
+		TaskIDs: make([]string, maxProjectionChildTasks+1),
+	})
+	var projectionErr *ProjectionDecodeError
+	if !errors.As(err, &projectionErr) {
+		t.Fatalf("error=%T %v, want *ProjectionDecodeError", err, err)
+	}
+	if projectionErr.Field != "task_ids" {
+		t.Fatalf("field=%q want task_ids", projectionErr.Field)
 	}
 }
 
@@ -119,6 +487,26 @@ func TestDecodeRunProjectionMatrix(t *testing.T) {
 				}
 				if len(got.Artifacts.Paths) != 2 || got.Artifacts.Paths[1] != "obs://synthetic-bucket/run-terminal-1/data.tsv" {
 					t.Fatalf("artifact paths=%v", got.Artifacts.Paths)
+				}
+			},
+		},
+		{
+			name: "canonical formatted deep_genome snapshot",
+			record: rxBot.RunRecord{
+				RunID:  "run-canonical-dg",
+				Agent:  "deep_genome",
+				Status: "running",
+				Answer: "",
+				Result: json.RawMessage(`{"formatted":{"answer":"# BriefGene\n","metadata":{"deep_genome":{"stage":"intermediate","completeness":"partial","revision":23,"updated_at":"2026-08-16T13:55:24Z","progress":{"brief_gene_status":"succeeded","total":12,"running":11},"degraded":false}}},"execution":{"tracking":{"degraded":true},"report":{"state":"intermediate","degraded":false,"source_artifact_count":0}}}`),
+			},
+			wantStatus: "RUNNING",
+			wantReport: "# BriefGene\n",
+			check: func(t *testing.T, got BotRunProjection) {
+				if got.ReportStage != "intermediate" || got.ReportCompleteness != "partial" || got.ReportRevision != 23 {
+					t.Fatalf("canonical snapshot=%#v", got)
+				}
+				if got.Progress.BriefGeneStatus != "succeeded" || got.Progress.Total != 12 {
+					t.Fatalf("progress=%#v", got.Progress)
 				}
 			},
 		},
@@ -258,6 +646,84 @@ func TestDecodeRunProjectionSubmissionDegradedTrackingIsExplicit(t *testing.T) {
 	}
 	if got.VisibleReport() != "Synthetic degraded answer" {
 		t.Fatalf("degraded answer=%q", got.VisibleReport())
+	}
+}
+
+func TestDecodeAgentRunSubmissionNormalizesNativeRunIdentity(t *testing.T) {
+	stringPtr := func(value string) *string { return &value }
+	tests := []struct {
+		name      string
+		id        *string
+		runID     *string
+		wantRunID string
+		wantError bool
+	}{
+		{name: "native id only", id: stringPtr("run-native"), wantRunID: "run-native"},
+		{name: "compatibility alias only", runID: stringPtr("run-compat"), wantRunID: "run-compat"},
+		{name: "matching fields", id: stringPtr(" run-matching "), runID: stringPtr("run-matching"), wantRunID: "run-matching"},
+		{name: "conflicting fields", id: stringPtr("run-primary"), runID: stringPtr("run-conflict"), wantError: true},
+		{name: "missing fields", wantError: true},
+		{name: "blank native id", id: stringPtr(" "), wantError: true},
+		{name: "malformed native id", id: stringPtr("run/native"), wantError: true},
+		{name: "control character in alias", runID: stringPtr("run-\x00compat"), wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := rxBot.AgentRunResponse{
+				ID:      tt.id,
+				RunID:   tt.runID,
+				Agent:   "analyst",
+				Status:  "running",
+				TaskIDs: []string{"task-native-submit"},
+			}
+
+			got, err := DecodeAgentRunSubmission(response)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("DecodeAgentRunSubmission unexpectedly returned %#v", got)
+				}
+				var projectionErr *ProjectionDecodeError
+				if !errors.As(err, &projectionErr) || projectionErr.Field != "run_id" {
+					t.Fatalf("error = %T %v, want run_id ProjectionDecodeError", err, err)
+				}
+				if !reflect.DeepEqual(got, BotRunProjection{}) {
+					t.Fatalf("invalid identity returned partial projection %#v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeAgentRunSubmission: %v", err)
+			}
+			if got.RunID != tt.wantRunID {
+				t.Fatalf("submission run id = %q, want %q", got.RunID, tt.wantRunID)
+			}
+		})
+	}
+}
+
+func TestDecodeAgentRunSubmissionRetainsTerminalExecutionState(t *testing.T) {
+	runID := "run-terminal-submit"
+	response := rxBot.AgentRunResponse{
+		RunID:  &runID,
+		Agent:  "research",
+		Status: "succeeded",
+		Result: rxBot.AgentRunResult{
+			Formatted: &rxBot.Formatted{Answer: "complete report"},
+			Execution: json.RawMessage(`{
+				"tracking":{"degraded":true},
+				"output_dirs":["internal/runs/synthetic"],
+				"delivery":null
+			}`),
+		},
+	}
+
+	got, err := DecodeAgentRunSubmission(response)
+	if err != nil {
+		t.Fatalf("DecodeAgentRunSubmission: %v", err)
+	}
+	if !got.TrackingDegraded || got.OutputDirectoryCount != 1 || len(got.Artifacts.OutputDirs) != 0 {
+		t.Fatalf("terminal submission projection = %#v", got)
 	}
 }
 
@@ -404,7 +870,7 @@ func TestDecodeRunProjectionAcceptsNonInteropFormattedMetadata(t *testing.T) {
 	}{
 		{name: "success", agent: "deep_genome", topStatus: "succeeded", metaStatus: "SUCCESS", wantStatus: "SUCCEEDED"},
 		{name: "running", agent: "analyst", topStatus: "running", metaStatus: "RUNNING", wantStatus: "RUNNING"},
-		{name: "input required", agent: "review", topStatus: "input_required", metaStatus: "INPUT_REQUIRED", wantStatus: "INPUT_REQUIRED"},
+		{name: "Review answer completes pause", agent: "review", topStatus: "input_required", metaStatus: "INPUT_REQUIRED", wantStatus: "SUCCEEDED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			record := rxBot.RunRecord{
@@ -424,44 +890,43 @@ func TestDecodeRunProjectionAcceptsNonInteropFormattedMetadata(t *testing.T) {
 	}
 }
 
-func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
+func TestDecodeCanonicalResultArchiveTerminalFixtures(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name          string
-		fixture       string
-		wantFixtureID string
-		wantAgent     string
-		wantReport    string
-		wantArtifacts int
-		wantPaths     int
+		name        string
+		fixture     string
+		wantAgent   string
+		wantReport  string
+		wantArchive string
 	}{
 		{
-			name:          "research report and artifacts",
-			fixture:       "research_terminal.json",
-			wantFixtureID: "rc-web-004-research-terminal",
-			wantAgent:     "research",
-			wantReport:    "# Research terminal report",
-			wantArtifacts: 1,
-			wantPaths:     2,
+			name:        "analyst delivery",
+			fixture:     "analyst_terminal.json",
+			wantAgent:   "analyst",
+			wantReport:  "# Synthetic Analyst Result\n\nArchive ready.",
+			wantArchive: "analyst-results.zip",
 		},
 		{
-			name:          "design formatted answer and empty artifacts",
-			fixture:       "design_terminal.json",
-			wantFixtureID: "rc-web-004-design-terminal",
-			wantAgent:     "design",
-			wantReport:    "# Design terminal answer",
-			wantArtifacts: 0,
-			wantPaths:     0,
+			name:        "research delivery",
+			fixture:     "research_terminal.json",
+			wantAgent:   "research",
+			wantReport:  "# Synthetic Research Result\n\nArchive ready.",
+			wantArchive: "research-results.zip",
 		},
 		{
-			name:          "network report and empty artifact paths",
-			fixture:       "network_terminal.json",
-			wantFixtureID: "rc-web-004-network-terminal",
-			wantAgent:     "network",
-			wantReport:    "# Network terminal report",
-			wantArtifacts: 1,
-			wantPaths:     0,
+			name:        "design delivery",
+			fixture:     "design_terminal.json",
+			wantAgent:   "design",
+			wantReport:  "# Synthetic Design Result\n\nArchive ready.",
+			wantArchive: "design-results.zip",
+		},
+		{
+			name:        "network delivery",
+			fixture:     "network_terminal.json",
+			wantAgent:   "network",
+			wantReport:  "# Synthetic Network Result\n\nArchive ready.",
+			wantArchive: "network-results.zip",
 		},
 	}
 
@@ -469,7 +934,7 @@ func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var raw map[string]interface{}
 			decodeFixtureForProjectionTest(t, tc.fixture, &raw)
-			assertSanitizedTerminalFixture(t, raw, tc.wantFixtureID, tc.wantAgent)
+			assertCanonicalResultArchiveFixture(t, raw, tc.wantAgent, tc.wantArchive)
 
 			record := loadRunRecordFixture(t, tc.fixture)
 			if record.Agent != tc.wantAgent {
@@ -480,82 +945,54 @@ func TestDecodeResearchDesignNetworkTerminalArtifacts(t *testing.T) {
 			}
 
 			var envelope struct {
-				FinalReport string `json:"final_report"`
-				Formatted   *struct {
+				Formatted *struct {
 					Answer string `json:"answer"`
 				} `json:"formatted"`
-				Artifacts []struct {
-					OutputDir string   `json:"output_dir"`
-					Paths     []string `json:"paths"`
-				} `json:"artifacts"`
 			}
 			if err := json.Unmarshal(record.Result, &envelope); err != nil {
 				t.Fatalf("decode result envelope: %v", err)
 			}
-			if strings.TrimSpace(envelope.FinalReport) == "" &&
-				(envelope.Formatted == nil || strings.TrimSpace(envelope.Formatted.Answer) == "") {
-				t.Fatal("terminal fixture has neither a final report nor formatted answer")
-			}
-			if len(envelope.Artifacts) != tc.wantArtifacts {
-				t.Fatalf("artifact entries=%d want %d", len(envelope.Artifacts), tc.wantArtifacts)
-			}
-			pathCount := 0
-			for _, artifact := range envelope.Artifacts {
-				if artifact.OutputDir == "" && len(artifact.Paths) > 0 {
-					t.Fatal("artifact paths must not exist without an output directory")
-				}
-				pathCount += len(artifact.Paths)
-			}
-			if pathCount != tc.wantPaths {
-				t.Fatalf("artifact paths=%d want %d", pathCount, tc.wantPaths)
+			if envelope.Formatted == nil || strings.TrimSpace(envelope.Formatted.Answer) == "" {
+				t.Fatal("terminal fixture has no formatted answer")
 			}
 
 			projection, err := DecodeRunProjection(record)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if projection.Agent != tc.wantAgent || projection.VisibleReport() != tc.wantReport {
+			if projection.Agent != tc.wantAgent || projection.VisibleReport() != tc.wantReport ||
+				!projection.ResultArchiveV1 || projection.Delivery == nil ||
+				projection.Delivery.ArchiveName != tc.wantArchive || projection.Delivery.ArchiveSize <= 0 {
 				t.Fatalf("projection agent/report=%q/%q", projection.Agent, projection.VisibleReport())
 			}
-			if len(projection.Artifacts.Paths) != tc.wantPaths {
-				t.Fatalf("projection paths=%d want %d", len(projection.Artifacts.Paths), tc.wantPaths)
+			if len(projection.Artifacts.Paths) != 0 {
+				t.Fatalf("active v1 projection retained legacy paths=%#v", projection.Artifacts.Paths)
 			}
 		})
 	}
 }
 
-func assertSanitizedTerminalFixture(t *testing.T, payload map[string]interface{}, fixtureID, agent string) {
+func assertCanonicalResultArchiveFixture(t *testing.T, payload map[string]interface{}, agent, archiveName string) {
 	t.Helper()
-	if payload["fixture_id"] != fixtureID {
-		t.Fatalf("fixture_id=%v want %q", payload["fixture_id"], fixtureID)
-	}
 	if payload["agent"] != agent {
 		t.Fatalf("agent=%v want %q", payload["agent"], agent)
 	}
-	forbidden := map[string]struct{}{
-		"created_at": {}, "dialogue_id": {}, "error": {}, "expires_at": {},
-		"model": {}, "origin": {}, "payload": {}, "private": {},
-		"private_payload": {}, "query": {}, "raw": {}, "raw_payload": {},
-		"request_id": {}, "stack_trace": {}, "task_id": {}, "task_ids": {},
-		"traceback": {}, "updated_at": {}, "user_id": {},
+	result, ok := payload["result"].(map[string]interface{})
+	if !ok || result["artifacts"] != nil {
+		t.Fatalf("fixture retained legacy result artifacts")
 	}
-	var visit func(interface{})
-	visit = func(value interface{}) {
-		switch current := value.(type) {
-		case map[string]interface{}:
-			for key, child := range current {
-				if _, blocked := forbidden[key]; blocked {
-					t.Fatalf("fixture contains raw/private field %q", key)
-				}
-				visit(child)
-			}
-		case []interface{}:
-			for _, child := range current {
-				visit(child)
-			}
-		}
+	execution, ok := result["execution"].(map[string]interface{})
+	if !ok {
+		t.Fatal("fixture execution is missing")
 	}
-	visit(payload)
+	delivery, ok := execution["delivery"].(map[string]interface{})
+	if !ok || delivery["delivery_internal"] != nil || delivery["schema_version"] != float64(1) {
+		t.Fatalf("fixture delivery is invalid")
+	}
+	archive, ok := delivery["archive"].(map[string]interface{})
+	if !ok || archive["name"] != archiveName || archive["role"] != "result_archive" {
+		t.Fatalf("fixture archive is invalid")
+	}
 }
 
 func decodeFixtureForProjectionTest(t *testing.T, name string, out interface{}) {
