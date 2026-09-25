@@ -1,12 +1,11 @@
 # Phytomni Terms of Service
 
-**Version:** 0.1.0  
+**Version:** 0.1.4
+
 **Effective date:** 2026-07-09  
 **Operator:** Biotechnology Research Institute, Chinese Academy of Agricultural Sciences (CAAS BRI)  
 **Contact:** bri-zhbgs@caas.cn  
 **Address:** 12 Zhongguancun South Street, Haidian District, Beijing 100081, People’s Republic of China
-
-This document is a draft pending institute review.
 
 For users in mainland China, Chinese prevails if the Chinese and English texts conflict. For all other users, the English version prevails.
 
@@ -34,7 +33,7 @@ We process relevant content to provide the Services, protect the system and user
 
 You retain rights in User Inputs, Uploaded Files, Research Data, and Outputs and Artifacts to the extent you lawfully hold those rights. To deliver the Services you request, the operator may, to the extent necessary, host, copy, transmit, process, display, and generate Artifacts from relevant content (service-delivery processing). To protect the system and users, prevent abuse, provide support, diagnose failures, and handle legal or audit matters, the operator may also conduct necessary security, abuse-prevention, support, legal, and audit review (security, support, and compliance processing).
 
-Model or product improvement is a processing purpose separate from the purposes above. The scope and method of improvement currently remain subject to institute and legal approval and internal review; unless separately described and approved, these Terms do not imply that any improvement processing, training switch, or specific opt-out mechanism exists. Only separately described and approved improvement processing may occur. Even if an improvement choice is provided in the future, it will not stop processing necessary to deliver the Services or for security, abuse prevention, support, legal, or audit purposes. Except for the purposes above or as required by law, we do not acquire ownership of your content.
+Model or product improvement is a processing purpose separate from service delivery and from security, abuse-prevention, support, legal, and audit processing. Under these Terms, User Inputs and related data may by default be used for model and product improvement. You may email bri-zhbgs@caas.cn to request opt-out; opt-out applies prospectively to new data generated after the request and does not roll back model parameters already trained. Passwords, API keys, access tokens, payment information, and secrets are excluded from improvement data. Opt-out does not stop processing necessary to provide the Services, operate account security, prevent abuse, provide support, troubleshoot faults, or meet legal or audit obligations. Email is the available opt-out route; these Terms do not represent that an in-product switch, temporary chat, immediate deletion control, or operational opt-out workflow exists. Except for the purposes above or as required by law, we do not acquire ownership of your content.
 
 ## 5. Research, biological, and third-party data responsibilities
 
