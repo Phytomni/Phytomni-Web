@@ -226,17 +226,33 @@ func (ps *Service) GetUserInfo(ctx context.Context, email string, password strin
 }
 
 func (ps *Service) UserRegister(ctx context.Context, email, password string) error {
+	role, err := utils.RegistrationDefaultRole()
+	if err != nil {
+		return err
+	}
+	var description string
+	var chatLimit int
+	switch role {
+	case "guest":
+		description = "Guest"
+		chatLimit = viper.GetInt("guest_default_chat_limit")
+	case "user":
+		description = "Regular User"
+	case "vip_user":
+		description = "VIP User"
+	}
 	mdPassword, herr := utils.HashPassword(password)
 	if herr != nil {
 		return errors.New("user registration failed")
 	}
 	now := time.Now()
 	db := model.DB(ctx).Model(&model.User{}).Debug()
-	err := db.Create(&model.User{
+	err = db.Create(&model.User{
 		Email:            email,
 		Password:         mdPassword,
-		Code:             "user",
-		Description:      "Regular User",
+		Code:             role,
+		Description:      description,
+		ChatLimit:        chatLimit,
 		PasswordChangeAt: &now,
 	}).Error
 	if err != nil {

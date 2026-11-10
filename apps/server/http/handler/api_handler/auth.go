@@ -108,6 +108,13 @@ func (ph *Handler) UserRegister(ctx *gin.Context) {
 
 	err := ph.service.UserRegister(ctx, email, password)
 	if err != nil {
+		if errors.Is(err, utils.ErrInvalidRegistrationRole) {
+			ctx.JSON(http.StatusServiceUnavailable, gin.H{
+				"code":    http.StatusServiceUnavailable,
+				"message": i18n.T(ctx, "register.service_unavailable"),
+			})
+			return
+		}
 		ctx.JSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "message": i18n.TMaybe(ctx, err.Error())})
 		return
 	}

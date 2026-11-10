@@ -481,6 +481,48 @@ describe("Registration auth surface", () => {
     );
   });
 
+  it.each([403, 503])(
+    "keeps registration retryable after HTTP %s with stale availability",
+    async (status) => {
+      const message =
+        status === 403
+          ? "Registration is currently unavailable"
+          : "Service temporarily unavailable, please try again later";
+      mocks.getAuthCapabilities.mockResolvedValueOnce({
+        code: 200,
+        data: { registration_enabled: true },
+      });
+      mocks.register.mockRejectedValueOnce({
+        response: { status, data: { message } },
+      });
+      const wrapper = mountView();
+      await flushPromises();
+
+      expect(mocks.getAuthCapabilities).toHaveBeenCalledTimes(1);
+      expect(wrapper.find(".register-form").exists()).toBe(true);
+      await fillRegistration(wrapper);
+      await wrapper.get('input[type="checkbox"]').setValue(true);
+      await wrapper.get(".register-button").trigger("click");
+      await flushPromises();
+
+      expect(mocks.register).toHaveBeenCalledTimes(1);
+      expect(mocks.error).toHaveBeenCalledWith(message);
+      expect(mocks.success).not.toHaveBeenCalled();
+      expect(mocks.replace).not.toHaveBeenCalled();
+      expect(mocks.push).not.toHaveBeenCalled();
+      expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
+        "false"
+      );
+      expect(
+        wrapper.get(".register-button").attributes("disabled")
+      ).toBeUndefined();
+      expect([...mocks.register.mock.calls[0][0].entries()]).toEqual([
+        ["email", "researcher@example.test"],
+        ["password", "Secure1!"],
+      ]);
+    }
+  );
+
   it("does not log registration requests, responses, errors, or payloads", () => {
     expect(SOURCE.match(/<PhyAuthBrand/g)).toHaveLength(1);
     expect(SOURCE.match(/<h1/g)).toHaveLength(1);

@@ -137,11 +137,12 @@ applicable EULA and use that directory with the test command above or
 does not configure production exports or replace the production font-source
 and license responsibilities described above.
 
-### `auth` — public self-registration gate (default ON)
+### `auth` — public self-registration policy (default ON, guest)
 
 ```yaml
 auth:
   registration_enabled: true
+  registration_default_role: guest
 ```
 
 When `auth.registration_enabled` is missing or `true`, public
@@ -150,10 +151,37 @@ that public route: it returns HTTP 403 with the localized closed-registration
 message. `GET /api/v1/auth/capabilities` remains public and reports the
 `registration_enabled` boolean for client presentation.
 
-`POST /api/v1/users` still requires an administrator token and remains usable
-when public registration is closed. Changing this value requires a Go service
-restart; no schema migration is involved. To roll back, set the key back to
-`true` and restart the Go service.
+`auth.registration_default_role` accepts only these exact strings:
+
+| Value      | Stored description | Initial chat allowance                     |
+| ---------- | ------------------ | ------------------------------------------ |
+| `guest`    | `Guest`            | `guest_default_chat_limit`, including zero |
+| `user`     | `Regular User`     | Existing non-guest initialization (zero)   |
+| `vip_user` | `VIP User`         | Existing non-guest initialization (zero)   |
+
+An absent role defaults to `guest`. This intentionally changes the previous
+fixed `user` assignment: operators who want regular-user signup must explicitly
+set `user`; `vip_user` is also available. Explicit empty/whitespace strings,
+null, non-string values, aliases such as `vip`, case variants, padded values,
+administrator roles, and agent-specific roles are invalid. They reject otherwise
+valid public registrations with HTTP 503 and the existing localized
+service-unavailable message, before password hashing or account creation.
+Invalid role settings do not prevent startup or affect login. An explicit
+`registration_enabled: false` still wins and returns 403 even with an invalid
+role. The capability response continues to report only the switch, not the role.
+
+Guests receive the configured allowance without changing `guest_default_chat_limit`
+or `chatlimit.enforce` defaults. Other roles retain their existing quota and
+permission semantics. Clients cannot select their role or initial allowance.
+
+Both settings require a Go service restart and affect only future public
+registrations. Existing users, roles, quotas, sessions, and first-login behavior
+are unchanged; no schema migration or backfill is involved. `POST /api/v1/users`
+still requires an administrator token and is independent of both settings,
+including when public registration is closed or its role is invalid. To stop new
+signups, set `registration_enabled: false` and restart; to restore regular-user
+signup, set the role to `user` and restart while keeping registration enabled.
+Neither action changes accounts already created.
 
 ### `redis` — user/product layer (critical; fail-open)
 
@@ -226,7 +254,9 @@ chatlimit:
 
 `false` = everyone can chat. Flip `true` only when the invitation-quota model is
 active. Bypass for `admin`/`super_admin`/`vip_user`; fail-open on DB error.
-`guest_default_chat_limit` (default 5) sets the quota for new self-registrations.
+`guest_default_chat_limit` (example value 5) sets the initial quota for new guest
+accounts, including public registrations with the `guest` role. An explicit zero
+stays zero; the role setting does not change quota enforcement.
 
 ### `bot` — Bot relay (critical)
 

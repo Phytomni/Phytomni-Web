@@ -44,6 +44,7 @@ func initConfig(*cli.Context) error {
 	// keeps the relay fallback as the safe dormant default.
 	viper.SetDefault("gene_obsfs_path", "")
 	viper.SetDefault("auth.registration_enabled", true)
+	viper.SetDefault(utils.RegistrationDefaultRoleKey, "guest")
 	if err := utils.LoadConfigInFile(configFile); err != nil {
 		return err
 	}

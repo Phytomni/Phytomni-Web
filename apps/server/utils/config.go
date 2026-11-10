@@ -1,12 +1,43 @@
 package utils
 
 import (
-	"github.com/spf13/viper"
+	"errors"
 	"log"
 	"os"
+
+	"github.com/spf13/viper"
 )
 
 const RegistrationEnabledKey = "auth.registration_enabled"
+
+const RegistrationDefaultRoleKey = "auth.registration_default_role"
+
+var ErrInvalidRegistrationRole = errors.New("invalid public registration role")
+
+func RegistrationDefaultRole() (string, error) {
+	if !viper.IsSet(RegistrationDefaultRoleKey) {
+		return "guest", nil
+	}
+	role, ok := viper.Get(RegistrationDefaultRoleKey).(string)
+	if ok {
+		switch role {
+		case "guest", "user", "vip_user":
+			return role, nil
+		}
+	}
+	return "", ErrInvalidRegistrationRole
+}
+
+func normalizeRegistrationRoleConfig(source *viper.Viper) {
+	value, present := source.GetStringMap("auth")["registration_default_role"]
+	if present {
+		if _, ok := value.(string); !ok {
+			// Preserve explicit nulls through AllSettings and prevent map/scalar
+			// merge rules from retaining an earlier role or blocking a correction.
+			source.Set(RegistrationDefaultRoleKey, "")
+		}
+	}
+}
 
 func RegistrationEnabled() bool {
 	if !viper.IsSet(RegistrationEnabledKey) {
@@ -35,6 +66,7 @@ func LoadConfigInFile(filename string) error {
 				return err
 			}
 
+			normalizeRegistrationRoleConfig(v)
 			err := viper.MergeConfigMap(v.AllSettings())
 			if err != nil {
 				return err
@@ -50,6 +82,7 @@ func LoadConfigInFile(filename string) error {
 				return err
 			}
 
+			normalizeRegistrationRoleConfig(v)
 			err := viper.MergeConfigMap(v.AllSettings())
 			if err != nil {
 				return err
@@ -65,6 +98,7 @@ func LoadConfigInFile(filename string) error {
 				return err
 			}
 
+			normalizeRegistrationRoleConfig(v)
 			err := viper.MergeConfigMap(v.AllSettings())
 			if err != nil {
 				return err
@@ -76,6 +110,7 @@ func LoadConfigInFile(filename string) error {
 		if err := viper.ReadInConfig(); err != nil {
 			return err
 		}
+		normalizeRegistrationRoleConfig(viper.GetViper())
 	}
 
 	// Override jwt.secret_key from PHYTOMNI_JWT_SECRET only when the env var is

@@ -129,11 +129,16 @@ http:
 cron:
   switch: true
 
-# Public self-registration. The default is ON for compatibility.
+# Public self-registration defaults to ON with guest access.
 # Set false to close POST /api/v1/auth/registrations; administrator-token
 # POST /api/v1/users remains available. Restart the Go service after changes.
 auth:
   registration_enabled: true
+  # Exact allowed roles: guest, user, vip_user. Missing means guest (previously user).
+  # Explicit blank/null/non-string or other roles reject public signup with 503.
+  # Only future public accounts change; existing users/admin provisioning do not.
+  # Guests use guest_default_chat_limit, including zero; other roles are unchanged.
+  registration_default_role: guest
 
 # ---------------------------------------------------------------------
 # Gene example obsfs mount root. When set to a readable directory, the
