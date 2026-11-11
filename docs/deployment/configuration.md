@@ -183,6 +183,19 @@ signups, set `registration_enabled: false` and restart; to restore regular-user
 signup, set the role to `user` and restart while keeping registration enabled.
 Neither action changes accounts already created.
 
+New public accounts use the password chosen during registration and do not
+require an initial password change, regardless of the configured role. Signup
+still returns to login rather than signing in automatically. In the same browser
+tab, successful signup queues the existing chat tutorial for the next login;
+unavailable browser storage does not block registration or login.
+Administrator-provisioned accounts still require changing their initial password
+before accessing protected APIs. The database default and existing accounts'
+password-change states are not modified; no automatic historical backfill runs.
+Do not run the historical `migrate up` password-status backfill for this change:
+it infers initial passwords from timestamps and would incorrectly require newly
+self-registered users to change their passwords again. This change needs no
+database migration.
+
 ### `redis` — user/product layer (critical; fail-open)
 
 ```yaml

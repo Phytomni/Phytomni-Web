@@ -282,6 +282,11 @@ const handleRegister = () => {
     .then((res: { code: number; message?: string }) => {
       if (res.code === 200) {
         ElMessage.success(t("common.registrationSuccess"));
+        try {
+          sessionStorage.setItem("tutorial_pending", "1");
+        } catch {
+          // Onboarding storage must not block successful registration.
+        }
         return router.replace("/login");
       } else {
         ElMessage.error(res.message || t("register.registrationFailed"));

@@ -49,8 +49,8 @@ func TestUserRegister_ConfiguredRole(t *testing.T) {
 			if ok, upgrade, err := utils.VerifyPassword(user.Password, password); !ok || upgrade || err != nil {
 				t.Errorf("stored password must verify as bcrypt: ok=%v upgrade=%v err=%v", ok, upgrade, err)
 			}
-			if user.PasswordChangeAt == nil || user.FirstLoginStatus != "0" {
-				t.Error("registration must preserve password timestamp and first-login requirement")
+			if user.PasswordChangeAt == nil || user.FirstLoginStatus != "1" {
+				t.Error("self-selected password must have a timestamp and require no initial rotation")
 			}
 		})
 	}
@@ -74,8 +74,8 @@ func TestUserRegister_GuestZeroQuota(t *testing.T) {
 	if ok, upgrade, err := utils.VerifyPassword(user.Password, "Synthetic12!"); !ok || upgrade || err != nil {
 		t.Errorf("stored password must verify as bcrypt: ok=%v upgrade=%v err=%v", ok, upgrade, err)
 	}
-	if user.PasswordChangeAt == nil || user.FirstLoginStatus != "0" {
-		t.Error("registration must preserve password timestamp and first-login requirement")
+	if user.PasswordChangeAt == nil || user.FirstLoginStatus != "1" {
+		t.Error("self-selected password must have a timestamp and require no initial rotation")
 	}
 }
 

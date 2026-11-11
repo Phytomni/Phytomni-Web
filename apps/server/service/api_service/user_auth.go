@@ -254,6 +254,8 @@ func (ps *Service) UserRegister(ctx context.Context, email, password string) err
 		Description:      description,
 		ChatLimit:        chatLimit,
 		PasswordChangeAt: &now,
+		// The user chose this password; only provisioned passwords need rotation.
+		FirstLoginStatus: "1",
 	}).Error
 	if err != nil {
 		if stdErrors.Is(err, gorm.ErrDuplicatedKey) {

@@ -223,6 +223,7 @@ const fillRegistration = async (
 describe("Registration auth surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     context = createTestAppContext({ locale: "en-US" });
     mocks.route.query = {};
     mocks.formValidateReject = false;
@@ -431,6 +432,7 @@ describe("Registration auth surface", () => {
       ["password", "Secure1!"],
     ]);
     expect(mocks.replace).toHaveBeenCalledWith("/login");
+    expect(sessionStorage.getItem("tutorial_pending")).toBe("1");
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
       "false"
     );
@@ -450,6 +452,27 @@ describe("Registration auth surface", () => {
     );
   });
 
+  it("still returns to login when tutorial storage is unavailable", async () => {
+    const wrapper = mountView();
+    await fillRegistration(wrapper);
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    const setItem = vi
+      .spyOn(sessionStorage, "setItem")
+      .mockImplementation(() => {
+        throw new Error("storage unavailable");
+      });
+    try {
+      await wrapper.get(".register-button").trigger("click");
+      await flushPromises();
+
+      expect(setItem).toHaveBeenCalledWith("tutorial_pending", "1");
+      expect(mocks.replace).toHaveBeenCalledWith("/login");
+      expect(mocks.error).not.toHaveBeenCalled();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
   it("resets loading and surfaces backend failures without logging", async () => {
     mocks.register.mockResolvedValueOnce({
       code: 400,
@@ -462,6 +485,7 @@ describe("Registration auth surface", () => {
     await flushPromises();
 
     expect(mocks.error).toHaveBeenCalledWith("Registration failed");
+    expect(sessionStorage.getItem("tutorial_pending")).toBeNull();
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
       "false"
     );
@@ -476,6 +500,7 @@ describe("Registration auth surface", () => {
     await flushPromises();
 
     expect(mocks.error).toHaveBeenCalledWith("Network unavailable");
+    expect(sessionStorage.getItem("tutorial_pending")).toBeNull();
     expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(
       "false"
     );
@@ -508,6 +533,7 @@ describe("Registration auth surface", () => {
       expect(mocks.register).toHaveBeenCalledTimes(1);
       expect(mocks.error).toHaveBeenCalledWith(message);
       expect(mocks.success).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("tutorial_pending")).toBeNull();
       expect(mocks.replace).not.toHaveBeenCalled();
       expect(mocks.push).not.toHaveBeenCalled();
       expect(wrapper.get(".register-button").attributes("aria-busy")).toBe(

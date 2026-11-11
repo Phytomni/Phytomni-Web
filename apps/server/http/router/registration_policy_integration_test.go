@@ -233,18 +233,14 @@ func TestPublicRegistration_RoleLoginAndPermissions(t *testing.T) {
 			const email = "role@example.test"
 			registrationPolicyRegister(t, engine, email)
 			created := registrationPolicyUser(t, gdb, email, tc.role, tc.description, tc.quota)
-			if created.FirstLoginStatus != "0" {
-				t.Fatalf("new account first_login_status = %q, want 0", created.FirstLoginStatus)
-			}
-			token := registrationPolicyCompleteFirstLogin(t, engine, email)
-			updated := registrationPolicyUser(t, gdb, email, tc.role, tc.description, tc.quota)
-			if updated.FirstLoginStatus != "1" || updated.Password == created.Password {
-				t.Fatal("password change must update the stored password and first-login status")
+			if created.FirstLoginStatus != "1" {
+				t.Fatalf("self-registered account first_login_status = %q, want 1", created.FirstLoginStatus)
 			}
 			// Current product admission no longer filters canonical grants by
 			// proxy enablement; both settings must retain the literal tool order.
 			for _, enabled := range []bool{false, true} {
 				rxBot.BotConfig = &rxBot.Config{ProxyEnabled: enabled}
+				token := registrationPolicyLogin(t, engine, email, registrationPolicyPassword, "1")
 				response := registrationPolicyRequest(t, engine, http.MethodGet, "/api/v1/users/me/tool-permissions", token, nil, 200, 200)
 				var permissions common.LoginResponse
 				if err := json.Unmarshal(response.Data, &permissions); err != nil {
@@ -253,6 +249,10 @@ func TestPublicRegistration_RoleLoginAndPermissions(t *testing.T) {
 				if permissions.Permission != tc.role || !reflect.DeepEqual(permissions.ToolList, tc.tools) || len(permissions.PermissionList) != 0 {
 					t.Fatalf("proxy=%v: permissions=%+v, want role=%s tools=%v and no extra permissions", enabled, permissions, tc.role, tc.tools)
 				}
+			}
+			updated := registrationPolicyUser(t, gdb, email, tc.role, tc.description, tc.quota)
+			if updated.FirstLoginStatus != "1" || updated.Password != created.Password || !updated.PasswordChangeAt.Equal(*created.PasswordChangeAt) {
+				t.Fatal("login must preserve the self-selected password and its timestamp")
 			}
 		})
 	}
@@ -265,10 +265,10 @@ func TestPublicRegistration_ClientRoleCannotEscalate(t *testing.T) {
 		"email": {email}, "password": {registrationPolicyPassword},
 		"code": {"admin"}, "role": {"super_admin"}, "description": {"Administrator"},
 		"permission": {"admin"}, "permission_list": {"admin"}, "tool_list": {"DigitalDesignAgent"},
-		"chat_limit": {"999999"}, "guest_default_chat_limit": {"999999"}, "first_login_status": {"1"},
+		"chat_limit": {"999999"}, "guest_default_chat_limit": {"999999"}, "first_login_status": {"0"},
 	}, 200, 200)
 	registrationPolicyUser(t, gdb, email, "guest", "Guest", 7)
-	token := registrationPolicyCompleteFirstLogin(t, engine, email)
+	token := registrationPolicyLogin(t, engine, email, registrationPolicyPassword, "1")
 	response := registrationPolicyRequest(t, engine, http.MethodGet, "/api/v1/users/me/tool-permissions", token, nil, 200, 200)
 	var permissions common.LoginResponse
 	if err := json.Unmarshal(response.Data, &permissions); err != nil {
@@ -306,8 +306,8 @@ func TestPublicRegistration_PolicyChangesOnlyNewAccounts(t *testing.T) {
 			registrationPolicyRequest(t, engine, http.MethodPost, "/api/v1/auth/registrations", "",
 				url.Values{"email": {email}, "password": {registrationPolicyPassword}}, tc.status, tc.status)
 			registrationPolicyNoUser(t, gdb, email)
-			registrationPolicyLogin(t, engine, "a@example.test", registrationPolicyPassword, "0")
-			registrationPolicyLogin(t, engine, "b@example.test", registrationPolicyPassword, "0")
+			registrationPolicyLogin(t, engine, "a@example.test", registrationPolicyPassword, "1")
+			registrationPolicyLogin(t, engine, "b@example.test", registrationPolicyPassword, "1")
 			registrationPolicyUser(t, gdb, "a@example.test", "guest", "Guest", 7)
 			registrationPolicyUser(t, gdb, "b@example.test", "vip_user", "VIP User", 0)
 		})
@@ -350,6 +350,59 @@ func TestPublicRegistration_AdminProvisioningIgnoresPolicy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdminProvisioning_RequiresInitialPasswordChange(t *testing.T) {
+	for _, role := range []string{"guest", "user", "vip_user"} {
+		t.Run(role, func(t *testing.T) {
+			engine, gdb := buildRegistrationPolicyAPIEnv(t)
+			if err := gdb.Exec(`INSERT INTO users (email, code, first_login_status) VALUES (?, 'admin', '1')`, "admin@example.test").Error; err != nil {
+				t.Fatal(err)
+			}
+			adminToken, err := middleware.GenerateToken("admin@example.test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			const email = "provisioned@example.test"
+			registrationPolicyRequest(t, engine, http.MethodPost, "/api/v1/users", adminToken,
+				url.Values{"email": {email}, "password": {registrationPolicyPassword}, "code": {role}, "first_login_status": {"1"}}, 200, 200)
+			var created model.User
+			if err := gdb.Where("email = ?", email).First(&created).Error; err != nil {
+				t.Fatal(err)
+			}
+			if created.FirstLoginStatus != "0" {
+				t.Fatal("client fields must not waive initial password rotation for provisioned accounts")
+			}
+			token := registrationPolicyCompleteFirstLogin(t, engine, email)
+			registrationPolicyRequest(t, engine, http.MethodGet, "/api/v1/users/me/tool-permissions", token, nil, 200, 200)
+			var updated model.User
+			if err := gdb.Where("email = ?", email).First(&updated).Error; err != nil {
+				t.Fatal(err)
+			}
+			if updated.FirstLoginStatus != "1" || updated.Password == created.Password {
+				t.Fatal("password change must update the stored password and first-login status")
+			}
+		})
+	}
+}
+
+func TestPublicRegistration_PreservesExistingPasswordStates(t *testing.T) {
+	engine, gdb := buildRegistrationPolicyAPIEnv(t)
+	for _, status := range []string{"0", "1"} {
+		if err := gdb.Exec(`INSERT INTO users (email, code, first_login_status) VALUES (?, 'guest', ?)`, "existing-"+status+"@example.test", status).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	registrationPolicyRegister(t, engine, "new@example.test")
+	for _, status := range []string{"0", "1"} {
+		var user model.User
+		if err := gdb.Where("email = ?", "existing-"+status+"@example.test").First(&user).Error; err != nil {
+			t.Fatal(err)
+		}
+		if user.FirstLoginStatus != status {
+			t.Fatal("public registration must not alter existing password states")
+		}
 	}
 }
 

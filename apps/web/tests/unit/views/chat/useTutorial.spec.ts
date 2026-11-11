@@ -41,6 +41,26 @@ describe("useTutorial", () => {
     expect(userStore().seen_tutorial).toBe("1");
   });
 
+  it("onboards a self-registered user without password rotation and does not replay after completion", () => {
+    userStore().SET_LOGIN_STATUS("1");
+    userStore().SET_SEEN_TUTORIAL("1");
+    sessionStorage.setItem("tutorial_pending", "1");
+    const tutorial = useTutorial();
+
+    tutorial.checkTutorialStatus();
+    vi.advanceTimersByTime(1000);
+    expect(tutorial.showTutorial.value).toBe(true);
+    expect(userStore().isFirstLogin).toBe(false);
+    expect(sessionStorage.getItem("tutorial_pending")).toBeNull();
+
+    tutorial.completeTutorial();
+    const remounted = useTutorial();
+    remounted.checkTutorialStatus();
+    vi.advanceTimersByTime(1000);
+    expect(remounted.showTutorial.value).toBe(false);
+    expect(userStore().login_status).toBe("1");
+  });
+
   it("prepares responsive navigation before opening the tour", () => {
     const beforeStart = vi.fn(() => {
       expect(tutorial.showTutorial.value).toBe(false);
